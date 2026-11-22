@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Tech-debt session (bash→lua), coordinator direction: three ports per batch.
+packets:
+  - packet_id: installer-groundtruth-land-retry-fixtures-become-lua
+    order: 2205-cepb
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 3
+    title: |
+      Port test-installer-reset-kind.sh, test-groundtruth-regime-fails-closed.sh and test-land-auth-retry.sh to scripts/lua, rewire gate step 770 and the two litmus tests, delete the three .sh.
+    context: |
+      Open work refs were scanned first; none touches these three. test-gate-step-metrics-attribution.sh was skipped: it needs a concurrent writer, which proc.run cannot host.
+    exit_criteria:
+      - 'each Lua port prints the same ok/FAIL arms as its .sh on this tree; step 770 runs STEP_LUA; litmus groundtruth-regime-fails-closed and land-verdict-through-a-pipe run the Lua; the three .sh and their floor lines are gone'
+    unscoreable: 'unpinnable-until-the-guard-exists: the existing step and litmus tests are the proof and are recorded in the PR.'
+    next_action: 'Port, compare arm output, rewire, open the PR.'
+    provenance: coordinator direction; filed by lenovinha.
+    depends_on: []
+    related: [1559-sqzp, 1500-gu5r, 1164-cftu]
+    events:
+      - {type: filed, ts: '2026-11-22T09:37:39Z', host: lenovinha, summary: filed three fixture Lua ports}

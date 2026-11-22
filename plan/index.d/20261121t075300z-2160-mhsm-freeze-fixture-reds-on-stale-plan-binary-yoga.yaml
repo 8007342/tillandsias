@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-21 from macbookair's darwin regime run (relayed by the coordinator).
+packets:
+  - packet_id: live-freeze-fixture-arm-3b-reds-on-a-stale-plan-binary-instead-of-rebuilding-or-skipping
+    order: "2160-mhsm"
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, fixture, plan-binary]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-pre-push-honours-a-live-freeze.sh
+    title: "test-pre-push-honours-a-live-freeze arm 3b reds on a stale plan binary instead of rebuilding or skipping"
+    context: |
+      Gate step 075-1176-9vqn. On macbookair (darwin) and on linux-next, arm 3b went red with "resolved plan
+      binary is STALE" when target/release/tillandsias-plan predated the tree. That is a property of the host,
+      not of the change under test, so it should be a named could-not-run (the step's STEP_SKIP_EXIT) or a
+      rebuild, never a content red that evicts an innocent candidate.
+    exit_criteria:
+      - "With a stale plan binary, step 075 answers could-not-run (or rebuilds and passes), never rc 1; with a current one it passes as now."
+    unscoreable: "the stale-binary run is the measure"
+    provenance: "macbookair darwin regime run 2026-11-20, relayed by macuahuitl-fedora 2026-11-21."
+    events:
+      - type: filed
+        ts: "2026-11-21T07:53:00Z"
+        host: yoga
+        summary: "filed"

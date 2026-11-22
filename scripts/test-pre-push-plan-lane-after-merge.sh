@@ -170,7 +170,7 @@ G add -A >/dev/null; G commit -q -m "ledger append"
 G fetch -q origin
 G merge -q --no-edit origin/linux-next -m "mandated merge of origin/linux-next"
 out="$(run_guard)"; rc=$?
-if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q 'plan-only lane'; then
+if [ "$rc" -eq 0 ] && grep -q 'plan-only lane' <<<"$out"; then
     ok "ARM 1: ledger-only push takes the lane despite a merge carrying foreign code"
 else
     bad "ARM 1: lane refused a ledger-only push after the mandated merge (rc=$rc)"
@@ -240,7 +240,7 @@ G add -A >/dev/null; G commit -q -m "ledger append"
 G merge -q --no-edit origin/linux-next -m "mandated merge of origin/linux-next"
 out="$(run_guard)"; rc=$?
 if [ "$rc" -eq 0 ] && [ -s .git/tillandsias-union-ungated ] \
-   && printf '%s' "$out" | grep -q 'UN-GATED UNION'; then
+   && grep -q 'UN-GATED UNION' <<<"$out"; then
     ok "ARM 4: the lane records the un-gated union for the coordinator's land"
 else
     bad "ARM 4: the lane took a merge-scoped push without recording the union debt (rc=$rc)"
@@ -278,11 +278,11 @@ G add -A >/dev/null; G commit -q -m "new fragment plus a correction to a landed 
 G merge -q --no-edit origin/linux-next -m "mandated merge of origin/linux-next"
 rm -f .git/tillandsias-union-ungated
 out="$(run_guard)"; rc=$?
-if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q 'plan-only lane'; then
+if [ "$rc" -eq 0 ] && grep -q 'plan-only lane' <<<"$out"; then
     ok "ARM 6: an M confined to plan/issues/ rides the lane beside a new fragment"
 else
     bad "ARM 6: a correction to a landed report was refused after the merge (rc=$rc)"
-    printf '%s\n' "$out" | grep -m2 'plan-only lane' | sed 's/^/      /' >&2
+    grep -m2 'plan-only lane' <<<"$out" | sed 's/^/      /' >&2
 fi
 # Criterion 3 of the packet: relaxing the file-status rule must not quietly drop
 # the gate debt the scoped lane incurs.
@@ -306,10 +306,10 @@ case "$_outgoing" in
     *) bad "ARM 7 is VACUOUS — the modified file is not in the outgoing diff" ;;
 esac
 out="$(run_guard)"; rc=$?
-if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "outside plan/index.d/"; then
+if [ "$rc" -ne 0 ] && grep -q "outside plan/index.d/" <<<"$out"; then
     ok "ARM 7: an M outside the plan directories still requires the full gate"
 elif [ "$rc" -ne 0 ]; then
-    bad "ARM 7: refused, but not by the path-scope rule — $(printf '%s' "$out" | grep -m1 'plan-only lane')"
+    bad "ARM 7: refused, but not by the path-scope rule — $(grep -m1 'plan-only lane' <<<"$out")"
 else
     bad "ARM 7: a modified non-plan file rode the lane — the M relaxation is too wide"
 fi

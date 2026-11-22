@@ -30,3 +30,10 @@ STEP_OK="enclave remedy coverage check passed"
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="scripts/check-enclave-service-health.sh is absent, so the remedy could not be exercised"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:enclave-remedy:5"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="drives podman"
+STEP_LANES="podman"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/check-enclave-service-health.sh scripts/test-enclave-remedy-covers-the-named-service.sh"

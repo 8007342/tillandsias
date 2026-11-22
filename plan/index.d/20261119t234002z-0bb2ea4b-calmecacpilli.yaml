@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-new-project-forge-installs-branch-discipline-hooks-and-runs-them-without-hand-repair
+    field: next_action
+    value: |-
+      Slice 1 first: in discipline_hooks.rs, when only a GLOBAL hooksPath is set, set the local one and say so instead of refusing; mirror in scripts/install-hooks.sh. Then slice 2 in the forge image build.
+
+
+      [2026-11-19T23:40:02Z calmecacpilli] Verify on next stable (live checks run on stable releases). Live check: live arms in a new-project --opencode forge (macOS run recorded; needs acceptance).
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: a-new-project-forge-installs-branch-discipline-hooks-and-runs-them-without-hand-repair
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

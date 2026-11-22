@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha (tech-debt session, 2026-11-20).
+packets:
+  - packet_id: sigpipe-verdict-pipelines-n-z-batch-3-nine-fixtures
+    order: 2118-jtky
+    status: in_progress
+    kind: debt
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixtures, sigpipe, ratchet]
+    estimated_hours: 2
+    related: [2123-ivi5, 2126-4cyq]
+    owned_files:
+      - scripts/test-running-image-freshness.sh
+      - scripts/test-release-tier-freshness-reads-ci-full.sh
+      - scripts/test-promote-stable-evidence-gate.sh
+      - scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh
+      - scripts/test-podman-mock-refusal.sh
+      - scripts/test-smoke-verifies-a-signature.sh
+      - scripts/test-reopen-is-history-not-loss.sh
+      - scripts/test-pre-push-honours-a-live-freeze.sh
+      - scripts/test-preflight-front-door.sh
+    title: |
+      Batch 3 of 2126-4cyq (the n-z half of 2123-ivi5): convert 32 printf/echo | grep -q verdicts in nine fixtures to here-strings.
+    context: |
+      Skipped:
+      - test-pre-push-plan-lane-after-merge.sh: yoga fixes it on #1188 (coordinator);
+      - test-summarize-pubspec.sh: ported in #1157 and deleted by #1175.
+    exit_criteria:
+      - 'the nine fixtures pass with 0 sites left; the pipe floors drop by 32'
+    unscoreable: "the census tool is the measure, per 2123-ivi5"
+    next_action: Preflight, push work/2118-jtky, open PR.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20.
+    events:
+      - type: filed
+        ts: "2026-11-20T08:05:09Z"
+        host: lenovinha
+        summary: sigpipe n-z batch 3 (nine fixtures, 32 sites).

@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: preview-route-on-18443-closes-browser-and-in-forge-connections-while-the-readiness-probe-reports-serving
+    field: next_action
+    value: |-
+      A Linux host with podman reproduces the failure with a project named a_b, and captures the router's SNI map and the probe's target.
+
+      [2026-11-19T23:28:20Z calmecacpilli] Verify on next stable (live checks run on stable releases). Live check: cargo test preview_probe_uses_client_sni_for_underscore_project, then a live a_b project preview via browser.open and curl.
+    ts: "2026-11-19T23:28:20Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: preview-route-on-18443-closes-browser-and-in-forge-connections-while-the-readiness-probe-reports-serving
+    event:
+      type: note
+      ts: "2026-11-19T23:28:20Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

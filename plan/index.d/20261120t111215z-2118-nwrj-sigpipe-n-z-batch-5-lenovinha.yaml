@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha (tech-debt session, 2026-11-20).
+packets:
+  - packet_id: sigpipe-verdict-pipelines-n-z-batch-5-ten-files
+    order: 2118-nwrj
+    status: in_progress
+    kind: debt
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixtures, sigpipe, ratchet]
+    estimated_hours: 2
+    related: [2123-ivi5, 2126-4cyq]
+    owned_files:
+      - scripts/select-work-batch.sh
+      - scripts/probe-silverblue-update-skew.sh
+      - scripts/hooks/post-commit-expert-refresh.sh
+    title: |
+      Batch 5 of 2126-4cyq (the n-z half of 2123-ivi5): convert 18 printf/echo | grep -q verdicts in ten files to here-strings, including three non-test scripts (select-work-batch, probe-silverblue-update-skew, the post-commit expert-refresh hook).
+    context: |
+      Checks on each converted line:
+      - every file is bash (here-strings are bash-only);
+      - the two grep -qv conversions came from printf '%s\n', so an empty value still yields one empty line, same as before.
+      Each file is exercised by its own test or by the tests that call it; the hook has no test.
+    exit_criteria:
+      - 'each converted file keeps its trunk verdicts; the pipe floors drop by 18'
+    unscoreable: "the census tool is the measure, per 2123-ivi5"
+    next_action: Preflight, push work/2118-nwrj, open PR.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20.
+    events:
+      - type: filed
+        ts: "2026-11-20T11:12:15Z"
+        host: lenovinha
+        summary: sigpipe n-z batch 5 (ten files, 18 sites).

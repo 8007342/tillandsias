@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-release-freeze-refuses-the-cut-hosts-own-push-so-the-only-way-to-land-the-cuts-own-fix-is-clear-land-re-set-and-the-freeze-is-therefore-genuinely-absent-for-the-whole-length-of-that-landing-gate-included
+    field: status
+    value: completed
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: the-release-freeze-refuses-the-cut-hosts-own-push-so-the-only-way-to-land-the-cuts-own-fix-is-clear-land-re-set-and-the-freeze-is-therefore-genuinely-absent-for-the-whole-length-of-that-landing-gate-included
+    event:
+      type: completed
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        status 'completed' with evidence_refs: 52b4a19ac3 ok:release-freeze-landing:10 arms
+  - packet_id: the-release-freeze-refuses-the-cut-hosts-own-push-so-the-only-way-to-land-the-cuts-own-fix-is-clear-land-re-set-and-the-freeze-is-therefore-genuinely-absent-for-the-whole-length-of-that-landing-gate-included
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

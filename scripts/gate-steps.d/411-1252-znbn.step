@@ -62,3 +62,10 @@ STEP_SCRIPT="scripts/test-litmus-item-opener-refused.sh"
 STEP_ERROR="a critical_path item opened by a key other than 'step:' merges backwards into the previous step and the file silently loses a step (1252-znbn) — read which arm failed above; arm 3 failing means the guard itself is no longer exercised"
 STEP_OK="Litmus critical_path items cannot merge silently"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:litmus-item-opener-refused:4/4"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="runs the litmus runner (it wipes its runtime dirs)"
+STEP_LANES="litmus"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/run-litmus-test.sh scripts/test-litmus-item-opener-refused.sh"

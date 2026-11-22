@@ -489,6 +489,27 @@ pub const ENV_INHERIT_PROFILES: &[(&str, &[ProfileVar])] = &[
             ("DOCKER_HOST", PODMAN_WHY, "2029-39bt"),
             ("XDG_CONFIG_HOME", PODMAN_WHY, "2029-39bt"),
             ("XDG_DATA_HOME", PODMAN_WHY, "2029-39bt"),
+            // ORDER 2147-amid: the litmus podman shim's selectors. Without the
+            // mode, a script run under the runner reached its shim with no
+            // LITMUS_PODMAN_MODE, the shim defaulted to REAL and compiled the
+            // podman delegate on first use (RC attempt 2, image-build-
+            // convergence step 1: `podman image inspect exit 101`). Inert
+            // outside the litmus runner, which is the only thing that sets them.
+            (
+                "LITMUS_PODMAN_MODE",
+                "the litmus podman shim's fake/real selector; without it fake mode silently becomes real past the door",
+                "2147-amid",
+            ),
+            (
+                "LITMUS_PODMAN_STATE_DIR",
+                "the PATH of the fake podman's state directory (a locator), so the fake answers from the fixture's world",
+                "2147-amid",
+            ),
+            (
+                "LITMUS_PODMAN_CALLS_FILE",
+                "the PATH of the shim's call log (a locator), so a fixture counts the calls made past the door",
+                "2147-amid",
+            ),
         ],
     ),
     (

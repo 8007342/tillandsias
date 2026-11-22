@@ -21,3 +21,7 @@ STEP_OK="pre-push refusal names the ungated lane"
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="the pre-push hook or salvage script is absent, so the refusal could not be read"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   the meta-orchestration skill carries the same rule, so the refusal is not the only place it lives"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/hooks/pre-push-local-gate.sh scripts/salvage-dirty-worktree.sh scripts/test-refusal-names-the-ungated-lane.sh skills/meta-orchestration/SKILL.md"

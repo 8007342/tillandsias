@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-20: RC attempt 2 evidence gap (coordinator).
+packets:
+  - packet_id: the-litmus-runner-keeps-a-failed-or-timed-out-steps-stderr-where-nothing-deletes-it
+    order: 2146-46fd
+    status: in_progress
+    kind: bug
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [litmus, release-blocker, observability]
+    estimated_hours: 1
+    owned_files:
+      - scripts/run-litmus-test.sh
+    title: "The litmus runner keeps a failed or timed-out step's stderr under target/litmus-runtime/failed-stderr and names it in the FAIL block"
+    context: |
+      RC attempt 2 (2026-11-20) reported image-build-convergence step 1 with empty output; its stderr was unrecoverable
+      because step-stderr/ is wiped at the start of every runner invocation and the gate runs one invocation per spec.
+      Neither yoga nor macuahuitl reproduced the failure afterwards.
+    exit_criteria:
+      - "A FAILED step with stderr, a FAILED step with empty stderr and a TIMEOUT each leave target/litmus-runtime/failed-stderr/<test>-step<N>.stderr (the empty case says so, with rc), the path is printed in the FAIL block, and the file survives a later runner invocation."
+    unscoreable: "probe runs are the measure"
+    provenance: "coordinator relay 2026-11-20; yoga probe."
+    events:
+      - type: filed
+        ts: "2026-11-20T20:48:33Z"
+        host: yoga
+        summary: "filed and claimed (release blocker evidence)"

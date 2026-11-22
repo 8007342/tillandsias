@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: build-sh-routes-every-rustc-unit-through-sccache-when-one-resolves-on-path-with-the-cache-at-a-fixed-bind-mountable-dir-under-the-users-cache-and-the-cold-warm-numbers-on-macuahuitl-show-the-key-includes-the-target-path
+    field: next_action
+    value: |-
+      Delivered by work/1804-sccl. LEFT: (1) 1805-relo bind-mounts ~/.cache/tillandsias/sccache onto the RAID (operator); (2) decide whether gates in target/work/<name> worktrees should share ONE canonical CARGO_TARGET_DIR so a new worktree's dependency build is a hit — that is the real cross-worktree win and the precondition for 1806-lanc, and it reopens the 1599-egzz shared-target regime, so it needs its own row and measurement, not a quiet default.
+
+
+      [2026-11-19T23:40:02Z calmecacpilli] Verify on next stable (live checks run on stable releases). Live check: ./build.sh --preflight shows sccache on, then a warm build (sccache --show-stats).
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: build-sh-routes-every-rustc-unit-through-sccache-when-one-resolves-on-path-with-the-cache-at-a-fixed-bind-mountable-dir-under-the-users-cache-and-the-cold-warm-numbers-on-macuahuitl-show-the-key-includes-the-target-path
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

@@ -31,3 +31,7 @@ STEP_OK="long-running view completion-time refusal check passed"
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="no tillandsias-plan binary resolved, so the refusal could not be exercised"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:long-running-completion:7"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="crates/tillandsias-plan/src/main.rs plan/index.d/** plan/index.yaml plan/long-running.md plan/schema.yaml scripts/check-long-running-view.sh scripts/plan-binary-probe.sh scripts/test-long-running-view-refuses-at-completion.sh"

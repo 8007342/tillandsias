@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 699-usxc).
+#
+# two-inline-gate-checks-become-pooled-step-files.status was ALREADY 'blocked', so no field changed — but the caller
+# supplied a note, and discarding it silently is what this packet is about.
+events:
+  - packet_id: two-inline-gate-checks-become-pooled-step-files
+    event:
+      type: note
+      ts: "2026-11-22T05:37:53Z"
+      host: lenovinha
+      summary: |-
+        queued for landing as PR #1297

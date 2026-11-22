@@ -72,7 +72,7 @@ echo "arm 1 — a terminal flip on a LISTED multi_cycle packet is REFUSED at the
 D="$(scratch "| $MC_ORDER | x | y | z | w |
 ")"
 flip "$D" "$MC_ORDER" completed
-if [ "$FLIP_RC" -ne 0 ] && printf '%s' "$FLIP_OUT" | grep -q 'still listed in'; then
+if [ "$FLIP_RC" -ne 0 ] && grep -q 'still listed in' <<<"$FLIP_OUT"; then
     ok "refused (rc=$FLIP_RC) naming the view"
 else
     bad "expected a refusal; rc=$FLIP_RC out=$(printf '%s' "$FLIP_OUT" | head -1)"

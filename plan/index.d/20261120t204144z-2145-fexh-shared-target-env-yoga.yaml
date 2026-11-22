@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-20: RC attempt 2 release blocker (coordinator).
+packets:
+  - packet_id: test-shared-target-clears-the-inherited-shared-target-environment-before-its-arms
+    order: 2145-fexh
+    status: in_progress
+    kind: bug
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [litmus, fixtures, release-blocker, shared-target]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-shared-target.sh
+    title: "test-shared-target clears the inherited shared-target environment before its arms"
+    context: |
+      RC attempt 2 (2026-11-20), litmus:unreferenced-lane-fixtures-run step 10: arm1 "second enter was admitted while the dir
+      was held", arm3 and arm6 "different checkout admitted under a held lock". Inside the gate the caller has already entered
+      the shared target: CARGO_TARGET_DIR (and TILLANDSIAS_SHARED_TARGET_HELD) are exported, and shared_target_enter answers
+      "off" for a foreign CARGO_TARGET_DIR and "inherited" for a live HELD, so the fixture's own lock is never contended.
+      Measured on yoga: CARGO_TARGET_DIR=/tmp/x bash scripts/test-shared-target.sh reproduces arm1 and arm6.
+    exit_criteria:
+      - "The fixture passes with CARGO_TARGET_DIR, TILLANDSIAS_SHARED_TARGET_HELD and TILLANDSIAS_SHARED_TARGET=off exported by the caller (each measured; pre-fix FAILS arm1/arm6)."
+    unscoreable: "the fixture is the measure"
+    provenance: "RC attempt 2 2026-11-20, coordinator relay; yoga repro."
+    events:
+      - type: filed
+        ts: "2026-11-20T20:41:44Z"
+        host: yoga
+        summary: "filed and claimed (release blocker)"

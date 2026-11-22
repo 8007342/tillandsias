@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-21: build-speed queue item 6 (record only; skip awaits an operator ruling).
+packets:
+  - packet_id: gate-steps-record-their-inputs-in-step-inputs-not-yet-used-to-skip
+    order: "2157-ginp"
+    status: in_progress
+    kind: perf
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, gate]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/check-gate-step-inputs.lua
+      - scripts/gate-steps.d/942-2157-ginp-step-inputs.step
+    title: "Gate steps record their inputs (STEP_INPUTS), checked to resolve, not yet used to skip"
+    context: |
+      Every scripts/gate-steps.d/*.step carries STEP_INPUTS: first cut = the step's own script plus every repo
+      path that script names literally (211 steps, 782 paths). Nothing skips on them: skipping a check whose
+      inputs did not change is a scope reduction the operator rules on. Gate step 942 runs
+      check-gate-step-inputs.lua so a record that names a vanished path, or a step with none, reds the gate
+      instead of rotting silently. Known limit of the first cut: inputs a script reaches through a variable,
+      a sourced helper's own reads, or the crate a test binary builds from are not listed.
+    exit_criteria:
+      - "Every step carries STEP_INPUTS; check-gate-step-inputs.lua answers ok on the tree and rc 1 on a record naming a missing path."
+      - "Gate step 942 has a darwin second regime before landing."
+    unscoreable: "the record's completeness is judged when the skip is ruled on"
+    provenance: "coordinator build-speed queue item 6, 2026-11-21."
+    events:
+      - type: filed
+        ts: "2026-11-21T06:46:50Z"
+        host: yoga
+        summary: "filed and claimed"

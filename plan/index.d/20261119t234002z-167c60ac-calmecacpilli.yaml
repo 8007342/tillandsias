@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-tray-launched-with-an-expired-github-token-calls-github-with-it-because-the-first-rotation-check-runs-before-vault-is-up
+    field: next_action
+    value: |-
+      Gate run_git_image_shell on vault_bootstrap::github_token_due_check_live after the lease acquire, behind a seam the tests can see.
+
+
+      [2026-11-19T23:40:02Z calmecacpilli] Verify on next stable (live checks run on stable releases). Live check: a gh call rotates a due GitHub token before reading it.
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: a-tray-launched-with-an-expired-github-token-calls-github-with-it-because-the-first-rotation-check-runs-before-vault-is-up
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

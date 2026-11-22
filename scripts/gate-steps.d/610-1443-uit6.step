@@ -15,3 +15,7 @@ STEP_SCRIPT="scripts/test-mirror-discipline.sh"
 STEP_ERROR="the git mirror no longer enforces or publishes the seeded branch discipline as specified (1443-uit6); see which arm failed above"
 STEP_OK="mirror enforces the seeded discipline and publishes one discipline ref"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-29 darwin PASS: mirror-discipline at 106dca304 (14 arms, stock ruby 2.6, git status clean)"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="images/git/entrypoint.sh images/git/pre-receive-hook.sh images/git/publish-discipline.sh scripts/test-mirror-discipline.sh"

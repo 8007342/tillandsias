@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: row from yoga's audit, assigned by macuahuitl-fedora 2026-11-21.
+packets:
+  - packet_id: fixtures-stop-reading-real-git-state
+    order: "2197-hgit"
+    status: implemented
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [gate, fixture, hermetic]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-salvage-audit.sh
+      - scripts/test-mode-only-regression-887-bz88.sh
+      - scripts/test-tool-dispatch-lib.sh
+    title: "Gate fixtures that read or wrote the real checkout's git state now build scratch repos"
+    context: |
+      Yoga's audit named four fixtures whose answer depended on the host's branch.
+      test-salvage-audit.sh ARM 2b read the real HEAD's VERSION history and wrote a probe ref and objects into the real
+      .git; it now builds a three-commit scratch repo and runs a copy of salvage-audit.sh there.
+      test-mode-only-regression-887-bz88.sh chmodded the real check-credential-channel.sh and flipped its mode in the real
+      index; its arms now run in a scratch repo holding the two guards, the awk filter, the victim and one caller. Arm 6
+      still reads the real index on purpose, because it checks the committed tree.
+      test-litmus-diff-scope.sh:256 was already hermetic: PROJECT_ROOT is a scratch repo there.
+      test-tool-dispatch-lib.sh:128 is an intended check of the committed scripts, and a comment now says so.
+    exit_criteria:
+      - "On a HEAD with a staged mode change, the old 887-bz88 fixture reds (clean tree: violation:script-not-executable:1) and the new one is ok:mode-only-regression-fixture:all (measured 2026-11-21)."
+      - "test-salvage-audit.sh ARM 2b is ok on the same divergent HEAD and leaves no arm2probe ref in the real repo."
+    unscoreable: "fixture-only change: scored by the fixtures' own arms and the divergent-HEAD comparison above."
+    next_action: "Land."
+    provenance: "macuahuitl-fedora 2026-11-21, from yoga's audit of fixtures that read the real checkout's git state."
+    events:
+      - type: filed
+        ts: "2026-11-22T07:23:18Z"
+        host: calmecacpilli
+        summary: "filed and implemented on work/2197-hgit"
