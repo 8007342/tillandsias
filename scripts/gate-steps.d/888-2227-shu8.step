@@ -11,3 +11,4 @@ STEP_ERROR="the host-escape shim forwarded a non-UTF-8 env value to flatpak-spaw
 STEP_OK="Host-escape shim skips a non-UTF-8 env value by name"
 STEP_READS="scripts/lua/test-host-escape-shim-skips-non-utf8-env.lua scripts/with-tillandsias-builder.sh"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:host-escape-shim-skips-non-utf8-env:3"
+# msys record: yolanda 2026-11-22 msys ok:host-escape-shim-skips-non-utf8-env:3 arms at 692f7b9f9 (after the Lua cut; c85b7a4eb was red with shim-not-found: bare-name spawns)
