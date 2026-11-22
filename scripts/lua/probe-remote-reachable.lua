@@ -56,8 +56,14 @@ local on_github = url:find("github%.com") ~= nil
 local g = on_github and proc.run{ argv = argv_of(GH, "auth", "status"), timeout_ms = T } or { ok = true, code = 0 }
 if g.status == "timed_out" or (g.code == nil and not g.ok) then
     if g.status == "timed_out" then
-        blocked("gh-timeout", "`gh auth status` did not answer within " .. T .. " ms",
-            "check this host's network and its GitHub login with `gh auth status`.")
+        -- The known cause on Silverblue: gh reads its token from the desktop
+        -- keyring, and a LOCKED keyring (or no session bus) blocks the read
+        -- with no error at all.
+        blocked("gh-timeout", "`gh auth status` did not answer within " .. T .. " ms. gh reads its token from the"
+            .. " desktop keyring (Secret Service); a LOCKED keyring, or no session bus, blocks that read silently"
+            .. " (known on Silverblue). A network stall also does this",
+            "a HUMAN unlocks this host's login keyring (log in to the desktop session, or unlock it in Passwords and"
+            .. " Keys / seahorse), then checks `gh auth status` answers promptly; a session never unlocks or re-logs it.")
     end
     blocked("no-gh", "`gh` could not be run on this host (" .. tostring(g.stderr or g.status) .. ")",
         "install gh, or run from a host that has it.")

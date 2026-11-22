@@ -13,7 +13,7 @@
 --   4 LS-HANG     git ls-remote hangs -> blocked:remote-unreachable:ls-remote-timeout
 --                 inside the bounded timeout (no retry: one ls-remote call)
 --   5 LS-AUTH     git ls-remote refused credentials -> ...:ls-remote-auth
---   6 GH-HANG     gh hangs -> ...:gh-timeout, bounded
+--   6 GH-HANG     gh hangs (a locked keyring) -> ...:gh-timeout, bounded, remedy names the keyring
 --   7 LOCAL       a non-GitHub origin (a fixture's local remote) never asks gh
 --
 -- Verdict: ok:probe-remote-reachable:<n> or violation:probe-remote-reachable:<failed>.
@@ -87,8 +87,8 @@ if o == "blocked:remote-unreachable:ls-remote-auth" and rc == 1 then ok("5: refu
 else bad("5: refused credentials answered [" .. o .. "] rc=" .. tostring(rc) .. " err=[" .. e .. "]") end
 
 o, e, rc, ms, calls = probe("hang", "ok"); all_calls = all_calls .. calls
-if o == "blocked:remote-unreachable:gh-timeout" and rc == 1 and ms < 15000 then
-    ok("6: a hung gh -> gh-timeout in " .. ms .. " ms")
+if o == "blocked:remote-unreachable:gh-timeout" and rc == 1 and ms < 15000 and e:find("keyring", 1, true) then
+    ok("6: a hung gh (a locked keyring) -> gh-timeout in " .. ms .. " ms, its remedy naming the keyring")
 else bad("6: hung gh answered [" .. o .. "] rc=" .. tostring(rc) .. " in " .. ms .. " ms") end
 
 o, e, rc, ms, calls = probe("none", "ok", "/tmp/scratch/remote.git")
