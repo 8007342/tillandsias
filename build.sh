@@ -5814,7 +5814,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # 2026-08-12. Diff-scoped like 634-39ik's enforcement, so a fragment
     # inherited from a sibling only warns and can never red-gate this host.
     _step "Checking that fragments added by this change parse..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-added-fragments-parse.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-added-fragments-parse.lua" 2>&1; then
         _error "this change adds a ledger fragment the fold cannot read — its packets would be invisible to every host; the offending file and reason are named on the check's own output above, and the fragment format is documented in plan/index.d/README.md"
         exit 1
     fi
