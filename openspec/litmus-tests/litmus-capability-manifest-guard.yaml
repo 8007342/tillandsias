@@ -55,9 +55,9 @@ critical_path:
     # manifest, and compile in an isolated private copy. The checkout is never
     # edited: a build failure therefore cannot poison capabilities.txt for a
     # concurrent cargo invocation or a later lane in the suite.
-    command: "bash scripts/test-capability-manifest-guard.sh"
-    timeout_ms: 300000
-    expected_behavior: "PASS: capability manifest guard (4/4)"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run --timeout 10m scripts/lua/test-capability-manifest-guard.lua 2>&1"
+    timeout_ms: 600000
+    expected_behavior: "ok:capability-manifest-guard:4 arms"
 
 observability:
   traces:
