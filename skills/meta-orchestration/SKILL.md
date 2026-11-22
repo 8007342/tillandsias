@@ -949,7 +949,7 @@ filing — not the prompt.
 4. **Launch-generated opsx dirt is a refusal (deterministic, order 1440-w8g8)**:
    before refusing on startup dirt, name WHICH dirt it is:
    ```bash
-   scripts/check-opsx-generated-dirt.sh
+   tillandsias-plan script run scripts/lua/check-opsx-generated-dirt.lua
    ```
    It prints exactly one line matching
    `^(ok:clean-tree|launch-dirt:opsx-only|non-opsx:.*)$`. `launch-dirt:opsx-only`
@@ -964,7 +964,7 @@ filing — not the prompt.
    step produced. Moving the generated set to a new openspec version is a
    deliberate `openspec update` + commit under its own packet, never a cycle's
    reaction to dirt. `non-opsx:` (exit 3) is real sibling/operator dirt: fall
-   through to 4b, then to the dirty-start refusal. `ok:clean-tree` (exit 4)
+   through to 4b, then to the dirty-start refusal. `ok:clean-tree` (exit 0; 4 until 2201-opsx)
    means there is nothing to name. The checker is a falsifiable machine
    decision; do not substitute prose judgment for it.
 4b. **Resumable claim dirt (deterministic, order 833-fpe7)**: when the dirt is

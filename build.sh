@@ -4944,7 +4944,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # named only if it RUNS, so the WSL gate's Linux ELF is never recommended
     # to a Windows host whose .exe it sits beside.
     _step "Checking the stale-binary remedy names only a runnable binary (1267-uafx)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-remedy-names-only-a-runnable-binary.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-plan-binary-remedy-names-only-a-runnable-binary.lua" 2>&1; then
         _error "the plan-only lane's remedy named a binary that cannot run on this host"
         exit 1
     fi
@@ -6966,7 +6966,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # malformed fragment must still be refused, and a real ledger fault must not
     # be blamed on the instrument.
     _step "Checking the lane blames the instrument, not the ledger, when the binary cannot run (1060-6fx7)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-lane-instrument-vs-ledger.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-lane-instrument-vs-ledger.lua" 2>&1; then
         _error "the plan-only lane misattributes an instrument failure to the ledger (1060-6fx7) — see the verdict line above"
         exit 1
     fi
@@ -6997,7 +6997,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # cannot tell that from "the code never landed" — opposite diagnoses. The
     # fixture reproduces the rewrite and pins that the two stay separable.
     _step "Checking a rewritten evidence SHA is named with its landed replacement (1024-c3h3)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-closure-evidence-survives-landing.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-closure-evidence-survives-landing.lua" 2>&1; then
         _error "the closure-evidence check no longer separates a rewritten ref from work that never landed (1024-c3h3) — see the verdict line above"
         exit 1
     fi
@@ -7057,7 +7057,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # control, so it belongs inside the gate for the same reason its sibling
     # does — a control nothing executes cannot protect the hole it names.
     _step "Checking the plan-only lane survives the mandated merge without opening a bypass (1056-5344)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-pre-push-plan-lane-after-merge.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-pre-push-plan-lane-after-merge.lua" 2>&1; then
         _error "the plan-only lane's merge scoping lost a boundary (1056-5344) — see the verdict line above"
         exit 1
     fi

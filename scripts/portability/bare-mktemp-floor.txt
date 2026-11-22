@@ -21,7 +21,6 @@ scripts/check-release-asset-integrity.sh 1
 scripts/check-script-exec-bits.sh 1
 scripts/check-spec-index-resolution-agreement.sh 2
 scripts/check-tracked-files-unwritten.sh 1
-scripts/check-windows-tray-clippy.sh 1
 scripts/clamp-ca-material.sh 1
 scripts/cycle-preflight.sh 2
 scripts/diagnose-proxy.sh 1
