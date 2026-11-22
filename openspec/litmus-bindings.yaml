@@ -170,6 +170,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:archive-answerability-tree-copy
+  - litmus:script-run-ignores-inherited-project-root
   - litmus:script-run-roots-at-a-repository
   - litmus:land-queue-host-door-names-its-cause
   - litmus:plan-binary-rebuild-while-running

@@ -1070,10 +1070,15 @@ fn walk_up_to_repo(mut dir: PathBuf) -> Option<PathBuf> {
     }
 }
 
+/// ORDER 2225-prrt. PROJECT_ROOT is NOT read here. It is a generic name that
+/// many tools set, and scripts/run-litmus-test.sh exports it (naming the real
+/// checkout) for its metrics logs (1268-m2ir). Read ahead of the cwd, it made
+/// every Lua decider a litmus step ran inside a `git init`-ed scratch repo
+/// judge the real checkout instead (measured on calmecacpilli, 2026-11-22).
+/// TILLANDSIAS_REPO_ROOT stays the one explicit override.
 fn locate_repo_root() -> Option<PathBuf> {
     locate_repo_root_from(
         std::env::var("TILLANDSIAS_REPO_ROOT").ok(),
-        std::env::var("PROJECT_ROOT").ok(),
         std::env::current_dir().ok(),
         SCRIPT_PATH.get().cloned(),
         std::env::current_exe().ok(),
@@ -1081,15 +1086,16 @@ fn locate_repo_root() -> Option<PathBuf> {
 }
 
 /// The resolution order, with every input passed in so it is testable without
-/// touching the process environment or cwd.
+/// touching the process environment or cwd: TILLANDSIAS_REPO_ROOT, then the
+/// cwd's repository, then (script mode) the script's repository and nothing
+/// after it, else (not script mode) the runner binary's checkout.
 fn locate_repo_root_from(
     repo_root_env: Option<String>,
-    project_root_env: Option<String>,
     cwd: Option<PathBuf>,
     script: Option<PathBuf>,
     exe: Option<PathBuf>,
 ) -> Option<PathBuf> {
-    for p in [repo_root_env, project_root_env].into_iter().flatten() {
+    if let Some(p) = repo_root_env {
         let pb = PathBuf::from(p);
         if pb.is_dir() {
             return Some(pb);
@@ -1936,7 +1942,6 @@ mod tests {
         assert_eq!(
             locate_repo_root_from(
                 None,
-                None,
                 Some(scratch.clone()),
                 Some(in_scratch.clone()),
                 Some(exe.clone())
@@ -1947,13 +1952,12 @@ mod tests {
         // the None above is script mode's doing, not a fixture that cannot find
         // the runner's checkout at all.
         assert_eq!(
-            locate_repo_root_from(None, None, Some(scratch.clone()), None, Some(exe.clone())),
+            locate_repo_root_from(None, Some(scratch.clone()), None, Some(exe.clone())),
             Some(runner_checkout.clone())
         );
         // A script inside a repository, run from a foreign cwd: its repository.
         assert_eq!(
             locate_repo_root_from(
-                None,
                 None,
                 Some(scratch.clone()),
                 Some(in_repo.clone()),
@@ -1966,7 +1970,6 @@ mod tests {
         assert_eq!(
             locate_repo_root_from(
                 None,
-                None,
                 Some(repo.join("scripts")),
                 Some(in_scratch.clone()),
                 Some(exe.clone())
@@ -1976,7 +1979,6 @@ mod tests {
         assert_eq!(
             locate_repo_root_from(
                 Some(scratch.display().to_string()),
-                None,
                 Some(repo.clone()),
                 Some(in_repo),
                 Some(exe)
