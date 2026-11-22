@@ -64,7 +64,7 @@ calls=0; [ -f "$W/podman.calls" ] && calls="$(wc -l < "$W/podman.calls" | tr -d 
 
 # 4
 if grep -q '^# @live-fixture ' "$FX" \
-    && grep -q "grep -q '^# @live-fixture '" "$ROOT/scripts/preflight-fixtures-default-target.sh"; then
+    && grep -qF "grep -qE '^(#|--) @live-fixture '" "$ROOT/scripts/preflight-fixtures-default-target.sh"; then
     ok "4 GUARD the vault fixture is marked @live-fixture and the changed-fixture guard skips that marker"
 else
     bad "4 GUARD the @live-fixture marker or the guard's skip for it is missing"
