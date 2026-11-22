@@ -17,19 +17,37 @@
 -- Verdict: ok:host-escape-shim-skips-non-utf8-env:<n> or
 -- violation:host-escape-shim-skips-non-utf8-env:<failed>.
 
-local root = text.trim(proc.run{ argv = { "pwd", "-P" } }.stdout or "")
+-- Every child is Git's bash with RELATIVE paths, never a bare tool name: a
+-- native Windows process resolves a bare `bash` to WSL's and may find no sed,
+-- find or chmod at all (2218-x4s3; msys red with shim-not-found on c85b7a4eb).
+local BASH = "/bin/bash"
+do
+    local ep = text.trim(proc.run({ argv = { "git", "--exec-path" }, timeout_ms = 10000 }).stdout or "")
+    if ep:find("^%a:/.*/libexec/git%-core$") then  -- mingw64/ or ucrt64/, per Git build
+        BASH = (ep:gsub("/[^/]+/libexec/git%-core$", "/bin/bash.exe"))
+    end
+end
 local rel = "target/plan-scratch/shim-utf8-" .. tostring(time.now_ms())
-local W = root .. "/" .. rel
-proc.run{ argv = { "mkdir", "-p", W .. "/bin" } }
-local function cleanup() proc.run{ argv = { "find", W, "-delete" }, timeout_ms = 60000 } end
+local function sh(script, ...)
+    return proc.run{ argv = { BASH, rel .. "/" .. script, ... }, timeout_ms = 30000 }
+end
+fs.mkdir(rel .. "/bin")
+fs.write(rel .. "/cleanup.sh", 'rm -rf -- "$1"\n')
+local function cleanup() proc.run{ argv = { BASH, rel .. "/cleanup.sh", rel }, timeout_ms = 60000 } end
 
 local pass, fail = 0, 0
 local function ok(m) out.line("ok:   " .. m); pass = pass + 1 end
 local function bad(m) log.raw("FAIL: " .. m); fail = fail + 1 end
 
--- The shim as it ships: the heredoc body between <<'SHIM' and SHIM.
-local body = proc.run{ argv = { "sed", "-n", "/<<'SHIM'$/,/^SHIM$/{/<<'SHIM'$/d;/^SHIM$/d;p;}",
-    root .. "/scripts/with-tillandsias-builder.sh" } }.stdout or ""
+-- The shim as it ships: the heredoc body between the <<'SHIM' line and the
+-- line that is exactly SHIM, cut in Lua (no sed; \r tolerated).
+local srcfile = (fs.read("scripts/with-tillandsias-builder.sh") or ""):gsub("\r\n", "\n")
+local body = ""
+do
+    local _, open_end = srcfile:find("<<'SHIM'\n", 1, true)
+    local close_at = open_end and srcfile:find("\nSHIM\n", open_end, true)
+    if open_end and close_at then body = srcfile:sub(open_end + 1, close_at) end
+end
 if not body:find("flatpak-spawn --host", 1, true) then
     cleanup()
     log.raw("FAIL: could not cut the host-escape shim out of scripts/with-tillandsias-builder.sh — this fixture has drifted from the code it pins")
@@ -60,19 +78,19 @@ for a in "$@"; do
 done
 echo "ran:${*: -1}"
 ]==])
-proc.run{ argv = { "chmod", "+x", W .. "/bin/flatpak-spawn" } }
 
 -- The driver sets the bytes itself (a non-UTF-8 value is set by printf, not
 -- carried through the runner's env table), then runs the shim body.
 fs.write(rel .. "/drive.sh", [==[
-export PATH="$1/bin:$PATH"
+chmod +x "$1/bin/flatpak-spawn"
+export PATH="$(cd "$1" && pwd)/bin:$PATH"
 export TILLANDSIAS_T_BAD="$(printf 'json\xfe\xff')"
 export TILLANDSIAS_T_GOOD="$(printf 'caf\xc3\xa9')"
 bash "$2" argone
 ]==])
 
 local function run(shim)
-    local p = proc.run{ argv = { "bash", W .. "/drive.sh", W, W .. "/" .. shim }, timeout_ms = 30000 }
+    local p = sh("drive.sh", rel, rel .. "/" .. shim)
     return p.stdout or "", p.stderr or "", p.code
 end
 
