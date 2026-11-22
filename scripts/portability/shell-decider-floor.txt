@@ -539,7 +539,6 @@ scripts/test-vault-shutdown-fixture-classifier.sh
 scripts/test-vault-shutdown-forwards-sigterm.sh
 scripts/test-verify-closure.sh
 scripts/test-version-bump-isolation-scope.sh
-scripts/test-vsock-handshake-wire-v2.sh
 scripts/test-warm-tier-model.sh
 scripts/test-windows-host-lane-refusal-controls.sh
 scripts/test-windows-host-lane-refusal.sh
