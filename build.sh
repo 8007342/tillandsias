@@ -4903,7 +4903,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # named only if it RUNS, so the WSL gate's Linux ELF is never recommended
     # to a Windows host whose .exe it sits beside.
     _step "Checking the stale-binary remedy names only a runnable binary (1267-uafx)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-remedy-names-only-a-runnable-binary.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-plan-binary-remedy-names-only-a-runnable-binary.lua" 2>&1; then
         _error "the plan-only lane's remedy named a binary that cannot run on this host"
         exit 1
     fi
@@ -7027,7 +7027,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # control, so it belongs inside the gate for the same reason its sibling
     # does — a control nothing executes cannot protect the hole it names.
     _step "Checking the plan-only lane survives the mandated merge without opening a bypass (1056-5344)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-pre-push-plan-lane-after-merge.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-pre-push-plan-lane-after-merge.lua" 2>&1; then
         _error "the plan-only lane's merge scoping lost a boundary (1056-5344) — see the verdict line above"
         exit 1
     fi

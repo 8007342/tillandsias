@@ -297,7 +297,6 @@ scripts/test-land-gate-refusal-names-its-step.sh
 scripts/test-land-merges-trunk.sh
 scripts/test-land-notice-names-unrun-litmus.sh
 scripts/test-land-push-bounded.sh
-scripts/test-land-push-classification.sh
 scripts/test-land-queue.sh
 scripts/test-land-verdict-through-a-pipe.sh
 scripts/test-landed-but-open.sh
@@ -394,7 +393,6 @@ scripts/test-plan-binary-probe-release-over-debug.sh
 scripts/test-plan-binary-probe-usage-determinism.sh
 scripts/test-plan-binary-probe-usage-population.sh
 scripts/test-plan-binary-probe.sh
-scripts/test-plan-binary-remedy-names-only-a-runnable-binary.sh
 scripts/test-plan-binary-runnability-precondition.sh
 scripts/test-plan-field-get.sh
 scripts/test-plan-fragments-lane-affordance.sh
@@ -414,7 +412,6 @@ scripts/test-pre-push-honours-a-live-freeze.sh
 scripts/test-pre-push-issue-capture-lane.sh
 scripts/test-pre-push-linux-next-merged.sh
 scripts/test-pre-push-main-branch-affordance.sh
-scripts/test-pre-push-plan-lane-after-merge.sh
 scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh
 scripts/test-pre-push-trailer-states-what-it-saw.sh
 scripts/test-pre-push-version-guard-sigpipe.sh
