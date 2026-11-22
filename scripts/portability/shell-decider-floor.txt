@@ -122,7 +122,6 @@ scripts/test-claims-fleet-visible.sh
 scripts/test-claude-forge-bypass-preaccepted.sh
 scripts/test-clear-vault-credentials-partial-is-nonzero.sh
 scripts/test-clear-vault-host-credentials.sh
-scripts/test-closure-evidence-survives-landing.sh
 scripts/test-closure-guards-name-the-way-out.sh
 scripts/test-cloudflare-login.sh
 scripts/test-cloudflare-oauth-core.sh
@@ -301,7 +300,6 @@ scripts/test-land-push-classification.sh
 scripts/test-land-queue.sh
 scripts/test-land-verdict-through-a-pipe.sh
 scripts/test-landed-but-open.sh
-scripts/test-lane-instrument-vs-ledger.sh
 scripts/test-ledger-node-claim-resolution.sh
 scripts/test-ledger-prose-roundtrip.sh
 scripts/test-ledger-ts-guard.sh
@@ -369,7 +367,6 @@ scripts/test-mo-full-attest.sh
 scripts/test-mo-full-record-precedes-marker.sh
 scripts/test-mode-only-regression-887-bz88.sh
 scripts/test-must-ship-rows.sh
-scripts/test-native-lint-attested.sh
 scripts/test-nix-cache-service.sh
 scripts/test-nix-toolbox.sh
 scripts/test-no-competing-gate.sh

@@ -561,7 +561,6 @@ scripts scripts/test-claim-wip-limit.sh 2
 scripts scripts/test-claims-across-branches.sh 7
 scripts scripts/test-claims-affordance.sh 2
 scripts scripts/test-claims-fleet-visible.sh 13
-scripts scripts/test-closure-evidence-survives-landing.sh 5
 scripts scripts/test-closure-guards-name-the-way-out.sh 6
 scripts scripts/test-cloudflare-login.sh 33
 scripts scripts/test-cloudflare-token-rotation.sh 16
@@ -665,7 +664,6 @@ scripts scripts/test-land-gate-refusal-names-its-step.sh 12
 scripts scripts/test-land-notice-names-unrun-litmus.sh 2
 scripts scripts/test-land-queue.sh 1
 scripts scripts/test-land-verdict-through-a-pipe.sh 1
-scripts scripts/test-lane-instrument-vs-ledger.sh 6
 scripts scripts/test-ledger-prose-roundtrip.sh 8
 scripts scripts/test-ledger-ts-guard.sh 2
 scripts scripts/test-ledger-write-reaches-its-reader.sh 22

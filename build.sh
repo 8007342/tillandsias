@@ -6929,7 +6929,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # malformed fragment must still be refused, and a real ledger fault must not
     # be blamed on the instrument.
     _step "Checking the lane blames the instrument, not the ledger, when the binary cannot run (1060-6fx7)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-lane-instrument-vs-ledger.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-lane-instrument-vs-ledger.lua" 2>&1; then
         _error "the plan-only lane misattributes an instrument failure to the ledger (1060-6fx7) — see the verdict line above"
         exit 1
     fi
@@ -6967,7 +6967,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # cannot tell that from "the code never landed" — opposite diagnoses. The
     # fixture reproduces the rewrite and pins that the two stay separable.
     _step "Checking a rewritten evidence SHA is named with its landed replacement (1024-c3h3)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-closure-evidence-survives-landing.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-closure-evidence-survives-landing.lua" 2>&1; then
         _error "the closure-evidence check no longer separates a rewritten ref from work that never landed (1024-c3h3) — see the verdict line above"
         exit 1
     fi
