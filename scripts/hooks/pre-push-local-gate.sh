@@ -1693,14 +1693,17 @@ attempt_plan_only_lane() {
     # fragment at its author was bypassed by the only path that skips the build,
     # which is the path fragments actually take. Measured windows 2026-08-15:
     # `packets: [unclosed` pushed clean through this lane.
-    if [[ -f scripts/check-added-fragments-parse.sh ]]; then
-        if ! out="$(bash scripts/check-added-fragments-parse.sh 2>&1)"; then
+    # ORDER 2223-afpl: the gate is Lua on `script run`, on the plan_bin this
+    # lane resolved above; its capability was checked before the status-loss
+    # guard, and a guard that cannot run is a refusal (787-f7dh).
+    if [[ -f scripts/lua/check-added-fragments-parse.lua ]]; then
+        if ! out="$(TILLANDSIAS_REPO_ROOT="$REPO_ROOT" TILLANDSIAS_SCRIPT_RUNNER_BIN="$plan_bin" "$plan_bin" script run scripts/lua/check-added-fragments-parse.lua 2>&1)"; then
             echo "plan-only lane: validation FAILED — check-added-fragments-parse refused (full gate required):" >&2
             echo "$out" | head -6 | sed 's/^/  /' >&2
             return 1
         fi
     else
-        LANE_NOTES+=("scripts/check-added-fragments-parse.sh absent — skipped")
+        LANE_NOTES+=("scripts/lua/check-added-fragments-parse.lua absent — skipped")
     fi
 
     # ORDER 1069-5sp4: THE SCORABLE-OBLIGATION GUARD CANNOT RUN
