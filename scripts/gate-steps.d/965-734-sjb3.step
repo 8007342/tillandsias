@@ -13,4 +13,5 @@ STEP_DESC="Checking the pre-commit spec sweep's exclusions are answer-preserving
 STEP_SCRIPT="scripts/test-precommit-zero-trace-scan-scope.sh"
 STEP_ERROR="excluding build output changed the referenced-spec set (734-sjb3) — see the verdict line above"
 STEP_OK="Zero-trace scan scope pin passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin precommit-zero-trace-scan-scope: 4 passed, 0 failed (work/2185-inst @ fcc5fc2b0)"
 STEP_READS="scripts/hooks/pre-commit-openspec.sh scripts/test-precommit-zero-trace-scan-scope.sh"
