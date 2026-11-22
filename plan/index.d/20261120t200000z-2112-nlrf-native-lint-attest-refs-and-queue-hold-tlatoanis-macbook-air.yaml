@@ -44,7 +44,7 @@ packets:
   estimated_hours: 2
   title: 'Port scripts/attest-native-lint.sh and scripts/check-native-lint-attested.sh to Lua once land-queue.sh and land-on-platform-branch.sh can call a Lua decider'
   context: >-
-    2112-nlrf extended both scripts in shell, because both callers (land-queue.sh, owned by yoga, and land-on-platform-branch.sh) invoke them with bash and parse their verdict lines. This packet carries that shell-to-lua obligation. Keep the verdict grammar and exit codes (ok/refused/override/hold, 0/1/3), and port test-native-lint-attested.sh in the same change.
+    2112-nlrf extended both scripts in shell, because both callers (land-queue.sh, owned by yoga, and land-on-platform-branch.sh) invoke them with bash and parse their verdict lines. This packet carries that shell-to-lua obligation. Keep the verdict grammar and exit codes (ok/refused/override/hold, 0/1/3). The test-native-lint-attested.sh port is NOT in scope: 2208-vxb6 (#1321) did it as scripts/lua/test-native-lint-attested.lua (coordinator, 2026-11-22).
   exit_criteria:
   - 'Both scripts are deleted, Lua twins exist, and both callers run the twins.'
   - 'test-native-lint-attested and test-native-lint-hold pass against the twins.'
