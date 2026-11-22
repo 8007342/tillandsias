@@ -29,8 +29,8 @@ local ROOT = fixture.repo_root()
 local BASH = "bash"
 local ep = T:run{ "git", "--exec-path" }
 local gp = text.trim(ep.stdout or "")
-if gp:find("/mingw64/libexec/git%-core$") then
-    BASH = gp:gsub("/mingw64/libexec/git%-core$", "/bin/bash.exe")
+if gp:find("^%a:/.*/libexec/git%-core$") then  -- mingw64/ or ucrt64/, per Git build
+    BASH = (gp:gsub("/[^/]+/libexec/git%-core$", "/bin/bash.exe"))
 end
 
 local S = T:scratch("tree")
