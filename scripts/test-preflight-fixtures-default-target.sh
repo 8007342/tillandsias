@@ -153,6 +153,9 @@ if ! grep -qx script <<<"$caps"; then # sigpipe-ok: herestring, no upstream writ
 else
     L="$W/lrepo"
     mkdir -p "$L/scripts/lua" "$L/target/release" "$W/lpath"
+    # The Lua runner roots a decider at the repository containing its cwd and
+    # refuses outside one (2213-ag5u), so the stand-in checkout is a repository.
+    git init -q "$L"
     cp "$DEC" "$ROOT/scripts/plan-binary-probe.sh" "$L/scripts/"
     cp "$REALP" "$L/target/release/tillandsias-plan"; cp "$REALP" "$W/lpath/tillandsias-plan"
     cat > "$L/scripts/res-cd-first.sh" <<'EOS'
@@ -179,7 +182,10 @@ EOS
         bad "ARM 8 expected the cd-first Lua fixture refused (rc=$rc8): $(printf '%s' "$o8" | tail -2 | tr '\n' ';')"
     fi
     o9="$(by_lpath scripts/lua/test-absolute.lua)"; rc9=$?
-    if [ "$rc9" -eq 0 ] && [ "$(printf '%s' "$o9" | tail -1)" = "ok:fixture-default-target:1 checked" ]; then
+    # Not noted as red in both regimes: a fixture the runner refused everywhere
+    # is "checked" and noted, which would admit it vacuously (2213-ag5u).
+    if [ "$rc9" -eq 0 ] && [ "$(printf '%s' "$o9" | tail -1)" = "ok:fixture-default-target:1 checked" ] \
+       && [[ "$o9" != *"red-in-both-or-normal-regime"* ]]; then
         ok "ARM 9 the absolutising Lua fixture is admitted and counted"
     else
         bad "ARM 9 expected the absolutising Lua fixture admitted (rc=$rc9): $(printf '%s' "$o9" | tail -2 | tr '\n' ';')"

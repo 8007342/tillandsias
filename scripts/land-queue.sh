@@ -337,6 +337,27 @@ delta_plan_only() {
 # ── THE WORKING TREE MUST BE CLEAN ───────────────────────────────────────────
 # This script checks out and rewrites HEAD. Doing that over uncommitted work
 # destroys it, and `git checkout` would happily carry the changes across.
+# ORDER 2209-dfix: A HELD LOCK IS SAID FIRST, AND ON BOTH STREAMS. The 03:42
+# timer --daily-full on macuahuitl (2026-11-22) exited with nothing in its log
+# while run 28 held the lock: a live queue leaves the checkout mid-merge, so the
+# dirty-tree refusal (or the in-flight skip) is what a second caller meets, and
+# neither named the holder where the timer looks. --daily-full now WAITS for the
+# holder (up to TILLANDSIAS_LAND_QUEUE_DAILY_LOCK_WAIT_S, default 3 h), saying
+# so; any other caller is told who holds it and exits 3.
+_lock_holder() { local _h; _h="$(cat "$LOCKDIR/pid" 2>/dev/null || true)"; [ -n "$_h" ] && kill -0 "$_h" 2>/dev/null && printf '%s\n' "$_h"; }
+if _h0="$(_lock_holder)"; then
+    if [ "$DAILY_FULL" -eq 1 ]; then
+        _wmax="${TILLANDSIAS_LAND_QUEUE_DAILY_LOCK_WAIT_S:-10800}"; _w=0
+        say "land-queue:daily-full:waiting-for-lock:$_h0 (up to ${_wmax}s)" | tee /dev/stderr
+        while _h0="$(_lock_holder)"; do
+            [ "$_w" -ge "$_wmax" ] && { say "skip:land-queue:daily-full:lock-held:$_h0 — waited ${_w}s" | tee /dev/stderr; exit 3; }
+            sleep 30; _w=$((_w + 30))
+        done
+    else
+        say "skip:land-queue:in-flight:$_h0 — one landing at a time, by design" | tee /dev/stderr
+        exit 3
+    fi
+fi
 dirty="$(git status --porcelain 2>/dev/null)"
 if [ -n "$dirty" ]; then
     say "fail:land-queue:dirty-tree — this script rewrites HEAD; commit or stash first"

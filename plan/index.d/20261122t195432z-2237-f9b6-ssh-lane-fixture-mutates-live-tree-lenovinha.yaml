@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: ssh-lane-fixture-mutates-the-live-tree
+    order: 2237-f9b6
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      test-ssh-lane-refuses-when-unwired.sh rewrites crates/tillandsias-headless/src/main.rs IN THE LIVE TREE for its mutation arm and restores it from a bash trap; a killed gate leaves the source mutated, and the cargo test it runs races any other cargo in the same tree.
+    context: |
+      Found by lenovinha screening it for a Lua port (2235-zkmx passed it over); coordinator 2026-11-22: the host-state class at its worst. Arm 2 seds the pre-fix fallback wording back into main.rs, runs cargo test -p tillandsias-headless write_forge_gitconfig, and expects red; the restore is a bash trap on EXIT INT TERM, which a SIGKILL (a gate deadline, an OOM kill) never runs. The fix is to mutate a scratch copy or use a cfg/env seam, never the checkout's source; the Lua port follows from that.
+    exit_criteria:
+      - "the mutation arm never writes the checkout's tracked files: a fixture run killed mid-arm leaves git status clean (an arm that SIGKILLs it and checks)"
+      - "the mutation still reds the unit arms, proven by the arm itself"
+      - "then the fixture is ported to Lua and the .sh deleted"
+    unscoreable: "unpinnable-until-the-guard-exists: the kill-mid-arm check is the deliverable."
+    next_action: "Choose scratch copy vs seam: a scratch crate copy needs the workspace; a cfg/env seam on the wording under test may be lighter. Then port."
+    provenance: coordinator direction; filed by lenovinha.
+    related: [2235-zkmx]
+    events:
+      - {type: filed, ts: '2026-11-22T19:54:32Z', host: lenovinha, summary: ssh-lane fixture mutates the live tree filed}

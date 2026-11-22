@@ -4072,6 +4072,9 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
     // run if it died without its graceful exit — before anything launches.
     let run_id = crate::dead_run::mint_run_id();
     reap_previous_run_if_dead(&run_id);
+    // 1911-3gqy: forwarders and networks whose browser window is gone (a
+    // killed tray never ran their exit watcher). Live windows are spared.
+    crate::browser_open::sweep_orphan_windows(debug);
     ensure_desktop_icon();
     let version = super::VERSION.trim().to_string();
     let root = super::resolve_runtime_asset_root(&version, debug)?;
@@ -4320,6 +4323,8 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
         // @trace spec:graceful-shutdown, spec:app-lifecycle
         // 1988-trkp: a plain exit keeps forges and hands their lanes on;
         // only `tillandsias --stop-all` stops everything.
+        // 1911-3gqy: on Quit, reap leftovers of windows already gone.
+        crate::browser_open::sweep_orphan_windows(debug);
         let plan = crate::shutdown_plan(crate::take_stop_all_request());
         if plan.mark_lanes_for_adoption {
             let lanes = crate::mcp_socket::mark_served_lanes_for_adoption();

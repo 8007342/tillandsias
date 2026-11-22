@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-metrics-attribution-and-opencode-follower-fixtures
+    order: 2233-vxu9
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      Whole-file shell-to-Lua ports of the two fixtures 2232-k8jc skipped for needing a concurrent background process: test-gate-step-metrics-attribution.sh and test-opencode-tool-start-follower.sh, now on proc.spawn.
+    context: |
+      Coordinator 2026-11-22: proc.spawn (used by calmecacpilli's #1331 for concurrent grades, and on trunk in test-browser-audio-generic-names.lua) gives a handle with :wait() and :kill(), which covers both background processes: gate B's concurrent log writer and the opencode log follower under test.
+    exit_criteria:
+      - "each .lua gives the same verdict as its .sh on the trunk tree, and the same red arm as the .sh under a mutant"
+      - "every caller runs the .lua; both .sh files are deleted; no spawned process outlives the fixture"
+    unscoreable: "unpinnable-until-the-guard-exists: the mutant parity is the deliverable."
+    next_action: "Port on proc.spawn, mutant-parity each, rewire build.sh and gate step 510, delete the .sh."
+    provenance: coordinator direction; filed by lenovinha.
+    related: [2232-k8jc]
+    events:
+      - {type: filed, ts: '2026-11-22T18:50:12Z', host: lenovinha, summary: two background-process fixture ports filed}
