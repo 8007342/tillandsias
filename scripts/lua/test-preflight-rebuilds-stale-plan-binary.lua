@@ -62,6 +62,10 @@ local function run_door(name, stale_at_start, cargo_body)
         "#!/usr/bin/env bash\n"
         .. "if [ \"$1\" = validator-surface-hash ] && [ ! -e '" .. A .. "/fresh' ]; then\n"
         .. "  echo 'stale:validator-surface built-from=0000 checkout=ffff' >&2; exit 3\nfi\n"
+        -- HERMETIC (darwin 2026-11-21): the "current" answer is the stub's own,
+        -- never the real binary's, so a host whose release build is from
+        -- another branch does not red the control.
+        .. "if [ \"$1\" = validator-surface-hash ]; then echo 'ok:validator-surface:ffff'; exit 0; fi\n"
         .. "exec '" .. REAL .. "' \"$@\"\n")
     fs.write(REL .. "/" .. name .. "/cargo",
         "#!/usr/bin/env bash\necho \"$*\" >> '" .. A .. "/cargo.calls'\n" .. cargo_body:gsub("@A@", A) .. "\n")
