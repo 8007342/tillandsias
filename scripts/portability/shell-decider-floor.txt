@@ -76,7 +76,6 @@ scripts/check-yaml-reader-availability.sh
 scripts/test-a-claim-names-a-workstation.sh
 scripts/test-added-test-is-referenced.sh
 scripts/test-agent-identity.sh
-scripts/test-all-fragments-intact.sh
 scripts/test-append-event-archived-refusal.sh
 scripts/test-append-vs-origin-fold.sh
 scripts/test-archiver-concurrent-check.sh
@@ -220,7 +219,6 @@ scripts/test-freshness-regime-budget.sh
 scripts/test-gate-divergence-is-declared.sh
 scripts/test-gate-fast-refusals.sh
 scripts/test-gate-host-memory-figure.sh
-scripts/test-gate-memory-floor-consumer.sh
 scripts/test-gate-memory-refusal.sh
 scripts/test-gate-memory-wsl2-guest.sh
 scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh
@@ -306,7 +304,6 @@ scripts/test-ledger-ts-guard.sh
 scripts/test-ledger-write-reaches-its-reader.sh
 scripts/test-litmus-binding-truth.sh
 scripts/test-litmus-bindings.sh
-scripts/test-litmus-budget-negative-control.sh
 scripts/test-litmus-budget-tally.sh
 scripts/test-litmus-covering-relay-scope.sh
 scripts/test-litmus-diff-scope.sh
