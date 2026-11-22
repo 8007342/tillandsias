@@ -3813,7 +3813,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _CHECK_T0="$(timing_now_ms)"
     # 1915-gtph: a FAILED gate flushes its phase rows too — the gate that died
     # at minute 20 is the one whose minutes most need attributing.
-    trap '_gate_rc=$?; _phase_emit_timing; timing_emit build-check check "$_CHECK_T0" "$_gate_rc"' EXIT
+    trap '_gate_rc=$?; _phase_emit_timing; timing_emit build-check check "$_CHECK_T0" "$_gate_rc"; bash "$SCRIPT_DIR/scripts/gate-tree-hygiene.sh" psi gate-end 2>/dev/null || true' EXIT
+    # ORDER 2150-qd38 (priority:build-speed): host pressure at both ends of the gate
+    # and the checkout's untracked scratch, so a slow gate can say whether the
+    # HOST or the TREE was the cause. ~0.1 s; a warning never blocks, and only
+    # TILLANDSIAS_GATE_SCRATCH_REFUSE=1 turns >1 GB of scratch into a refusal.
+    bash "$SCRIPT_DIR/scripts/gate-tree-hygiene.sh" psi gate-start 2>/dev/null || true
+    if ! _hygiene_out="$(bash "$SCRIPT_DIR/scripts/gate-tree-hygiene.sh" scratch 2>&1)"; then
+        printf '%s\n' "$_hygiene_out"
+        _error "the checkout carries more untracked scratch than TILLANDSIAS_GATE_SCRATCH_REFUSE allows (2150-qd38) — see the line above"
+        exit 1
+    fi
+    printf '%s\n' "$_hygiene_out"
     # 1826-gi8e: hold the coordinator lane marker while the gate runs, so the
     # `coord heartbeat` stands down. The reader checks the pid, so an aborted
     # gate leaves a marker that no longer holds anything, and the EXIT trap
@@ -4549,12 +4560,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # including INT/TERM. Arm 9 (pirria's design) asserts arm 7's verdict is
     # IDENTICAL whichever way the stamp happens to be, so a future leak fails
     # loudly instead of flipping silently.
-    _step "Checking the pre-push empty-ref-list fixture (877-mynm)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-pre-push-empty-ref-list.sh" 2>&1; then
-        _error "the empty-ref-list lane fixture regressed — the plan-only fast lane's acceptance path is unproven"
-        exit 1
-    fi
-    _info "pre-push empty-ref-list fixture passed"
+    # 877-mynm's pre-push empty-ref-list fixture is gate step 950 (2173-inst).
 
     # ORDER 1194-davi. The advisory itself runs from the LAND path (a land that
     # adopts a valid stamp skips this gate entirely, 1174-u5wp), but its fixture
@@ -4574,12 +4580,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # gates, where fixtures run. Hermetic apart from two real-history arms that
     # read this repo's own log, and those skip rather than fail when a tag is
     # absent from a shallow clone.
-    _step "Checking the must-ship-next release advisory (1218-25z3)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-must-ship-rows.sh" 2>&1; then
-        _error "the must-ship advisory regressed — a row required in the next cut can again be missed with nothing reporting it"
-        exit 1
-    fi
-    _info "must-ship-next release advisory fixture passed"
+    # 1218-25z3's must-ship-next advisory fixture is gate step 951 (2173-inst).
 
     # ORDER 1369-sjbc. The release jobs upload a staged copy to `unstable` whose
     # installers default to unstable; the versioned copy keeps stable. Hermetic,
@@ -4648,12 +4649,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # worse, and "differs" is not "outstanding". The fixture's first arm pins
     # the false negative the script itself shipped with — a ref lookup that
     # silently finds nothing reads exactly like "nothing is stranded".
-    _step "Checking the salvage audit (1226-jb8y)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-salvage-audit.sh" 2>&1; then
-        _error "the salvage audit regressed — stranded work can again read as landed, or a stale snapshot as outstanding"
-        exit 1
-    fi
-    _info "salvage audit fixture passed"
+    # 1226-jb8y's salvage audit fixture is gate step 952 (2173-inst).
 
     # TWO GUARDS THAT EXISTED, WERE BROKEN, AND WERE INVOKED BY NOTHING.
     #
@@ -6733,12 +6729,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Host-tools check passed"
 
-    _step "Checking cross-branch claim visibility refuses a packet held elsewhere (1034-whsp)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-claims-across-branches.sh" 2>&1; then
-        _error "the cross-branch claim check is unsound (1034-whsp) — a false 'nobody holds this' hands a claimed packet to a second host, which is the 814-iyu7 duplication"
-        exit 1
-    fi
-    _info "Cross-branch claim visibility passed"
+    # 1034-whsp's cross-branch claim visibility fixture is gate step 953 (2173-inst).
 
     _step "Checking the raw frame-decode ratchet (795-5itp)..."
     # PORTED to Lua (1527-v7cy): scripts/lua/check-framing-raw-decodes.lua.

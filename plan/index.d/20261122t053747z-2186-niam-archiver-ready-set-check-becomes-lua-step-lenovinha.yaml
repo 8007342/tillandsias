@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Input-scoped land gates (coordinator direction, 2026-11-22).
+packets:
+  - packet_id: archiver-ready-set-check-becomes-lua-gate-step
+    order: 2186-niam
+    status: ready
+    kind: chore
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 3
+    title: |
+      Move the inline build.sh archiver ready-set check (831-ezea) into a STEP_LUA gate step that carries its memo hit/miss timing (1074-96z9) and the forge-only exit-3 skip (965-sxec), with no new .sh.
+    context: |
+      Coordinator: give the archiver block a wrapper, written in Lua as a STEP_LUA step so the shell ratchet stays down. Sibling of 2185-inst, which left this block out because the plain step format cannot express the memo or the forge-only skip.
+    exit_criteria:
+      - 'the inline block is gone; a STEP_LUA step reproduces memo hit, memo miss with rc 0, rc 3 forge skip, rc 3 elsewhere refused and other rc refused, each shown in the PR; the step carries darwin and msys STEP_SECOND_REGIME records'
+    unscoreable: 'unpinnable-until-the-guard-exists: check-gate-step-regimes and the parity runs are the proof and are recorded in the PR.'
+    next_action: 'Write the Lua wrapper and step file, prove the five paths, open the PR as a draft pending darwin and msys records.'
+    provenance: coordinator direction; filed by lenovinha.
+    depends_on: []
+    related: [831-ezea, 911-m7js, 965-sxec, 923-ws3r, 1074-96z9, 2185-inst]
+    events:
+      - {type: filed, ts: '2026-11-22T05:37:47Z', host: lenovinha, summary: filed moving the archiver ready-set check into a Lua gate step}

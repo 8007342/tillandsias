@@ -104,12 +104,20 @@ candidate() {
 # never read or write production state, so both are pinned to scratch unless an
 # arm names its own (ARM 40). Measured: unpinned, ARM 22b stamped the target and
 # the NEXT gate's ARM 22 skipped its failing refresh and gated #22 (red).
+# 2174-dail: the land-queue KNOBS are pinned too (BATCH_K, TRAIN_LOG, DAILY_*). A
+# host that runs its queue with TILLANDSIAS_LAND_QUEUE_BATCH_K=4 exported reaches
+# this fixture through the gate, and every one-at-a-time arm then ran as a train
+# (macuahuitl run 26: ARM 1b/2/17a/22/30/34 red). Arms set ARM_* instead.
 run_queue() {
     ( cd "$WORK_DIR" && env \
         TILLANDSIAS_LAND_QUEUE_GH="$GH_BIN" \
         TILLANDSIAS_LAND_QUEUE_GATE="bash $GATE_BIN" \
         TILLANDSIAS_LAND_QUEUE_PREFLIGHT="${PREFLIGHT_CMD:-}" \
         TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH="${PLAN_REFRESH_CMD:-}" \
+        TILLANDSIAS_LAND_QUEUE_BATCH_K="${ARM_BATCH_K:-1}" \
+        TILLANDSIAS_LAND_QUEUE_TRAIN_LOG="${ARM_TRAIN_LOG:-$TMP/trains.$$.log}" \
+        TILLANDSIAS_LAND_QUEUE_DAILY_SKIP="${ARM_DAILY_SKIP:-1}" \
+        TILLANDSIAS_LAND_QUEUE_DAILY_MAX_AGE_S="${ARM_DAILY_MAX_AGE_S:-86400}" \
         TILLANDSIAS_LAND_QUEUE_PLAN_DEPINFO="${TILLANDSIAS_LAND_QUEUE_PLAN_DEPINFO:-$TMP/no-plan-depinfo.d}" \
         TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH_STAMP="${TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH_STAMP:-$TMP/plan-refresh-stamp.$$}" \
         TILLANDSIAS_LAND_QUEUE_HOST_DOOR="${HOST_DOOR_CMD:-}" \
@@ -1693,7 +1701,7 @@ _t41="$TMP/arm41/trains.log"
 if [ "$(git -C "$REMOTE_DIR" for-each-ref --format='%(objectname)' 'refs/heads/work/*' | sort -u | grep -c .)" -ne 3 ]; then
     bad "ARM 41 premise: three distinct work heads were not pushed"
 else
-    out41="$(TILLANDSIAS_LAND_QUEUE_BATCH_K=4 TILLANDSIAS_LAND_QUEUE_TRAIN_LOG="$_t41" run_queue)"; rc41=$?
+    out41="$(ARM_BATCH_K=4 ARM_TRAIN_LOG="$_t41" run_queue)"; rc41=$?
     _h41="$(git -C "$REMOTE_DIR" rev-parse linux-next)"
     _np41="$(git -C "$REMOTE_DIR" rev-list --parents -n 1 "$_h41" | wc -w)"
     _fp41="$(git -C "$REMOTE_DIR" rev-list --first-parent --count "$_b41..$_h41")"
@@ -1723,7 +1731,7 @@ if [ ! -e "$_m41b" ]; then : > "$_m41b"; echo "FAIL: scripts/test-flaky-train.sh
 exit 0
 GATE
 _t41b="$TMP/arm41b/trains.log"
-out41b="$(TILLANDSIAS_LAND_QUEUE_BATCH_K=4 TILLANDSIAS_LAND_QUEUE_TRAIN_LOG="$_t41b" run_queue)"
+out41b="$(ARM_BATCH_K=4 ARM_TRAIN_LOG="$_t41b" run_queue)"
 if grep -q '^train:red:' <<<"$out41b" && ! grep -q '^evict' <<<"$out41b" \
     && [ "$(grep -c '^land:5[45] ' <<<"$out41b")" -eq 2 ] && ! grep -q 'train=' <<<"$(grep '^land:' <<<"$out41b")" \
     && [ "$(grep -c . "$GATE_LOG")" -eq 3 ] && grep -q 'result=red:' "$_t41b" 2>/dev/null; then
@@ -1843,6 +1851,31 @@ else
 $out50d
 $out50e"
 fi
+# ARM 52 (coordinator 2026-11-22): A GATE NEVER SEES THE QUEUE'S KNOBS. run_queue
+# hands the queue a dozen TILLANDSIAS_LAND_QUEUE_* settings, and the host may
+# export more (BATCH_K=4 redded run 26's train through this very fixture). The
+# gate stub records every such name it can see: there must be none. PREMISE:
+# the queue itself really was given them (BATCH_K exported here too).
+scaffold arm52
+candidate arm52 1070-aaaa a52.txt A
+cat > "$GH_PRS" <<JSON
+[{"number":70,"headRefName":"work/1070-aaaa","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+compgen -v TILLANDSIAS_LAND_QUEUE_ >> "$GATE_LOG.knobs" 2>/dev/null
+: >> "$GATE_LOG.knobs"
+exit 0
+GATE
+out52="$(TILLANDSIAS_LAND_QUEUE_BATCH_K=4 run_queue)"
+if [ "$(grep -c . "$GATE_LOG")" -eq 1 ] && [ ! -s "$GATE_LOG.knobs" ] && grep -q '^land:70 ' <<<"$out52"; then
+    ok "ARM 52: the gate inherits no TILLANDSIAS_LAND_QUEUE_* knob, even with BATCH_K exported by the host (2174-dail)"
+else
+    bad "ARM 52: wanted 1 gate, no queue knobs visible to it, #70 landed; gates=$(grep -c . "$GATE_LOG") knobs=$(tr '\n' ' ' < "$GATE_LOG.knobs" 2>/dev/null)
+$out52"
+fi
+
 # ARM 51: THE REAL SELECTOR against a proof (scripts/change-class.sh may-skip,
 # its own repo). A step whose declared input changed since the proved commit is
 # NOT skipped; a docs-only change is; a stale proof runs everything.
