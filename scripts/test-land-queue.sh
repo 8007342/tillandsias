@@ -104,12 +104,20 @@ candidate() {
 # never read or write production state, so both are pinned to scratch unless an
 # arm names its own (ARM 40). Measured: unpinned, ARM 22b stamped the target and
 # the NEXT gate's ARM 22 skipped its failing refresh and gated #22 (red).
+# 2174-dail: the land-queue KNOBS are pinned too (BATCH_K, TRAIN_LOG, DAILY_*). A
+# host that runs its queue with TILLANDSIAS_LAND_QUEUE_BATCH_K=4 exported reaches
+# this fixture through the gate, and every one-at-a-time arm then ran as a train
+# (macuahuitl run 26: ARM 1b/2/17a/22/30/34 red). Arms set ARM_* instead.
 run_queue() {
     ( cd "$WORK_DIR" && env \
         TILLANDSIAS_LAND_QUEUE_GH="$GH_BIN" \
         TILLANDSIAS_LAND_QUEUE_GATE="bash $GATE_BIN" \
         TILLANDSIAS_LAND_QUEUE_PREFLIGHT="${PREFLIGHT_CMD:-}" \
         TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH="${PLAN_REFRESH_CMD:-}" \
+        TILLANDSIAS_LAND_QUEUE_BATCH_K="${ARM_BATCH_K:-1}" \
+        TILLANDSIAS_LAND_QUEUE_TRAIN_LOG="${ARM_TRAIN_LOG:-$TMP/trains.$$.log}" \
+        TILLANDSIAS_LAND_QUEUE_DAILY_SKIP="${ARM_DAILY_SKIP:-1}" \
+        TILLANDSIAS_LAND_QUEUE_DAILY_MAX_AGE_S="${ARM_DAILY_MAX_AGE_S:-86400}" \
         TILLANDSIAS_LAND_QUEUE_PLAN_DEPINFO="${TILLANDSIAS_LAND_QUEUE_PLAN_DEPINFO:-$TMP/no-plan-depinfo.d}" \
         TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH_STAMP="${TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH_STAMP:-$TMP/plan-refresh-stamp.$$}" \
         TILLANDSIAS_LAND_QUEUE_HOST_DOOR="${HOST_DOOR_CMD:-}" \
@@ -1666,6 +1674,225 @@ if [ "$(grep -c . "$_r40b")" -eq 2 ] && ! grep -q '^plan-refresh:skipped' <<<"$o
 else
     bad "ARM 40b: wanted 2 refreshes and no skip; got $(grep -c . "$_r40b")
 $out40b"
+fi
+
+# ──────────────────────────────────────────────────────────── ARM 41
+# ORDER 2153-trn1: A BATCH TRAIN GATES THE UNION ONCE AND LANDS ONE COMMIT.
+# Three candidates, K=4: exactly ONE gate; the trunk advances by ONE
+# first-parent commit whose parents are the old trunk plus the three heads, and
+# whose tree holds all three files; every member prints land:; the train log
+# records it. Premise first: three distinct heads were pushed.
+scaffold arm41
+candidate arm41 1051-aaaa a41.txt A
+candidate arm41 1052-bbbb b41.txt B
+candidate arm41 1053-cccc c41.txt C
+cat > "$GH_PRS" <<JSON
+[{"number":51,"headRefName":"work/1051-aaaa","isDraft":false},
+ {"number":52,"headRefName":"work/1052-bbbb","isDraft":false},
+ {"number":53,"headRefName":"work/1053-cccc","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+exit 0
+GATE
+_b41="$(git -C "$REMOTE_DIR" rev-parse linux-next)"
+_t41="$TMP/arm41/trains.log"
+if [ "$(git -C "$REMOTE_DIR" for-each-ref --format='%(objectname)' 'refs/heads/work/*' | sort -u | grep -c .)" -ne 3 ]; then
+    bad "ARM 41 premise: three distinct work heads were not pushed"
+else
+    out41="$(ARM_BATCH_K=4 ARM_TRAIN_LOG="$_t41" run_queue)"; rc41=$?
+    _h41="$(git -C "$REMOTE_DIR" rev-parse linux-next)"
+    _np41="$(git -C "$REMOTE_DIR" rev-list --parents -n 1 "$_h41" | wc -w)"
+    _fp41="$(git -C "$REMOTE_DIR" rev-list --first-parent --count "$_b41..$_h41")"
+    _files41="$(git -C "$REMOTE_DIR" ls-tree --name-only "$_h41" | grep -c '^[abc]41\.txt$')"
+    if [ "$rc41" -eq 0 ] && [ "$(grep -c . "$GATE_LOG")" -eq 1 ] && [ "$_np41" -eq 5 ] && [ "$_fp41" -eq 1 ] \
+        && [ "$_files41" -eq 3 ] && [ "$(grep -c '^land:5[123] .*train=' <<<"$out41")" -eq 3 ] \
+        && grep -q 'result=landed:' "$_t41" 2>/dev/null; then
+        ok "ARM 41: a train of 3 gates the union ONCE and lands ONE first-parent commit with 4 parents carrying all three trees (2153-trn1)"
+    else
+        bad "ARM 41: wanted rc=0, 1 gate, 1 first-parent commit with 4 parents (5 words), 3 files, 3 land: lines, a landed train-log line; got rc=$rc41 gates=$(grep -c . "$GATE_LOG") words=$_np41 fp=$_fp41 files=$_files41
+$out41"
+    fi
+fi
+# ARM 41b: a RED train evicts nobody; the members go one at a time and land.
+scaffold arm41b
+candidate arm41b 1054-dddd d41.txt D
+candidate arm41b 1055-eeee e41.txt E
+cat > "$GH_PRS" <<JSON
+[{"number":54,"headRefName":"work/1054-dddd","isDraft":false},
+ {"number":55,"headRefName":"work/1055-eeee","isDraft":false}]
+JSON
+_m41b="$TMP/arm41b/red-once"
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+if [ ! -e "$_m41b" ]; then : > "$_m41b"; echo "FAIL: scripts/test-flaky-train.sh"; exit 1; fi
+exit 0
+GATE
+_t41b="$TMP/arm41b/trains.log"
+out41b="$(ARM_BATCH_K=4 ARM_TRAIN_LOG="$_t41b" run_queue)"
+if grep -q '^train:red:' <<<"$out41b" && ! grep -q '^evict' <<<"$out41b" \
+    && [ "$(grep -c '^land:5[45] ' <<<"$out41b")" -eq 2 ] && ! grep -q 'train=' <<<"$(grep '^land:' <<<"$out41b")" \
+    && [ "$(grep -c . "$GATE_LOG")" -eq 3 ] && grep -q 'result=red:' "$_t41b" 2>/dev/null; then
+    ok "ARM 41b: a red train evicts nobody; its members land one at a time (1 train gate + 2 member gates)"
+else
+    bad "ARM 41b: wanted train:red, no evict, #54 and #55 landed singly, 3 gates, a red train-log line; got gates=$(grep -c . "$GATE_LOG")
+$out41b"
+fi
+# ARM 41c, NEGATIVE CONTROL: K unset (the default) runs no train at all.
+scaffold arm41c
+candidate arm41c 1056-ffff f41.txt F
+candidate arm41c 1057-gggg g41.txt G
+cat > "$GH_PRS" <<JSON
+[{"number":56,"headRefName":"work/1056-ffff","isDraft":false},
+ {"number":57,"headRefName":"work/1057-gggg","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+exit 0
+GATE
+out41c="$(run_queue)"
+if ! grep -q '^train' <<<"$out41c" && [ "$(grep -c . "$GATE_LOG")" -eq 2 ] && [ "$(grep -c '^land:5[67] ' <<<"$out41c")" -eq 2 ]; then
+    ok "ARM 41c (control): with BATCH_K unset there is no train; one gate per candidate"
+else
+    bad "ARM 41c: wanted no train, 2 gates, 2 landed; got gates=$(grep -c . "$GATE_LOG")
+$out41c"
+fi
+
+# ──────────────────────────────────────────────────────────── ARM 50
+# ORDER 2174-dail (operator 2026-11-22: small gates piggyback on a daily run).
+# The gate stub records the selector env the queue hands it, and plays a gate
+# whose class selector skipped one step when (and only when) a proof is given.
+dail_gate() { # writes $GATE_BIN: records env, emits a skip line under a proof
+    cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+printf 'base=%s marker=%s\n' "\${TILLANDSIAS_CLASS_BASE:-none}" "\$(cat "\${TILLANDSIAS_FULL_GATE_MARKER:-/nonexistent}" 2>/dev/null || echo absent)" >> "$GATE_LOG.env"
+[ -n "\${TILLANDSIAS_CLASS_BASE:-}" ] && echo "skip:class-selector:gate-step:999-zzzz — declared-inputs=path:x.txt"
+exit 0
+GATE
+}
+# 50a FRESH GREEN PROOF: the gate gets the proved commit and its epoch; the
+# land's not-run: line names the skipped step.
+scaffold arm50a
+candidate arm50a 1060-aaaa a50.txt A
+cat > "$GH_PRS" <<JSON
+[{"number":60,"headRefName":"work/1060-aaaa","isDraft":false}]
+JSON
+dail_gate
+_p50="$(git -C "$REMOTE_DIR" rev-parse linux-next)"; _e50="$(date -u +%s)"
+git -C "$REMOTE_DIR" update-ref "refs/attest/daily-full/$_e50" "$_p50"
+out50a="$(run_queue)"
+if grep -q "^base=$_p50 marker=$_e50$" "$GATE_LOG.env" 2>/dev/null \
+    && grep -q '^land:60 ' <<<"$out50a" && grep -q 'not-run: gate-step:999-zzzz .*daily proof' <<<"$out50a"; then
+    ok "ARM 50a: a fresh green daily proof reaches the gate (class base + epoch) and the land names the skipped step (2174-dail)"
+else
+    bad "ARM 50a: wanted base=$_p50 marker=$_e50 and a not-run line naming 999-zzzz; env=$(cat "$GATE_LOG.env" 2>/dev/null)
+$out50a"
+fi
+# 50b STALE PROOF (> 24 h): no class base, no marker; the land runs full.
+scaffold arm50b
+candidate arm50b 1061-bbbb b50.txt B
+cat > "$GH_PRS" <<JSON
+[{"number":61,"headRefName":"work/1061-bbbb","isDraft":false}]
+JSON
+dail_gate
+git -C "$REMOTE_DIR" update-ref "refs/attest/daily-full/$(( $(date -u +%s) - 90000 ))" "$(git -C "$REMOTE_DIR" rev-parse linux-next)"
+out50b="$(run_queue)"
+if grep -q '^base=none marker=absent$' "$GATE_LOG.env" 2>/dev/null && grep -q 'not-run: nothing .*daily-run-stale' <<<"$out50b"; then
+    ok "ARM 50b: a daily proof older than 24 h freezes the land back to full (no class base, no marker)"
+else
+    bad "ARM 50b: wanted base=none marker=absent and not-run nothing (daily-run-stale); env=$(cat "$GATE_LOG.env" 2>/dev/null)
+$out50b"
+fi
+# 50c RED NEWER THAN GREEN: full, naming the red.
+scaffold arm50c
+candidate arm50c 1062-cccc c50.txt C
+cat > "$GH_PRS" <<JSON
+[{"number":62,"headRefName":"work/1062-cccc","isDraft":false}]
+JSON
+dail_gate
+_t50c="$(git -C "$REMOTE_DIR" rev-parse linux-next)"; _e50c="$(date -u +%s)"
+git -C "$REMOTE_DIR" update-ref "refs/attest/daily-full/$((_e50c - 60))" "$_t50c"
+git -C "$REMOTE_DIR" update-ref "refs/attest/daily-red/$_e50c" "$_t50c"
+out50c="$(run_queue)"
+if grep -q '^base=none marker=absent$' "$GATE_LOG.env" 2>/dev/null && grep -q 'not-run: nothing .*daily-run-red' <<<"$out50c"; then
+    ok "ARM 50c: a red daily run newer than the last green freezes lands back to full"
+else
+    bad "ARM 50c: wanted a full land naming daily-run-red; env=$(cat "$GATE_LOG.env" 2>/dev/null)
+$out50c"
+fi
+# 50d --daily-full publishes the proof: green -> daily-full ref, red -> daily-red.
+scaffold arm50d
+cat > "$GH_PRS" <<JSON
+[]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "\${TILLANDSIAS_CLASS_SELECTOR:-on}" >> "$GATE_LOG"
+exit 0
+GATE
+out50d="$(run_queue --daily-full)"; rc50d=$?
+_t50d="$(git -C "$REMOTE_DIR" rev-parse linux-next)"
+_g50d="$(git -C "$REMOTE_DIR" for-each-ref --format='%(objectname)' refs/attest/daily-full/)"
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+exit 1
+GATE
+out50e="$(run_queue --daily-full)"; rc50e=$?
+_r50d="$(git -C "$REMOTE_DIR" for-each-ref --format='%(objectname)' refs/attest/daily-red/)"
+if [ "$rc50d" -eq 0 ] && [ "$_g50d" = "$_t50d" ] && grep -qx off "$GATE_LOG" && [ "$rc50e" -eq 1 ] && [ "$_r50d" = "$_t50d" ] \
+    && grep -q '^ok:land-queue:daily-full:' <<<"$out50d" && grep -q '^red:land-queue:daily-full:' <<<"$out50e"; then
+    ok "ARM 50d: --daily-full gates the trunk tip with the selector OFF and publishes daily-full (green) or daily-red (red)"
+else
+    bad "ARM 50d: wanted rc 0 + daily-full ref at the trunk tip (selector off), then rc 1 + daily-red; got rc=$rc50d/$rc50e green='$_g50d' red='$_r50d' tip=$_t50d
+$out50d
+$out50e"
+fi
+# ARM 52 (coordinator 2026-11-22): A GATE NEVER SEES THE QUEUE'S KNOBS. run_queue
+# hands the queue a dozen TILLANDSIAS_LAND_QUEUE_* settings, and the host may
+# export more (BATCH_K=4 redded run 26's train through this very fixture). The
+# gate stub records every such name it can see: there must be none. PREMISE:
+# the queue itself really was given them (BATCH_K exported here too).
+scaffold arm52
+candidate arm52 1070-aaaa a52.txt A
+cat > "$GH_PRS" <<JSON
+[{"number":70,"headRefName":"work/1070-aaaa","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+compgen -v TILLANDSIAS_LAND_QUEUE_ >> "$GATE_LOG.knobs" 2>/dev/null
+: >> "$GATE_LOG.knobs"
+exit 0
+GATE
+out52="$(TILLANDSIAS_LAND_QUEUE_BATCH_K=4 run_queue)"
+if [ "$(grep -c . "$GATE_LOG")" -eq 1 ] && [ ! -s "$GATE_LOG.knobs" ] && grep -q '^land:70 ' <<<"$out52"; then
+    ok "ARM 52: the gate inherits no TILLANDSIAS_LAND_QUEUE_* knob, even with BATCH_K exported by the host (2174-dail)"
+else
+    bad "ARM 52: wanted 1 gate, no queue knobs visible to it, #70 landed; gates=$(grep -c . "$GATE_LOG") knobs=$(tr '\n' ' ' < "$GATE_LOG.knobs" 2>/dev/null)
+$out52"
+fi
+
+# ARM 51: THE REAL SELECTOR against a proof (scripts/change-class.sh may-skip,
+# its own repo). A step whose declared input changed since the proved commit is
+# NOT skipped; a docs-only change is; a stale proof runs everything.
+_c51="$TMP/arm51"; mkdir -p "$_c51/scripts"
+cp "$ROOT/scripts/change-class.sh" "$ROOT/scripts/gate-stamp.sh" "$_c51/scripts/"
+git -C "$_c51" init -q; git -C "$_c51" config user.email t@l; git -C "$_c51" config user.name t
+echo a > "$_c51/x.txt"; echo r > "$_c51/README.md"
+git -C "$_c51" add -A; git -C "$_c51" commit -qm proved
+_b51="$(git -C "$_c51" rev-parse HEAD)"; date -u +%s > "$_c51.marker"
+ms51() { ( cd "$_c51" && TILLANDSIAS_CLASS_BASE="$_b51" TILLANDSIAS_FULL_GATE_MARKER="$_c51.marker" bash scripts/change-class.sh may-skip gate-step:t path:x.txt 2>/dev/null ); }
+echo b >> "$_c51/x.txt"; git -C "$_c51" commit -qam x; v51a="$(ms51)"
+git -C "$_c51" reset -q --hard "$_b51"; echo more >> "$_c51/README.md"; git -C "$_c51" commit -qam doc; v51b="$(ms51)"
+echo 1 > "$_c51.marker"; v51c="$(ms51)"
+if [ "$v51a" = run ] && [ "$v51b" = skip ] && [ "$v51c" = run ]; then
+    ok "ARM 51: against a proof, a changed declared input RUNS, a docs-only change SKIPS, a stale proof RUNS (real change-class.sh)"
+else
+    bad "ARM 51: wanted run/skip/run; got '$v51a'/'$v51b'/'$v51c'"
 fi
 
 printf '\n'
