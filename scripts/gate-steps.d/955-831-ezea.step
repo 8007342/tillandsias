@@ -9,3 +9,5 @@ STEP_DESC="Checking the plan archiver preserves the ready set (831-ezea)"
 STEP_LUA="scripts/lua/check-archiver-ready-set.lua"
 STEP_ERROR="the plan archiver's check refused — see the line above: a ready-set violation means do not sweep; a could-not-run means the instrument needs repair (923-ws3r)"
 STEP_OK="Plan archiver check passed"
+# ORDER 2157-ginp: STEP_READS, recorded only (never consulted by the skip).
+STEP_READS="plan/index.yaml plan/index.d/** plan/archive/** scripts/archive-plan-packets.sh scripts/archiver-check-memo.sh scripts/cycle-metrics.sh scripts/lua/check-archiver-ready-set.lua"
