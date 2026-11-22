@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: ssh-lane-fixture-mutates-the-live-tree
+    field: status
+    value: implemented
+    ts: "2026-11-22T21:24:19Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: ssh-lane-fixture-mutates-the-live-tree
+    event:
+      type: progress
+      ts: "2026-11-22T21:24:19Z"
+      host: calmecacpilli
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: scripts/lua/test-ssh-lane-refuses-when-unwired.lua ok:3: the mutation goes into a scratch git worktree (shared target dir), never the checkout; arm 3 SIGKILLs a held mutation arm and checks git status unchanged and main.rs unmutated; the .sh is deleted and the litmus rebound
