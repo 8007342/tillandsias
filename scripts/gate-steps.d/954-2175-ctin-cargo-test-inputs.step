@@ -6,11 +6,14 @@
 # this rescans crates/ (include_str!, ../ literals, joins, read_dir roots,
 # build.rs rerun-if-changed) and refuses any scanned root the declaration lacks.
 STEP_DESC="Checking the cargo test skip declaration covers every repo path the tests read (2175-ctin)"
-STEP_LUA="scripts/lua/scan-cargo-test-repo-roots.lua"
+STEP_LUA="scripts/lua/test-scan-cargo-test-repo-roots.lua"
 STEP_ERROR="a repo path the feature-gated cargo tests can read is missing from _CARGO_FEATURE_TEST_INPUTS in build.sh (2175-ctin) — add each missing line the scanner names, or the step could be skipped when that path changes"
 STEP_OK="cargo test skip declaration covers every scanned path"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/lua/scan-cargo-test-repo-roots.lua build.sh crates/**"
+STEP_READS="scripts/lua/test-scan-cargo-test-repo-roots.lua scripts/lua/scan-cargo-test-repo-roots.lua build.sh crates/**"
+# ORDER 2239-5gb5: the step now runs the fixture, whose arm 1 IS the former
+# bare `--check` on the real tree; arms 2-4 add the exec-gap, read-gap and
+# net-less-mutant controls. The second-regime record below is the bare scanner's.
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-21 darwin ok:cargo-test-inputs:45:files=278"
