@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-22: carried-silent evictions cost ~8 gate slots in a day (coordinator).
+packets:
+  - packet_id: the-pre-push-hook-refuses-a-carried-silent-work-push-instead-of-warning
+    order: "2194-cspr"
+    status: in_progress
+    kind: perf
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [pre-push, carried-obligations, build-speed]
+    estimated_hours: 1
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+      - scripts/test-pre-push-refuses-carried-silent.sh
+      - scripts/gate-steps.d/955-2194-cspr-pre-push-carried.step
+    title: "The pre-push hook refuses a carried-silent work push instead of warning"
+    context: |
+      On the work lane `refuse` degrades to a warning, so a carried-silent change (due, neither paying an item
+      nor waiving) was pushed, queued, and evicted at --landing an hour later: about 8 gate slots on
+      2026-11-22. The hook now refuses it with exit 1, naming the offered item and the Carried-Waiver line.
+      Waived and not-due changes pass; outside the work lane the guard is not run. The land queue already
+      checks carried obligations before preflight and the gate, so no queue change is needed.
+    exit_criteria:
+      - "test-pre-push-refuses-carried-silent 4/4 (refused on due, passes waived and not-due, not run off the work lane); trunk's hook reds arm A."
+      - "Gate step 955 has a darwin second regime."
+    unscoreable: "carried-silent evictions in the queue logs are the measure"
+    provenance: "coordinator, 2026-11-22."
+    events:
+      - type: filed
+        ts: "2026-11-22T06:53:21Z"
+        host: yoga
+        summary: "filed and claimed"
