@@ -10,3 +10,4 @@ STEP_ERROR="the remote-unreachable probe misnamed a cause, retried, overran its 
 STEP_OK="Remote-unreachable probe stops a host that cannot push"
 STEP_READS="scripts/lua/test-probe-remote-reachable.lua scripts/lua/probe-remote-reachable.lua"
 # msys record: yolanda 2026-11-22 msys ok:probe-remote-reachable:7 at 87c9278a8 (hung-tool arms 2216 ms ls-remote, 2135 ms gh)
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:probe-remote-reachable:7"
