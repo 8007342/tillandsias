@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace order:1255-s4im
+# @trace order:1255-s4im, order:2200-hkup
 #
 # Fixture for scripts/ensure-hooks.sh. Hermetic: scratch repos built from a
 # COPY of this tree's scripts/ (so the bytes under test are the working tree's,
@@ -118,6 +118,19 @@ if [ "$RC" -eq 0 ] && [ "$OUT" = "upgraded:hooks:tillandsias-pre-push-v7->$WANT"
     ok "arm 3: v7 upgraded to $WANT"
 else
     bad "arm 3: rc=$RC out=[$OUT] err=[$ERR]"
+fi
+
+# ── 3b. THE MARKER JUST BELOW THE CURRENT ONE is upgraded (order 2200-hkup) ──
+# The recognised list was a hand-kept v[234567]; bumping to v9 left every v8
+# host "unrecognized". Derived from WANT, so the next bump is covered too.
+_cur="${WANT##*-v}"; PREV="tillandsias-pre-push-v$((_cur - 1))"
+wc="$(seed upgrade-prev)" || exit 1; h="$(hooks_dir "$wc")/pre-push"; mkdir -p "$(dirname "$h")"
+printf '#!/usr/bin/env bash\n# %s\nexit 0\n' "$PREV" > "$h"; chmod +x "$h"
+ensure "$wc"
+if [ "$RC" -eq 0 ] && [ "$OUT" = "upgraded:hooks:$PREV->$WANT" ] && grep -qF "# $WANT" "$h"; then
+    ok "arm 3b: the previous marker ($PREV) is upgraded to $WANT"
+else
+    bad "arm 3b: $PREV was not upgraded: rc=$RC out=[$OUT] err=[$ERR]"
 fi
 
 # ── 4. a foreign pre-push is refused and untouched ──────────────────────────
