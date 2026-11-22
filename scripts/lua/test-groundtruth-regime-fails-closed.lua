@@ -1,5 +1,9 @@
 -- @trace order:1500-gu5r, order:2205-cepb, spec:ci-release
 -- @env TILLANDSIAS_TEST_CHECK
+-- @env FORGE_SPEC_INDEX_DIR
+-- @env FORGE_SPEC_INDEX_ROOT
+-- @env PROJECT_ROOT
+-- @env XDG_CACHE_HOME
 --
 -- test-groundtruth-regime-fails-closed.lua — PORTED from
 -- test-groundtruth-regime-fails-closed.sh (2205-cepb), same arms, same lines.
@@ -74,7 +78,15 @@ table.sort(sets)
 local SET = sets[1]
 
 local function run(extra)
+    -- The LIVE regime is the ambient env, as in the .sh. The endpoint
+    -- variables are TILLANDSIAS_* and pass through the runner; the other
+    -- names grade reads (spec index, cache) are scrubbed, so forward them,
+    -- or live would grade from a different index than the caller's (2168-634p).
     local e = { TILLANDSIAS_PLAN_BIN = W .. "/plan" }
+    for _, k in ipairs({ "FORGE_SPEC_INDEX_DIR", "FORGE_SPEC_INDEX_ROOT", "PROJECT_ROOT", "XDG_CACHE_HOME" }) do
+        local v = env.get(k)
+        if v then e[k] = v end
+    end
     for k, v in pairs(extra) do e[k] = v end
     local p = proc.run{ argv = { "bash", CHECK, "--strict" }, env = e, timeout_ms = 600000 }
     return text.trim(p.stdout or ""), p.code
