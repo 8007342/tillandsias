@@ -5,10 +5,10 @@
 # never the real container); and the changed-fixture guard skips any fixture
 # marked `# @live-fixture`. A land gate stopped yoga's vault on 2026-11-21.
 STEP_DESC="Checking the live vault fixture is opt-in and never stops the host's vault (2207-v7x2)"
-STEP_SCRIPT="scripts/test-live-vault-fixture-is-opt-in.sh"
+STEP_LUA="scripts/lua/test-live-vault-fixture-is-opt-in.lua"
 STEP_ERROR="the live vault-shutdown fixture can reach podman without its opt-in, or the changed-fixture guard would run it (2207-v7x2) — see the FAIL lines above"
 STEP_OK="Live vault fixture is opt-in"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut).
-STEP_READS="scripts/test-live-vault-fixture-is-opt-in.sh scripts/test-vault-shutdown-forwards-sigterm.sh scripts/preflight-fixtures-default-target.sh"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:live-vault-fixture-is-opt-in:4(arm2-no-live-vault-skip)"
+STEP_READS="scripts/lua/test-live-vault-fixture-is-opt-in.lua scripts/test-vault-shutdown-forwards-sigterm.sh scripts/preflight-fixtures-default-target.sh"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:live-vault-fixture-is-opt-in:4 (Lua port; arm2-no-live-vault-skip)"
