@@ -1128,7 +1128,7 @@ It prints exactly one line matching the falsifiable grammar
 absent or blocked. A usable channel is present when ANY of these holds (the
 script checks them in order):
 
-- `<common-git-dir>/.gh-credentials` (absolute `git rev-parse --path-format=absolute --git-common-dir`, so every linked worktree shares it; 1409-65d5) exists and is non-empty (repo-local store helper), or
+- (2222-xjgu) a non-empty `<common-git-dir>/.gh-credentials` is NOT a channel: it is a plaintext token at rest (`methodology/philosophy.yaml` `credentials_at_rest`) and answers `blocked:plaintext-credential-store` first, whatever else works; the channel is one of:
 - `GH_TOKEN` or `GITHUB_TOKEN` is set in the environment, or
 - `gh auth status` succeeds (reachable, unlocked keyring), or
 - `TILLANDSIAS_HOST_KIND=forge` is set AND the enclave git mirror is reachable
@@ -1149,7 +1149,7 @@ Pinned by `litmus:credential-channel-check-shape` and
 into worker drain or any committable work. Instead
 fail loud: file or update a blocker in `plan/issues/` recording the exact
 verdict, the owner (operator), and the smallest next
-action (re-seed `.git/.gh-credentials` via the gh token, inject `GH_TOKEN`
+action (the operator signs in to the OS keyring with `tillandsias --github-login` and removes any plaintext store, inject `GH_TOKEN`
 into the task environment, or — for `blocked:*` — repair the mirror's Vault
 GitHub token / its repo push permission), then stop. Accreting local-only
 commits that cannot be pushed violates the Non-Negotiable Exit Contract and is

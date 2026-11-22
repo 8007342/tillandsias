@@ -151,11 +151,13 @@ fn the_guards_refused_probe_leaves_the_store_byte_identical() {
     let after = fs::read(&store).unwrap_or_default();
     assert_eq!(
         verdict,
-        "blocked:gh-credentials-store-push-refused",
+        // 2222-xjgu: a store file is refused before any probe; the property
+        // that matters, byte-identical bytes after the guard, is unchanged.
+        "blocked:plaintext-credential-store",
         "stderr={}",
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(!out.status.success(), "a refused probe must exit non-zero");
+    assert!(!out.status.success(), "a plaintext store must exit non-zero");
     assert_eq!(
         before, after,
         "the guard's probe changed the credential store"

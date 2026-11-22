@@ -146,8 +146,6 @@ scripts/test-credential-channel-host-push-lane.sh
 scripts/test-credential-channel-names-a-locked-keyring.sh
 scripts/test-credential-channel-survives-a-killed-probe.sh
 scripts/test-credential-cold-state-probe.sh
-scripts/test-credential-remedy-runnable.sh
-scripts/test-credential-store-worktree.sh
 scripts/test-credential-verdict-script.sh
 scripts/test-cycle-checkout-lock.sh
 scripts/test-cycle-claims-report.sh

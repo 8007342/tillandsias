@@ -577,7 +577,6 @@ scripts scripts/test-credential-channel-affordances.sh 1
 scripts scripts/test-credential-channel-host-push-lane.sh 1
 scripts scripts/test-credential-channel-names-a-locked-keyring.sh 6
 scripts scripts/test-credential-cold-state-probe.sh 2
-scripts scripts/test-credential-store-worktree.sh 2
 scripts scripts/test-cycle-checkout-lock.sh 9
 scripts scripts/test-cycle-claims-report.sh 1
 scripts scripts/test-cycle-driver.sh 3
