@@ -132,6 +132,8 @@ table="$(cd "$ROOT" && {
     printf '%s\n' build.sh launch.sh scripts/install.sh scripts/install-macos.sh scripts/ensure_toolbox.sh
     # §6.5 row 2, "nor vouch for itself" (1627-hg3t)
     printf '%s\n' scripts/check-yaml-reader-availability.sh
+    # §6.5 row 2, "nor gate the push that arrives before it exists" (2222-icbs)
+    printf '%s\n' scripts/check-issue-citation-convention.sh
     git ls-files -- 'scripts/*.ps1' 'scripts/hooks/*.sh' 'images/*/entrypoint*.sh'
 } | LC_ALL=C sort -u)"
 if [ "$entries" = "$table" ]; then
