@@ -699,7 +699,6 @@ scripts scripts/test-metrics-log-path-agreement.sh 1
 scripts scripts/test-mirror-host-cert-and-sshd.sh 11
 scripts scripts/test-mirror-receive-wrapper.sh 8
 scripts scripts/test-mirror-refuses-when-broken.sh 2
-scripts scripts/test-mirror-relay-state.sh 2
 scripts scripts/test-mirror-sshd-posture.sh 5
 scripts scripts/test-mirror-sync-state.sh 5
 scripts scripts/test-mirror-upstream-auth-overwrite.sh 2
