@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed and taken by yolanda 2026-11-20 at macuahuitl-fedora's direction (priority:build-speed).
+packets:
+  - packet_id: fixture-scratch-abs-is-a-plain-windows-path-not-a-verbatim-one
+    order: 2158-vrb7
+    status: claimed
+    kind: fix
+    priority: p1
+    labels: [priority:build-speed]
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [lua, fixture, msys, gate]
+    estimated_hours: 2
+    title: "common.fixture T:scratch .abs hands out a plain C: drive path on Windows, not a verbatim one, so git remote/push/clone and rm -rf accept it"
+    context: |
+      MEASURED 2026-11-20 by yolanda on msys: #1246 step 932 refused its rm -rf of SC.abs
+      (policy_consent_required, the \?\ path reads as outside the workspace), and #1248 step 933
+      refused at setup: git push to a remote added as O.abs said "hostname contains invalid
+      characters" (git parses \?\C:\... as //host/share). Every fixture handing .abs to git or rm
+      is red on Windows. Root fix in lib/lua/common/fixture.lua where .abs is built.
+    exit_criteria:
+      - "A fixture arm passes T:scratch().abs to git remote add + push and to rm -rf. Pre-fix on msys: FAILS."
+      - "#1246 step 932 and #1248 step 933 run green on msys with .abs used directly."
+    verifiable_closure: litmus:common-fixture
+    waivers:
+      - "shell-to-lua: none needed beyond the Lua fixture itself; the change is Lua-only (coordinator asked it carried)"
+    provenance: "yolanda msys runs of #1246/#1248 and macuahuitl-fedora routing 2026-11-20."
+    events: []

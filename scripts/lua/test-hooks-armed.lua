@@ -38,7 +38,7 @@ local function arm(name, cond, got)
     end
 end
 
-local WANT = "tillandsias-pre-push-v8"
+local WANT = "tillandsias-pre-push-v9"
 -- A scratch checkout with an installer naming WANT, and an optional hook body.
 local function repo(name, hook)
     local d = REL .. "/" .. name

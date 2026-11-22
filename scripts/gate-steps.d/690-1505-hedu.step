@@ -9,7 +9,12 @@
 #
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking every release-preflight refusal says why and what clears it (1505-hedu)"
-STEP_SCRIPT="scripts/test-release-preflight-affordances.sh"
+# PORTED to Lua (2197-h5kv): run with STEP_LUA through the one runner.
+STEP_LUA="scripts/lua/test-release-preflight-affordances.lua"
 STEP_ERROR="a release-preflight refusal lost its why/remedy, changed its token or exit code, or its remedy no longer clears it (1505-hedu)"
 STEP_OK="release-preflight refusals carry working affordances"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-29 darwin PASS: release-preflight-affordances (1505-hedu) at 0a1b111ab, 3 arms, bash 3.2, NO tillandsias-plan on PATH (Gate 3 skipped by name there; the Linux run exercises it with a plan binary)"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="plan/index.d/** plan/index.yaml scripts/check-refusal-affordance-added.sh scripts/plan-binary-probe.sh scripts/release-preflight.sh scripts/lua/test-release-preflight-affordances.lua scripts/verify-version-monotonic.sh"

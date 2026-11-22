@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Story build-speed-lenovinha (coordinator, 2026-11-21).
+packets:
+  - packet_id: the-parse-only-duplicate-key-fixture-re-parses-only-the-files-the-live-runner-refused
+    order: 2164-desp
+    status: ready
+    kind: chore
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    story: build-speed-lenovinha
+    capability_tags: [build-speed, litmus]
+    estimated_hours: 1
+    title: |
+      test-litmus-parse-only-duplicate-key's ARM 6 parsed the whole real corpus (about 630 files) twice, with the live runner and a neutralised base copy, about 12 s each, to show the change adds no refusal. Only the files live refuses need the base pass.
+    context: |
+      Profiled 2026-11-21: 28 s total, about 24 s in the two corpus passes. Live refuses 4 files that are already unparseable on trunk.
+    exit_criteria:
+      - 'base parses only the files live refused; any file base accepts and live refuses fails the arm; every corpus file still has an explicit verdict; 16/16 arms pass'
+    unscoreable: 'unpinnable-until-the-guard-exists: the fixture itself is the pin.'
+    next_action: 'Land the PR.'
+    provenance: coordinator 2026-11-21; filed by lenovinha.
+    depends_on: []
+    related: [1274-cbk7, 2118-ywk7]
+    events:
+      - {type: filed, ts: '2026-11-21T10:20:46Z', host: lenovinha, summary: filed p0 under build-speed-lenovinha}

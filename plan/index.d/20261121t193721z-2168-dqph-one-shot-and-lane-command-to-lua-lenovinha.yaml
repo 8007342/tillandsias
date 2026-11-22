@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Shell-to-Lua backlog (coordinator direction, 2026-11-21).
+packets:
+  - packet_id: the-one-shot-and-lane-command-fixtures-are-lua-and-both-sh-are-deleted
+    order: 2168-dqph
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua]
+    estimated_hours: 2
+    title: |
+      Port scripts/test-headless-cloud-one-shot.sh (49 lines) and scripts/test-bare-metal-lane-command-is-runnable.sh (63 lines) to scripts/lua/, repoint their litmus tests, and delete both .sh files.
+    context: |
+      Next shell-to-lua candidates after 2167-wshb. No open work ref touches either file (checked).
+    exit_criteria:
+      - 'each Lua fixture gives the same verdict as its .sh on this tree, and a mutation fails it; both litmus tests run the Lua; both .sh files and their floor lines are gone'
+    unscoreable: 'unpinnable-until-the-guard-exists: the parity run is recorded in the PR.'
+    next_action: 'Port, prove parity, open the PR.'
+    provenance: shell-to-lua backlog; filed by lenovinha.
+    depends_on: []
+    related: [1354-uv4e, 1847-5xv3, 1356-u6xe]
+    events:
+      - {type: filed, ts: '2026-11-21T19:37:21Z', host: lenovinha, summary: filed the one-shot and lane-command ports}

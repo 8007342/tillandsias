@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-21: build-speed queue item 2 (operator ruling: lands in minutes).
+packets:
+  - packet_id: land-queue-skips-an-unchanged-plan-binary-refresh-and-drops-the-duplicate-preflight
+    order: "2152-lqrf"
+    status: in_progress
+    kind: perf
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, land-queue]
+    estimated_hours: 2
+    owned_files:
+      - scripts/land-queue.sh
+      - scripts/test-land-queue.sh
+    title: "land-queue skips the plan-binary refresh when its inputs are unchanged and drops the duplicate preflight"
+    context: |
+      Each full-lane candidate paid a cargo release build of tillandsias-plan and a build.sh --preflight whose
+      roster is built from the gate's own steps, about 2.5 min per land before the gate (coordinator's
+      build-speed investigation). The refresh is now keyed on cargo's dep-info for the binary (every input,
+      out-of-crate include_str! files and rerun-if-changed dirs included) plus Cargo.lock, rust-toolchain.toml
+      and the binary, stamped after each successful refresh. The preflight door defaults off and can be
+      restored by env.
+    exit_criteria:
+      - "Queue overhead per land (time before the gate starts) is under 40 s in run logs."
+      - "test-land-queue ARM 40: one refresh for two candidates that leave the inputs alone, a second for one that edits an input; ARM 40b control: no dep-info refreshes every time; a key that ignores dep contents reds ARM 40."
+    unscoreable: "the per-land overhead in run logs on the coordinator host is the measure"
+    provenance: "coordinator build-speed queue item 2, 2026-11-21 (operator ruling)."
+    events:
+      - type: filed
+        ts: "2026-11-21T05:45:08Z"
+        host: yoga
+        summary: "filed and claimed"

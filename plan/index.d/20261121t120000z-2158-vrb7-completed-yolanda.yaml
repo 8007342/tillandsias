@@ -1,0 +1,9 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: fixture-scratch-abs-is-a-plain-windows-path-not-a-verbatim-one
+    event:
+      type: completed
+      ts: "2026-11-21T12:00:00Z"
+      host: yolanda
+      summary: |-
+        landed as #1252 (904109ed8 on linux-next). litmus:common-fixture ok:common-fixture:8 arms on msys; sabotage (strip removed) reds arms 6 and 7. With it underneath, msys records followed: 933 on 2152-u7s4 (e54626558) and 934 on 2166-zvst (812098a17).

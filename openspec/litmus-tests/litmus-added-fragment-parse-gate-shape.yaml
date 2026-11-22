@@ -24,11 +24,11 @@ phase: pre-build
 
 preconditions:
   - workspace contains scripts/check-added-fragments-parse.sh
-  - workspace contains scripts/check-plan-schema-divergence.sh
+  - workspace contains scripts/lua/check-plan-schema-divergence.lua
 
 critical_path:
   - step: "Req: both admission gates exist and are executable"
-    command: "test -x scripts/check-added-fragments-parse.sh && test -x scripts/check-plan-schema-divergence.sh && echo 'ok: gates present'"
+    command: "test -x scripts/check-added-fragments-parse.sh && test -s scripts/lua/check-plan-schema-divergence.lua && test ! -e scripts/check-plan-schema-divergence.sh && echo 'ok: gates present'"
     timeout_ms: 3000
     expected_behavior: "ok: gates present"
 
@@ -55,7 +55,7 @@ critical_path:
   - step: "NEGATIVE CONTROL: an unloadable index reports index-load-failed, NOT a vocabulary divergence (720-24u6)"
     # The two lists in this fixture are identical, so a gate that blamed
     # divergence would be naming a fault that provably is not there.
-    command: "d=$(mktemp -d); mkdir -p \"$d/plan\"; printf 'plan_index:\\n  default_status_values: [ready\\n' > \"$d/plan/index.yaml\"; printf 'statuses: [ready]\\n' > \"$d/plan/schema.yaml\"; out=$( cd \"$d\" && bash \"$OLDPWD/scripts/check-plan-schema-divergence.sh\" 2>/dev/null ); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q '^blocked:index-load-failed: ' && ! printf '%s' \"$out\" | grep -q 'status-vocab-diverges' && echo 'ok: load failure named honestly'"
+    command: "PB=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; case \"$PB\" in ./*) PB=\"$PWD/${PB#./}\" ;; esac; d=$(mktemp -d); mkdir -p \"$d/plan\"; printf 'plan_index:\\n  default_status_values: [ready\\n' > \"$d/plan/index.yaml\"; printf 'statuses: [ready]\\n' > \"$d/plan/schema.yaml\"; out=$( cd \"$d\" && TILLANDSIAS_PLAN_BIN=\"$PB\" \"$PB\" script run \"$OLDPWD/scripts/lua/check-plan-schema-divergence.lua\" 2>/dev/null ); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q '^blocked:index-load-failed: ' && ! printf '%s' \"$out\" | grep -q 'status-vocab-diverges' && echo 'ok: load failure named honestly'"
     timeout_ms: 15000
     expected_behavior: "ok: load failure named honestly"
 
@@ -76,7 +76,7 @@ critical_path:
     expected_behavior: "ok: live pin claims all executable"
 
   - step: "POSITIVE CONTROL: the real ledger loads and its vocabularies agree"
-    command: "mf_stage prod 0 OUT -- scripts/check-plan-schema-divergence.sh && mf_holds_ere OUT '^ok:status-vocab-in-sync$' && echo 'ok: live ledger loads and agrees'"
+    command: "PB=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; case \"$PB\" in ./*) PB=\"$PWD/${PB#./}\" ;; esac; mf_stage prod 0 OUT -- env TILLANDSIAS_PLAN_BIN=\"$PB\" \"$PB\" script run scripts/lua/check-plan-schema-divergence.lua && mf_holds_ere OUT '^ok:status-vocab-in-sync$' && echo 'ok: live ledger loads and agrees'"
     timeout_ms: 30000
     expected_behavior: "ok: live ledger loads and agrees"
 
@@ -87,8 +87,8 @@ observability:
   log_fields:
     spec: "ci-release"
     test: "litmus-added-fragment-parse-gate-shape"
-    artifact: "scripts/check-added-fragments-parse.sh + scripts/check-plan-schema-divergence.sh"
+    artifact: "scripts/check-added-fragments-parse.sh + scripts/lua/check-plan-schema-divergence.lua"
 
 rollback:
-  on_failure: "run scripts/check-added-fragments-parse.sh and scripts/check-plan-schema-divergence.sh directly and compare their verdict lines against the pinned grammar"
-  command: "scripts/check-added-fragments-parse.sh; scripts/check-plan-schema-divergence.sh"
+  on_failure: "run scripts/check-added-fragments-parse.sh and scripts/lua/check-plan-schema-divergence.lua (tillandsias-plan script run) directly and compare their verdict lines against the pinned grammar"
+  command: "scripts/check-added-fragments-parse.sh; tillandsias-plan script run scripts/lua/check-plan-schema-divergence.lua"

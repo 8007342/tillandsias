@@ -11,3 +11,7 @@ STEP_LUA="scripts/lua/test-push-capability.lua"
 STEP_ERROR="lib-push-capability.sh no longer reports what its fixture constructs, or its branch check stopped following the project's discipline seed (1264-s4id) — see the FAIL lines above"
 STEP_OK="Forge push-capability report fixture passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-16 darwin ok:push-capability:13 arms"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="images/default/lib-push-capability.sh scripts/lua/test-push-capability.lua"
