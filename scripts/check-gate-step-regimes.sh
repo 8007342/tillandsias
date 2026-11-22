@@ -52,6 +52,8 @@ missing=0
 malformed=0
 linuxonly=0
 ok=0
+n_darwin=0
+n_msys=0
 detail=""
 
 for step in "$DIR"/*.step; do
@@ -72,36 +74,43 @@ for step in "$DIR"/*.step; do
                 continue ;;
         esac
     fi
-    # Read the value without sourcing: a .step is data, and sourcing it would
+    # Read the values without sourcing: a .step is data, and sourcing it would
     # execute whatever a future step happens to contain.
-    line="$(grep -E '^[[:space:]]*STEP_SECOND_REGIME=' "$step" 2>/dev/null | head -1)"
-    if [ -z "$line" ]; then
+    # ORDER 2221-vjqb: EVERY record is judged, not `head -1`. Steps now carry a
+    # darwin AND an msys record, and the second was never read, so a malformed
+    # or Linux-host second line passed. One bad line refuses the step, by name.
+    lines="$(grep -E '^[[:space:]]*STEP_SECOND_REGIME=' "$step" 2>/dev/null)"
+    if [ -z "$lines" ]; then
         missing=$((missing + 1))
         detail="${detail}violation:gate-step-single-regime:${name}"$'\n'
         continue
     fi
-    value="${line#*=}"
-    value="${value%\"}"; value="${value#\"}"
-    # shellcheck disable=SC2086
-    set -- $value
-    host="${1:-}"; date_="${2:-}"; regime="${3:-}"
-    if [ -z "$host" ] || [ -z "$date_" ] || [ -z "$regime" ]; then
-        malformed=$((malformed + 1))
-        detail="${detail}violation:gate-step-single-regime:${name}:malformed-record"$'\n'
-        continue
-    fi
-    case "$date_" in
-        [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) : ;;
-        *)
-            malformed=$((malformed + 1))
-            detail="${detail}violation:gate-step-single-regime:${name}:date-not-yyyy-mm-dd"$'\n'
-            continue ;;
+    step_bad=""; step_regimes=""
+    while IFS= read -r line; do
+        value="${line#*=}"
+        value="${value%\"}"; value="${value#\"}"
+        # shellcheck disable=SC2086
+        set -- $value
+        host="${1:-}"; date_="${2:-}"; regime="${3:-}"
+        if [ -z "$host" ] || [ -z "$date_" ] || [ -z "$regime" ]; then
+            step_bad="malformed:malformed-record"; break
+        fi
+        case "$date_" in
+            [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) : ;;
+            *) step_bad="malformed:date-not-yyyy-mm-dd"; break ;;
+        esac
+        if ! _is_second_regime "$regime"; then
+            step_bad="linuxonly:regime-${regime}-is-not-a-second-regime"; break
+        fi
+        case " $step_regimes " in *" $regime "*) ;; *) step_regimes="${step_regimes:+$step_regimes }$regime" ;; esac
+    done <<< "$lines"
+    case "$step_bad" in
+        malformed:*) malformed=$((malformed + 1)); detail="${detail}violation:gate-step-single-regime:${name}:${step_bad#*:}"$'\n'; continue ;;
+        linuxonly:*) linuxonly=$((linuxonly + 1)); detail="${detail}violation:gate-step-single-regime:${name}:${step_bad#*:}"$'\n'; continue ;;
     esac
-    if ! _is_second_regime "$regime"; then
-        linuxonly=$((linuxonly + 1))
-        detail="${detail}violation:gate-step-single-regime:${name}:regime-${regime}-is-not-a-second-regime"$'\n'
-        continue
-    fi
+    for r in $step_regimes; do
+        case "$r" in darwin) n_darwin=$((n_darwin + 1)) ;; msys) n_msys=$((n_msys + 1)) ;; esac
+    done
     ok=$((ok + 1))
 done
 
@@ -123,3 +132,4 @@ if [ "$bad" -gt 0 ]; then
 fi
 
 echo "ok:gate-step-regimes:$ok"
+echo "  regimes: darwin=$n_darwin msys=$n_msys (steps carrying each; 2221-vjqb)" >&2

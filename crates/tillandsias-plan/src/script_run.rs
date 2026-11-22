@@ -1312,6 +1312,27 @@ pub fn cli_run(args: &[String]) -> ! {
             std::process::exit(3);
         }
     };
+    // ORDER 2213-ag5u. Root the script at the repository containing the cwd,
+    // else the one containing the script — never the runner binary's own
+    // checkout. A decider with neither refuses here, before any code runs: a
+    // fixture in an un-`git init`-ed scratch dir used to run against the real
+    // tree and report its green. A --helper (the forge's ported lib-*.sh
+    // bodies, under /usr/local/lib) needs no repository and still runs.
+    crate::lua_predicate::enter_script_mode(std::path::Path::new(&path));
+    if !helper && !crate::lua_predicate::repo_root_resolves() {
+        let cwd = std::env::current_dir()
+            .map(|d| d.display().to_string())
+            .unwrap_or_else(|_| "?".to_owned());
+        println!("could-not-run:script-run:no-repository-root");
+        eprintln!(
+            "  why: neither the cwd ({cwd}) nor {path} is inside a repository (no .git or plan/index.yaml above it), \
+             so fs.*, proc.run's default cwd and require() have no root; the runner no longer falls back to its own checkout (2213-ag5u)"
+        );
+        eprintln!(
+            "  remedy: run from inside the checkout, `git init` a scratch dir that stands in for one, or set TILLANDSIAS_REPO_ROOT"
+        );
+        std::process::exit(3);
+    }
     let t0 = Instant::now();
     // ORDER 2031-dwwy (design 2029-39bt §4.5): the header is judged BEFORE any
     // script code runs, so a refusal is a refusal of the script with no

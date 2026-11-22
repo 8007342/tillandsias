@@ -82,6 +82,8 @@ _seed() {
     cp "$ROOT/scripts/lua/check-no-python-scripts.lua" "$d/scripts/lua/"
     # 2221-rfaa: check-refusal-affordance-added is a Lua decider since its port.
     cp "$ROOT/scripts/lua/check-refusal-affordance-added.lua" "$d/scripts/lua/"
+    # 2223-afpl: check-added-fragments-parse.sh is a shim over its Lua port.
+    cp "$ROOT/scripts/lua/check-added-fragments-parse.lua" "$d/scripts/lua/"
     mkdir -p "$d/methodology"
     cp "$ROOT/methodology/convergence.yaml" "$d/methodology/"
     # The runner's command-policy audit writes .cache/metrics/ under the repo
