@@ -59,7 +59,7 @@ for _, d in ipairs(DECIDERS) do
     local r = run(argv, (tonumber(DEADLINE) + 5) * 1000)
     local took = math.floor((time.now_ms() - t0) / 1000)
     if r.code == 124 or r.code == 137 then
-        log.raw("FAIL: " .. d .. " outlived the " .. DEADLINE .. "s door deadline (" .. took .. "s) — the door would skip it, not refuse\n")
+        log.raw("FAIL: " .. d .. " outlived the " .. DEADLINE .. "s door deadline (" .. took .. "s) — the door would skip it, not refuse")
         fail = fail + 1
     else
         out.line("ok:   " .. d .. " finished inside the door deadline (" .. took .. "s, rc=" .. tostring(r.code) .. ")")
@@ -81,10 +81,10 @@ for _, d in ipairs(DECLARED) do
         if m then decl = m:gsub("^—%s*", ""):gsub("^%-%s*", ""); break end
     end
     if decl == nil or decl == "" then
-        log.raw("FAIL: " .. d .. " is neither timed nor declared — it lost its '# preflight: gate-only-decider — <reason>' line, so the door would deadline-skip it in silence (1518-8p5k)\n")
+        log.raw("FAIL: " .. d .. " is neither timed nor declared — it lost its '# preflight: gate-only-decider — <reason>' line, so the door would deadline-skip it in silence (1518-8p5k)")
         fail = fail + 1
     elseif text.contains(hooks, d .. ".sh") or text.contains(hooks, d .. ".lua") then
-        log.raw("FAIL: " .. d .. " declares gate-only-decider but a pre-push hook runs it; the door ignores the declaration and deadline-skips it (1518-8p5k)\n")
+        log.raw("FAIL: " .. d .. " declares gate-only-decider but a pre-push hook runs it; the door ignores the declaration and deadline-skips it (1518-8p5k)")
         fail = fail + 1
     else
         out.line("ok:   " .. d .. " is declared gate-only-decider (the door names it; the gate runs it): " .. decl)

@@ -1,0 +1,9 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: build-sh-floor-runs-fmt-lua-parse-and-the-packets-own-litmus-in-under-two-minutes
+    event:
+      type: released
+      ts: "2026-11-22T12:00:00Z"
+      host: yolanda
+      summary: |-
+        released to ready by yolanda at macuahuitl-fedora's direction: #1220 (work/2130-fl0r, on origin) is drafted in the build-speed hold of ~61 PRs; the slot goes to a Lua port. The work is complete on the ref (ok:floor in 9 s; test-build-floor 5 arms with sabotage); re-claim or adopt when the hold lifts.

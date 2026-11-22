@@ -21,9 +21,19 @@
 #       opsx files
 set -euo pipefail
 
-ROOT="$(git rev-parse --show-toplevel)"
+# 1401-x76w: from the script's own checkout, not the caller's cwd (a scratch cwd made this rc 128).
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GUARD="$ROOT/scripts/meta-orchestration-worktree-guard.sh"
-CHECKER="$ROOT/scripts/check-opsx-generated-dirt.sh"
+# Order 2201-opsx: the checker is the Lua port, run by the plan binary.
+# 1401-x76w / 84f37ff24: resolve the plan binary from the CHECKOUT, not the caller's cwd,
+# and absolutise it before any cd. An explicit TILLANDSIAS_PLAN_BIN keeps its meaning.
+if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
+    PLAN="$TILLANDSIAS_PLAN_BIN"
+else
+    PLAN="$(cd "$ROOT" && _p="$(. scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" && case "$_p" in (/*) printf %s "$_p" ;; (*) printf %s/%s "$PWD" "${_p#./}" ;; esac)" || PLAN=""
+fi
+[ -n "$PLAN" ] || { echo "could-not-run:test-meta-orchestration-opsx-sync-merge:no-plan-binary"; exit 3; }
+CHECKER() { env -u TILLANDSIAS_REPO_ROOT -u PROJECT_ROOT "$PLAN" script run "$ROOT/scripts/lua/check-opsx-generated-dirt.lua"; }
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/meta-orchestration-opsx-merge.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -58,7 +68,7 @@ for sk in apply-change archive-change bulk-archive-change continue-change explor
 done
 
 # ── (a) deterministic detector: launch dirt is a refusal, not an ok ────────
-if verdict="$(cd "$repo" && "$CHECKER")"; then rc=0; else rc=$?; fi
+if verdict="$(cd "$repo" && CHECKER)"; then rc=0; else rc=$?; fi
 [[ "$verdict" == "launch-dirt:opsx-only" && $rc -eq 5 ]] || {
     echo "FAIL(a): expected launch-dirt:opsx-only rc=5, got '$verdict' rc=$rc" >&2
     exit 1
@@ -91,7 +101,7 @@ boundary2="$WORK/boundary2"
 (cd "$repo" && "$GUARD" snapshot "$boundary2")
 printf 'preflight diagnostic only\n' >"$boundary2/tmp/probe.log"
 (cd "$repo" && "$GUARD" verify "$boundary2") | grep -q '^ok: startup worktree boundary preserved$'
-if verdict2="$(cd "$repo" && "$CHECKER")"; then
+if verdict2="$(cd "$repo" && CHECKER)"; then
     verdict2rc=0
 else
     verdict2rc=$?
@@ -111,7 +121,7 @@ printf 'operator tracked edit\n' >"$repo/base.txt"
 echo "ok: (c) non-opsx dirt refuses closed and preserves bytes"
 
 # ── (d) the skill wires the checker; nothing tells an agent to commit ───────
-grep -Fq 'scripts/check-opsx-generated-dirt.sh' "$ROOT/skills/meta-orchestration/SKILL.md"
+grep -Fq 'scripts/lua/check-opsx-generated-dirt.lua' "$ROOT/skills/meta-orchestration/SKILL.md"
 grep -Fq 'launch-dirt:opsx-only' "$ROOT/skills/meta-orchestration/SKILL.md"
 self="scripts/test-meta-orchestration-opsx-sync-merge.sh"
 if hits="$(cd "$ROOT" && git grep -n -F -e 'chore(opsx): sync generated' -e 'git add .opencode/commands/opsx-' \

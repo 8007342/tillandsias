@@ -8,7 +8,7 @@
 #
 # REGIME: hermetic. Both real blocks are cut from the shipped files (the
 # wrapper between its BEGIN and END markers, build.sh's consumer between
-# `_mem_rc=0` and its `esac`, the same cut test-gate-memory-floor-consumer.sh
+# `_mem_rc=0` and its `esac`, the same cut scripts/lua/test-gate-memory-floor-consumer.lua
 # makes). They are driven with the REAL floor script and synthetic meminfo.
 #
 #   1  sampler: a host meminfo with MemFree exports the figure (in kB)

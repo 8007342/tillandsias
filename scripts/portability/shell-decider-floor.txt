@@ -21,7 +21,6 @@ scripts/check-deslop-sweep-health.sh
 scripts/check-enclave-ca-consistency.sh
 scripts/check-enclave-network-internal.sh
 scripts/check-enclave-service-health.sh
-scripts/check-engine-cpu-dispatch.sh
 scripts/check-fleet-membership.sh
 scripts/check-forge-findings-persisted.sh
 scripts/check-fragment-ts-skew.sh
@@ -43,7 +42,6 @@ scripts/check-nix-deps-stability.sh
 scripts/check-no-competing-gate.sh
 scripts/check-no-fixture-writes-live-ledger.sh
 scripts/check-no-tracked-binaries.sh
-scripts/check-opsx-generated-dirt.sh
 scripts/check-pickup-role-grammar.sh
 scripts/check-plan-binary-current.sh
 scripts/check-plan-binary-probe-usage.sh
@@ -69,13 +67,11 @@ scripts/check-test-baseline.sh
 scripts/check-tracked-files-unwritten.sh
 scripts/check-unrunnable-platform-arms.sh
 scripts/check-windows-only-sources-verified.sh
-scripts/check-windows-tray-clippy.sh
 scripts/check-windows-tray-diagnose-surface.sh
 scripts/check-yaml-reader-availability.sh
 scripts/test-a-claim-names-a-workstation.sh
 scripts/test-added-test-is-referenced.sh
 scripts/test-agent-identity.sh
-scripts/test-all-fragments-intact.sh
 scripts/test-append-event-archived-refusal.sh
 scripts/test-append-vs-origin-fold.sh
 scripts/test-archiver-concurrent-check.sh
@@ -110,7 +106,6 @@ scripts/test-check-carry-forward.sh
 scripts/test-check-credential-channel.sh
 scripts/test-check-engine-cpu-dispatch.sh
 scripts/test-check-jq-callsite-ratchet.sh
-scripts/test-check-macos-stock-binaries.sh
 scripts/test-check-opsx-generated-dirt.sh
 scripts/test-check-stranded-in-progress.sh
 scripts/test-check-test-baseline.sh
@@ -121,7 +116,6 @@ scripts/test-claims-fleet-visible.sh
 scripts/test-claude-forge-bypass-preaccepted.sh
 scripts/test-clear-vault-credentials-partial-is-nonzero.sh
 scripts/test-clear-vault-host-credentials.sh
-scripts/test-closure-evidence-survives-landing.sh
 scripts/test-closure-guards-name-the-way-out.sh
 scripts/test-cloudflare-login.sh
 scripts/test-cloudflare-oauth-core.sh
@@ -165,9 +159,7 @@ scripts/test-dev-inference-start-refusal-names-cause.sh
 scripts/test-discipline-derive.sh
 scripts/test-discipline-install-hooks.sh
 scripts/test-dispatch-reap.sh
-scripts/test-drain-queue-bare-refuses.sh
 scripts/test-e2e-preflight-live-runtime.sh
-scripts/test-e2e-step2-macos.sh
 scripts/test-embed-endpoint-derivation.sh
 scripts/test-enclave-network-internal-discovery.sh
 scripts/test-enclave-proxy-lib.sh
@@ -202,7 +194,6 @@ scripts/test-forge-gitconfig-bidirectional-quarantine.sh
 scripts/test-forge-launch-openspec-init-clean.sh
 scripts/test-forge-liveness-probe.sh
 scripts/test-forge-localization-staged.sh
-scripts/test-forge-packed-refs-split-brain.sh
 scripts/test-forge-project-guard-hooks.sh
 scripts/test-forge-project-trust-seeds.sh
 scripts/test-forge-runtime-ca-trust.sh
@@ -220,7 +211,6 @@ scripts/test-freshness-regime-budget.sh
 scripts/test-gate-divergence-is-declared.sh
 scripts/test-gate-fast-refusals.sh
 scripts/test-gate-host-memory-figure.sh
-scripts/test-gate-memory-floor-consumer.sh
 scripts/test-gate-memory-refusal.sh
 scripts/test-gate-memory-wsl2-guest.sh
 scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh
@@ -277,9 +267,7 @@ scripts/test-inference-mkdir-fatal-1183-j9dk.sh
 scripts/test-inference-pull-failure-classification.sh
 scripts/test-inference.sh
 scripts/test-initialize-bare-metal-host-idempotent.sh
-scripts/test-install-hooks-refuses-global-hookspath.sh
 scripts/test-install-macos-announces-its-pin.sh
-scripts/test-install-macos-swap-is-interruptible.sh
 scripts/test-install-path.sh
 scripts/test-installer-probes-by-attempt-not-by-help.sh
 scripts/test-installer-reports-wsl-guest-shape.sh
@@ -296,18 +284,15 @@ scripts/test-land-gate-refusal-names-its-step.sh
 scripts/test-land-merges-trunk.sh
 scripts/test-land-notice-names-unrun-litmus.sh
 scripts/test-land-push-bounded.sh
-scripts/test-land-push-classification.sh
 scripts/test-land-queue.sh
 scripts/test-land-verdict-through-a-pipe.sh
 scripts/test-landed-but-open.sh
-scripts/test-lane-instrument-vs-ledger.sh
 scripts/test-ledger-node-claim-resolution.sh
 scripts/test-ledger-prose-roundtrip.sh
 scripts/test-ledger-ts-guard.sh
 scripts/test-ledger-write-reaches-its-reader.sh
 scripts/test-litmus-binding-truth.sh
 scripts/test-litmus-bindings.sh
-scripts/test-litmus-budget-negative-control.sh
 scripts/test-litmus-budget-tally.sh
 scripts/test-litmus-covering-relay-scope.sh
 scripts/test-litmus-diff-scope.sh
@@ -349,7 +334,6 @@ scripts/test-macos-vsock-inference-closure.sh
 scripts/test-macos-vz-orphan-diagnosis.sh
 scripts/test-mcp-plan-resolver-pinning.sh
 scripts/test-mcp-run-command-tool.sh
-scripts/test-mcp-server-resilience.sh
 scripts/test-mcp-transport-death-trace.sh
 scripts/test-memo-hit-observability.sh
 scripts/test-meta-orchestration-opsx-sync-merge.sh
@@ -368,7 +352,6 @@ scripts/test-mo-full-attest.sh
 scripts/test-mo-full-record-precedes-marker.sh
 scripts/test-mode-only-regression-887-bz88.sh
 scripts/test-must-ship-rows.sh
-scripts/test-native-lint-attested.sh
 scripts/test-nix-cache-service.sh
 scripts/test-nix-toolbox.sh
 scripts/test-no-competing-gate.sh
@@ -387,13 +370,11 @@ scripts/test-packet-tier-fields.sh
 scripts/test-pending-capability-row-does-not-wedge.sh
 scripts/test-pilot-lua-ports.sh
 scripts/test-plan-binary-copy-refresh.sh
-scripts/test-plan-binary-freshness.sh
 scripts/test-plan-binary-locus-native.sh
 scripts/test-plan-binary-probe-release-over-debug.sh
 scripts/test-plan-binary-probe-usage-determinism.sh
 scripts/test-plan-binary-probe-usage-population.sh
 scripts/test-plan-binary-probe.sh
-scripts/test-plan-binary-remedy-names-only-a-runnable-binary.sh
 scripts/test-plan-binary-runnability-precondition.sh
 scripts/test-plan-field-get.sh
 scripts/test-plan-fragments-lane-affordance.sh
@@ -410,10 +391,8 @@ scripts/test-portability-idioms.sh
 scripts/test-pre-push-deletion-only.sh
 scripts/test-pre-push-empty-ref-list.sh
 scripts/test-pre-push-honours-a-live-freeze.sh
-scripts/test-pre-push-issue-capture-lane.sh
 scripts/test-pre-push-linux-next-merged.sh
 scripts/test-pre-push-main-branch-affordance.sh
-scripts/test-pre-push-plan-lane-after-merge.sh
 scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh
 scripts/test-pre-push-trailer-states-what-it-saw.sh
 scripts/test-pre-push-version-guard-sigpipe.sh
@@ -447,10 +426,8 @@ scripts/test-release-tier-timer-render.sh
 scripts/test-reopen-is-history-not-loss.sh
 scripts/test-repeat-model-flag.sh
 scripts/test-requirement-ids.sh
-scripts/test-rerun-failed-rust-tests.sh
 scripts/test-reset-flags-are-accepted.sh
 scripts/test-reset-state-contract.sh
-scripts/test-reset-state-no-home-refusal.sh
 scripts/test-resolve-open-pr.sh
 scripts/test-resolve-release-run.sh
 scripts/test-resumable-claim-dirt.sh
@@ -523,9 +500,6 @@ scripts/test-tray-surface-parity-gate.sh
 scripts/test-uninstall-keeps-models.sh
 scripts/test-uninstall-matcher-spares-bystanders.sh
 scripts/test-uninstall-path-block.sh
-scripts/test-uninstall-preserves-vm.sh
-scripts/test-uninstall-sweeps-both-app-dirs.sh
-scripts/test-uninstall-tray-stop-is-macos-only.sh
 scripts/test-unrunnable-platform-arms.sh
 scripts/test-unstable-installer-defaults-to-unstable.sh
 scripts/test-validator-surface-currency.sh

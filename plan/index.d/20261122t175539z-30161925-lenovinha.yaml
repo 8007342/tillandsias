@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: local-ci-to-lua-slice-3-check-catalog
+    field: status
+    value: blocked
+    ts: "2026-11-22T17:55:39Z"
+    host: lenovinha
+
+events:
+  - packet_id: local-ci-to-lua-slice-3-check-catalog
+    event:
+      type: note
+      ts: "2026-11-22T17:55:39Z"
+      host: lenovinha
+      summary: |-
+        draft PR #1345, stacked on #1337 and #1327; un-drafted and queued for landing once its base lands

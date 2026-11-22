@@ -1885,7 +1885,9 @@ git -C "$_c51" init -q; git -C "$_c51" config user.email t@l; git -C "$_c51" con
 echo a > "$_c51/x.txt"; echo r > "$_c51/README.md"
 git -C "$_c51" add -A; git -C "$_c51" commit -qm proved
 _b51="$(git -C "$_c51" rev-parse HEAD)"; date -u +%s > "$_c51.marker"
-ms51() { ( cd "$_c51" && TILLANDSIAS_CLASS_BASE="$_b51" TILLANDSIAS_FULL_GATE_MARKER="$_c51.marker" bash scripts/change-class.sh may-skip gate-step:t path:x.txt 2>/dev/null ); }
+# The selector knobs are the CALLER's: --daily-full gates with TILLANDSIAS_CLASS_SELECTOR=off
+# exported, and the arm inherited it (run/run/run on macuahuitl 2026-11-22). Unset them all.
+ms51() { ( cd "$_c51" && unset TILLANDSIAS_CLASS_SELECTOR TILLANDSIAS_TRUNK_BRANCH TILLANDSIAS_CHANGE_CLASS_REMOTE TILLANDSIAS_FULL_GATE_MAX_AGE_S && TILLANDSIAS_CLASS_BASE="$_b51" TILLANDSIAS_FULL_GATE_MARKER="$_c51.marker" bash scripts/change-class.sh may-skip gate-step:t path:x.txt 2>/dev/null ); }
 echo b >> "$_c51/x.txt"; git -C "$_c51" commit -qam x; v51a="$(ms51)"
 git -C "$_c51" reset -q --hard "$_b51"; echo more >> "$_c51/README.md"; git -C "$_c51" commit -qam doc; v51b="$(ms51)"
 echo 1 > "$_c51.marker"; v51c="$(ms51)"
@@ -1895,6 +1897,47 @@ else
     bad "ARM 51: wanted run/skip/run; got '$v51a'/'$v51b'/'$v51c'"
 fi
 
+
+# ARM 53 (2209-dfix): the publish goes through the REAL pre-push hook. The first
+# live --daily-full on macuahuitl (2026-11-22) gated green-or-red and then could
+# not publish: the hook refused refs/attest/daily-red/<epoch> as a new ref needing
+# a full gate. A daily verdict ref is exempt; a non-epoch name under the same
+# namespace and an ordinary branch are not (premise: this repo has no gate stamp,
+# so anything not exempt is refused).
+_c53="$TMP/arm53"; mkdir -p "$_c53/w/scripts/hooks"
+git init -q --bare "$_c53/r.git"
+cp "$ROOT/scripts/hooks/pre-push-local-gate.sh" "$_c53/w/scripts/hooks/"; cp "$ROOT/scripts/gate-stamp.sh" "$_c53/w/scripts/"
+git -C "$_c53/w" init -q; git -C "$_c53/w" config user.email t@l; git -C "$_c53/w" config user.name t
+git -C "$_c53/w" add -A; git -C "$_c53/w" commit -qm base
+git -C "$_c53/w" push -q "$_c53/r.git" HEAD:refs/heads/linux-next 2>/dev/null
+printf '#!/bin/sh\nexec bash scripts/hooks/pre-push-local-gate.sh "$@"\n' > "$_c53/w/.git/hooks/pre-push"; chmod +x "$_c53/w/.git/hooks/pre-push"
+p53() { ( cd "$_c53/w" && git push -q "$_c53/r.git" "HEAD:$1" < /dev/null > /dev/null 2>&1 ); echo $?; }
+v53a="$(p53 refs/attest/daily-full/1795348746)"; v53b="$(p53 refs/attest/daily-red/1795348747)"
+v53c="$(p53 refs/attest/daily-red/not-an-epoch)"; v53d="$(p53 refs/heads/not-exempt)"
+if [ "$v53d" != 0 ] && [ "$v53c" != 0 ] && [ "$v53a" = 0 ] && [ "$v53b" = 0 ]; then
+    ok "ARM 53: the real pre-push hook lets daily-full/daily-red <epoch> refs through and still refuses a non-epoch attest name and a branch (2209-dfix)"
+else
+    bad "ARM 53: wanted push rc 0/0/refused/refused (daily-full, daily-red, non-epoch, branch); got $v53a/$v53b/$v53c/$v53d"
+fi
+
+# ARM 54 (2209-dfix): a held lock is SAID. The 03:42 timer --daily-full died with
+# no output while run 28 held the lock. With a live holder, --daily-full waits
+# (bounded) and then names the holder; a plain run names it too; no gate runs.
+sleep 300 & _h54=$!
+_l54="$(cd "$WORK_DIR" && git rev-parse --show-toplevel)/.git/tillandsias-land-queue.lock"
+mkdir -p "$_l54"; echo "$_h54" > "$_l54/pid"; : > "$GATE_LOG"
+out54a="$(TILLANDSIAS_LAND_QUEUE_DAILY_LOCK_WAIT_S=0 run_queue --daily-full)"; rc54a=$?
+out54b="$(run_queue)"; rc54b=$?
+kill "$_h54" 2>/dev/null; wait "$_h54" 2>/dev/null; rm -rf "$_l54"
+if [ "$rc54a" = 3 ] && [ "$rc54b" = 3 ] && grep -q "^land-queue:daily-full:waiting-for-lock:$_h54 " <<<"$out54a" \
+    && grep -q "^skip:land-queue:daily-full:lock-held:$_h54 " <<<"$out54a" && grep -q "^skip:land-queue:in-flight:$_h54 " <<<"$out54b" \
+    && [ ! -s "$GATE_LOG" ]; then
+    ok "ARM 54: a live lock holder is named by --daily-full (after its bounded wait) and by a plain run; neither gates (2209-dfix)"
+else
+    bad "ARM 54: wanted rc 3/3 naming holder $_h54 and no gate; got rc=$rc54a/$rc54b gates=$(grep -c . "$GATE_LOG")
+$out54a
+$out54b"
+fi
 printf '\n'
 if [ "$fail" -eq 0 ]; then
     if [ "$skipped" -gt 0 ]; then
