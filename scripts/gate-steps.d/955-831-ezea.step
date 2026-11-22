@@ -9,6 +9,11 @@ STEP_DESC="Checking the plan archiver preserves the ready set (831-ezea)"
 STEP_LUA="scripts/lua/check-archiver-ready-set.lua"
 STEP_ERROR="the plan archiver's check refused — see the line above: a ready-set violation means do not sweep; a could-not-run means the instrument needs repair (923-ws3r)"
 STEP_OK="Plan archiver check passed"
+# msys (yolanda-windows, 2026-11-21, @ 0dfb03fe1): RED, for two archiver causes
+# the inline block had too; neither is about the ready set. (1) A stale runner
+# exe cannot rebuild itself on Windows (os error 5), filed as 2187-sdtz. (2) The
+# answerability tree copy dies on an ignored dangling nix `result` symlink
+# (tree-copy-failed), filed as 2187-9cws, which regresses 1392-6tbs.
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-21 darwin ok:archiver-ready-set:checked rc=0, a real run, not a memo hit (work/2186-niam @ 0dfb03fe1)"
 # ORDER 2157-ginp: STEP_READS, recorded only (never consulted by the skip).
 STEP_READS="plan/index.yaml plan/index.d/** plan/archive/** scripts/archive-plan-packets.sh scripts/archiver-check-memo.sh scripts/cycle-metrics.sh scripts/lua/check-archiver-ready-set.lua"
