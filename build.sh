@@ -5853,7 +5853,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # 827-d3dc found 92 such pins; four of the ten costliest were this shape,
     # and one kept a product defect green (1472-3d29). Diff-scoped.
     _step "Checking newly-added Rust source-literal pins (1473-scdq)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-rust-source-pin-added.sh" 2>&1; then
+    # 2242-rspn: a Lua decider on the one runner since its port.
+    if ! _run_lua_decider "scripts/lua/check-rust-source-pin-added.lua" 2>&1; then
         _error "a newly-added Rust test pins source text with no negative control or reason (1473-scdq); the site and the remedy are printed above"
         exit 1
     fi

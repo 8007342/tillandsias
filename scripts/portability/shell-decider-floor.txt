@@ -53,7 +53,6 @@ scripts/check-release-asset-integrity.sh
 scripts/check-release-tier-freshness.sh
 scripts/check-resumable-claim-dirt.sh
 scripts/check-running-image-freshness.sh
-scripts/check-rust-source-pin-added.sh
 scripts/check-salvage-refs-ledger.sh
 scripts/check-scorable-obligation-added.sh
 scripts/check-script-exec-bits.sh

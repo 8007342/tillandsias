@@ -389,7 +389,6 @@ scripts scripts/check-release-asset-integrity.sh 12
 scripts scripts/check-release-tier-freshness.sh 7
 scripts scripts/check-resumable-claim-dirt.sh 1
 scripts scripts/check-running-image-freshness.sh 6
-scripts scripts/check-rust-source-pin-added.sh 2
 scripts scripts/check-salvage-refs-ledger.sh 3
 scripts scripts/check-scorable-obligation-added.sh 21
 scripts scripts/check-script-exec-bits.sh 6
