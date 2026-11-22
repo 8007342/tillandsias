@@ -51,7 +51,21 @@ _hash_tracked() {
     # NUL-delimited: a path with a space or a newline must not split, and this
     # runs over the whole tracked set where one such path is enough to corrupt
     # the comparison silently.
-    git ls-files -z | xargs -0 -r sha256sum 2>/dev/null | LC_ALL=C sort
+    # ORDER 2188-qaaj: a tracked SYMLINK is recorded by its link target string
+    # (readlink), not hashed through: sha256sum on a symlink to a directory
+    # fails EISDIR, and with stderr discarded those paths (94 on 2026-11-22,
+    # every .claude/skills/* and .agents/skills/* link) were silently missing,
+    # so retargeting one went undetected. Same "<64 hex>  <path>" line shape.
+    {
+        git ls-files -z | while IFS= read -r -d '' _p; do
+            [ -L "$_p" ] || printf '%s\0' "$_p"
+        done | xargs -0 -r sha256sum 2>/dev/null
+        git ls-files -z | while IFS= read -r -d '' _p; do
+            [ -L "$_p" ] || continue
+            _h="$(printf 'symlink:%s' "$(readlink -- "$_p")" | sha256sum)"
+            printf '%s  %s\n' "${_h%% *}" "$_p"
+        done
+    } | LC_ALL=C sort
 }
 
 case "$mode" in
@@ -71,6 +85,15 @@ case "$mode" in
         if [ "${_n:-0}" -lt 1 ]; then
             _afford "hashing the tracked set wrote nothing to $state, so there is no baseline to verify against" "check that git ls-files lists files here and that $state is writable, then snapshot again"
             echo "blocked:tracked-files-unwritten:snapshot-empty"
+            exit 2
+        fi
+        # ORDER 2188-qaaj: every tracked path must be in the baseline. A path
+        # sha256sum could not read used to vanish behind 2>/dev/null, and a
+        # path missing from the baseline can never be reported as written.
+        _want="$(git ls-files -z | tr -cd '\0' | wc -c)"
+        if [ "${_n:-0}" -ne "${_want:-0}" ]; then
+            _afford "the baseline holds ${_n} of ${_want} tracked paths, so the missing ones could be rewritten unseen" "find the unreadable path(s) with: git ls-files -z | xargs -0 sha256sum >/dev/null, fix them, then snapshot again"
+            echo "blocked:tracked-files-unwritten:unhashable:$((_want - _n))"
             exit 2
         fi
         echo "ok:tracked-files-unwritten:${_n} files"
