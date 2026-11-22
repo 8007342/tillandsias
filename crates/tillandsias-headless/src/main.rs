@@ -4174,8 +4174,34 @@ fn store_supports_shifting() -> Option<String> {
 /// plain `--userns=keep-id`, so one create covers them all. Best-effort: a
 /// failed warm only means the first start pays the copy, as before.
 fn warm_keep_id_mapping(image_name: &str, tag: &str, debug: bool) {
-    if !keep_id_warm_needed(store_supports_shifting().as_deref()) {
-        return;
+    let _ = warm_keep_id_mapping_on(store_supports_shifting().as_deref(), image_name, tag, debug);
+}
+
+/// What one keep-id warm did (order 2198-ee49).
+#[derive(Debug, PartialEq, Eq)]
+enum KeepIdWarm {
+    /// The store shifts IDs, or could not say: nothing to warm.
+    NotNeeded,
+    /// The keep-id create succeeded; the mapped copy exists.
+    Warmed,
+    /// The create failed or timed out; the first start pays the copy.
+    Failed(String),
+}
+
+/// ORDER 2198-ee49: the warm, given the store's shifting answer instead of
+/// asking for it. The warm test measured `false`, then the warm asked podman
+/// again; when that second `podman info` failed under load the answer was
+/// None, the warm returned silently, and the test read "the warm made the
+/// mapped copy: 0 != 1" with no cause (macuahuitl land queue, 2026-11-22).
+/// One answer per decision, and an outcome that says why nothing was warmed.
+fn warm_keep_id_mapping_on(
+    shifting: Option<&str>,
+    image_name: &str,
+    tag: &str,
+    debug: bool,
+) -> KeepIdWarm {
+    if !keep_id_warm_needed(shifting) {
+        return KeepIdWarm::NotNeeded;
     }
     let name = format!(
         "tillandsias-keepid-warm-{image_name}-{}",
@@ -4188,7 +4214,7 @@ fn warm_keep_id_mapping(image_name: &str, tag: &str, debug: bool) {
     let mut rm = podman_command();
     rm.args(["rm", "-f", &name]);
     let _ = rm.output_bounded(tillandsias_podman::OperationKind::Container.default_budget());
-    match created {
+    let why = match created {
         Ok(o) if o.status.success() => {
             if debug {
                 eprintln!(
@@ -4196,15 +4222,15 @@ fn warm_keep_id_mapping(image_name: &str, tag: &str, debug: bool) {
                     t0.elapsed().as_millis()
                 );
             }
+            return KeepIdWarm::Warmed;
         }
-        Ok(o) => eprintln!(
-            "[tillandsias] image {image_name}: keep-id warm failed; the first start pays the copy: {}",
-            String::from_utf8_lossy(&o.stderr).trim()
-        ),
-        Err(e) => eprintln!(
-            "[tillandsias] image {image_name}: keep-id warm failed; the first start pays the copy: {e}"
-        ),
-    }
+        Ok(o) => String::from_utf8_lossy(&o.stderr).trim().to_string(),
+        Err(e) => e.to_string(),
+    };
+    eprintln!(
+        "[tillandsias] image {image_name}: keep-id warm failed; the first start pays the copy: {why}"
+    );
+    KeepIdWarm::Failed(why)
 }
 
 /// How many trailing lines of podman's stderr a failed build carries into its
@@ -41593,6 +41619,21 @@ mod keep_id_warm_tests {
         assert!(!keep_id_warm_needed(None));
     }
 
+    /// 2198-ee49: the warm decides on the answer it is HANDED. A shifting or
+    /// unknown answer returns NotNeeded before any podman call (the tag names
+    /// no image, so a create would fail, not warm), which is what lets the
+    /// live test below pass its own measured answer instead of a re-query.
+    #[test]
+    fn the_warm_decides_on_the_answer_it_is_handed() {
+        for shifting in [Some("true"), Some(""), None] {
+            assert_eq!(
+                warm_keep_id_mapping_on(shifting, "t", "localhost/no-such-image:2198", false),
+                KeepIdWarm::NotNeeded,
+                "{shifting:?}"
+            );
+        }
+    }
+
     /// 1785-655p: the build arm of `ensure_image_exists` warms the keep-id
     /// mapping after a SUCCESSFUL build (after the retry loop's `break`), and
     /// nowhere a present image is merely reused, so the warm is never a
@@ -41712,7 +41753,9 @@ mod keep_id_warm_tests {
         // image's own unmapped layer must be visible first.
         let seen = rows_of_layer().len();
         let after_build = mapped();
-        warm_keep_id_mapping("keepid-warm-test", &tag, false);
+        // 2198-ee49: the warm is handed the answer measured above, so a second
+        // `podman info` failing under load can no longer skip it silently.
+        let warm = warm_keep_id_mapping_on(shifting.as_deref(), "keepid-warm-test", &tag, false);
         let after_warm = mapped();
         let name = format!("tillandsias-keepid-warm-test-{}", std::process::id());
         let _ = podman_cmd_sync()
@@ -41732,6 +41775,11 @@ mod keep_id_warm_tests {
         assert_eq!(
             after_build, 0,
             "a fresh image starts with no mapped copy (the premise)"
+        );
+        assert_eq!(
+            warm,
+            KeepIdWarm::Warmed,
+            "the warm ran on a store that cannot shift"
         );
         assert_eq!(after_warm, 1, "the warm made the mapped copy");
         assert_eq!(
