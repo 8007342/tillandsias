@@ -529,7 +529,6 @@ scripts scripts/summarize-pyproject.sh 3
 scripts scripts/terminology-check-memo.sh 3
 scripts scripts/test-a-claim-names-a-workstation.sh 5
 scripts scripts/test-agent-identity.sh 4
-scripts scripts/test-all-fragments-intact.sh 1
 scripts scripts/test-append-event-archived-refusal.sh 4
 scripts scripts/test-append-vs-origin-fold.sh 7
 scripts scripts/test-archiver-concurrent-check.sh 2
@@ -815,8 +814,6 @@ scripts scripts/test-trace-coverage.sh 4
 scripts scripts/test-tracked-files-unwritten-guard.sh 2
 scripts scripts/test-tray-asset-placeholder-refused.sh 1
 scripts scripts/test-tray-surface-parity-gate.sh 1
-scripts scripts/test-uninstall-preserves-vm.sh 1
-scripts scripts/test-uninstall-sweeps-both-app-dirs.sh 7
 scripts scripts/test-unrunnable-platform-arms.sh 9
 scripts scripts/test-unstable-installer-defaults-to-unstable.sh 1
 scripts scripts/test-vault-shutdown-forwards-sigterm.sh 2

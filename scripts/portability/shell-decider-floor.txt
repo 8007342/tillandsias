@@ -76,7 +76,6 @@ scripts/check-yaml-reader-availability.sh
 scripts/test-a-claim-names-a-workstation.sh
 scripts/test-added-test-is-referenced.sh
 scripts/test-agent-identity.sh
-scripts/test-all-fragments-intact.sh
 scripts/test-append-event-archived-refusal.sh
 scripts/test-append-vs-origin-fold.sh
 scripts/test-archiver-concurrent-check.sh
@@ -111,7 +110,6 @@ scripts/test-check-carry-forward.sh
 scripts/test-check-credential-channel.sh
 scripts/test-check-engine-cpu-dispatch.sh
 scripts/test-check-jq-callsite-ratchet.sh
-scripts/test-check-macos-stock-binaries.sh
 scripts/test-check-opsx-generated-dirt.sh
 scripts/test-check-stranded-in-progress.sh
 scripts/test-check-test-baseline.sh
@@ -220,7 +218,6 @@ scripts/test-freshness-regime-budget.sh
 scripts/test-gate-divergence-is-declared.sh
 scripts/test-gate-fast-refusals.sh
 scripts/test-gate-host-memory-figure.sh
-scripts/test-gate-memory-floor-consumer.sh
 scripts/test-gate-memory-refusal.sh
 scripts/test-gate-memory-wsl2-guest.sh
 scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh
@@ -306,7 +303,6 @@ scripts/test-ledger-ts-guard.sh
 scripts/test-ledger-write-reaches-its-reader.sh
 scripts/test-litmus-binding-truth.sh
 scripts/test-litmus-bindings.sh
-scripts/test-litmus-budget-negative-control.sh
 scripts/test-litmus-budget-tally.sh
 scripts/test-litmus-covering-relay-scope.sh
 scripts/test-litmus-diff-scope.sh
@@ -448,7 +444,6 @@ scripts/test-repeat-model-flag.sh
 scripts/test-requirement-ids.sh
 scripts/test-reset-flags-are-accepted.sh
 scripts/test-reset-state-contract.sh
-scripts/test-reset-state-no-home-refusal.sh
 scripts/test-resolve-open-pr.sh
 scripts/test-resolve-release-run.sh
 scripts/test-resumable-claim-dirt.sh
@@ -521,9 +516,6 @@ scripts/test-tray-surface-parity-gate.sh
 scripts/test-uninstall-keeps-models.sh
 scripts/test-uninstall-matcher-spares-bystanders.sh
 scripts/test-uninstall-path-block.sh
-scripts/test-uninstall-preserves-vm.sh
-scripts/test-uninstall-sweeps-both-app-dirs.sh
-scripts/test-uninstall-tray-stop-is-macos-only.sh
 scripts/test-unrunnable-platform-arms.sh
 scripts/test-unstable-installer-defaults-to-unstable.sh
 scripts/test-validator-surface-currency.sh

@@ -19,3 +19,10 @@ STEP_SECOND_REGIME="yolanda 2026-10-08 msys ok:purge-guard-soft-arm:4 arms"
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
 STEP_READS="crates/tillandsias-windows-tray/src/notify_icon.rs scripts/check-purge-clears-vault-credentials.sh scripts/test-purge-guard-soft-arm.sh"
+# ORDER 2184-sinp: DECLARED INPUTS (2118-tnut grammar). The script drives
+# check-purge-clears-vault-credentials.sh, which reads the Windows tray SOFT
+# body (notify_icon.rs) AND scans every tracked *.sh and *.ps1 (git ls-files),
+# so any shell or PowerShell file is an input; the glob matches across
+# directories (a case pattern, where * matches /). An ATIME TRACE of a real
+# run read nothing outside these.
+STEP_INPUTS="path:scripts/check-purge-clears-vault-credentials.sh path:crates/tillandsias-windows-tray/src/notify_icon.rs path:*.sh path:*.ps1"

@@ -137,8 +137,8 @@ critical_path:
     timeout_ms: 120000
 
   - step: "1233-jqp4: a budget is a ceiling, not a grace period — a hung step is killed AND red, a wrong answer under a generous budget is red and fast"
-    command: "bash scripts/test-litmus-budget-negative-control.sh 2>&1 | tail -1"
-    success_pattern: "^ok:litmus-budget-negative-control:[0-9]+ arms$"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-budget-negative-control.lua 2>&1"
+    success_pattern: "^ok:litmus-budget-negative-control:[0-9]+-arms$"
     timeout_ms: 120000
 
 observability:

@@ -378,6 +378,15 @@ _CLASS_SKIPPED=0        # how many guards this run did NOT run. A run that
                         # record one — otherwise a chain of scoped runs keeps
                         # renewing its own licence to be scoped, forever.
 _CLASS_SET_MEMO=""      # computed once per run; empty until first asked
+# ORDER 2175-ctin: what the feature-gated cargo test step (tray,listen-vsock,
+# headless bin tests) can READ, in the class selector's grammar (STEP_INPUTS:
+# classes + path: globs). With a daily full proof (2174-dail) the step is
+# skipped when no change touches any of these. GENERATED from the Rust sources
+# by scripts/lua/scan-cargo-test-repo-roots.lua --list (headless + its path-dep
+# closure), and gate step 954 runs that scanner's --check so a new embedded or
+# read path cannot be missed here. Every uncertainty in the scan WIDENS this.
+_CARGO_FEATURE_TEST_INPUTS="rust path:Cargo.toml path:Cargo.lock path:rust-toolchain.toml path:.cargo/** path:.claude/CLAUDE.md path:.claude/CLAUDE.md/** path:.codex path:.codex/** path:.config path:.config/** path:.gemini/GEMINI.md path:.gemini/GEMINI.md/** path:.tillandsias path:.tillandsias/** path:assets path:assets/** path:cloud path:cloud/** path:docs/cheatsheets/github-credential-tools.md path:images path:images/** path:lib/chart.umd.js path:lib/chart.umd.js/** path:lib/highlight.min.css path:lib/highlight.min.css/** path:lib/highlight.min.js path:lib/highlight.min.js/** path:licences/acknowledgements/adefossez-htdemucs.yaml path:licences/acknowledgements/cc-by-4-0--google-deepmind-representations4d.yaml path:licences/acknowledgements/corridor-key-licence-2-0--nikopueringer-corridorkey2-0.yaml path:licences/acknowledgements/mit--ruicheng-moge-2-vitb-normal.yaml path:licences/acknowledgements/nvidia-open-model-license--nvidia-c-radiov4-so400m.yaml path:locales path:locales/** path:observatorium path:observatorium/** path:openspec/changes/studio-asset-pipeline/contract/examples/gatekeeper-v3.character-frames.json path:research path:research/** path:scripts path:scripts/** path:skills path:skills/** path:tests/fixtures/recipe-basic/Recipefile path:tests/fixtures/recipe-basic/Recipefile/** path:tests/fixtures/recipe-basic/manifest.toml path:tests/fixtures/recipe-basic/manifest.toml/** path:tools path:tools/**"
+
 _class_set_once() {
     [ -n "$_CLASS_SET_MEMO" ] && return 0
     _CLASS_SET_MEMO="$(change_class_set 2>/dev/null)" || _CLASS_SET_MEMO="(unavailable)"
@@ -3172,6 +3181,10 @@ _gs_lanes() {
     for _f in "$@"; do
         _lanes="$(sed -n 's/^STEP_LANES="\(.*\)"$/\1/p' "$_f" | head -n 1)"
         set -- $_lanes
+        # 2192-excl: `exclusive` (alone or beside other lanes) means NOTHING else may
+        # run with this step: it reads or counts a fixed host-wide file. It joins the
+        # exclusive phase after the lanes, as a step naming several lanes does.
+        case " $_lanes " in *" exclusive "*) _excl+=("$_f"); continue ;; esac
         if [ "$#" -ne 1 ]; then _excl+=("$_f"); continue; fi
         _i=$((_i + 1)); _names+=("$_f")
         printf '%s\t%s\n' "$_i" "$_f" >> "$_d/lane-$1.list"
@@ -4517,7 +4530,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "All fragments intact"
 
     _step "Checking the whole-overlay fragment guard's negative controls..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-all-fragments-intact.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-all-fragments-intact.lua" 2>&1; then
         _error "the fragment-integrity guard cannot distinguish valid YAML, parse damage, and conflict markers"
         exit 1
     fi
@@ -5422,6 +5435,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     #
     # Deliberately NOT routed through the baseline ratchet, matching the
     # --test pass: no known-red entry lives here today, so strict is correct.
+    # ORDER 2175-ctin: skippable against a daily full proof when no change
+    # touches what these tests read (_CARGO_FEATURE_TEST_INPUTS, scanned).
+    # shellcheck disable=SC2086 — the declared inputs are words by design.
+    if _class_may_skip cargo-feature-gated-tests $_CARGO_FEATURE_TEST_INPUTS; then
+    # shellcheck disable=SC2086
+    _class_skip_line cargo-feature-gated-tests $_CARGO_FEATURE_TEST_INPUTS
+    else
     _step "Running feature-gated tests (tray, listen-vsock) — 1074-w7qv..."
     _fg_transcript="$SCRIPT_DIR/target/test-transcript-feature-gated-gate.log"
     mkdir -p "$(dirname "$_fg_transcript")"
@@ -5498,6 +5518,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Feature-gated tests passed: $_fg_ran test(s) executed under tray,listen-vsock"
+    fi
 
     # ORDER 1713-1dnx: the VM GUEST's feature set, exactly as
     # build-macos-tray.sh and build-guest-binaries.sh build it (listen-vsock,
@@ -6502,12 +6523,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Hardware-fingerprint gate passed"
 
-    _step "Checking uninstall sweeps BOTH macOS app dirs..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-uninstall-sweeps-both-app-dirs.sh" 2>&1; then
-        _error "uninstall would leave the app in the DEFAULT install dir while removing the LaunchAgent beside it — the app stays, nothing launches it, and the uninstaller reports success"
-        exit 1
-    fi
-    _info "Uninstall app-dir sweep gate passed"
+    # The uninstall app-dir sweep moved to gate step 402-2109-umac (Lua).
 
     _step "Checking image rebuild keeps the installed binary's launch tag (747-knbp)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-build-image-installed-version-alias.sh" 2>&1; then
@@ -6879,13 +6895,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # a substantive ledger claim from a command that never executed. Wired here
     # because the defect is invisible on any host that HAS ruby, which is every
     # host that runs this gate; only the stub-PATH arms exercise it.
-    _step "Checking a missing ruby reads as could-not-run, not as a ledger verdict (965-sxec)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-archiver-ruby-could-not-run.sh" 2>&1; then
-        _error "an absent ruby does not route to the could-not-run channel (965-sxec) — see the verdict line above"
-        exit 1
-    fi
-    _info "Archiver could-not-run channel check passed"
-
     # 964-zedm: the index builder must stage where the payload FITS. It staged
     # via the ambient TMPDIR, and in a forge /tmp is a 256 MB tmpfs while the
     # index root is on a 1.2 TB overlay — so a cold 22,645-chunk build died on
@@ -6983,13 +6992,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # is only safe if it does not change the ANSWER — a spec referenced solely
     # from target/ would otherwise be reported as a zero-trace spec that is not
     # one, a false accusation produced by an optimisation.
-    _step "Checking the pre-commit spec sweep's exclusions are answer-preserving (734-sjb3)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-precommit-zero-trace-scan-scope.sh" 2>&1; then
-        _error "excluding build output changed the referenced-spec set (734-sjb3) — see the verdict line above"
-        exit 1
-    fi
-    _info "Zero-trace scan scope pin passed"
-
     # Order 1024-c3h3. An evidence SHA captured before land-on-platform-branch
     # rewrites the commit names a ref that never reaches origin, and a reader
     # cannot tell that from "the code never landed" — opposite diagnoses. The
