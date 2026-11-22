@@ -1,0 +1,24 @@
+# Gate step 965-sxec — data, not code. Moved out of inline build.sh by
+# 2185-inst so it runs in the step pool and can be input-scoped.
+#
+# An absent ruby must route the archiver's --check to the could-not-run
+# channel (exit 3, the instrument named, a remedy), never to a ready-set
+# verdict it never tested.
+#
+# POOL: no STEP_SERIAL. The fixture writes only its own mktemp dirs under
+# TMPDIR; the archiver --check it drives builds in its own mktemp scratch
+# (1132-r4mt), and the real-checkout run only READS the tree.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking a missing ruby reads as could-not-run, not as a ledger verdict (965-sxec)"
+STEP_SCRIPT="scripts/test-archiver-ruby-could-not-run.sh"
+STEP_ERROR="an absent ruby does not route to the could-not-run channel (965-sxec) — see the verdict line above"
+STEP_OK="Archiver could-not-run channel check passed"
+STEP_READS="scripts/archive-plan-packets.sh scripts/plan-binary-probe.sh scripts/test-archiver-ruby-could-not-run.sh"
+# ORDER 2185-inst: DECLARED INPUTS (2118-tnut grammar). An ATIME TRACE of two
+# real runs (every tracked file's atime backdated, the step run, the tracked
+# non-symlink reads listed): it reads all 1463 tracked files under scripts/
+# (the positive arm copies scripts/ into a scratch tree) and .gitignore (git
+# status over the archiver's scratch paths), and nothing else. The archiver
+# resolves the plan binary, so rust is an input too.
+STEP_INPUTS="rust path:scripts/* path:.gitignore"

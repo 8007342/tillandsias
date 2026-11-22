@@ -6845,13 +6845,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # a substantive ledger claim from a command that never executed. Wired here
     # because the defect is invisible on any host that HAS ruby, which is every
     # host that runs this gate; only the stub-PATH arms exercise it.
-    _step "Checking a missing ruby reads as could-not-run, not as a ledger verdict (965-sxec)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-archiver-ruby-could-not-run.sh" 2>&1; then
-        _error "an absent ruby does not route to the could-not-run channel (965-sxec) — see the verdict line above"
-        exit 1
-    fi
-    _info "Archiver could-not-run channel check passed"
-
     # 964-zedm: the index builder must stage where the payload FITS. It staged
     # via the ambient TMPDIR, and in a forge /tmp is a 256 MB tmpfs while the
     # index root is on a 1.2 TB overlay — so a cold 22,645-chunk build died on
@@ -6949,13 +6942,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # is only safe if it does not change the ANSWER — a spec referenced solely
     # from target/ would otherwise be reported as a zero-trace spec that is not
     # one, a false accusation produced by an optimisation.
-    _step "Checking the pre-commit spec sweep's exclusions are answer-preserving (734-sjb3)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-precommit-zero-trace-scan-scope.sh" 2>&1; then
-        _error "excluding build output changed the referenced-spec set (734-sjb3) — see the verdict line above"
-        exit 1
-    fi
-    _info "Zero-trace scan scope pin passed"
-
     # Order 1024-c3h3. An evidence SHA captured before land-on-platform-branch
     # rewrites the commit names a ref that never reaches origin, and a reader
     # cannot tell that from "the code never landed" — opposite diagnoses. The

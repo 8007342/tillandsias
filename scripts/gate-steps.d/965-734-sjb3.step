@@ -1,0 +1,16 @@
+# Gate step 734-sjb3 — data, not code. Moved out of inline build.sh by
+# 2185-inst so it runs in the step pool.
+#
+# The pre-commit spec sweep excludes build output; excluding target/, .git/
+# and node_modules must not change the referenced-spec set.
+#
+# POOL: no STEP_SERIAL. The fixture greps the tree twice and writes nothing.
+# NO STEP_INPUTS: the sweep's subject is the whole tree (any file can name a
+# spec), so no closure smaller than "everything" exists.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking the pre-commit spec sweep's exclusions are answer-preserving (734-sjb3)"
+STEP_SCRIPT="scripts/test-precommit-zero-trace-scan-scope.sh"
+STEP_ERROR="excluding build output changed the referenced-spec set (734-sjb3) — see the verdict line above"
+STEP_OK="Zero-trace scan scope pin passed"
+STEP_READS="scripts/hooks/pre-commit-openspec.sh scripts/test-precommit-zero-trace-scan-scope.sh"
