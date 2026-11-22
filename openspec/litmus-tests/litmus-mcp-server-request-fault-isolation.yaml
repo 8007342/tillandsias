@@ -21,16 +21,16 @@ description: >
 preconditions:
   - workspace contains images/default/config-overlay/mcp/project-info.sh
   - workspace contains images/default/config-overlay/mcp/forge-plan.sh
-  - workspace contains scripts/test-mcp-server-resilience.sh
+  - workspace contains scripts/lua/test-mcp-server-resilience.lua
 
 critical_path:
   - step: "project-info survives a SIGPIPE'd read_file(offset,limit) mid-window and still answers the NEXT request (the 2026-08-15 killer, replayed)"
-    command: "bash scripts/test-mcp-server-resilience.sh sigpipe 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-mcp-server-resilience.lua sigpipe 2>/dev/null"
     timeout_ms: 30000
     expected_behavior: "ok:project-info-survives-sigpipe"
 
   - step: "both servers survive a malformed (non-JSON) request line and answer the following tools/list"
-    command: "bash scripts/test-mcp-server-resilience.sh malformed 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-mcp-server-resilience.lua malformed 2>/dev/null"
     timeout_ms: 30000
     expected_behavior: "ok:mcp-servers-survive-malformed-line"
 

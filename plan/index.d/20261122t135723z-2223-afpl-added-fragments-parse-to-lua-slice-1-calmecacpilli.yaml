@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: shell-to-lua row, assigned by macuahuitl-fedora 2026-11-22.
+packets:
+  - packet_id: added-fragments-parse-to-lua-slice-1
+    order: "2223-afpl"
+    status: implemented
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, lua]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/check-added-fragments-parse.lua
+      - scripts/check-added-fragments-parse.sh
+      - build.sh
+      - openspec/litmus-tests/litmus-added-fragment-parse-gate-shape.yaml
+      - openspec/litmus-tests/litmus-fold-incompleteness-typed-shape.yaml
+      - scripts/test-claims-fleet-visible.sh
+      - scripts/test-relay-preflight.sh
+    title: "check-added-fragments-parse is Lua; the .sh is a shim until slice 2 rebinds the pre-push plan lane and relay-preflight"
+    context: |
+      Not a bootstrap decider: with no plan binary the .sh already refused (blocked:added-fragments-parse:no-validator)
+      unless tillandsias-policy or yq existed, and the plan-only lane fixture's ARM 3 does not copy it. The Lua validates
+      with the runner's own validate-yaml. The .sh shim execs the Lua when a plan binary resolves and otherwise keeps the
+      refusal, so the plan lane stays fail-closed. The shim pins TILLANDSIAS_REPO_ROOT to its own checkout: without it, litmus
+      step 3 judged the real checkout (123 real fragments) and passed a bare timestamp. The mechanism is not yet
+      identified: no script on trunk exports the variable, and a nested scratch repo roots correctly when run by hand; an
+      inherited TILLANDSIAS_REPO_ROOT does override the caller's cwd (measured), so the pin closes that door either way. build.sh calls the Lua directly; the litmus tests, test-claims-fleet-visible and test-relay-preflight copy
+      the .lua beside the shim. Slice 2: rebind scripts/hooks/pre-push-local-gate.sh and relay-preflight.sh, delete the shim.
+    exit_criteria:
+      - "Live tree: old .sh and Lua both ok:added-fragments-parse:0 checked; scratch repos give identical verdicts for a bare timestamp (violation:added-fragment-bare-timestamp:1), an unparseable fragment (violation:added-fragment-unparseable:1) and a quoted one (ok:...:1 checked)."
+      - "litmus:added-fragment-parse-gate-shape and litmus:fold-incompleteness-typed-shape pass; test-claims-fleet-visible, test-relay-preflight, test-pre-push-plan-lane-fails-closed-without-binary and test-plan-only-lane-structural pass."
+      - "Mutant parity: with the bare-timestamp rule disabled, the old .sh and the Lua both print ok:added-fragments-parse:1 checked on the bare fragment (measured 2026-11-22)."
+    unscoreable: "a port slice: scored by the litmus tests, the scratch-repo agreement and the mutant parity above."
+    next_action: "Land; then slice 2."
+    provenance: "macuahuitl-fedora 2026-11-22: take check-added-fragments-parse, checking the bootstrap question first."
+    events:
+      - type: filed
+        ts: "2026-11-22T13:57:23Z"
+        host: calmecacpilli
+        summary: "filed and implemented on work/2223-afpl"

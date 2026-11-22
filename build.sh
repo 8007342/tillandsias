@@ -46,6 +46,16 @@ trap '{
     kill -TERM $$
 }' TERM
 
+# ORDER 2224-gdir — NO INHERITED REPO LOCATION. Git exports GIT_DIR (and in
+# some hooks GIT_WORK_TREE / GIT_INDEX_FILE) to every hook; a hook-launched
+# build.sh handed it to every guard and fixture, and a fixture's
+# `git -C <scratch> ...` then followed it to the REAL repo:
+# test-check-credential-channel.sh rewrote this checkout's origin and set
+# credential.helper=manager (calmecacpilli 2026-11-22). build.sh names its
+# checkout with -C "$SCRIPT_DIR", and a hook runs from the repo root, so git
+# rediscovers the same repository without them.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX
+
 # On Fedora Silverblue (immutable), transparently re-exec inside the
 # tillandsias-builder toolbox where Rust/gcc/ruby/etc are available.
 # Non-Silverblue hosts skip with zero overhead.
@@ -2269,6 +2279,12 @@ ensure_dev_cache() {
             else
                 rm -f "$tmp_cert" "$tmp_key"
                 _warn "Failed to generate CA cert for dev proxy"
+                # 2228-vt2z: release the lock and CLEAR the RETURN trap before
+                # this early return. Left set, the trap outlives the function
+                # and fires again at the next top-level sourced file, where
+                # ca_lock is gone: `unbound variable` under set -u.
+                rmdir "$ca_lock" 2>/dev/null || true
+                trap - RETURN
                 return 0
             fi
         fi
@@ -2913,6 +2929,17 @@ _gs_one() {
     if [ -n "$STEP_INPUTS" ] && [ "$_gs_root" = "$SCRIPT_DIR" ]; then
         _gs_id="gate-step:${_step_file##*/}"; _gs_id="${_gs_id%.step}"
         _gs_inputs="$STEP_INPUTS path:scripts/gate-steps.d/${_step_file##*/} path:$_step_path path:build.sh path:scripts/change-class.sh path:scripts/gate-stamp.sh"
+        # ORDER 2178-luai: A STEP THAT RUNS ON THE PLAN BINARY ALSO READS WHAT THE
+        # RUNTIME READS. lenovinha's atime traces (2026-11-22): every STEP_LUA step
+        # read .tillandsias/command-policies.yaml, .tillandsias/branch-discipline.yaml
+        # and .gitignore through proc.run's policy, and none declared them, so a
+        # policy change could skip the very steps it changes. The runtime's own
+        # source and the methodology file it consults are inputs the same way: a
+        # Lua step judged by a changed runtime is a different check. Added for a
+        # STEP_LUA step, and for a script step whose script names the plan binary.
+        if [ -n "$STEP_LUA" ] || grep -qE 'tillandsias-plan|resolve_plan_binary|TILLANDSIAS_PLAN_BIN' "$_gs_root/$_step_path" 2>/dev/null; then
+            _gs_inputs="$_gs_inputs path:.tillandsias/command-policies.yaml path:.tillandsias/branch-discipline.yaml path:.gitignore path:methodology/distributed-work.yaml path:VERSION path:flake.nix path:crates/tillandsias-plan/* path:crates/tillandsias-exec/* path:Cargo.lock"
+        fi
         # shellcheck disable=SC2086 — the declared inputs are words by design.
         if _class_may_skip "$_gs_id" $_gs_inputs; then
             # shellcheck disable=SC2086
@@ -5305,7 +5332,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # records carrying ITS gate's run id; two concurrent writers prove a
     # concurrent gate no longer gets the running step blamed and evicted.
     _step "Checking the timing-log leak check blames only its own gate (1916-tsel)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-gate-step-metrics-attribution.sh" 2>&1; then
+    # 2233-vxu9: the fixture is Lua (gate B is a proc.spawn'ed writer). No
+    # runnable plan binary is a failed check, never a pass.
+    _gsma_plan="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _gsma_plan=""
+    case "$_gsma_plan" in ./*) _gsma_plan="$SCRIPT_DIR/${_gsma_plan#./}" ;; esac
+    if [[ -z "$_gsma_plan" ]]; then
+        _error "could-not-run:gate-step-metrics-attribution:no-plan-binary — scripts/lua/test-gate-step-metrics-attribution.lua needs tillandsias-plan script run (1916-tsel)"
+        exit 1
+    fi
+    if ! (cd "$SCRIPT_DIR" && _run "$_gsma_plan" script run scripts/lua/test-gate-step-metrics-attribution.lua) 2>&1; then
         _error "the shared-timing-log leak check attributes records by growth again, or no longer names a leaking step (1916-tsel)"
         exit 1
     fi
@@ -5772,93 +5807,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Arrival-routing advisory reported"
 
-    # Order 831-ezea. The archiver is the ONLY bulk drain the ledger has, and
-    # until this line it had ZERO call sites — so its correctness was never
-    # exercised by anything. When it was finally dry-run on 2026-08-19 it
-    # archived two READY rows (424, 437) into a file where they answer `no
-    # packet matches`, while its own `--check` printed "script is idempotent"
-    # and its freshness header cited that as evidence of soundness.
-    #
-    # --check now asserts the actual invariant — archiving moves TERMINAL rows,
-    # so the ready set must be byte-identical across a run — and this wires it
-    # to a caller. 2.0s. Gating a tool nobody invokes yet is deliberate: the
-    # sweep gets its call site under R3, and the gate must predate the sweep
-    # rather than be added after the first bad run.
-    # ORDER 923-ws3r. The two outcomes are now separate exit codes, because the
-    # merged message ("would change the ready set, OR its check could not run")
-    # named both and pointed at neither — and the check spent days red on clean
-    # checkouts for the second reason while its wording invited the first
-    # reading. A violation means STOP. A could-not-run means the INSTRUMENT is
-    # broken and this step has learned nothing about the ledger.
-    _step "Checking the plan archiver preserves the ready set (831-ezea)..."
-    _archiver_rc=0
-    # ORDER 911-m7js. The check is LEDGER-BOUND (16-20s here, 105s on a slow
-    # host, proportional to the ledger) and its inputs are exactly the ledger
-    # plus the archiver itself, so its verdict is memoised on a digest of those
-    # inputs (scripts/archiver-check-memo.sh). A hit repeats a verdict the same
-    # bytes earned; any change to plan/index.yaml, plan/archive, a fragment,
-    # the archiver, its checker or the plan binary is a miss and runs it.
-    # 965-sxec: the output is TEED rather than swallowed, because the exit-3
-    # branch below has to read one token out of it while the operator still
-    # needs to see the whole thing. `_run` stays in the path — it carries the
-    # phase timing and the cd into SCRIPT_DIR, and a capture that dropped it
-    # would silently stop this step being profiled.
-    _archiver_log="$(mktemp "${TMPDIR:-/tmp}/tillandsias-archiver.XXXXXX")"
-    # ORDER 1074-96z9. A memo HIT used to emit nothing at all: this branch was
-    # `_info` and a return, so the step simply vanished from the timing log and
-    # the hit rate was not computable. The audit that nominates steps for
-    # memoisation could therefore never measure whether memoisation WORKED —
-    # and worse, kept re-nominating this already-memoised step, because its
-    # cheap hits no longer accumulated under any name to dilute the old
-    # average. The terminology memo (1054-zvq4) already carries the fix; this
-    # copies that convention rather than inventing a third.
-    #
-    # THE MISS DELIBERATELY STAYS INSIDE `_run`. build.sh's own 965-sxec note
-    # records that `_run` carries the phase timing, so lifting the work out of
-    # it to emit a tidier hit/miss pair would delete the only measurement of
-    # what this step actually COSTS while still satisfying "a hit is recorded".
-    # The hit/miss records answer "did the memo fire"; the `_run` phase record
-    # answers "what does the work cost". Both are needed and they are not the
-    # same number.
-    _arch_t0="$(timing_now_ms)"
-    if _archiver_memo="$(bash "$SCRIPT_DIR/scripts/archiver-check-memo.sh" check 2>/dev/null)"; then
-        _info "$_archiver_memo — ledger and archiver unchanged since the last pass; check not re-run"
-        timing_emit archiver-check-hit check "$_arch_t0" 0 || true
-    else
-        _run bash "$SCRIPT_DIR/scripts/archive-plan-packets.sh" --check 2>&1             | tee "$_archiver_log" || true
-        _archiver_rc="${PIPESTATUS[0]}"
-        [ "$_archiver_rc" -eq 0 ] && bash "$SCRIPT_DIR/scripts/archiver-check-memo.sh" record >/dev/null 2>&1 || true
-        timing_emit archiver-check-miss check "$_arch_t0" "${_archiver_rc:-1}" || true
-    fi
-    if [ "$_archiver_rc" -eq 3 ]; then
-        # ORDER 965-sxec. A forge ships NO ruby by design, so the archiver's
-        # worker cannot run there and the whole forge lane could not reach a
-        # verdict on ./build.sh --check at all — a p0 blocker, filed by an agent
-        # it stopped. Named as a SKIP here rather than a failure, and the skip is
-        # narrow twice over: only inside a forge, and only for the one cause the
-        # script tokenises. A stale plan binary or an unreadable fragment also
-        # exit 3 and still stop the gate, because those are repairable in the
-        # locus that hit them and waving them through would trade a false
-        # substantive verdict for a false green.
-        #
-        # It is LOUD on purpose. The ready set went unverified on this run; a
-        # reader has to be able to see that in the log, which is the 796-4ydb
-        # posture — say what was not checked rather than make one environment's
-        # missing package every host's red build.
-        if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]            && grep -q 'could-not-run:no-usable-ruby' "$_archiver_log" 2>/dev/null; then
-            _warn "SKIPPED the plan archiver check: no usable ruby in this forge (965-sxec). The ready set was NOT verified on this run — the archiver's ruby worker never executed. This is not a statement about the ledger."
-        else
-            _error "the plan archiver's check COULD NOT RUN (exit 3) — this says nothing about the ready set; the instrument is what needs repair (923-ws3r)"
-            exit 1
-        fi
-    elif [ "$_archiver_rc" -ne 0 ]; then
-        _error "the plan archiver would CHANGE THE READY SET, orphan events, or leave archived rows unanswerable — do not sweep"
-        exit 1
-    fi
-    rm -f "$_archiver_log"
-    _info "Plan archiver check passed"
-
-    # Order 965-sxec. The fixture for the branch just above. It pins the VERDICT
+    # Order 965-sxec. The fixture for the archiver step (scripts/gate-steps.d/955-831-ezea.step, 2186-niam). It pins the VERDICT
     # TEXT, not the exit code alone: build.sh failed either way before this, and
     # what was wrong was what it SAID — "the plan archiver would CHANGE THE READY
     # SET" on a run where the check never executed. A test that checked only the
@@ -5879,7 +5828,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # 2026-08-12. Diff-scoped like 634-39ik's enforcement, so a fragment
     # inherited from a sibling only warns and can never red-gate this host.
     _step "Checking that fragments added by this change parse..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-added-fragments-parse.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-added-fragments-parse.lua" 2>&1; then
         _error "this change adds a ledger fragment the fold cannot read — its packets would be invisible to every host; the offending file and reason are named on the check's own output above, and the fragment format is documented in plan/index.d/README.md"
         exit 1
     fi

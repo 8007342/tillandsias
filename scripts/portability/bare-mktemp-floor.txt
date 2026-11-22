@@ -70,7 +70,6 @@ scripts/test-credential-verdict-script.sh 1
 scripts/test-cycle-checkout-lock.sh 1
 scripts/test-cycle-lock-attested-release.sh 1
 scripts/test-default-vault-cli-security.sh 1
-scripts/test-drain-queue-bare-refuses.sh 1
 scripts/test-e2e-preflight-live-runtime.sh 2
 scripts/test-enclave-network-internal-discovery.sh 2
 scripts/test-env-forward-shared.sh 1
@@ -84,7 +83,6 @@ scripts/test-fleet-msg-store.sh 1
 scripts/test-forge-git-index-materialization.sh 1
 scripts/test-forge-gitconfig-bidirectional-quarantine.sh 1
 scripts/test-forge-launch-openspec-init-clean.sh 1
-scripts/test-forge-packed-refs-split-brain.sh 1
 scripts/test-forge-runtime-ca-trust.sh 1
 scripts/test-forge-seeds-from-salvage-ref.sh 1
 scripts/test-forge-standard-gitconfig-path.sh 1
@@ -154,7 +152,6 @@ scripts/test-mo-full-record-precedes-marker.sh 1
 scripts/test-no-competing-gate.sh 1
 scripts/test-opencode-entrypoint-prompt.sh 1
 scripts/test-opencode-render-probe.sh 1
-scripts/test-opencode-tool-start-follower.sh 1
 scripts/test-opencode-vault-auth-content.sh 1
 scripts/test-plan-binary-probe-usage-determinism.sh 2
 scripts/test-plan-binary-probe-usage-population.sh 1
@@ -178,7 +175,6 @@ scripts/test-release-tier-freshness.sh 1
 scripts/test-release-tier-timer-render.sh 2
 scripts/test-repeat-model-flag.sh 1
 scripts/test-requirement-ids.sh 1
-scripts/test-rerun-failed-rust-tests.sh 1
 scripts/test-reset-state-contract.sh 2
 scripts/test-resumable-claim-dirt.sh 1
 scripts/test-running-image-freshness.sh 1

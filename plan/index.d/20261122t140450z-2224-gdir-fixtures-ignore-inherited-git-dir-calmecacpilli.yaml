@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: found 2026-11-22 when a push from calmecacpilli went to a fixture's scratch path.
+packets:
+  - packet_id: fixtures-ignore-inherited-git-dir
+    order: "2224-gdir"
+    status: implemented
+    kind: fix
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [gate, fixture, hermetic, git]
+    estimated_hours: 1
+    owned_files:
+      - build.sh
+      - scripts/test-check-credential-channel.sh
+      - scripts/test-fixtures-ignore-inherited-git-dir.sh
+      - scripts/gate-steps.d/347-2224-gdir.step
+    title: "A hook-launched gate no longer lets fixtures write the real repository through an inherited GIT_DIR"
+    context: |
+      Git exports GIT_DIR to every hook. The pre-push hook runs ./build.sh --preflight, which ran
+      test-check-credential-channel.sh, and its "git -C <scratch> remote set-url origin $W/does-not-exist.git" followed
+      GIT_DIR to the real checkout. On calmecacpilli 2026-11-22 the next push failed with "'/tmp/pf-guard.../
+      does-not-exist.git' does not appear to be a git repository"; origin was restored by hand to the GitHub URL. Reproduced
+      with GIT_DIR naming a throwaway repo: its origin was rewritten and credential.helper=manager was set. Any host that
+      pushed through the hook with this fixture in its preflight roster may carry the same damage: check
+      git remote get-url origin and git config --local credential.helper. Fix: the fixture unsets GIT_DIR and its siblings,
+      and build.sh clears them at its top, so no hook-launched guard or fixture inherits them. Three more fixtures use the
+      same does-not-exist.git pattern without an unset (test-pre-push-honours-a-live-freeze.sh, test-salvage-net.sh,
+      test-claim-confirmation-names-the-earliest-claimant.lua); the build.sh clear covers them when the gate runs them.
+    exit_criteria:
+      - "Step 347-2224-gdir: with GIT_DIR naming a victim repo, test-check-credential-channel.sh leaves it unchanged; build.sh clears GIT_DIR in its first 80 lines; the mutant (fixture without the unset) DOES rewrite the victim."
+    unscoreable: "a hermeticity fix: scored by the step's three arms, including the mutant."
+    next_action: "Land; every host checks its origin URL and local credential.helper."
+    provenance: "calmecacpilli 2026-11-22, found while pushing work/2223-afpl."
+    events:
+      - type: filed
+        ts: "2026-11-22T14:04:50Z"
+        host: calmecacpilli
+        summary: "filed and implemented on work/2224-gdir"

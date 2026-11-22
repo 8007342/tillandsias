@@ -94,10 +94,29 @@ set +e
 # times each litmus phase; a timing failure must NEVER change local-ci's exit.
 . "$REPO_ROOT/scripts/timing-log.sh" 2>/dev/null || true
 command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
-# 1242-4x53: re-run a failed check's failures once, same regime, and record
-# whether they REPRODUCED. Best-effort like the timing side-channel above.
-. "$REPO_ROOT/scripts/lib-rerun-failed-rust-tests.sh" 2>/dev/null || true
-command -v rerun_failed_rust_tests >/dev/null 2>&1 || rerun_failed_rust_tests() { return 0; }
+# 1242-4x53 / 2215-beb5: the rust-tests check runs, and re-runs its failures
+# once in the SAME regime, through scripts/lua/run-rust-test-on-host.lua
+# (local-ci.sh to Lua, slice 1). Its pass-through env list is in its verdict.
+_rrt_plan=""
+run_rust_tests_lua() { # <run|rerun> [args...] -- <argv...>
+    if [[ -z "$_rrt_plan" ]]; then
+        _rrt_plan="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _rrt_plan=""
+        [[ "$_rrt_plan" == ./* ]] && _rrt_plan="$REPO_ROOT/${_rrt_plan#./}"
+    fi
+    if [[ -z "$_rrt_plan" ]]; then
+        echo "could-not-run:rust-test-on-host:no-plan-binary — no runnable tillandsias-plan to run scripts/lua/run-rust-test-on-host.lua (2215-beb5)"
+        return 3
+    fi
+    (cd "$REPO_ROOT" && "$_rrt_plan" script run scripts/lua/run-rust-test-on-host.lua -- "$@")
+}
+# reproduced=yes|no from the re-run's verdict line; empty when it gave none.
+rust_tests_reproduced() { # <rerun verdict output>
+    case "$1" in
+        *"reproduced=yes"*) echo yes ;;
+        *"reproduced=no"*) echo no ;;
+    esac
+    return 0
+}
 # 765-dfry: per-check duration anchor. Checks run sequentially and each ends
 # in archive_check_log, so "time since the previous archive (or section
 # start)" IS the check's own duration. Re-anchored by log_section and by
@@ -1348,7 +1367,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # the headless target. The durable closure is the seam-writer guard
     # (scripts/lua/check-seam-writers-canonical.lua) going gating once 1250-92ty
     # lands; this seat removes the deterministic failure, not the race.
-    if run_rust_test_on_host env TILLANDSIAS_PODMAN_BIN=/bin/false cargo test --workspace --lib --no-fail-fast 2>&1 | tee /tmp/test-check.log; then
+    if run_rust_tests_lua run --regime rust-tests -- env TILLANDSIAS_PODMAN_BIN=/bin/false cargo test --workspace --lib --no-fail-fast 2>&1 | tee /tmp/test-check.log; then
         log_pass "All unit tests pass"
         archive_check_log "rust-tests" "pass" /tmp/test-check.log
     else
@@ -1356,8 +1375,11 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         [[ "$VERBOSE" == "1" ]] && cat /tmp/test-check.log >&2
         # 1242-4x53: did it fail AGAIN, same env and seat? Two reds in one
         # release tier passed on re-run, and until now the record could not say.
-        _rust_reproduced="$(rerun_failed_rust_tests /tmp/test-check.log \
-            run_rust_test_on_host env TILLANDSIAS_PODMAN_BIN=/bin/false cargo test --workspace --lib --no-fail-fast)"
+        # The re-run refuses by name if the regime differs from the first run.
+        _rust_rerun="$(run_rust_tests_lua rerun --regime rust-tests /tmp/test-check.log \
+            -- env TILLANDSIAS_PODMAN_BIN=/bin/false cargo test --workspace --lib --no-fail-fast 2>/dev/null)"
+        _rust_reproduced="$(rust_tests_reproduced "$_rust_rerun")"
+        [[ "$_rust_rerun" == *regime-differs* ]] && log_info "rust-tests re-run refused, the regime differs from the first run (2215-beb5): $_rust_rerun"
         [[ -n "$_rust_reproduced" ]] && log_info "rust-tests failure reproduced on a same-regime re-run: $_rust_reproduced (1242-4x53)"
         archive_check_log "rust-tests" "fail" /tmp/test-check.log "rust-tests.log" "$_rust_reproduced"
     fi

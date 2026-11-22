@@ -134,7 +134,6 @@ scripts/test-compaction-coverage.sh
 scripts/test-competing-gate-consumer.sh
 scripts/test-competing-gate-no-dispatch-cause.sh
 scripts/test-concurrent-forge-shared-stack.sh
-scripts/test-convergence-dashboard-locale.sh
 scripts/test-convergence-dashboard.sh
 scripts/test-credential-and-proxy-confinement.sh
 scripts/test-credential-channel-affordances.sh
@@ -160,7 +159,6 @@ scripts/test-dev-inference-start-refusal-names-cause.sh
 scripts/test-discipline-derive.sh
 scripts/test-discipline-install-hooks.sh
 scripts/test-dispatch-reap.sh
-scripts/test-drain-queue-bare-refuses.sh
 scripts/test-e2e-preflight-live-runtime.sh
 scripts/test-embed-endpoint-derivation.sh
 scripts/test-enclave-network-internal-discovery.sh
@@ -196,7 +194,6 @@ scripts/test-forge-gitconfig-bidirectional-quarantine.sh
 scripts/test-forge-launch-openspec-init-clean.sh
 scripts/test-forge-liveness-probe.sh
 scripts/test-forge-localization-staged.sh
-scripts/test-forge-packed-refs-split-brain.sh
 scripts/test-forge-project-guard-hooks.sh
 scripts/test-forge-project-trust-seeds.sh
 scripts/test-forge-runtime-ca-trust.sh
@@ -315,7 +312,6 @@ scripts/test-litmus-retired-phase-skip.sh
 scripts/test-litmus-runner-reads-without-jq.sh
 scripts/test-litmus-runner-reports-rc.sh
 scripts/test-litmus-scalar-unescape.sh
-scripts/test-litmus-self-match.sh
 scripts/test-litmus-stdin-does-not-eat-the-spec-list.sh
 scripts/test-litmus-step-model.sh
 scripts/test-litmus-step-pipefail.sh
@@ -337,7 +333,6 @@ scripts/test-macos-vsock-inference-closure.sh
 scripts/test-macos-vz-orphan-diagnosis.sh
 scripts/test-mcp-plan-resolver-pinning.sh
 scripts/test-mcp-run-command-tool.sh
-scripts/test-mcp-server-resilience.sh
 scripts/test-mcp-transport-death-trace.sh
 scripts/test-memo-hit-observability.sh
 scripts/test-meta-orchestration-opsx-sync-merge.sh
@@ -365,7 +360,6 @@ scripts/test-no-stale-base-revert.sh
 scripts/test-nvidia-cdi-stale-hostpath.sh
 scripts/test-opencode-entrypoint-prompt.sh
 scripts/test-opencode-render-probe.sh
-scripts/test-opencode-tool-start-follower.sh
 scripts/test-opencode-vault-auth-content.sh
 scripts/test-openspec-pin.sh
 scripts/test-orchestrate-enclave.sh
@@ -430,7 +424,6 @@ scripts/test-release-tier-timer-render.sh
 scripts/test-reopen-is-history-not-loss.sh
 scripts/test-repeat-model-flag.sh
 scripts/test-requirement-ids.sh
-scripts/test-rerun-failed-rust-tests.sh
 scripts/test-reset-flags-are-accepted.sh
 scripts/test-reset-state-contract.sh
 scripts/test-resolve-open-pr.sh
