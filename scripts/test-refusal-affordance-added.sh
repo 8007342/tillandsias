@@ -52,7 +52,10 @@ repo() { # repo <name> [base content of scripts/x.sh]
     git -C "$r" update-ref refs/remotes/origin/linux-next HEAD
     echo "$r"
 }
-run() { OUT="$(cd "$1" && "$PLAN" script run "$GUARD" -- "${@:2}" 2>&1)"; RC=$?; }
+# TILLANDSIAS_REPO_ROOT pins the runner to the scratch repo: an inherited one
+# (the litmus runner exports the real checkout's) roots `script run` there, and
+# the arms would judge the real tree instead of the one they built.
+run() { OUT="$(cd "$1" && TILLANDSIAS_REPO_ROOT="$1" "$PLAN" script run "$GUARD" -- "${@:2}" 2>&1)"; RC=$?; }
 put() { printf '%s\n' "$2" > "$1/scripts/x.sh"; }
 
 # 1 — bare.
