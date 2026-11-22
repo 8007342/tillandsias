@@ -22,3 +22,15 @@ STEP_LANES="host"
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
 STEP_READS="scripts/lua/test-door-index-lock-sweep.lua"
+# ORDER 2177-dils (priority:build-speed): STEP_INPUTS, the class selector may skip
+# this step when no changed path intersects them (2118-tnut). The fixture does
+# NOT run the door: it extracts the _pf_* sweep functions from build.sh (an
+# implicit input) and runs them in scratch repos, so its closure is nameable.
+# Static: the extracted functions name no script. Atime trace of a real run
+# (calmecacpilli 2026-11-22): build.sh, this fixture, .tillandsias/*.yaml (the
+# plan binary's command policy) and nothing else.
+# path:.gitignore: the Lua runtime reads it on every script run (lenovinha's
+# trace, 2026-11-22), so it is declared too. The Lua guard it plants runs
+# on the plan binary, hence rust. Door-level coverage stays in 885-1753-p925,
+# which declares no inputs and always runs.
+STEP_INPUTS="rust path:.tillandsias/* path:.gitignore"
