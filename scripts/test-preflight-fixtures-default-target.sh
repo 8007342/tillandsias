@@ -24,6 +24,13 @@
 # ARM 6  With no arguments the population is the added fixtures (untracked
 #        against the base), and the count is the fixtures examined.
 # ARM 7  No timeout command: a NAMED skip, never an unbounded run.
+# ARM 8  (2206-js5t) A scripts/lua/test-*.lua fixture is examined too: one
+#        whose child resolves the plan binary after `cd /` passes while a plan
+#        binary is on PATH and is REFUSED by name. PRE-FIX RESULT: FAILS, the
+#        decider counted no .lua (`0 checked`).
+# ARM 9  NEGATIVE CONTROL for 8: the absolutising Lua fixture is admitted
+#        and counted. Arms 8-9 need a REAL runner (a stub cannot run Lua), so
+#        they copy the caller's plan binary and skip by name without one.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEC="$ROOT/scripts/preflight-fixtures-default-target.sh"
@@ -134,6 +141,49 @@ if [ "$rc7" -eq 0 ] && [ "$(printf '%s' "$o7" | tail -1)" = "skip:fixture-defaul
     ok "ARM 7 with no timeout command the decider skips by name instead of running unbounded"
 else
     bad "ARM 7 expected skip:fixture-default-target:no-timeout-command (rc=$rc7): $(printf '%s' "$o7" | tail -2 | tr '\n' ';')"
+fi
+
+# ARMS 8-9: Lua fixtures, run by a real runner copied to the default target
+# of a second scratch repo and to a PATH directory (the mask).
+REALP="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || REALP=""
+case "$REALP" in ""|/*) ;; *) REALP="$ROOT/${REALP#./}" ;; esac
+caps=""; [ -n "$REALP" ] && caps="$("$REALP" capabilities 2>/dev/null)"
+if ! grep -qx script <<<"$caps"; then # sigpipe-ok: herestring, no upstream writer
+    echo "skip:arm-8-9:no-real-lua-runner"
+else
+    L="$W/lrepo"
+    mkdir -p "$L/scripts/lua" "$L/target/release" "$W/lpath"
+    cp "$DEC" "$ROOT/scripts/plan-binary-probe.sh" "$L/scripts/"
+    cp "$REALP" "$L/target/release/tillandsias-plan"; cp "$REALP" "$W/lpath/tillandsias-plan"
+    cat > "$L/scripts/res-cd-first.sh" <<'EOS'
+. scripts/plan-binary-probe.sh
+cd / || exit 1
+P="$(resolve_plan_binary)" || exit 2
+"$P" capabilities >/dev/null
+EOS
+    cat > "$L/scripts/res-absolute.sh" <<'EOS'
+. scripts/plan-binary-probe.sh
+P="$(resolve_plan_binary)" || exit 2
+case "$P" in /*) ;; *) P="$PWD/${P#./}" ;; esac
+cd / || exit 1
+"$P" capabilities >/dev/null
+EOS
+    for k in cd-first absolute; do
+        printf 'local r = proc.run{ argv = { "bash", "scripts/res-%s.sh" }, timeout_ms = 60000 }\nif r.ok then verdict.ok("lua-%s") end\nverdict.refused("lua-%s")\n' "$k" "$k" "$k" > "$L/scripts/lua/test-$k.lua"
+    done
+    by_lpath() { (cd "$L" && env -u TILLANDSIAS_PLAN_BIN -u TILLANDSIAS_SCRIPT_RUNNER_BIN -u CARGO_TARGET_DIR PATH="$W/lpath:$BASEPATH" bash "$L/scripts/preflight-fixtures-default-target.sh" "$@" 2>&1); }
+    o8="$(by_lpath scripts/lua/test-cd-first.lua)"; rc8=$?
+    if [ "$rc8" -ne 0 ] && [[ "$o8" == *"refused:fixture-default-target:scripts/lua/test-cd-first.lua"* ]]; then
+        ok "ARM 8 a Lua fixture masked by a plan binary on PATH is refused"
+    else
+        bad "ARM 8 expected the cd-first Lua fixture refused (rc=$rc8): $(printf '%s' "$o8" | tail -2 | tr '\n' ';')"
+    fi
+    o9="$(by_lpath scripts/lua/test-absolute.lua)"; rc9=$?
+    if [ "$rc9" -eq 0 ] && [ "$(printf '%s' "$o9" | tail -1)" = "ok:fixture-default-target:1 checked" ]; then
+        ok "ARM 9 the absolutising Lua fixture is admitted and counted"
+    else
+        bad "ARM 9 expected the absolutising Lua fixture admitted (rc=$rc9): $(printf '%s' "$o9" | tail -2 | tr '\n' ';')"
+    fi
 fi
 
 # ARM 6: population mode. Base holds only the decider and resolver; the

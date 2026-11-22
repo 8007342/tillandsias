@@ -529,7 +529,6 @@ scripts scripts/summarize-pyproject.sh 3
 scripts scripts/terminology-check-memo.sh 3
 scripts scripts/test-a-claim-names-a-workstation.sh 5
 scripts scripts/test-agent-identity.sh 4
-scripts scripts/test-all-fragments-intact.sh 1
 scripts scripts/test-append-event-archived-refusal.sh 4
 scripts scripts/test-append-vs-origin-fold.sh 7
 scripts scripts/test-archiver-concurrent-check.sh 2
@@ -639,7 +638,6 @@ scripts scripts/test-git-mirror-vault-agent-auto-auth.sh 18
 scripts scripts/test-github-token-auto-rotation.sh 1
 scripts scripts/test-github-token-rotation-entry-points.sh 3
 scripts scripts/test-groundtruth-corpus-declaration.sh 8
-scripts scripts/test-groundtruth-regime-fails-closed.sh 4
 scripts scripts/test-guest-binaries-nix-lane.sh 9
 scripts scripts/test-hardware-fingerprint.sh 1
 scripts scripts/test-harness-affinity-selection.sh 10
@@ -662,7 +660,6 @@ scripts scripts/test-jq-multiline-capture.sh 3
 scripts scripts/test-json-get-help-names-its-subset.sh 23
 scripts scripts/test-json-query-jq-parity.sh 4
 scripts scripts/test-land-adopts-valid-stamp.sh 1
-scripts scripts/test-land-auth-retry.sh 1
 scripts scripts/test-land-gate-refusal-names-its-step.sh 12
 scripts scripts/test-land-notice-names-unrun-litmus.sh 2
 scripts scripts/test-land-queue.sh 1
@@ -817,8 +814,6 @@ scripts scripts/test-trace-coverage.sh 4
 scripts scripts/test-tracked-files-unwritten-guard.sh 2
 scripts scripts/test-tray-asset-placeholder-refused.sh 1
 scripts scripts/test-tray-surface-parity-gate.sh 1
-scripts scripts/test-uninstall-preserves-vm.sh 1
-scripts scripts/test-uninstall-sweeps-both-app-dirs.sh 7
 scripts scripts/test-unrunnable-platform-arms.sh 9
 scripts scripts/test-unstable-installer-defaults-to-unstable.sh 1
 scripts scripts/test-vault-shutdown-forwards-sigterm.sh 2

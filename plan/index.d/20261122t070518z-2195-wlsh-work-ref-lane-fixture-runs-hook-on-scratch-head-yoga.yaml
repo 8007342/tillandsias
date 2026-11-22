@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-22 at the coordinator's request (fixtures reading production state).
+packets:
+  - packet_id: test-pre-push-work-ref-lane-runs-the-hook-against-a-scratch-head-not-the-real-checkout
+    order: "2195-wlsh"
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixture, pre-push]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-pre-push-work-ref-lane.sh
+    title: "test-pre-push-work-ref-lane runs the hook against a scratch HEAD, not the real checkout"
+    context: |
+      The fixture sets SHA=$(git rev-parse HEAD) and runs scripts/hooks/pre-push-local-gate.sh from the REAL
+      checkout, so every decider judges the branch under test, not a world the fixture built. Once #1305
+      (2194-cspr) made the carried-obligations check refuse instead of warn, ARM 1 went red on any carried-silent
+      branch: measured on work/2194-cspr before its waiver (ARM 1 rc=1, `pre-push refused: carried:shell-to-lua:due`),
+      green after. The verdict therefore depends on the host's branch state: a fixture reading production state.
+    exit_criteria:
+      - "The fixture builds a scratch repo/worktree with its own HEAD and origin/linux-next, and its arms are green on a branch that is carried-silent."
+      - "A control arm proves the scratch HEAD is not the checkout's HEAD."
+    unscoreable: "the fixture is the measure"
+    provenance: "coordinator 2026-11-22, after #1305's ARM 1 red."
+    events:
+      - type: filed
+        ts: "2026-11-22T07:05:18Z"
+        host: yoga
+        summary: "filed"

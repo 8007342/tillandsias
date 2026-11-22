@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Tech-debt session (bash→lua), coordinator direction: next three from 2196-rdec's indirect-candidate list.
+packets:
+  - packet_id: lane-instrument-closure-evidence-native-lint-fixtures-become-lua
+    order: 2208-vxb6
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 4
+    title: |
+      Port test-lane-instrument-vs-ledger.sh, test-closure-evidence-survives-landing.sh and test-native-lint-attested.sh (2196-rdec candidates) to scripts/lua, rewire build.sh and gate step 285, delete the three .sh.
+    context: |
+      Coordinator direction 2026-11-22: the next three Lua ports from 2196-rdec's indirect-candidate list, with mutant parity. Open work refs were scanned first; none touches these three. Each port records whether its subject runs against the real checkout's HEAD, for 2196-rdec.
+    exit_criteria:
+      - "each Lua port prints the same ok/FAIL arms as its .sh on this tree and reds on the same mutant; build.sh and step 285 run the Lua; the three .sh and their floor lines are gone"
+    unscoreable: "unpinnable-until-the-guard-exists: the existing steps are the proof and are recorded in the PR."
+    next_action: "Port, compare arm output and mutants, rewire, open the PR."
+    provenance: coordinator direction; filed by lenovinha.
+    depends_on: []
+    related: [2196-rdec, 1060-6fx7, 1235-rfub]
+    events:
+      - {type: filed, ts: '2026-11-22T11:52:24Z', host: lenovinha, summary: filed three fixture Lua ports from 2196-rdec}

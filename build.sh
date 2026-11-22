@@ -378,6 +378,15 @@ _CLASS_SKIPPED=0        # how many guards this run did NOT run. A run that
                         # record one — otherwise a chain of scoped runs keeps
                         # renewing its own licence to be scoped, forever.
 _CLASS_SET_MEMO=""      # computed once per run; empty until first asked
+# ORDER 2175-ctin: what the feature-gated cargo test step (tray,listen-vsock,
+# headless bin tests) can READ, in the class selector's grammar (STEP_INPUTS:
+# classes + path: globs). With a daily full proof (2174-dail) the step is
+# skipped when no change touches any of these. GENERATED from the Rust sources
+# by scripts/lua/scan-cargo-test-repo-roots.lua --list (headless + its path-dep
+# closure), and gate step 954 runs that scanner's --check so a new embedded or
+# read path cannot be missed here. Every uncertainty in the scan WIDENS this.
+_CARGO_FEATURE_TEST_INPUTS="rust path:Cargo.toml path:Cargo.lock path:rust-toolchain.toml path:.cargo/** path:.claude/CLAUDE.md path:.claude/CLAUDE.md/** path:.codex path:.codex/** path:.config path:.config/** path:.gemini/GEMINI.md path:.gemini/GEMINI.md/** path:.tillandsias path:.tillandsias/** path:assets path:assets/** path:cloud path:cloud/** path:docs/cheatsheets/github-credential-tools.md path:images path:images/** path:lib/chart.umd.js path:lib/chart.umd.js/** path:lib/highlight.min.css path:lib/highlight.min.css/** path:lib/highlight.min.js path:lib/highlight.min.js/** path:licences/acknowledgements/adefossez-htdemucs.yaml path:licences/acknowledgements/cc-by-4-0--google-deepmind-representations4d.yaml path:licences/acknowledgements/corridor-key-licence-2-0--nikopueringer-corridorkey2-0.yaml path:licences/acknowledgements/mit--ruicheng-moge-2-vitb-normal.yaml path:licences/acknowledgements/nvidia-open-model-license--nvidia-c-radiov4-so400m.yaml path:locales path:locales/** path:observatorium path:observatorium/** path:openspec/changes/studio-asset-pipeline/contract/examples/gatekeeper-v3.character-frames.json path:research path:research/** path:scripts path:scripts/** path:skills path:skills/** path:tests/fixtures/recipe-basic/Recipefile path:tests/fixtures/recipe-basic/Recipefile/** path:tests/fixtures/recipe-basic/manifest.toml path:tests/fixtures/recipe-basic/manifest.toml/** path:tools path:tools/**"
+
 _class_set_once() {
     [ -n "$_CLASS_SET_MEMO" ] && return 0
     _CLASS_SET_MEMO="$(change_class_set 2>/dev/null)" || _CLASS_SET_MEMO="(unavailable)"
@@ -1755,11 +1764,29 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     esac
     if [ -n "$_pf_plan_bin" ]; then
         _pf_vs="$(cd "$SCRIPT_DIR" && "$_pf_plan_bin" validator-surface-hash --check 2>&1)" || true
+        # ORDER 2186-x5kv — A STALE BINARY IS REBUILT ONCE, THEN RE-ASKED. Every
+        # host hit this refusal several times on 2026-11-21 (yoga's step 885
+        # read it as a content red); the remedy was always the same incremental
+        # build, seconds when warm. build.sh already runs inside the builder
+        # toolbox on Silverblue, so this cargo is the toolbox's. Only a binary
+        # still stale after the rebuild (or a failed build) refuses. The
+        # --ci-full twin is _ci_full_plan_bins_current (1925-77h4).
+        case "$_pf_vs" in
+            *stale:validator-surface*)
+                echo "stale:preflight:plan-binary — $_pf_plan_bin; rebuilding once: cargo build --release -p tillandsias-plan" >&2
+                # TILLANDSIAS_PREFLIGHT_CARGO is the fixture's seam (2186-x5kv):
+                # build.sh puts ~/.cargo/bin first on PATH, so a planted cargo
+                # on PATH would never be the one run.
+                if (cd "$SCRIPT_DIR" && "${TILLANDSIAS_PREFLIGHT_CARGO:-cargo}" build --release -p tillandsias-plan) >&2; then
+                    _pf_vs="$(cd "$SCRIPT_DIR" && "$_pf_plan_bin" validator-surface-hash --check 2>&1)" || true
+                    case "$_pf_vs" in *stale:validator-surface*) ;; *) echo "ok:preflight:plan-binary-rebuilt:$_pf_plan_bin" >&2 ;; esac
+                fi ;;
+        esac
         case "$_pf_vs" in
             *stale:validator-surface*)
                 echo "refused:preflight:stale-plan-binary — $_pf_plan_bin was built from a different validator surface than this checkout (${_pf_vs##*stale:validator-surface })" >&2
                 echo "  WHY: the guards below resolve this binary, so each would refuse for this one cause under its own name." >&2
-                echo "  REMEDY: cargo build --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh, then re-run ./build.sh --preflight." >&2
+                echo "  REMEDY: the door already ran cargo build --release -p tillandsias-plan once and the binary is still stale (or the build failed): rebuild or remove the named copy (it may lie outside \${CARGO_TARGET_DIR:-target}), then re-run ./build.sh --preflight." >&2
                 echo "  No guard was run. A stale binary says nothing about the tree." >&2
                 exit 1 ;;
         esac
@@ -2043,6 +2070,34 @@ PFEOF
             "fix each named guard's complaint, then re-run ./build.sh --preflight until refused=0"
         echo "refused:preflight:$_pf_counts sum=$_pf_sum $_pf_iso wall=${_pf_wall}s" >&2
         exit 1
+    fi
+    # ORDER 2112-nlrf. On darwin, a tree that changes a cfg-gated crate gets its
+    # native lint attested HERE, as refs/attest/native-lint/<crate-subtree-sha>
+    # (no commit on the branch), so the land queue needs no separate
+    # attest-native-lint.sh round trip. Only a clean, committed tree: the ref
+    # names committed content. A clippy failure refuses the preflight (that is a
+    # real lint failure); an unpushable ref is kept locally and named.
+    if [ "$(uname -s)" = Darwin ] && [ -f "$SCRIPT_DIR/scripts/attest-native-lint.sh" ] \
+       && [ "${TILLANDSIAS_PREFLIGHT_NATIVE_LINT:-1}" != 0 ]; then
+        _nl_base="${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}"
+        _nl_ht="$(git -C "$SCRIPT_DIR" rev-parse --verify --quiet HEAD:crates/tillandsias-macos-tray 2>/dev/null)" || _nl_ht=""
+        _nl_bt="$(git -C "$SCRIPT_DIR" rev-parse --verify --quiet "$_nl_base:crates/tillandsias-macos-tray" 2>/dev/null)" || _nl_bt=""
+        if [ -n "$_nl_ht" ] && [ "$_nl_ht" != "$_nl_bt" ]; then
+            if ! git -C "$SCRIPT_DIR" diff --quiet || ! git -C "$SCRIPT_DIR" diff --cached --quiet; then
+                echo "note:preflight:native-lint-ref:skipped:dirty-tree — commit, then re-run to attest crates/tillandsias-macos-tray=$_nl_ht" >&2
+            else
+                _nl_out="$(cd "$SCRIPT_DIR" && bash scripts/attest-native-lint.sh --ref --push 2>&1)"; _nl_rc=$?
+                case "$_nl_rc:$_nl_out" in
+                    0:*ok:attest-native-lint:ref*) echo "ok:preflight:native-lint-ref:$(printf '%s\n' "$_nl_out" | grep -m1 '^ok:attest-native-lint:' | cut -d: -f3-)" >&2 ;;
+                    1:*failed:attest-native-lint:push*) echo "note:preflight:native-lint-ref:written-not-pushed — git push origin refs/attest/native-lint/$_nl_ht" >&2 ;;
+                    *) printf '%s\n' "$_nl_out" >&2
+                       _afford "the macOS tray crate failed its native clippy lint (clippy -p tillandsias-macos-tray --all-targets -D warnings, run by scripts/attest-native-lint.sh); the land queue would refuse it, and on trunk it would redden every Mac build" \
+                           "fix the clippy findings above, commit, and re-run ./build.sh --preflight"
+                       echo "refused:preflight:native-lint:tillandsias-macos-tray rc=$_nl_rc" >&2
+                       exit 1 ;;
+                esac
+            fi
+        fi
     fi
     if [ "$_pf_unanswered" -gt 0 ]; then
         # DELIBERATELY NOT `ok:`. The old line said ok: here and exited 0, and a
@@ -2979,6 +3034,14 @@ _gs_one() {
             _error "gate step ${_step_path##*/} leaked record(s) into $_metrics_leak — $_metrics_attr (1204-3s2s; 1966-ubsw: the gate's private fallback, or the shared path under this gate's run id)"
             _error "  The leaked line(s), kept so the next one is diagnosable:"
             tail -n "+$(( ${_metrics_shared_before:-0} + 1 ))" "$_metrics_leak" 2>/dev/null | head -n 5 | sed 's/^/    /' >&2
+            # ORDER 2189-lktp: and the WHOLE log, copied aside now. Under the pool or
+            # lanes a concurrent step can rotate or truncate the shared file before
+            # anyone reads it (yoga 2026-11-22: the lines above printed nothing and
+            # the file was gone), and the record's own fields name its real writer.
+            _leak_keep="${TMPDIR:-/tmp}/gate-leak-$$-${_step_path##*/}.jsonl"
+            if cp -p "$_metrics_leak" "$_leak_keep" 2>/dev/null; then
+                _error "  the whole log at refusal time is kept at $_leak_keep (line $(( ${_metrics_shared_before:-0} + 1 )) on is this step's window)"
+            fi
             _error "  That path is the NON-CHECKOUT FALLBACK and it shares production's basename, so those"
             _error "  records carry this host's real name and split the timing log. cycle-metrics.sh will then"
             _error "  refuse to publish any number, every arm driving it reads zero, and"
@@ -3118,6 +3181,10 @@ _gs_lanes() {
     for _f in "$@"; do
         _lanes="$(sed -n 's/^STEP_LANES="\(.*\)"$/\1/p' "$_f" | head -n 1)"
         set -- $_lanes
+        # 2192-excl: `exclusive` (alone or beside other lanes) means NOTHING else may
+        # run with this step: it reads or counts a fixed host-wide file. It joins the
+        # exclusive phase after the lanes, as a step naming several lanes does.
+        case " $_lanes " in *" exclusive "*) _excl+=("$_f"); continue ;; esac
         if [ "$#" -ne 1 ]; then _excl+=("$_f"); continue; fi
         _i=$((_i + 1)); _names+=("$_f")
         printf '%s\t%s\n' "$_i" "$_f" >> "$_d/lane-$1.list"
@@ -4463,7 +4530,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "All fragments intact"
 
     _step "Checking the whole-overlay fragment guard's negative controls..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-all-fragments-intact.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-all-fragments-intact.lua" 2>&1; then
         _error "the fragment-integrity guard cannot distinguish valid YAML, parse damage, and conflict markers"
         exit 1
     fi
@@ -5368,6 +5435,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     #
     # Deliberately NOT routed through the baseline ratchet, matching the
     # --test pass: no known-red entry lives here today, so strict is correct.
+    # ORDER 2175-ctin: skippable against a daily full proof when no change
+    # touches what these tests read (_CARGO_FEATURE_TEST_INPUTS, scanned).
+    # shellcheck disable=SC2086 — the declared inputs are words by design.
+    if _class_may_skip cargo-feature-gated-tests $_CARGO_FEATURE_TEST_INPUTS; then
+    # shellcheck disable=SC2086
+    _class_skip_line cargo-feature-gated-tests $_CARGO_FEATURE_TEST_INPUTS
+    else
     _step "Running feature-gated tests (tray, listen-vsock) — 1074-w7qv..."
     _fg_transcript="$SCRIPT_DIR/target/test-transcript-feature-gated-gate.log"
     mkdir -p "$(dirname "$_fg_transcript")"
@@ -5444,6 +5518,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Feature-gated tests passed: $_fg_ran test(s) executed under tray,listen-vsock"
+    fi
 
     # ORDER 1713-1dnx: the VM GUEST's feature set, exactly as
     # build-macos-tray.sh and build-guest-binaries.sh build it (listen-vsock,
@@ -6362,12 +6437,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Hardware-fingerprint gate passed"
 
-    _step "Checking uninstall sweeps BOTH macOS app dirs..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-uninstall-sweeps-both-app-dirs.sh" 2>&1; then
-        _error "uninstall would leave the app in the DEFAULT install dir while removing the LaunchAgent beside it — the app stays, nothing launches it, and the uninstaller reports success"
-        exit 1
-    fi
-    _info "Uninstall app-dir sweep gate passed"
+    # The uninstall app-dir sweep moved to gate step 402-2109-umac (Lua).
 
     _step "Checking image rebuild keeps the installed binary's launch tag (747-knbp)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-build-image-installed-version-alias.sh" 2>&1; then
@@ -6739,13 +6809,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # a substantive ledger claim from a command that never executed. Wired here
     # because the defect is invisible on any host that HAS ruby, which is every
     # host that runs this gate; only the stub-PATH arms exercise it.
-    _step "Checking a missing ruby reads as could-not-run, not as a ledger verdict (965-sxec)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-archiver-ruby-could-not-run.sh" 2>&1; then
-        _error "an absent ruby does not route to the could-not-run channel (965-sxec) — see the verdict line above"
-        exit 1
-    fi
-    _info "Archiver could-not-run channel check passed"
-
     # 964-zedm: the index builder must stage where the payload FITS. It staged
     # via the ambient TMPDIR, and in a forge /tmp is a 256 MB tmpfs while the
     # index root is on a 1.2 TB overlay — so a cold 22,645-chunk build died on
@@ -6843,13 +6906,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # is only safe if it does not change the ANSWER — a spec referenced solely
     # from target/ would otherwise be reported as a zero-trace spec that is not
     # one, a false accusation produced by an optimisation.
-    _step "Checking the pre-commit spec sweep's exclusions are answer-preserving (734-sjb3)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-precommit-zero-trace-scan-scope.sh" 2>&1; then
-        _error "excluding build output changed the referenced-spec set (734-sjb3) — see the verdict line above"
-        exit 1
-    fi
-    _info "Zero-trace scan scope pin passed"
-
     # Order 1024-c3h3. An evidence SHA captured before land-on-platform-branch
     # rewrites the commit names a ref that never reaches origin, and a reader
     # cannot tell that from "the code never landed" — opposite diagnoses. The

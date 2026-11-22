@@ -66,10 +66,14 @@ STEP_SCRIPT="scripts/test-tool-materialize-litmus-surfaces-arm.sh"
 STEP_ERROR="a litmus red can again print one contentless line, or the margin arm reds on a loaded host instead of skipping (1269-gfdi) — read which arm failed above; ARM 0 failing means the regime probe's real reading path is broken and arms 1-2 prove nothing"
 STEP_OK="Tool-materialization reds name their arm; bad regimes skip"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:tool-materialize-litmus:arm-surfaced:3/3"
-# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
-STEP_SERIAL="runs the litmus runner (it wipes its runtime dirs)"
-STEP_LANES="litmus"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/run-litmus-test.sh scripts/test-tool-materialize-litmus-surfaces-arm.sh scripts/test-tool-materialize.sh"
+STEP_READS="openspec/litmus-tests/litmus-tool-materialization.yaml scripts/lib/no-tool-path.sh scripts/lib/tool-dispatch.sh scripts/lib/tool-materialize.sh scripts/loop-success-probe.sh scripts/test-tool-materialize-litmus-surfaces-arm.sh scripts/test-tool-materialize.sh"
+# ORDER 2185-tmls (priority:build-speed): STEP_INPUTS (2118-tnut). ARM 1 now
+# runs the litmus step's own command instead of run-litmus-test.sh, whose
+# preamble built crates and read the live timing logs; the runner keeps its own
+# fixtures, which declare nothing and always run. Static closure plus an atime
+# trace of a real run (calmecacpilli 2026-11-22, tracked files only): exactly
+# the paths below plus this fixture. It runs no Lua and no plan binary.
+STEP_INPUTS="path:openspec/litmus-tests/litmus-tool-materialization.yaml path:scripts/lib/no-tool-path.sh path:scripts/lib/tool-dispatch.sh path:scripts/lib/tool-materialize.sh path:scripts/loop-success-probe.sh path:scripts/test-tool-materialize.sh"

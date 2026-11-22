@@ -15,11 +15,12 @@
 #
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking the installer resets SOFT only, never prompts, and prints no power-user text (1559-sqzp)"
-STEP_SCRIPT="scripts/test-installer-reset-kind.sh"
+# PORTED to Lua (2205-cepb): run with STEP_LUA through the one runner.
+STEP_LUA="scripts/lua/test-installer-reset-kind.lua"
 STEP_ERROR="the installer offers a HARD reset, prompts, or prints power-user reset text again (1559-sqzp); see which arm failed above"
 STEP_OK="the installer resets SOFT only, quietly, with no prompt"
 STEP_SECOND_REGIME="yolanda 2026-10-08 msys ok:installer-reset-kind:5 arms"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/install-windows.ps1 scripts/test-installer-reset-kind.sh"
+STEP_READS="scripts/install-windows.ps1 scripts/lua/test-installer-reset-kind.lua"
