@@ -93,7 +93,6 @@ scripts/test-fragment-batch-never-collapses-verdicts.sh 1
 scripts/test-fragment-status-loss.sh 1
 scripts/test-gate-fast-refusals.sh 1
 scripts/test-gate-host-memory-figure.sh 1
-scripts/test-gate-memory-floor-consumer.sh 1
 scripts/test-gate-memory-wsl2-guest.sh 1
 scripts/test-gate-stamp-memoization.sh 1
 scripts/test-gate-stamp-must-be-earned.sh 1

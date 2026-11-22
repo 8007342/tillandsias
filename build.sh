@@ -4517,7 +4517,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "All fragments intact"
 
     _step "Checking the whole-overlay fragment guard's negative controls..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-all-fragments-intact.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-all-fragments-intact.lua" 2>&1; then
         _error "the fragment-integrity guard cannot distinguish valid YAML, parse damage, and conflict markers"
         exit 1
     fi
