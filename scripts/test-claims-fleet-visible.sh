@@ -129,7 +129,8 @@ done
 # checkers the lane calls are scripts/lua/*.lua, run through the one runner;
 # their .sh files are gone, so they join this list by their own paths rather
 # than the bare-name loop above.
-for f in scripts/lua/check-no-base64-script-injection.lua scripts/lua/check-fragment-status-loss.lua; do
+# 2223-afpl: check-added-fragments-parse.sh is a shim over its Lua port.
+for f in scripts/lua/check-no-base64-script-injection.lua scripts/lua/check-fragment-status-loss.lua scripts/lua/check-added-fragments-parse.lua; do
     cp "$ROOT/$f" "$f" 2>/dev/null || true
     [ -f "$f" ] || { echo "FAIL: fixture scratch is missing $f (source: $ROOT/$f)"; exit 2; }
 done

@@ -98,7 +98,7 @@ done < <(git ls-files '*.sh')
 # with // comments stripped, so a comment quoting the call neither passes nor
 # fails it. A body that cannot be found is a violation by name, never a pass.
 # TILLANDSIAS_PURGE_GUARD_SOFT_SRC is the fixture seam
-# (scripts/test-purge-guard-soft-arm.sh).
+# (scripts/lua/test-purge-guard-soft-arm.lua).
 SOFT_SRC="${TILLANDSIAS_PURGE_GUARD_SOFT_SRC:-crates/tillandsias-windows-tray/src/notify_icon.rs}"
 soft_body="$(awk '/^pub fn reset_state_once\(\) -> i32 \{/ { f = 1 } f && /^pub fn reset_guest_once\(/ { exit } f' "$SOFT_SRC" 2>/dev/null | sed 's|//.*||')"
 scanned=$((scanned + 1))
