@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: default-target-guard-covers-lua-fixtures
+    order: 2206-js5t
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      preflight-fixtures-default-target also checks the scripts/lua/test-*.lua fixtures that an added gate step or litmus runs through the plan binary.
+    context: |
+      On work/2205-cepb (three .sh fixtures ported to Lua) it answered ok:fixture-default-target:0 checked, so it vouched for nothing while the fleet moves fixtures from .sh to .lua. Coordinator macuahuitl-fedora asked for this row 2026-11-22.
+    exit_criteria:
+      - 'an added or changed scripts/lua/test-*.lua fixture (STEP_LUA or a litmus "script run" command) is counted and run against only a default ./target/release binary; a Lua fixture that needs a non-default target reds the guard'
+    unscoreable: "unpinnable-until-the-guard-exists: the guard's own fixture gains the Lua arm in the same change."
+    next_action: 'Extend the guard to Lua fixtures and add a Lua arm with a negative control.'
+    provenance: coordinator direction; filed by lenovinha.
+    depends_on: []
+    related: [2205-cepb]
+    events:
+      - {type: filed, ts: '2026-11-22T09:49:27Z', host: lenovinha, summary: default-target guard ignores Lua fixtures}
