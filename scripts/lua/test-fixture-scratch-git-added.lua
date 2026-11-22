@@ -54,7 +54,9 @@ fs.write(rel .. "/put.sh", 'printf "%s\\n" "$3" >> "$1/$2"\n')
 local function put(r, file, line) proc.run{ argv = { BASH, rel .. "/put.sh", r, file, line } } end
 local function judge(r)
     local p = proc.run{ argv = { RUNNER, "script", "run", "scripts/lua/check-fixture-scratch-git-added.lua" }, cwd = r,
-        env = { TILLANDSIAS_REPO_ROOT = r }, timeout_ms = 60000 }
+        -- The scratch repo's own base: a gate exports TILLANDSIAS_GATE_DIFF_BASE as
+        -- a sha of the REAL repo, which this repo does not hold.
+        env = { TILLANDSIAS_REPO_ROOT = r, TILLANDSIAS_SCRATCH_GIT_BASE = "origin/linux-next" }, timeout_ms = 60000 }
     return (p.stdout or "") .. (p.stderr or ""), p.code
 end
 

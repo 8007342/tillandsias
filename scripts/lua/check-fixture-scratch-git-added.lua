@@ -44,7 +44,10 @@ local function bare_site(l)
 end
 
 local base = env.get("TILLANDSIAS_SCRATCH_GIT_BASE") or env.get("TILLANDSIAS_GATE_DIFF_BASE") or "origin/linux-next"
-if not select(1, git("rev-parse", "--verify", "--quiet", base)) then
+-- `^{commit}`: a bare 40-hex "verifies" even when no such object exists here
+-- (a gate's frozen base, inherited into a scratch repo), and every diff after it
+-- would then fail quietly and judge nothing.
+if not select(1, git("rev-parse", "--verify", "--quiet", base .. "^{commit}")) then
     verdict.emit("ok:fixture-scratch-git-added:base-unavailable", 0,
         "  note: base ref '" .. base .. "' unavailable — added-line enforcement skipped")
 end
