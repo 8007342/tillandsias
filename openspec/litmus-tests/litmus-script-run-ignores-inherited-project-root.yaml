@@ -1,0 +1,35 @@
+# @trace spec:ci-release
+# @trace order:2225-prrt
+#
+# script run must not take its repository root from an inherited
+# PROJECT_ROOT: run-litmus-test.sh exports it (the real checkout) for its
+# metrics logs, and a Lua decider a litmus step runs inside a git-init'd
+# scratch repo must judge the scratch repo. Red before the 2225-prrt fix:
+# arm 1 rooted at the real checkout, arm 3 ran instead of refusing.
+name: litmus:script-run-ignores-inherited-project-root
+spec: ci-release
+phase: pre-build
+description: with PROJECT_ROOT naming the real checkout, as under the litmus runner, script run roots at the caller's scratch repository and TILLANDSIAS_REPO_ROOT stays the only override
+severity: high
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary); git; a scratch repository under target/plan-scratch; no network, no podman
+
+critical_path:
+  - step: "scratch repo with PROJECT_ROOT set; the explicit override; no repository but PROJECT_ROOT"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-script-run-ignores-inherited-project-root.lua 2>&1"
+    timeout_ms: 60000
+    expected_behavior: "ok:script-run-ignores-inherited-project-root:3 arms"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "three arms"
+  log_fields:
+    spec: "ci-release"
+    test: "script-run-ignores-inherited-project-root"
+
+rollback:
+  on_failure: "read the FAIL lines; the root order is locate_repo_root_from in crates/tillandsias-plan/src/lua_predicate.rs"
+  command: "grep -n '2225-prrt' crates/tillandsias-plan/src/lua_predicate.rs"
