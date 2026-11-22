@@ -1,0 +1,11 @@
+# Gate step — data, not code (order 1072-b7eq). Moved out of build.sh by
+# 2186-niam: the plan archiver preserves the ready set (831-ezea).
+#
+# The inline block could not be pooled. Its memo (911-m7js), the memo's
+# hit/miss timing (1074-96z9) and the forge-only exit-3 skip (965-sxec,
+# 923-ws3r) live in the Lua, so the step needs no new .sh. See the script's
+# header for the five outcomes.
+STEP_DESC="Checking the plan archiver preserves the ready set (831-ezea)"
+STEP_LUA="scripts/lua/check-archiver-ready-set.lua"
+STEP_ERROR="the plan archiver's check refused — see the line above: a ready-set violation means do not sweep; a could-not-run means the instrument needs repair (923-ws3r)"
+STEP_OK="Plan archiver check passed"
