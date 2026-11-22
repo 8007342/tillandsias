@@ -91,9 +91,9 @@ critical_path:
   # built from a fallback root is already the false report — whether or not
   # anything is removed afterwards.
   - step: "with HOME unset the reader LABELS its fallback and the destructive path REFUSES (1315-d4qd)"
-    command: "bash scripts/test-reset-state-no-home-refusal.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-reset-state-no-home-refusal.lua 2>&1"
     timeout_ms: 30000
-    expected_behavior: "PASS"
+    expected_behavior: "ok:reset-state-no-home-refusal:"
 
 observability:
   traces:

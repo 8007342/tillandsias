@@ -1,0 +1,19 @@
+# Gate step 2109-umac — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. install-macos.sh prefers /Applications and falls back to
+# $HOME/Applications only when /Applications is not writable; uninstall.sh used
+# to remove ONLY the $HOME path, so on the DEFAULT target the app stayed while
+# the LaunchAgent beside it was removed (plan/issues/macos-uninstall-misses-the-
+# default-install-dir-2026-08-30.md). The fixture runs the uninstaller's own
+# macOS cleanup block against a scratch HOME and a seamed /Applications, with
+# pgrep/pkill/killall shimmed so no signal reaches the process table (1365-tjav).
+#
+# Moved here from an inline build.sh step by 2109-umac, when the fixture was
+# ported to Lua: STEP_LUA hands the fixture the plan binary that runs it.
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking uninstall sweeps BOTH macOS app dirs..."
+STEP_LUA="scripts/lua/test-uninstall-sweeps-both-app-dirs.lua"
+STEP_ERROR="uninstall would leave the app in the DEFAULT install dir while removing the LaunchAgent beside it — the app stays, nothing launches it, and the uninstaller reports success"
+STEP_OK="Uninstall app-dir sweep gate passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-20 darwin ok:uninstall-sweeps-both-app-dirs:15"
+STEP_READS="scripts/lua/test-uninstall-sweeps-both-app-dirs.lua scripts/uninstall.sh"

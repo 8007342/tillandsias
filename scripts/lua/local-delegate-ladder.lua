@@ -1,8 +1,8 @@
 -- @trace order:1834-ujsf, spec:local-coding-delegation
 --
 -- local-delegate-ladder.lua — the outcome-token grammar and the rung
--- aggregator behind scripts/local-delegate-ladder.sh and
--- `scripts/delegate-outcome.sh local-record` (openspec change
+-- aggregator, behind `scripts/delegate-outcome.sh local-record` and called
+-- directly for `aggregate` (the shell shim was removed in 2216-27ki; openspec change
 -- local-coding-experts-delegation-ladder, design §3).
 --
 --   tillandsias-plan script run scripts/lua/local-delegate-ladder.lua -- token

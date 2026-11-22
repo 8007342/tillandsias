@@ -113,15 +113,19 @@ fi
 #    exit 3 through ONLY in a forge and ONLY on the tokenised ruby cause; a stale
 #    plan binary or an unreadable fragment must still stop the gate, because
 #    those are repairable in the locus that hit them (965-sxec).
-skipline="$(/usr/bin/grep -n 'could-not-run:no-usable-ruby' build.sh | head -1)"
+# 2186-niam: the forge skip moved from build.sh into the archiver gate step's
+# Lua. Every token it matches is a `find("could-not-run:...` call there.
+SKIPSRC="scripts/lua/check-archiver-ready-set.lua"
+skipline="$(/usr/bin/grep -n 'find("could-not-run:' "$SKIPSRC")"
+case "$skipline" in *no-usable-ruby*) ;; *) skipline="" ;; esac
 if [ -z "$skipline" ]; then
-    bad "build.sh no longer keys its forge skip on the ruby token — the channel this fixture guards is gone"
+    bad "the archiver step no longer keys its forge skip on the ruby token — the channel this fixture guards is gone"
 else
     case "$skipline" in
         *'could-not-run:archiver:'*)
-            bad "build.sh's skip now matches an archiver:* token too — a repairable instrument failure became skippable" ;;
+            bad "the step's skip now matches an archiver:* token too — a repairable instrument failure became skippable" ;;
         *)
-            ok "build.sh's forge skip still keys ONLY on the ruby cause; the new tokens cannot be waved through" ;;
+            ok "the step's forge skip still keys ONLY on the ruby cause; the new tokens cannot be waved through" ;;
     esac
 fi
 

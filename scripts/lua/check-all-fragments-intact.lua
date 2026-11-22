@@ -10,7 +10,7 @@
 -- valid YAML).
 --
 -- TILLANDSIAS_FRAGMENT_SCAN_ROOT is a TEST SEAM
--- (scripts/test-all-fragments-intact.sh points it at an external
+-- (scripts/lua/test-all-fragments-intact.lua points it at an external
 -- `mktemp -d` fixture); -- @read-env widens fs.read/fs.walk under it. The
 -- repository's YAML validator (scripts/tillandsias-policy) is resolved
 -- against the REAL repo root always, never the scan root, exactly as the

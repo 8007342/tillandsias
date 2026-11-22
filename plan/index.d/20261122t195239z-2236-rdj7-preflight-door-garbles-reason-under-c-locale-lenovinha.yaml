@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: preflight-door-garbles-a-declarations-reason-under-the-c-locale
+    order: 2236-rdj7
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 1
+    title: |
+      build.sh's preflight door strips the dash before a declaration's reason with `sed 's/^[—-][[:space:]]*//'`; under LC_ALL=C the bracket is a set of BYTES, so it removes only the first byte of the em dash and prints invalid UTF-8 in every gate-only and serial skip line.
+    context: |
+      Found while porting test-preflight-declarations-host-sed.sh (2235-zkmx): the Lua runtime gives children LC_ALL=C, and the door's output there was `gate-only <0xE2 0x80 0x94 0x80 0x94>drives …` where the caller's UTF-8 locale gives `gate-only — drives …`. The decision and rc are unaffected; the printed reason is garbled, and a Lua reader of the line raises on the invalid UTF-8 (text.trim did). Any gate run under a C locale (a forge or cron without LANG) prints these lines. Same sed in _pf_predecide's gate-only and serial branches.
+    exit_criteria:
+      - "under LC_ALL=C the door prints the reason byte-identical to the UTF-8 locale (an arm in test-preflight-declarations-host-sed.lua, red before the fix)"
+    unscoreable: "unpinnable-until-the-guard-exists: the red-first arm is the deliverable."
+    next_action: "Strip the em dash or hyphen with an alternation or parameter expansion rather than a bracket; add the C-locale arm."
+    provenance: found by lenovinha porting 2235-zkmx.
+    related: [2235-zkmx]
+    events:
+      - {type: filed, ts: '2026-11-22T19:52:39Z', host: lenovinha, summary: preflight door garbles reasons under C locale filed}

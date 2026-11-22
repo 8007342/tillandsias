@@ -21,7 +21,6 @@ scripts/check-release-asset-integrity.sh 1
 scripts/check-script-exec-bits.sh 1
 scripts/check-spec-index-resolution-agreement.sh 2
 scripts/check-tracked-files-unwritten.sh 1
-scripts/check-windows-tray-clippy.sh 1
 scripts/clamp-ca-material.sh 1
 scripts/cycle-preflight.sh 2
 scripts/diagnose-proxy.sh 1
@@ -71,7 +70,6 @@ scripts/test-credential-verdict-script.sh 1
 scripts/test-cycle-checkout-lock.sh 1
 scripts/test-cycle-lock-attested-release.sh 1
 scripts/test-default-vault-cli-security.sh 1
-scripts/test-drain-queue-bare-refuses.sh 1
 scripts/test-e2e-preflight-live-runtime.sh 2
 scripts/test-enclave-network-internal-discovery.sh 2
 scripts/test-env-forward-shared.sh 1
@@ -85,7 +83,6 @@ scripts/test-fleet-msg-store.sh 1
 scripts/test-forge-git-index-materialization.sh 1
 scripts/test-forge-gitconfig-bidirectional-quarantine.sh 1
 scripts/test-forge-launch-openspec-init-clean.sh 1
-scripts/test-forge-packed-refs-split-brain.sh 1
 scripts/test-forge-runtime-ca-trust.sh 1
 scripts/test-forge-seeds-from-salvage-ref.sh 1
 scripts/test-forge-standard-gitconfig-path.sh 1
@@ -94,7 +91,6 @@ scripts/test-fragment-batch-never-collapses-verdicts.sh 1
 scripts/test-fragment-status-loss.sh 1
 scripts/test-gate-fast-refusals.sh 1
 scripts/test-gate-host-memory-figure.sh 1
-scripts/test-gate-memory-floor-consumer.sh 1
 scripts/test-gate-memory-wsl2-guest.sh 1
 scripts/test-gate-stamp-memoization.sh 1
 scripts/test-gate-stamp-must-be-earned.sh 1
@@ -180,9 +176,7 @@ scripts/test-release-tier-freshness.sh 1
 scripts/test-release-tier-timer-render.sh 2
 scripts/test-repeat-model-flag.sh 1
 scripts/test-requirement-ids.sh 1
-scripts/test-rerun-failed-rust-tests.sh 1
 scripts/test-reset-state-contract.sh 2
-scripts/test-reset-state-no-home-refusal.sh 1
 scripts/test-resumable-claim-dirt.sh 1
 scripts/test-running-image-freshness.sh 1
 scripts/test-salvage-audit.sh 1
@@ -209,7 +203,6 @@ scripts/test-trace-coverage.sh 1
 scripts/test-tray-asset-placeholder-refused.sh 1
 scripts/test-uninstall-matcher-spares-bystanders.sh 1
 scripts/test-uninstall-path-block.sh 1
-scripts/test-uninstall-tray-stop-is-macos-only.sh 1
 scripts/test-validator-surface-currency.sh 1
 scripts/test-vault-shutdown-forwards-sigterm.sh 1
 scripts/test-version-bump-isolation-scope.sh 1
