@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: convergence-max-residual-reason-names-the-wrong-check
+    order: 2226-63ta
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 1
+    title: |
+      local-ci's convergence signature can pair max_residual_spec with another check's max_residual_reason: the reason is read from FAILED_CHECKS[i] with the index of failed_specs, and the two arrays are in different orders.
+    context: |
+      Found while porting write_convergence_artifacts (2224-x32n). failed_specs and failed_weights are built in CHECK_IDS order; FAILED_CHECKS is in failure order. When those orders differ, the heaviest failure's spec is reported with the reason of whichever check failed at that position. 2224 ports this bug for bug, on the coordinator's ruling, so its parity evidence stays pure.
+    exit_criteria:
+      - "a fixture run whose failure order differs from catalog order reports the heaviest failure's own reason; the arm is red before the fix"
+    unscoreable: "unpinnable-until-the-guard-exists: the red-first arm is the deliverable."
+    next_action: "Fix in its own small PR stacked on 2224-x32n, with a red-first arm."
+    provenance: found by lenovinha porting 2224-x32n; coordinator ruling 2026-11-22.
+    depends_on: [local-ci-to-lua-slice-4-convergence-artifacts]
+    related: [2224-x32n]
+    events:
+      - {type: filed, ts: '2026-11-22T17:39:02Z', host: lenovinha, summary: max residual reason indexing bug filed}
