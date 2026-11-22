@@ -11,7 +11,7 @@ description: >
   redirect is NOT the fix: the anonymous insteadOf covers push as well as
   fetch, so an absent redirect lets the unauthenticated path win silently.
   Carries a mutation arm that reintroduces the pre-fix wording and requires
-  the unit arms to red, in a scratch worktree (never the checkout; 2237-f9b6).
+  the unit arms to red, in a scratch shared clone (never the checkout; 2237-f9b6).
 severity: high
 size: small
 

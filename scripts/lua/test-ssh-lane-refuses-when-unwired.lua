@@ -13,20 +13,23 @@
 --
 --   1 the behavioural unit arms (cargo test write_forge_gitconfig) pass on
 --     the checkout's source, which this fixture only READS
---   2 MUTATION: the pre-fix wording, put back into a SCRATCH WORKTREE's copy
+--   2 MUTATION: the pre-fix wording, put back into a SCRATCH CLONE's copy
 --     of main.rs (never the checkout's), reds the same unit arms there; the
 --     mutation is checked present before any test result counts
 --   3 KILLED MID-ARM: arm 2 run as a child (TILLANDSIAS_TEST_SSH_LANE_HOLD)
---     is SIGKILLed after its mutation applied; the checkout's tracked files
---     are still clean (git status) and its main.rs still says Pushes REFUSE
+--     is SIGKILLed after its mutation applied; this repo's tracked files,
+--     worktree list and refs read the same as before, and its main.rs still
+--     says Pushes REFUSE
 --
--- WHY A WORKTREE, NOT A TRAP (2237-f9b6). The .sh mutated the live main.rs
--- and restored it from `trap restore EXIT INT TERM`. SIGKILL (a gate
--- deadline, an OOM kill) runs no trap, so a killed gate left the source
--- mutated, and the cargo test raced any other cargo in the same tree. Here
--- the checkout's source is never written. The worktree shares the checkout's
--- target dir, so only the workspace crates rebuild; the preflight door sweeps
--- a worktree registration a KILL leaves behind (1600-nn5b).
+-- WHY A SHARED CLONE, NOT A TRAP OR A WORKTREE (2237-f9b6). The .sh mutated
+-- the live main.rs and restored it from `trap restore EXIT INT TERM`. SIGKILL
+-- (a gate deadline, an OOM kill) runs no trap, so a killed gate left the
+-- source mutated, and the cargo test raced any other cargo in the same tree.
+-- A `git worktree` would still write this repo (.git/worktrees/<name>), and a
+-- KILL leaves that entry. A `git clone --shared` under target/plan-scratch
+-- (git-ignored, outside every tracked-file scan) borrows objects through its
+-- OWN alternates file and writes nothing here. It shares the checkout's
+-- target dir, so only the workspace crates rebuild.
 --
 -- Verdict: ok:ssh-lane-refuses-when-unwired:<n> after the .sh's
 -- `ok: ssh-lane-refuses-when-unwired PASS` line (the litmus reads it), or
@@ -55,29 +58,36 @@ local function unit_arms(manifest)
     return p.code, (p.stdout or "") .. (p.stderr or "")
 end
 
--- A scratch worktree carrying the checkout's CURRENT main.rs with the pre-fix
+-- A scratch clone carrying the checkout's CURRENT main.rs with the pre-fix
 -- wording put back. Returns its path, or nil and why.
-local function mutant_worktree(tag)
+local function mutant_clone(tag)
     local W = root .. "/target/plan-scratch/ssh-lane-mutant-" .. tag .. "-" .. tostring(time.now_ms())
-    local a = proc.run{ argv = { "git", "-C", root, "worktree", "add", "--detach", "--quiet", W, "HEAD" }, timeout_ms = 300000 }
-    if not a.ok then return nil, W, "git worktree add failed: " .. (a.stderr or "") end
+    -- A --shared CLONE, not a worktree: a worktree registers itself in THIS
+    -- repo's .git/worktrees, which a KILL leaves behind. The clone borrows
+    -- objects through its own alternates file and writes nothing here.
+    local head = text.trim(proc.run{ argv = { "git", "-C", root, "rev-parse", "HEAD" } }.stdout or "")
+    local a = proc.run{ argv = { "git", "clone", "--shared", "--no-checkout", "--quiet", root, W }, timeout_ms = 300000 }
+    if not a.ok then return nil, W, "git clone --shared failed: " .. (a.stderr or "") end
+    local c = proc.run{ argv = { "git", "-C", W, "checkout", "--quiet", "--detach", head }, timeout_ms = 300000 }
+    if not c.ok then return nil, W, "checkout in the scratch clone failed: " .. (c.stderr or "") end
     local src = read(root .. "/" .. SRC)
     local s, e = src:find(FIXED, 1, true)
     if not s then return nil, W, "the fixed wording is not in " .. SRC .. " — this fixture has drifted from the code it pins" end
     fs.write(text.trim(W:sub(#root + 2)) .. "/" .. SRC, src:sub(1, s - 1) .. PRE_FIX .. src:sub(e + 1))
     -- A write that did not land must not read as a mutation (the .sh's sed lesson).
-    if not read(W .. "/" .. SRC):find(PRE_FIX, 1, true) then return nil, W, "the mutation is not present in the worktree copy" end
+    if not read(W .. "/" .. SRC):find(PRE_FIX, 1, true) then return nil, W, "the mutation is not present in the scratch copy" end
     return W
 end
 
-local function remove_worktree(W)
-    proc.run{ argv = { "git", "-C", root, "worktree", "remove", "--force", "--force", W }, timeout_ms = 120000 }
-    proc.run{ argv = { "git", "-C", root, "worktree", "prune" } }
+local function remove_clone(W)
+    if W and W:find("/target/plan%-scratch/ssh%-lane%-mutant%-") then
+        proc.run{ argv = { "rm", "-rf", "--", W }, timeout_ms = 120000 }
+    end
 end
 
 -- HOLD MODE (arm 3's child): apply the mutation, say so, and wait to be killed.
 if HOLD then
-    local W, _, why = mutant_worktree("hold")
+    local W, _, why = mutant_clone("hold")
     fs.write(HOLD, W and ("applied " .. W .. "\n") or ("failed " .. tostring(why) .. "\n"))
     -- One-second sleeps, not one long one: the KILL lands on this runner, and
     -- a long sleep child would outlive it as an orphan.
@@ -94,8 +104,8 @@ local rc, o = unit_arms(nil)
 if rc == 0 then ok("write_forge_gitconfig arms green")
 else bad("the gitconfig arms do not pass on the current source:\n" .. o) end
 
-out.line("arm 2 — MUTATION: reintroducing the fallback in a scratch worktree must RED the unit arms")
-local W, WP, why = mutant_worktree("arm2")
+out.line("arm 2 — MUTATION: reintroducing the fallback in a scratch clone must RED the unit arms")
+local W, WP, why = mutant_clone("arm2")
 if not W then
     bad("could not apply the mutation (" .. tostring(why) .. ") — arm 2 proves nothing and must not read as a pass")
 else
@@ -104,12 +114,20 @@ else
         bad("MUTATION SURVIVED: the pre-fix fallback wording was reintroduced and the unit arms still passed — the guard has no teeth")
     else ok("the mutated source REDS, so the guard bites") end
 end
-remove_worktree(W or WP)
+remove_clone(W or WP)
 
-out.line("arm 3 — KILLED MID-ARM: the checkout's tracked files stay clean")
+out.line("arm 3 — KILLED MID-ARM: this repo's files, worktrees and refs are untouched")
 local RUNNER = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN")
 if not RUNNER or RUNNER == "" then RUNNER = root .. "/target/release/tillandsias-plan" end
-local before = proc.run{ argv = { "git", "-C", root, "status", "--porcelain", "--untracked-files=no" } }.stdout or ""
+-- What a KILL could leave in THIS repo: tracked files, worktree
+-- registrations, refs. All three must read the same after it.
+local function repo_state()
+    local function q(...) return proc.run{ argv = { "git", "-C", root, ... } }.stdout or "" end
+    return "status:\n" .. q("status", "--porcelain", "--untracked-files=no")
+        .. "worktrees:\n" .. q("worktree", "list", "--porcelain")
+        .. "refs:\n" .. q("for-each-ref", "--format=%(refname) %(objectname)")
+end
+local before = repo_state()
 local marker_rel = "target/plan-scratch/ssh-lane-hold-" .. tostring(time.now_ms())
 local marker = root .. "/" .. marker_rel
 local h = proc.spawn{ argv = { RUNNER, "script", "run", "scripts/lua/test-ssh-lane-refuses-when-unwired.lua" },
@@ -122,17 +140,17 @@ for _ = 1, 600 do
 end
 h:kill()
 local HW = said:match("^applied (%S+)")
-local after = proc.run{ argv = { "git", "-C", root, "status", "--porcelain", "--untracked-files=no" } }.stdout or ""
+local after = repo_state()
 if not HW then
     bad("the held child never applied its mutation (" .. text.trim(said) .. ") — arm 3 proves nothing")
 elseif after ~= before then
-    bad("a SIGKILLed mutation arm changed the checkout's tracked files:\nbefore:\n" .. before .. "\nafter:\n" .. after)
+    bad("a SIGKILLed mutation arm changed this repo (tracked files, worktrees or refs):\nbefore:\n" .. before .. "\nafter:\n" .. after)
 elseif not read(root .. "/" .. SRC):find(FIXED, 1, true) then
     bad("a SIGKILLed mutation arm left the checkout's " .. SRC .. " without the fixed wording")
 else
-    ok("a mutation arm SIGKILLed after applying leaves git status as it was and " .. SRC .. " unmutated")
+    ok("a mutation arm SIGKILLed after applying leaves tracked files, worktrees and refs as they were and " .. SRC .. " unmutated")
 end
-if HW then remove_worktree(HW) end
+if HW then remove_clone(HW) end
 proc.run{ argv = { "find", marker, "-delete" } }
 
 if fail == 0 then
