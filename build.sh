@@ -3181,6 +3181,10 @@ _gs_lanes() {
     for _f in "$@"; do
         _lanes="$(sed -n 's/^STEP_LANES="\(.*\)"$/\1/p' "$_f" | head -n 1)"
         set -- $_lanes
+        # 2192-excl: `exclusive` (alone or beside other lanes) means NOTHING else may
+        # run with this step: it reads or counts a fixed host-wide file. It joins the
+        # exclusive phase after the lanes, as a step naming several lanes does.
+        case " $_lanes " in *" exclusive "*) _excl+=("$_f"); continue ;; esac
         if [ "$#" -ne 1 ]; then _excl+=("$_f"); continue; fi
         _i=$((_i + 1)); _names+=("$_f")
         printf '%s\t%s\n' "$_i" "$_f" >> "$_d/lane-$1.list"
