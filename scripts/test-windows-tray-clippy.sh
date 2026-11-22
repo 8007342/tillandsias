@@ -19,7 +19,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEC="$ROOT/scripts/lua/check-windows-tray-clippy.lua"
 # Order 2203-wclp: the decider is the Lua port, run by the plan binary, which
 # is resolved and absolutised BEFORE any cd into a scratch repo.
-PLAN="${TILLANDSIAS_PLAN_BIN:-$(. "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null && resolve_plan_binary 2>/dev/null)}"
+# 1401-x76w / 84f37ff24: resolve the plan binary from the CHECKOUT, not the caller's cwd,
+# and absolutise it before any cd. An explicit TILLANDSIAS_PLAN_BIN keeps its meaning.
+if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
+    PLAN="$TILLANDSIAS_PLAN_BIN"
+else
+    PLAN="$(cd "$ROOT" && _p="$(. scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" && case "$_p" in (/*) printf %s "$_p" ;; (*) printf %s/%s "$PWD" "${_p#./}" ;; esac)" || PLAN=""
+fi
 [ -n "$PLAN" ] || { echo "could-not-run:windows-tray-clippy-fixture:no-plan-binary"; exit 3; }
 export PLAN
 [ -f "$DEC" ] || { echo "skip:windows-tray-clippy-fixture:decider-absent"; exit 0; }
