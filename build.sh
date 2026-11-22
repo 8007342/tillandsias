@@ -1755,11 +1755,29 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     esac
     if [ -n "$_pf_plan_bin" ]; then
         _pf_vs="$(cd "$SCRIPT_DIR" && "$_pf_plan_bin" validator-surface-hash --check 2>&1)" || true
+        # ORDER 2186-x5kv — A STALE BINARY IS REBUILT ONCE, THEN RE-ASKED. Every
+        # host hit this refusal several times on 2026-11-21 (yoga's step 885
+        # read it as a content red); the remedy was always the same incremental
+        # build, seconds when warm. build.sh already runs inside the builder
+        # toolbox on Silverblue, so this cargo is the toolbox's. Only a binary
+        # still stale after the rebuild (or a failed build) refuses. The
+        # --ci-full twin is _ci_full_plan_bins_current (1925-77h4).
+        case "$_pf_vs" in
+            *stale:validator-surface*)
+                echo "stale:preflight:plan-binary — $_pf_plan_bin; rebuilding once: cargo build --release -p tillandsias-plan" >&2
+                # TILLANDSIAS_PREFLIGHT_CARGO is the fixture's seam (2186-x5kv):
+                # build.sh puts ~/.cargo/bin first on PATH, so a planted cargo
+                # on PATH would never be the one run.
+                if (cd "$SCRIPT_DIR" && "${TILLANDSIAS_PREFLIGHT_CARGO:-cargo}" build --release -p tillandsias-plan) >&2; then
+                    _pf_vs="$(cd "$SCRIPT_DIR" && "$_pf_plan_bin" validator-surface-hash --check 2>&1)" || true
+                    case "$_pf_vs" in *stale:validator-surface*) ;; *) echo "ok:preflight:plan-binary-rebuilt:$_pf_plan_bin" >&2 ;; esac
+                fi ;;
+        esac
         case "$_pf_vs" in
             *stale:validator-surface*)
                 echo "refused:preflight:stale-plan-binary — $_pf_plan_bin was built from a different validator surface than this checkout (${_pf_vs##*stale:validator-surface })" >&2
                 echo "  WHY: the guards below resolve this binary, so each would refuse for this one cause under its own name." >&2
-                echo "  REMEDY: cargo build --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh, then re-run ./build.sh --preflight." >&2
+                echo "  REMEDY: the door already ran cargo build --release -p tillandsias-plan once and the binary is still stale (or the build failed): rebuild or remove the named copy (it may lie outside \${CARGO_TARGET_DIR:-target}), then re-run ./build.sh --preflight." >&2
                 echo "  No guard was run. A stale binary says nothing about the tree." >&2
                 exit 1 ;;
         esac
