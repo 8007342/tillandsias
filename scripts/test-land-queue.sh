@@ -99,12 +99,21 @@ candidate() {
     git -C "$WORK_DIR" checkout -q linux-next
 }
 
+# 2152-lqrf: the refresh key reads a dep-info and writes a stamp, by default
+# under the GATE's CARGO_TARGET_DIR, i.e. the real shared target. A fixture must
+# never read or write production state, so both are pinned to scratch unless an
+# arm names its own (ARM 40). Measured: unpinned, ARM 22b stamped the target and
+# the NEXT gate's ARM 22 skipped its failing refresh and gated #22 (red).
 run_queue() {
     ( cd "$WORK_DIR" && env \
         TILLANDSIAS_LAND_QUEUE_GH="$GH_BIN" \
         TILLANDSIAS_LAND_QUEUE_GATE="bash $GATE_BIN" \
         TILLANDSIAS_LAND_QUEUE_PREFLIGHT="${PREFLIGHT_CMD:-}" \
         TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH="${PLAN_REFRESH_CMD:-}" \
+        TILLANDSIAS_LAND_QUEUE_PLAN_DEPINFO="${TILLANDSIAS_LAND_QUEUE_PLAN_DEPINFO:-$TMP/no-plan-depinfo.d}" \
+        TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH_STAMP="${TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH_STAMP:-$TMP/plan-refresh-stamp.$$}" \
+        TILLANDSIAS_LAND_QUEUE_HOST_DOOR="${HOST_DOOR_CMD:-}" \
+        TILLANDSIAS_LAND_QUEUE_SIDECAR_STAGE="" \
         TILLANDSIAS_LAND_QUEUE_PLAN_LANE_CHECK="${PLAN_LANE_CMD:-echo plan-lane >> $GATE_LOG.plan-lane}" \
         TILLANDSIAS_LAND_QUEUE_REMOTE=origin \
         TILLANDSIAS_LAND_QUEUE_LOGDIR="${LOGDIR_OVERRIDE:-$TMP/logs-$$}" \
@@ -553,6 +562,8 @@ out9="$(timeout 120 env \
     TILLANDSIAS_LAND_QUEUE_GH="$GH_BIN" \
     TILLANDSIAS_LAND_QUEUE_GATE="bash $GATE_BIN" \
     TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH="" \
+    TILLANDSIAS_LAND_QUEUE_HOST_DOOR="" \
+    TILLANDSIAS_LAND_QUEUE_SIDECAR_STAGE="" \
     TILLANDSIAS_LAND_QUEUE_REMOTE=origin \
     TILLANDSIAS_TRUNK_BRANCH=linux-next \
     bash -c 'cd "$1" && bash "$2"' _ "$WORK_DIR" "$QUEUE" </dev/null 2>&1)"
@@ -1407,17 +1418,20 @@ candidate arm32b 1322-aaaa a32b.txt A
 cat > "$GH_PRS" <<JSON
 [{"number":22,"headRefName":"work/1322-aaaa","isDraft":false}]
 JSON
+# 2118-tpmy: the red is the CANDIDATE's (trunk, without a32b.txt, is green),
+# so after the two candidate gates the trunk check gates once more and evicts.
 cat > "$GATE_BIN" <<GATE
 #!/usr/bin/env bash
 echo "gated" >> "$GATE_LOG"
-echo "FAIL scripts/test-other.sh: real"; exit 1
+if [ -e a32b.txt ]; then echo "FAIL scripts/test-other.sh: real"; exit 1; fi
+exit 0
 GATE
 out32b="$(run_queue)"
 if grep -q '^evicted:scripts/test-other.sh ' <<<"$out32b" && grep -q '^evict:land-queue:22:gate-failed' <<<"$out32b" \
-    && ! grep -q '^land:22 ' <<<"$out32b" && [ "$(grep -c . "$GATE_LOG")" -eq 2 ]; then
-    ok "ARM 32b: an untouched test red twice prints evicted:<test> and evicts (2 gates)"
+    && ! grep -q '^land:22 ' <<<"$out32b" && [ "$(grep -c . "$GATE_LOG")" -eq 3 ]; then
+    ok "ARM 32b: an untouched test red twice, trunk green, prints evicted:<test> and evicts (3 gates)"
 else
-    bad "ARM 32b: wanted evicted:scripts/test-other.sh, evicted, 2 gates; got gates=$(grep -c . "$GATE_LOG")
+    bad "ARM 32b: wanted evicted:scripts/test-other.sh, evicted, 3 gates; got gates=$(grep -c . "$GATE_LOG")
 $out32b"
 fi
 
@@ -1515,6 +1529,145 @@ else
     bad "ARM 33b: wanted landed on 1 full gate; got gates=$(grep -c . "$GATE_LOG")
 $out33b"
 fi
+
+# ──────────────────────────────────────────────────────────── ARM 34
+# 2118-tpmy THE HOST DOOR: could-not-run:host:<cause> evicts NOBODY and the run
+# goes on. The door stub refuses its first call (disk-low), then answers ok:
+# #41 is skipped (not gated, not evicted), #42 lands.
+scaffold arm34
+candidate arm34 1341-aaaa a34.txt A
+candidate arm34 1342-aaaa b34.txt B
+cat > "$GH_PRS" <<JSON
+[{"number":41,"headRefName":"work/1341-aaaa","isDraft":false},
+ {"number":42,"headRefName":"work/1342-aaaa","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+exit 0
+GATE
+DOOR_BIN="$TMP/door-arm34.sh"
+cat > "$DOOR_BIN" <<DOOR
+#!/usr/bin/env bash
+echo "asked" >> "$TMP/door-arm34.log"
+if [ "\$(grep -c . "$TMP/door-arm34.log")" -eq 1 ]; then
+    echo "could-not-run:host:disk-low:3.0G free under target, floor 40G"; exit 3
+fi
+echo "ok:host-door:disk=900G tmp=6.0G swap-free=90%"
+DOOR
+out34="$(HOST_DOOR_CMD="bash $DOOR_BIN" run_queue)"
+if grep -q '^could-not-run:host:disk-low:.* #41 is not evicted' <<<"$out34" && ! grep -q '^evict' <<<"$out34" \
+    && ! grep -q '^land:41 ' <<<"$out34" && grep -q '^land:42 ' <<<"$out34" \
+    && [ "$(grep -c . "$GATE_LOG")" -eq 1 ] && ! grep -q 'land-queue:evicted' "$GH_COMMENTS" 2>/dev/null; then
+    ok "ARM 34: a host-door refusal is could-not-run:host:<cause>, evicts nobody, and the run continues (#42 lands)"
+else
+    bad "ARM 34: wanted #41 could-not-run (no eviction, no gate) and #42 landed on 1 gate; got gates=$(grep -c . "$GATE_LOG")
+$out34"
+fi
+
+# ──────────────────────────────────────────────────────────── ARM 35
+# 2118-tpmy RED ON TRUNK TOO: the untouched test is red twice on the candidate
+# AND on the bare trunk -> hold:trunk-red:<test>. Nobody is evicted, the queue
+# holds (exit 4) and #44 behind it is not gated. A second run at the same trunk
+# base reads the memo: no gate is spent on the known trunk red.
+scaffold arm35
+candidate arm35 1343-aaaa a35.txt A
+candidate arm35 1344-aaaa b35.txt B
+cat > "$GH_PRS" <<JSON
+[{"number":43,"headRefName":"work/1343-aaaa","isDraft":false},
+ {"number":44,"headRefName":"work/1344-aaaa","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+echo "FAIL scripts/test-other.sh: broken on trunk"; exit 1
+GATE
+out35="$(run_queue)"; rc35=$?
+g35="$(grep -c . "$GATE_LOG")"
+if grep -q '^hold:trunk-red:scripts/test-other.sh ' <<<"$out35" && ! grep -q '^evict' <<<"$out35" \
+    && ! grep -q '^evicted:' <<<"$out35" && grep -q '^hold:land-queue:' <<<"$out35" \
+    && [ "$g35" -eq 3 ] && ! grep -q 'land-queue:evicted' "$GH_COMMENTS" 2>/dev/null; then
+    ok "ARM 35: red twice on the candidate AND on trunk is hold:trunk-red:<test>; nobody evicted; #44 not gated (3 gates)"
+else
+    bad "ARM 35: wanted hold:trunk-red, no eviction, held run, 3 gates; got gates=$g35 rc=$rc35
+$out35"
+fi
+: > "$GATE_LOG"
+out35b="$(run_queue)"
+g35b="$(grep -c . "$GATE_LOG")"
+if grep -q '^hold:trunk-red:scripts/test-other.sh ' <<<"$out35b" && [ "$g35b" -eq 2 ] && ! grep -q '^evict' <<<"$out35b"; then
+    ok "ARM 35b: at the same trunk base the trunk red is remembered: no trunk gate is spent again (2 gates)"
+else
+    bad "ARM 35b: wanted hold from the memo on 2 candidate gates; got gates=$g35b
+$out35b"
+fi
+
+# ──────────────────────────────────────────────────────────── ARM 40
+# ORDER 2152-lqrf (build speed): THE PLAN-BINARY REFRESH IS SKIPPED WHEN ITS
+# INPUTS ARE UNCHANGED. The refresh stub writes a dep-info naming base.txt (a
+# tracked file) plus a binary, and counts its runs. #40 and #41 do not touch
+# base.txt: ONE refresh, the second candidate prints the skip. #42 edits
+# base.txt: the refresh runs again. Premise first: the stub's dep-info exists
+# and names the dep after the first run.
+scaffold arm40
+candidate arm40 1040-aaaa a40.txt A
+candidate arm40 1041-bbbb b40.txt B
+candidate arm40 1042-cccc base.txt changed
+cat > "$GH_PRS" <<JSON
+[{"number":40,"headRefName":"work/1040-aaaa","isDraft":false},
+ {"number":41,"headRefName":"work/1041-bbbb","isDraft":false},
+ {"number":42,"headRefName":"work/1042-cccc","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+exit 0
+GATE
+_d40="$TMP/arm40/tgt"; mkdir -p "$_d40"
+_r40="$TMP/arm40/refresh.count"; : > "$_r40"
+cat > "$TMP/arm40/refresh.sh" <<REFRESH
+#!/usr/bin/env bash
+echo run >> "$_r40"
+printf '%s: %s\n' "$_d40/plan" "$WORK_DIR/base.txt" > "$_d40/plan.d"
+echo built >> "$_d40/plan"
+REFRESH
+out40="$(TILLANDSIAS_LAND_QUEUE_PLAN_DEPINFO="$_d40/plan.d" TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH_STAMP="$_d40/stamp" \
+    PLAN_REFRESH_CMD="bash '$TMP/arm40/refresh.sh'" run_queue)"; rc40=$?
+n40="$(grep -c . "$_r40")"
+if ! grep -q "base.txt" "$_d40/plan.d" 2>/dev/null; then
+    bad "ARM 40 premise: the refresh stub never wrote a dep-info naming base.txt
+$out40"
+elif grep -q '^plan-refresh:skipped:inputs-unchanged:#41:' <<<"$out40" \
+    && ! grep -q '^plan-refresh:skipped:inputs-unchanged:#42:' <<<"$out40" \
+    && [ "$n40" -eq 2 ] && [ "$rc40" -eq 0 ] && [ "$(grep -c '^land:' <<<"$out40")" -eq 3 ]; then
+    ok "ARM 40: the plan refresh runs once for two candidates that leave its inputs alone, and again for one that edits an input (2152-lqrf)"
+else
+    bad "ARM 40: wanted 2 refreshes (#40, #42), #41 skipped, 3 landed, rc=0; got refreshes=$n40 rc=$rc40
+$out40"
+fi
+# ARM 40b, NEGATIVE CONTROL: no dep-info (the refresh writes none) means no key,
+# so EVERY candidate refreshes, as before this change.
+scaffold arm40b
+candidate arm40b 1043-dddd d40.txt D
+candidate arm40b 1044-eeee e40.txt E
+cat > "$GH_PRS" <<JSON
+[{"number":43,"headRefName":"work/1043-dddd","isDraft":false},
+ {"number":44,"headRefName":"work/1044-eeee","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+exit 0
+GATE
+_r40b="$TMP/arm40b/refresh.count"; : > "$_r40b"
+out40b="$(TILLANDSIAS_LAND_QUEUE_PLAN_DEPINFO="$TMP/arm40b/none.d" TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH_STAMP="$TMP/arm40b/stamp" \
+    PLAN_REFRESH_CMD="echo run >> '$_r40b'" run_queue)"
+if [ "$(grep -c . "$_r40b")" -eq 2 ] && ! grep -q '^plan-refresh:skipped' <<<"$out40b"; then
+    ok "ARM 40b (control): with no dep-info every candidate refreshes"
+else
+    bad "ARM 40b: wanted 2 refreshes and no skip; got $(grep -c . "$_r40b")
+$out40b"
+fi
+
 printf '\n'
 if [ "$fail" -eq 0 ]; then
     if [ "$skipped" -gt 0 ]; then

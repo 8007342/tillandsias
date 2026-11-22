@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-21: a shell-to-lua port blocked on the runtime's verdict prefixes.
+packets:
+  - packet_id: lua-verdict-emit-accepts-a-todo-prefix-so-fleet-deciders-can-port
+    order: "2169-tdop"
+    status: ready
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, lua-door, plan-crate]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/script_run.rs
+    title: "verdict.emit accepts a todo: prefix, so the fleet's todo-shaped deciders can port to Lua"
+    context: |
+      scripts/check-bare-metal-host-initialized.sh (offered as the shell-to-lua item for work/2162-bpqz)
+      prints exactly one line `todo:initialize-bare-metal-host:<component>:<cmd>` with rc 1, and
+      check-fleet-membership.sh reads it. The Lua runtime cannot produce that: verdict.emit
+      (script_run.rs ~404-425) accepts only ok:/skip:/refused:/blocked:/could-not-run:/violation:/degraded:/down:;
+      verdict.refused/blocked print their own word; out.line plus a verdict prints two lines; os.exit and io
+      writers are sandboxed out. Add `todo:` to the prefix list the way degraded:/down: were (1584-ik5v),
+      classified as refused for the exit code, check the pinned prefix tests, rebuild the plan binary.
+    exit_criteria:
+      - "A Lua script can verdict.emit('todo:...', 1) and stdout is exactly that one line with rc 1; the prefix-list pin tests pass."
+      - "check-bare-metal-host-initialized.sh then ports with byte-identical verdicts (separate row or the same PR)."
+    unscoreable: "the port's side-by-side parity is the measure"
+    provenance: "yoga port attempt 2026-11-21 (subagent stopped on the prefix list before writing)."
+    events:
+      - type: filed
+        ts: "2026-11-21T19:50:05Z"
+        host: yoga
+        summary: "filed"

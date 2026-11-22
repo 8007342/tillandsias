@@ -21,9 +21,9 @@ caveats:
 critical_path:
   - step: "wire-v2 definition, typed framing, and maintained runtime fixture pass or skip explicitly"
     phase: runtime
-    command: "scripts/test-vsock-handshake-wire-v2.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-vsock-handshake-wire-v2.lua 2>&1"
     timeout_ms: 180000
-    success_pattern: "(PASS|SKIP): wire-v2 vsock"
+    success_pattern: "^(ok|skip):vsock-handshake-wire-v2:"
 
 observability:
   traces:
@@ -36,4 +36,4 @@ observability:
 
 rollback:
   on_failure: "inspect WIRE_VERSION/spec drift first, then the maintained integration fixture and unprivileged loopback permissions"
-  command: "scripts/test-vsock-handshake-wire-v2.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-vsock-handshake-wire-v2.lua 2>&1"

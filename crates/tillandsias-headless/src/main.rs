@@ -9443,6 +9443,45 @@ fn build_nix_cache_run_args(entrypoint: &str, image: &str, host_port: u16) -> Ve
 /// cache is not degraded — it is inapplicable, and this returns Ok so the
 /// ForgeLaunch edge never turns nix into a launch requirement (the exact
 /// posture cycle-preflight takes for inference: a report, never a gate).
+/// The prep script, relative to a Tillandsias checkout root.
+const NIX_CACHE_SCRIPT: &str = "scripts/nix-cache-service.sh";
+
+/// ORDER 2118-u675 — the checkout whose `scripts/nix-cache-service.sh` prepares
+/// the nix cache, from configuration only: `TILLANDSIAS_ROOT`, then
+/// `[dev] checkout` in config.toml, then `<watch_path>/tillandsias` per scanner
+/// path. NEVER the process cwd. `Err` is the named skip line, carrying what to
+/// set; a configured path that is not a checkout is named as such, not skipped
+/// past silently.
+fn resolve_nix_cache_checkout(
+    env_root: Option<PathBuf>,
+    configured: Option<PathBuf>,
+    watch_paths: &[PathBuf],
+) -> Result<PathBuf, String> {
+    let usable = |p: &Path| checkout_root_is_valid(p) && p.join(NIX_CACHE_SCRIPT).is_file();
+    for (source, path) in [
+        ("TILLANDSIAS_ROOT", env_root),
+        ("[dev] checkout", configured),
+    ] {
+        if let Some(p) = path {
+            if usable(&p) {
+                return Ok(p);
+            }
+            return Err(format!(
+                "skip:nix-cache:checkout-invalid:{source}={} — it is not a Tillandsias checkout carrying {NIX_CACHE_SCRIPT}; fix the path or unset it",
+                p.display()
+            ));
+        }
+    }
+    for w in watch_paths {
+        let p = w.join("tillandsias");
+        if usable(&p) {
+            return Ok(p);
+        }
+    }
+    Err("skip:nix-cache:no-checkout — no Tillandsias checkout configured, so the enclave nix cache is not started; set `checkout = \"/path/to/tillandsias\"` under [dev] in ~/.config/tillandsias/config.toml (or TILLANDSIAS_ROOT) on a host that builds with nix"
+        .to_string())
+}
+
 pub(crate) fn ensure_nix_cache_running(debug: bool) -> Result<(), String> {
     // The drain gate and the R4-race lock — their ABSENCE was two of the four
     // defects 801-vm4p names ("no runtime_phase drain gate", unsupervised
@@ -9462,27 +9501,35 @@ pub(crate) fn ensure_nix_cache_running(debug: bool) -> Result<(), String> {
         return Ok(());
     }
 
-    // Host-side prep lives in the script (see the module comment). Resolved
-    // relative to the checkout: this is a dev-tier service, and an installed
-    // end-user binary with no checkout correctly lands in the skip below.
-    let script = std::path::Path::new("scripts/nix-cache-service.sh");
-    if !script.exists() {
-        if debug {
-            eprintln!("[tillandsias] nix cache skip: no prep script (not a dev checkout)");
+    // Host-side prep lives in the script (see the module comment). ORDER
+    // 2118-u675: the checkout comes from CONFIGURATION, never from cwd. It was
+    // `Path::new("scripts/nix-cache-service.sh")`, relative to the process cwd,
+    // so an installed tray (not started from a checkout) skipped SILENTLY on
+    // every launch and the cache was never live on the hosts where gates build.
+    // An unresolved checkout is now a NAMED skip printed on every ensure.
+    let cfg = tillandsias_core::config::load_global_config();
+    let checkout = match resolve_nix_cache_checkout(
+        std::env::var_os("TILLANDSIAS_ROOT").map(PathBuf::from),
+        cfg.dev.checkout.clone(),
+        &cfg.scanner.watch_paths,
+    ) {
+        Ok(dir) => dir,
+        Err(skip) => {
+            eprintln!("[tillandsias] {skip}");
+            return Ok(());
         }
-        return Ok(());
-    }
+    };
     let prep = Command::new("bash")
-        .arg(script)
+        .arg(checkout.join(NIX_CACHE_SCRIPT))
         .arg("prepare")
+        .current_dir(&checkout)
         .output()
         .map_err(|e| format!("nix-cache prepare failed to spawn: {e}"))?;
     let verdict = String::from_utf8_lossy(&prep.stdout);
     let verdict = verdict.trim().lines().last().unwrap_or("").to_string();
     if verdict.starts_with("skip:") {
-        if debug {
-            eprintln!("[tillandsias] nix cache {verdict}");
-        }
+        // 2118-u675: a skip is a visible, named state, not a debug whisper.
+        eprintln!("[tillandsias] nix cache {verdict}");
         return Ok(());
     }
     let Some(entrypoint) = verdict
@@ -26443,6 +26490,62 @@ mod tests {
         );
     }
 
+    /// A scratch Tillandsias checkout: VERSION, images/, and the prep script.
+    fn fake_nix_cache_checkout(dir: &Path) {
+        std::fs::create_dir_all(dir.join("images")).unwrap();
+        std::fs::create_dir_all(dir.join("scripts")).unwrap();
+        std::fs::write(dir.join("VERSION"), "0.0.0\n").unwrap();
+        std::fs::write(dir.join(NIX_CACHE_SCRIPT), "#!/bin/sh\n").unwrap();
+    }
+
+    // ORDER 2118-u675: the checkout comes from configuration, never from cwd.
+    #[test]
+    fn nix_cache_checkout_resolves_from_configuration_in_order_and_never_from_cwd() {
+        let tmp = tempfile::tempdir().unwrap();
+        let env_co = tmp.path().join("env-co");
+        let cfg_co = tmp.path().join("cfg-co");
+        let watch = tmp.path().join("src");
+        fake_nix_cache_checkout(&env_co);
+        fake_nix_cache_checkout(&cfg_co);
+        fake_nix_cache_checkout(&watch.join("tillandsias"));
+        let w = vec![watch.clone()];
+
+        // TILLANDSIAS_ROOT wins, then [dev] checkout, then <watch>/tillandsias.
+        assert_eq!(
+            resolve_nix_cache_checkout(Some(env_co.clone()), Some(cfg_co.clone()), &w),
+            Ok(env_co.clone())
+        );
+        assert_eq!(
+            resolve_nix_cache_checkout(None, Some(cfg_co.clone()), &w),
+            Ok(cfg_co.clone())
+        );
+        assert_eq!(
+            resolve_nix_cache_checkout(None, None, &w),
+            Ok(watch.join("tillandsias"))
+        );
+
+        // NEGATIVE CONTROL: nothing configured is a named skip. The resolver
+        // takes no cwd at all (the defect was a cwd-relative lookup), so a valid
+        // checkout as the process cwd cannot be picked up; changing cwd here
+        // would race the parallel test threads, so it is not exercised.
+        let none = resolve_nix_cache_checkout(None, None, &[]);
+        let skip = none.unwrap_err();
+        assert!(skip.starts_with("skip:nix-cache:no-checkout"), "{skip}");
+        assert!(
+            skip.contains("[dev]") && skip.contains("config.toml"),
+            "the skip names what to set: {skip}"
+        );
+
+        // A configured path that is not a checkout is NAMED, not skipped past.
+        let bogus = tmp.path().join("not-a-checkout");
+        std::fs::create_dir_all(&bogus).unwrap();
+        let bad = resolve_nix_cache_checkout(None, Some(bogus.clone()), &w).unwrap_err();
+        assert!(
+            bad.starts_with("skip:nix-cache:checkout-invalid:[dev] checkout="),
+            "{bad}"
+        );
+    }
+
     #[test]
     fn nix_cache_run_args_match_the_service_contract() {
         // ORDER 801-vm4p. Two launch paths exist for the nix cache — the
@@ -30159,10 +30262,16 @@ mod tests {
             .output_bounded(OperationKind::Inspect.default_budget())
             .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
             .unwrap_or_default();
+        // ORDER 2171-qimg: never another TEST's image. keepid-warm-test builds
+        // `FROM scratch` (no `true`, no /bin/sh) and is left behind when its run
+        // is killed between build and rmi; listed first, it made this test run
+        // `true` in a scratch image and red every gate on yoga with exit 127
+        // ("crun: exec"), a verdict about a stray image, not about the options.
         let images: Vec<&str> = images
             .lines()
             .map(str::trim)
             .filter(|l| !l.is_empty() && !l.contains("<none>"))
+            .filter(|l| !l.contains("-test:") && !l.contains("keepid-warm"))
             .collect();
         let forge = images.iter().find(|i| i.contains("tillandsias-forge"));
         let Some(image) = forge.or(images.first()) else {

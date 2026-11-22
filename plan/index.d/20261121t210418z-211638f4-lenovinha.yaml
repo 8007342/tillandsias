@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-credential-fixture-step-joins-the-host-lane-instead-of-running-exclusive
+    field: status
+    value: in_progress
+    ts: "2026-11-21T21:04:18Z"
+    host: lenovinha
+    story: build-speed-lenovinha
+
+events:
+  - packet_id: the-credential-fixture-step-joins-the-host-lane-instead-of-running-exclusive
+    event:
+      type: note
+      ts: "2026-11-21T21:04:18Z"
+      host: lenovinha
+      summary: |-
+        moving credential step into the host lane

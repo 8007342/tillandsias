@@ -87,6 +87,7 @@
 #       2 the working tree is dirty — this script rewrites HEAD and refuses to
 #         do that over uncommitted work
 #       3 another landing is in flight (the lock is held)
+#       4 held on a trunk red: hold:trunk-red:<test> (2118-tpmy); nobody evicted
 set -uo pipefail
 
 # THE REPOSITORY IS THE ONE YOU ARE STANDING IN, NOT THE ONE THIS SCRIPT LIVES
@@ -139,7 +140,15 @@ GATE="${TILLANDSIAS_LAND_QUEUE_GATE:-./build.sh --check}"
 export TILLANDSIAS_CARGO_INCREMENTAL="${TILLANDSIAS_CARGO_INCREMENTAL:-0}"
 # ORDER 1765-q7rg: the ~1-min decider door run on the merge result BEFORE the
 # ~21-min gate. Set to the empty string to disable (the fixture's default).
-PREFLIGHT="${TILLANDSIAS_LAND_QUEUE_PREFLIGHT-./build.sh --preflight}"
+#
+# ORDER 2152-lqrf (build speed, operator ruling 2026-11-21: a land takes
+# minutes): OFF BY DEFAULT. The door's roster is built FROM the gate's own steps
+# and deciders (build.sh _preflight_roster), so on every candidate the gate
+# passes it re-ran work the gate runs anyway — the duplicate preflight the
+# build-speed investigation measured. Its only gain was evicting a red ~20 min
+# earlier; admission (land-admit.sh, P6) is where a cheap early refusal now
+# lives. Set TILLANDSIAS_LAND_QUEUE_PREFLIGHT='./build.sh --preflight' to restore.
+PREFLIGHT="${TILLANDSIAS_LAND_QUEUE_PREFLIGHT-}"
 # ORDER 1992-lqpb: rebuild tillandsias-plan from the MERGE RESULT and let
 # check-plan-binary-current.sh install it, before the preflight and the gate.
 # A stale ~/.local/bin/tillandsias-plan otherwise failed fixtures inside the
@@ -148,6 +157,17 @@ PREFLIGHT="${TILLANDSIAS_LAND_QUEUE_PREFLIGHT-./build.sh --preflight}"
 # rebuild. A refresh that fails stops the run with no eviction. Set to the
 # empty string to disable (the fixture's default).
 PLAN_REFRESH="${TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH-cargo build -q --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh}"
+# ORDER 2152-lqrf (build speed): THE REFRESH IS SKIPPED WHEN ITS INPUTS DID NOT
+# CHANGE. The inputs are what CARGO says they are: the dep-info file it writes
+# beside the binary lists every source the build read, out-of-crate
+# include_str! files included, so the key cannot drift from the build the way a
+# hand-kept path list would. Key = git blob ids of those files + Cargo.lock +
+# rust-toolchain.toml + the binary itself, stamped after each successful
+# refresh. A missing dep-info, binary or listed file means no key, and the
+# refresh runs as before. Not covered: RUSTFLAGS or toolchain installs changing
+# under an unchanged rust-toolchain.toml.
+PLAN_DEPINFO="${TILLANDSIAS_LAND_QUEUE_PLAN_DEPINFO:-${CARGO_TARGET_DIR:-target}/release/tillandsias-plan.d}"
+PLAN_REFRESH_STAMP="${TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH_STAMP:-${CARGO_TARGET_DIR:-target}/land-queue-plan-refresh.key}"
 # ORDER 2143-z5uj, operator ruling 2026-11-20: a plan-ledger-only candidate
 # lands on the plan-lane checks with no build-check. 1 (default) is on; 0 sends
 # every candidate through the full gate. PLAN_LANE_CHECK is what the plan lane
@@ -155,6 +175,19 @@ PLAN_REFRESH="${TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH-cargo build -q --release -p 
 # validates the ledger, exactly as the plan-only push lane does.
 PLAN_ONLY_LANE="${TILLANDSIAS_LAND_QUEUE_PLAN_ONLY_LANE:-1}"
 PLAN_LANE_CHECK="${TILLANDSIAS_LAND_QUEUE_PLAN_LANE_CHECK-\"\$PLAN\" check}"
+# ORDER 2118-tpmy (operator 2026-11-20, P11): THE HOST DOOR, asked before every
+# candidate. could-not-run:host:<cause> is about THIS host, so nobody is evicted
+# and the run goes on. A missing router sidecar is staged first (the gate's own
+# preamble stages it, so a fresh queue checkout would otherwise never pass).
+# Set either to the empty string to disable (the fixture's default).
+HOST_DOOR="${TILLANDSIAS_LAND_QUEUE_HOST_DOOR-\"\$PLAN\" script run scripts/lua/land-queue-host-door.lua}"
+SIDECAR_STAGE="${TILLANDSIAS_LAND_QUEUE_SIDECAR_STAGE-[ -e images/router/tillandsias-router-sidecar ] || bash scripts/build-sidecar.sh}"
+# ORDER 2118-tpmy: before an evicted:<test> red evicts, the bare trunk is gated
+# once; the same failing test there is hold:trunk-red:<test>: the queue holds
+# and reports, nobody is evicted. Remembered per trunk base (bounded: one trunk
+# gate per base). 0 disables.
+TRUNK_RED_CHECK="${TILLANDSIAS_LAND_QUEUE_TRUNK_RED_CHECK:-1}"
+TRUNK_RED_MEMO="${TILLANDSIAS_LAND_QUEUE_TRUNK_RED_MEMO:-$ROOT/.git/tillandsias-land-queue-trunk-red}"
 REMOTE="${TILLANDSIAS_LAND_QUEUE_REMOTE:-origin}"
 TRUNK="${TILLANDSIAS_TRUNK_BRANCH:-linux-next}"
 LOCKDIR="${TILLANDSIAS_LAND_QUEUE_LOCK:-$ROOT/.git/tillandsias-land-queue.lock}"
@@ -175,7 +208,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-landed=0; evicted=0; requeued=0; skipped=0
+landed=0; evicted=0; requeued=0; skipped=0; _held=0  # the 2118-tpmy trunk-red FLAG (0|1); the freeze check's path list is _frz_paths (2152-lqrf: one name for both erased a hold)
 
 say() { printf '%s\n' "$*"; }
 
@@ -259,6 +292,34 @@ gate_failed_comment() {
 # classifies as plan-ledger (a move that cannot invalidate a gate verdict). Sets
 # _delta_classes. An empty or unreadable answer is NOT plan-only (re-queue).
 # Shared by the first adopt and the post-refusal push retry (1839-fuvg).
+# plan_refresh_key — the content key of the plan binary's build inputs, or
+# nothing (rc 1) when it cannot be formed. See PLAN_DEPINFO above (2152-lqrf).
+plan_refresh_key() {
+    local d="$PLAN_DEPINFO" bin deps f
+    bin="${d%.d}"
+    [ -f "$d" ] && [ -f "$bin" ] || return 1
+    # Make syntax: "<target>: dep dep \<newline> dep"; a space inside a path is
+    # "\ ". Join continuations, drop the target, split on unescaped spaces.
+    # One awk for BSD and GNU alike (no sed \n or \x escapes).
+    deps="$(awk '{ l = l $0; if (sub(/\\$/, "", l)) { l = l " "; next }; exit }
+        END { sub(/^[^:]*: */, "", l); gsub(/\\ /, "\037", l); n = split(l, a, " ")
+              for (i = 1; i <= n; i++) { gsub("\037", " ", a[i]); print a[i] } }' "$d")"
+    [ -n "$deps" ] || return 1
+    {
+        while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            # A build script's rerun-if-changed DIRECTORY is listed as the dir:
+            # key every file under it (sorted, so the order is stable).
+            if [ -d "$f" ]; then find "$f" -type f 2>/dev/null | LC_ALL=C sort; continue; fi
+            [ -f "$f" ] || return 1
+            printf '%s\n' "$f"
+        done <<< "$deps"
+        for f in Cargo.lock rust-toolchain.toml "$bin"; do [ -f "$f" ] && printf '%s\n' "$f"; done
+    } > "$_RUNDIR/plan-refresh-inputs" || return 1
+    git hash-object --stdin-paths < "$_RUNDIR/plan-refresh-inputs" 2>/dev/null \
+        | git hash-object --stdin 2>/dev/null
+}
+
 delta_plan_only() {
     local _c
     _delta_classes="$(git diff --name-only "$1" "$2" 2>/dev/null \
@@ -591,16 +652,16 @@ This is the second identical conflict at this unchanged head (\`${head_sha:0:9}\
     # paths the freeze exempts (ledger, docs, skills, cheatsheets) still lands —
     # that is how coordination keeps moving during a cut. HOLD is not EVICT: the
     # candidate is fine, the branch is closed; it lands after the freeze clears.
-    _held="$(freeze_held_paths "$base_sha" "$merge_sha" | head -n 1)"
-    if [ -n "$_held" ]; then
+    _frz_paths="$(freeze_held_paths "$base_sha" "$merge_sha" | head -n 1)"
+    if [ -n "$_frz_paths" ]; then
         _frc=0; _fm="$(freeze_markers "$REMOTE" "$TRUNK")" || _frc=$?
         if [ "$_frc" -ne 0 ]; then
-            say "hold:land-queue:$num:freeze-unknown — git ls-remote $REMOTE failed, and this candidate carries held code ($_held); not gating into a branch whose freeze state is unknown"
+            say "hold:land-queue:$num:freeze-unknown — git ls-remote $REMOTE failed, and this candidate carries held code ($_frz_paths); not gating into a branch whose freeze state is unknown"
             skipped=$((skipped + 1))
             continue
         fi
         if [ -n "$_fm" ]; then
-            say "hold:land-queue:$num:frozen:$(printf '%s\n' "$_fm" | head -n 1 | cut -f2) — carries held code ($_held); it lands after the freeze clears"
+            say "hold:land-queue:$num:frozen:$(printf '%s\n' "$_fm" | head -n 1 | cut -f2) — carries held code ($_frz_paths); it lands after the freeze clears"
             skipped=$((skipped + 1))
             continue
         fi
@@ -640,6 +701,15 @@ This is the second identical conflict at this unchanged head (\`${head_sha:0:9}\
         # violation:carried:<backlog>:<silent|waiver-not-a-trailer>
         _cb="$(printf '%s' "$_cverdict" | cut -d: -f3)"
         _ck="$(printf '%s' "$_cverdict" | cut -d: -f4)"
+        # ORDER 2152-t5p9: refused:carried:paid-but-taken-by:<ref>:<item> has no
+        # backlog in field 3 — the guard keys waivers by BACKLOG name, so take it
+        # from the guard's own waiver line, never from the verdict.
+        if [ "$_cb" = paid-but-taken-by ]; then
+            _ck=paid-but-taken
+            _cb="$(printf '%s\n' "$_cwaiver" | awk '{print $2}')"
+            [ -n "$_cb" ] || _cb='<backlog>'
+            [ -n "$_cwaiver" ] || _cwaiver="Carried-Waiver: <backlog> conflict:<item> (#<pr>)"
+        fi
         _cdue="$(printf '%s\n' "$_carried" | grep "^Carried: $_cb due " | head -n 1 | sed "s/^Carried: $_cb due //")"
         say "evict:land-queue:$num:carried-$_ck:$_cb"
         say "  add to the LAST paragraph of a commit on $head: ${_cwaiver:-Carried-Waiver: $_cb <reason>}  (or port ${_cdue:-one item})"
@@ -737,13 +807,46 @@ $_nlwhy
         _lane=plan-only
         say "land-queue: #$num lane=plan-only — every changed path is plan-ledger; plan-lane checks only, no build-check"
     fi
+    # ── ORDER 2118-tpmy: THE HOST DOOR ──────────────────────────────────────
+    if [ -n "$HOST_DOOR" ] && [ "$_lane" = full ]; then
+        if [ -n "$SIDECAR_STAGE" ]; then
+            ( eval "$SIDECAR_STAGE" ) < /dev/null > "$_RUNDIR/pr-$num-sidecar.log" 2>&1 || true
+        fi
+        _hd="$( ( eval "$HOST_DOOR" ) < /dev/null 2>/dev/null | grep -m 1 -E '^(ok:host-door|could-not-run:host:)' )"
+        case "$_hd" in
+            ok:host-door*) ;;
+            could-not-run:host:*)
+                say "$_hd — #$num is not evicted for this host's state; next candidate"
+                skipped=$((skipped + 1))
+                continue ;;
+            *)
+                say "could-not-run:host:door-did-not-answer — #$num is not evicted; next candidate"
+                skipped=$((skipped + 1))
+                continue ;;
+        esac
+    fi
     # ── ORDER 1992-lqpb: A CURRENT PLAN BINARY BEFORE ANY DOOR ───────────────
     # The binary's state is this HOST's, never the candidate's: a refresh that
     # cannot make it current stops the run and evicts nobody.
+    # ORDER 2152-lqrf: and it is skipped when cargo's own input list hashes the
+    # same as at the last successful refresh (see PLAN_DEPINFO).
+    _rkey=""
     if [ -n "$PLAN_REFRESH" ] && [ "$_lane" = full ]; then
+        _rkey="$(plan_refresh_key)" || _rkey=""
+    fi
+    if [ -n "$PLAN_REFRESH" ] && [ "$_lane" = full ] && [ -n "$_rkey" ] \
+        && [ "$_rkey" = "$(cat "$PLAN_REFRESH_STAMP" 2>/dev/null)" ]; then
+        say "plan-refresh:skipped:inputs-unchanged:#$num:${_rkey:0:12}"
+    elif [ -n "$PLAN_REFRESH" ] && [ "$_lane" = full ]; then
         _rlog="$_RUNDIR/pr-$num-plan-refresh.log"
         ( eval "$PLAN_REFRESH" ) < /dev/null > "$_rlog" 2>&1
         _rrc=$?
+        # Stamp only a SUCCESSFUL refresh, keyed AFTER it (the build rewrote the
+        # dep-info and the binary). A failed stamp write only costs a rebuild.
+        if [ "$_rrc" -eq 0 ] && _rkey="$(plan_refresh_key)"; then
+            mkdir -p "$(dirname "$PLAN_REFRESH_STAMP")" 2>/dev/null
+            printf '%s\n' "$_rkey" > "$PLAN_REFRESH_STAMP" 2>/dev/null || true
+        fi
         if [ "$_rrc" -ne 0 ]; then
             # ORDER 2143-z5uj: SKIP THIS CANDIDATE, DO NOT END THE RUN. The refresh
             # builds from the merge of THIS candidate, so another candidate's merge
@@ -818,8 +921,38 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
                     say "flaky:$_flaky_test — #$num red then green on the identical tree ${merge_sha:0:9}; landing"
                     mv -f "$_glog" "$_glog.first-red"
                 else
-                    say "evicted:$_flaky_test — #$num red twice on the identical tree ${merge_sha:0:9}"
                     mv -f "$_glog.rerun" "$_glog"
+                    # ORDER 2118-tpmy: RED TWICE. Is it the trunk's red? The bare
+                    # trunk is gated once per base; the same failing test there
+                    # holds the queue instead of evicting a candidate for it.
+                    _trunk_red=""
+                    if [ "$TRUNK_RED_CHECK" = 1 ]; then
+                        _memo="$(cat "$TRUNK_RED_MEMO" 2>/dev/null)"
+                        if [ "${_memo%% *}" = "$base_sha" ]; then
+                            _tr_verdict="${_memo#* }"
+                        else
+                            git checkout -q --detach "$base_sha" 2>/dev/null
+                            ( eval "$_gcmd" ) < /dev/null > "$_glog.trunk" 2>&1
+                            _trc=$?
+                            git checkout -q --detach "$merge_sha" 2>/dev/null
+                            _tr_verdict="green"
+                            if [ "$_trc" -ne 0 ] \
+                               && grep -E '^[[:space:]]*(FAIL|\[FAIL\]|refused:|violation:|blocked:)' "$_glog.trunk" 2>/dev/null \
+                                  | grep -qF -- "$_flaky_test"; then
+                                _tr_verdict="red $_flaky_test"
+                            fi
+                            printf '%s %s\n' "$base_sha" "$_tr_verdict" > "$TRUNK_RED_MEMO" 2>/dev/null || true
+                            rm -f "$_glog.trunk"
+                        fi
+                        [ "$_tr_verdict" = "red $_flaky_test" ] && _trunk_red="$_flaky_test"
+                    fi
+                    if [ -n "$_trunk_red" ]; then
+                        say "hold:trunk-red:$_trunk_red — trunk ${base_sha:0:9} fails it too; #$num is not evicted; the queue holds until trunk is fixed (full log: $_glog)"
+                        rm -f "$_glog.rerun"
+                        _held=1
+                        break 2
+                    fi
+                    say "evicted:$_flaky_test — #$num red twice on the identical tree ${merge_sha:0:9}"
                 fi
                 rm -f "$_glog.rerun"
             fi
@@ -912,11 +1045,11 @@ Full gate log kept on the landing host at \`$_glog\`.$(evict_marker "$num" "$hea
     # window. The hook re-asks at push on a hooked host; the tool re-asks here
     # so the answer does not depend on which host runs the queue. Recomputed
     # from the CURRENT base, because an adopt above may have moved it.
-    _held="$(freeze_held_paths "$base_sha" "$merge_sha" | head -n 1)"
-    if [ -n "$_held" ]; then
+    _frz_paths="$(freeze_held_paths "$base_sha" "$merge_sha" | head -n 1)"
+    if [ -n "$_frz_paths" ]; then
         _frc=0; _fm="$(freeze_markers "$REMOTE" "$TRUNK")" || _frc=$?
         if [ "$_frc" -ne 0 ] || [ -n "$_fm" ]; then
-            say "requeue:land-queue:$num:frozen-mid-gate:$( [ "$_frc" -ne 0 ] && echo "freeze-unknown" || printf '%s\n' "$_fm" | head -n 1 | cut -f2) — the gate was green but $TRUNK froze while it ran and this carries held code ($_held); nothing was pushed"
+            say "requeue:land-queue:$num:frozen-mid-gate:$( [ "$_frc" -ne 0 ] && echo "freeze-unknown" || printf '%s\n' "$_fm" | head -n 1 | cut -f2) — the gate was green but $TRUNK froze while it ran and this carries held code ($_frz_paths); nothing was pushed"
             requeued=$((requeued + 1))
             continue
         fi
@@ -965,5 +1098,9 @@ The queue will re-gate on its next pass."
 done
 done
 
+if [ "$_held" -eq 1 ]; then
+    say "hold:land-queue:$_n landed=$landed evicted=$evicted requeued=$requeued skipped=$skipped — held on a trunk red (2118-tpmy)"
+    exit 4
+fi
 say "ok:land-queue:$_n landed=$landed evicted=$evicted requeued=$requeued skipped=$skipped"
 exit 0

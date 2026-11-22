@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-21: build-speed packet 8 follow-up (the 0-compile hunt).
+packets:
+  - packet_id: build-image-restages-the-forge-build-context-only-when-it-differs
+    order: "2172-stgc"
+    status: in_progress
+    kind: perf
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, gate, cargo, fixture]
+    estimated_hours: 1
+    owned_files:
+      - scripts/build-image.sh
+    title: "build-image.sh restages the forge build context only when it differs"
+    context: |
+      After #1278's precise touch a docs-only commit still compiled 7 units (embed, headless, browser-mcp).
+      Cause, caught: test-build-image-installed-version-alias.sh (gate step 747-knbp) drives build-image.sh
+      forge against the REAL checkout, and build-image.sh rm -rf + cp'd cheatsheets, cheatsheet-sources,
+      skills and research under images/default every run. Recreating them bumps images/default's mtime;
+      tillandsias-embed watches images/ recursively, so the NEXT gate rebuilt embed and its dependants. Now
+      each is restaged only when `diff -rq` against its source differs. Measured: the fixture alone moved
+      images/default's mtime 12:48:36 -> 12:58:37 before; with the fix it leaves it unchanged, and a planted
+      stale file in the staged skills/ is still restaged away.
+    exit_criteria:
+      - "Two consecutive gates on one checkout around a docs-only commit show 0 Compiling lines in the second."
+      - "The 747-knbp fixture leaves images/default's mtime unchanged; a stale staged copy is still restaged."
+    unscoreable: "Compiling-line counts across two gates are the measure"
+    provenance: "yoga 0-compile hunt for #1278, 2026-11-21."
+    events:
+      - type: filed
+        ts: "2026-11-21T21:00:33Z"
+        host: yoga
+        summary: "filed, claimed and fixed"

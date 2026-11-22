@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # @trace order:1059-pb2j
 #
-# Fixture for check-litmus-mutation-arms-mutate.sh.
+# Fixture for scripts/lua/check-litmus-mutation-arms-mutate.lua (ported from the .sh).
 #
 # ARM 1 IS THE REAL POSITIVE CONTROL: the actual pre-fix text of
 # litmus-lww-channel-fields-alias.yaml, read out of git history at 5083b2649^,
@@ -19,7 +19,12 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 2
-GUARD="$ROOT/scripts/check-litmus-mutation-arms-mutate.sh"
+GUARD="$ROOT/scripts/lua/check-litmus-mutation-arms-mutate.lua"   # ported (2166-yq4w); runs on `script run`
+# shellcheck source=scripts/plan-binary-probe.sh
+. "$ROOT/scripts/plan-binary-probe.sh"
+PLAN="$(resolve_plan_binary 2>/dev/null)" || PLAN=""
+case "$PLAN" in ./*) PLAN="$ROOT/${PLAN#./}" ;; esac
+[ -n "$PLAN" ] || { echo "could-not-run:litmus-mutation-arm-guard:no-plan-binary"; exit 3; }
 fail=0; pass=0
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
@@ -28,7 +33,7 @@ W="$(mktemp -d "${TMPDIR:-/tmp}/mutation-arm-guard.XXXXXX")"
 trap 'rm -rf "$W"' EXIT INT TERM
 
 _verdict() { # dir -> exit code, output discarded
-    bash "$GUARD" "$1" >/dev/null 2>&1
+    "$PLAN" script run "$GUARD" -- "$1" >/dev/null 2>&1
     echo $?
 }
 

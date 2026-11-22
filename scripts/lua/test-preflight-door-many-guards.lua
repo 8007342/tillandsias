@@ -68,7 +68,14 @@ for i = 1, N do
 end
 fs.write(REL .. "/roster", table.concat(roster, "\n") .. "\n")
 local r = proc.run({ argv = { "/bin/bash", "./build.sh", "--preflight" }, cwd = ROOT, timeout_ms = 600000,
-    env = { TILLANDSIAS_PREFLIGHT_ROSTER_FILE = ROOT .. "/" .. REL .. "/roster" } })
+    -- ORDER 2176-dort (priority:build-speed): the nested door's logs go into
+    -- this run's own scratch dir, never the checkout's .cache/metrics, so the
+    -- step holds no timing lane and runs in the gate pool. The replaced roster
+    -- also skips the door's origin fetch (build.sh), its one .git write.
+    env = { TILLANDSIAS_PREFLIGHT_ROSTER_FILE = ROOT .. "/" .. REL .. "/roster",
+            TILLANDSIAS_TIMING_LOG = ROOT .. "/" .. REL .. "/tillandsias-timing.jsonl",
+            TILLANDSIAS_EXPERT_USAGE_LOG = ROOT .. "/" .. REL .. "/forge-expert-usage.jsonl",
+            LITMUS_STEP_TIMING_LOG = ROOT .. "/" .. REL .. "/litmus-step-timing.jsonl" } })
 local outp = (r.stdout or "") .. "\n" .. (r.stderr or "")
 local v = outp:match("(ok:preflight:ran=%d+[^\n]*)") or outp:match("((%a+):preflight:ran=[^\n]*)") or "(no verdict)"
 arm("1 MANY the real door over " .. N .. " trivial guards exits 0 under /bin/bash",
