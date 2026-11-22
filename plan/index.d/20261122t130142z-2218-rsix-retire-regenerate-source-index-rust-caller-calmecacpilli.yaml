@@ -22,6 +22,7 @@ packets:
     exit_criteria:
       - "tillandsias-policy no longer names regenerate-source-index.sh; cargo test -p tillandsias-policy passes."
       - "scripts/regenerate-source-index.sh is deleted and git grep finds no live caller."
+    unscoreable: "unpinnable-until-the-guard-exists: the implementer names the fixture with the change"
     next_action: "Pick up."
     provenance: "macuahuitl-fedora 2026-11-22: file a row to retire the Rust caller first."
     events:

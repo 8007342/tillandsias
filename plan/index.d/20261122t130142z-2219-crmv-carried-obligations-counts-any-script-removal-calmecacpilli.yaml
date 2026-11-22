@@ -23,6 +23,7 @@ packets:
     exit_criteria:
       - "A change whose only shell effect is deleting a non-population scripts/*.sh passes check-carried-obligations --landing with no waiver."
       - "A change adding a scripts/*.sh still counts as before (the counter cannot be paid by renaming)."
+    unscoreable: "unpinnable-until-the-guard-exists: the implementer names the fixture with the change"
     next_action: "Pick up."
     provenance: "macuahuitl-fedora 2026-11-22: uncounted non-test wrappers need a waiver today, which is friction."
     events:
