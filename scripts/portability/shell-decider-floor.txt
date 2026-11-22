@@ -252,7 +252,6 @@ scripts/test-git-mirror-vault-agent-auto-auth.sh
 scripts/test-github-token-auto-rotation.sh
 scripts/test-github-token-rotation-entry-points.sh
 scripts/test-groundtruth-corpus-declaration.sh
-scripts/test-groundtruth-regime-fails-closed.sh
 scripts/test-guest-binaries-nix-lane.sh
 scripts/test-guest-crashloop-detection.sh
 scripts/test-guest-staging-refuses-a-wireless-binary.sh
@@ -294,7 +293,6 @@ scripts/test-json-get-help-names-its-subset.sh
 scripts/test-json-query-jq-parity.sh
 scripts/test-land-adopts-valid-stamp.sh
 scripts/test-land-affordance.sh
-scripts/test-land-auth-retry.sh
 scripts/test-land-gate-refusal-names-its-step.sh
 scripts/test-land-merges-trunk.sh
 scripts/test-land-notice-names-unrun-litmus.sh
