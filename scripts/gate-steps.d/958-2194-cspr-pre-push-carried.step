@@ -11,3 +11,4 @@ STEP_OK="pre-push carried-silent refusal holds"
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
 STEP_READS="scripts/test-pre-push-refuses-carried-silent.sh scripts/hooks/pre-push-local-gate.sh scripts/plan-binary-probe.sh"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-21 darwin ok:pre-push-refuses-carried-silent:4"
