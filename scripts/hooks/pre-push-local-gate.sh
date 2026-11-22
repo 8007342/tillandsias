@@ -1319,7 +1319,10 @@ attempt_plan_only_lane() {
             # advice — and only because it has been DIAGNOSED rather than
             # guessed. The reason travels with the verb, or it reads like the
             # rm-the-ledger advice this fleet refused twice today.
-            if [[ -n "$_ctd" && "${_fresher#$_ctd}" != "$_fresher" ]]; then
+            # 2068-9789: only when the RESOLVED copy lies OUTSIDE the redirected
+            # target dir. On yolanda both sat under $CARGO_TARGET_DIR, and the
+            # hint called a copy orphaned that every build still writes.
+            if [[ -n "$_ctd" && "${_fresher#$_ctd}" != "$_fresher" && "${plan_bin#$_ctd}" == "$plan_bin" ]]; then
                 echo "  The resolved copy is ORPHANED: CARGO_TARGET_DIR is redirected to" >&2
                 echo "  $_ctd, so no build writes $plan_bin any more and rebuilding cannot" >&2
                 echo "  refresh it in place. Removing it is safe for that reason, not merely to" >&2
