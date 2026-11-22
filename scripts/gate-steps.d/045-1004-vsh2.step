@@ -27,3 +27,6 @@ STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:cmdkey-predicate:2"
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
 STEP_READS="scripts/test-cmdkey-predicate-discriminates.sh skills/smoke-curl-install-and-test-e2e/SKILL.md"
+# ORDER 2184-sinp: DECLARED INPUTS (2118-tnut grammar). The one repo file
+# the script reads is the smoke runbook whose predicate it extracts.
+STEP_INPUTS="path:skills/smoke-curl-install-and-test-e2e/SKILL.md"

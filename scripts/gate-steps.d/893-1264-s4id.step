@@ -15,3 +15,8 @@ STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-16 darwin ok:push-capability:1
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
 STEP_READS="images/default/lib-push-capability.sh scripts/lua/test-push-capability.lua"
+# ORDER 2184-sinp: DECLARED INPUTS (2118-tnut grammar). The fixture sources
+# images/default/lib-push-capability.sh with stubbed commands, and runs on the
+# plan binary's Lua runtime, so the runtime (rust, as 375-1201-hsf9 declares
+# it) is an input too. It reads no other repo file.
+STEP_INPUTS="rust path:images/default/lib-push-capability.sh"
