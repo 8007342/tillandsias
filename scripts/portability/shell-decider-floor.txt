@@ -360,7 +360,6 @@ scripts/test-no-stale-base-revert.sh
 scripts/test-nvidia-cdi-stale-hostpath.sh
 scripts/test-opencode-entrypoint-prompt.sh
 scripts/test-opencode-render-probe.sh
-scripts/test-opencode-tool-start-follower.sh
 scripts/test-opencode-vault-auth-content.sh
 scripts/test-openspec-pin.sh
 scripts/test-orchestrate-enclave.sh
