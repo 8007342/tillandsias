@@ -18,5 +18,5 @@ STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   CONTROL: the strict port 3128
 STEP_READS="images/git/git-credential-tillandsias.sh images/proxy/squid.conf scripts/test-credential-and-proxy-confinement.sh"
 # ORDER 2184-sinp: DECLARED INPUTS (2118-tnut grammar). The script reads
 # exactly two repo files (the git credential helper and the proxy config) and
-# runs nothing else from the tree.
+# runs nothing else from the tree. An ATIME TRACE of a real run agrees.
 STEP_INPUTS="path:images/git/git-credential-tillandsias.sh path:images/proxy/squid.conf"

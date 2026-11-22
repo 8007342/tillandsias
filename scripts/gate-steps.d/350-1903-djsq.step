@@ -34,4 +34,10 @@ STEP_READS="scripts/test-keyring-fixtures-use-a-private-bus.sh crates/tillandsia
 # constant. None runs cargo or the plan binary; the rest is live host state
 # (gh, keyring, bus), which no path can name. The step script, this file and
 # the gate deciders are added by build.sh.
-STEP_INPUTS="path:scripts/test-support/private-session-bus.sh path:scripts/test-check-credential-channel.sh path:scripts/test-credential-verdict-script.sh path:scripts/test-clear-vault-credentials-partial-is-nonzero.sh path:scripts/test-clear-vault-host-credentials.sh path:scripts/test-credential-channel-affordances.sh path:scripts/test-credential-channel-names-a-locked-keyring.sh path:scripts/test-credential-channel-survives-a-killed-probe.sh path:scripts/test-credential-cold-state-probe.sh path:scripts/check-credential-channel.sh path:scripts/clear-vault-host-credentials.sh path:scripts/probe-credential-cold-state.sh path:scripts/check-refusal-affordance-added.sh path:crates/tillandsias-headless/src/remote_projects.rs path:crates/tillandsias-headless/src/vault_bootstrap.rs"
+# ATIME TRACE of a real run (every tracked file's atime backdated, the step
+# run, the read set listed; relatime updates an atime older than 24 h): it
+# also reads 311 files under scripts/, all *.sh, because the affordance
+# auditor's --audit scans the whole tree. The fixture keeps only
+# check-credential-channel.sh's lines, but a file that breaks the scan would
+# still change the answer, so every scripts/*.sh is declared.
+STEP_INPUTS="path:scripts/*.sh path:scripts/test-support/private-session-bus.sh path:scripts/test-check-credential-channel.sh path:scripts/test-credential-verdict-script.sh path:scripts/test-clear-vault-credentials-partial-is-nonzero.sh path:scripts/test-clear-vault-host-credentials.sh path:scripts/test-credential-channel-affordances.sh path:scripts/test-credential-channel-names-a-locked-keyring.sh path:scripts/test-credential-channel-survives-a-killed-probe.sh path:scripts/test-credential-cold-state-probe.sh path:scripts/check-credential-channel.sh path:scripts/clear-vault-host-credentials.sh path:scripts/probe-credential-cold-state.sh path:scripts/check-refusal-affordance-added.sh path:crates/tillandsias-headless/src/remote_projects.rs path:crates/tillandsias-headless/src/vault_bootstrap.rs"

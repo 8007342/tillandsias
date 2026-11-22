@@ -18,5 +18,7 @@ STEP_READS="images/default/lib-push-capability.sh scripts/lua/test-push-capabili
 # ORDER 2184-sinp: DECLARED INPUTS (2118-tnut grammar). The fixture sources
 # images/default/lib-push-capability.sh with stubbed commands, and runs on the
 # plan binary's Lua runtime, so the runtime (rust, as 375-1201-hsf9 declares
-# it) is an input too. It reads no other repo file.
-STEP_INPUTS="rust path:images/default/lib-push-capability.sh"
+# it) is an input too. An ATIME TRACE of a real run found the runtime also
+# reads .tillandsias/command-policies.yaml and branch-discipline.yaml (the
+# proc.run policy) and .gitignore; nothing else.
+STEP_INPUTS="rust path:images/default/lib-push-capability.sh path:.tillandsias/command-policies.yaml path:.tillandsias/branch-discipline.yaml path:.gitignore"
