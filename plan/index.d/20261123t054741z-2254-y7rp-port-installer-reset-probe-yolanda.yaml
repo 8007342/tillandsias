@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed and taken by yolanda at macuahuitl-fedora's direction.
+packets:
+  - packet_id: port-installer-reset-probe-fixture-to-lua
+    order: 2254-y7rp
+    status: in_progress
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [build-speed, lua, msys]
+    estimated_hours: 1
+    title: "Port scripts/test-installer-reset-probe.sh (gate step 570) to Lua on common.fixture; delete the .sh and repoint the step and floors"
+    context: |
+      The fixture runs the installer's reset probe in PowerShell against .cmd stubs, so only a Windows host
+      can prove parity; lenovinha screened it out of 2239-crf7 for that reason and the coordinator routed it here.
+    exit_criteria:
+      - "scripts/test-installer-reset-probe.sh is deleted and scripts/lua/test-installer-reset-probe.lua carries markers check and arms A-D"
+      - "mutant parity on msys: each planted probe defect the .sh caught reds the same arms in the Lua"
+      - "step 570 and the portability floors point at the Lua; a host without PowerShell or cmd.exe still skips by name"
+    unscoreable: "unpinnable-until-the-port-lands: the deleted file is the deliverable."
+    next_action: "Port, run mutant parity against the .sh, repoint step 570."
+    provenance: coordinator direction; filed by yolanda.
+    related: [2239-crf7, 1449-4qqu, 1565-qtuk, 2246-fkea]
+    events:
+      - {type: filed, ts: '2026-11-23T05:47:41Z', host: yolanda, summary: installer reset probe port filed and claimed}
