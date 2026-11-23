@@ -5,6 +5,9 @@
 # 2026-09-20. A front door is a thing people run instead of thinking, so every
 # way it can lie has to be pinned.
 set -uo pipefail
+# 2275-fcpy: the doors below are scratch doors; they neither read nor write this
+# host's bench record.
+export TILLANDSIAS_PREFLIGHT_BENCH=off
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || exit 1
 # ORDER 1516-wru4: NEVER PLANT IN THE LIVE CHECKOUT. The arms below plant
 # guards and gate steps and append to build.sh; run in place, a concurrent gate

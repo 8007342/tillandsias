@@ -834,6 +834,93 @@ _pf_budget() {
     esac
 }
 
+# ORDER 2272-cuxh. WHERE THE DOOR WAS WHEN ITS BUDGET RAN OUT, and how far past
+# it ran. The time is the budget itself, so the reporter's POSITION is what is
+# kept: the first roster guard it was still on. Sets _PF_REACHED once.
+_pf_note_budget() {  # $1 = elapsed s, $2 = roster position, $3 = guard
+    [ -z "${_PF_REACHED:-}" ] || return 0
+    [ "$1" -lt "$_PF_BUDGET" ] || _PF_REACHED="$2:${3##*/}"
+}
+# tail = seconds past the budget (0 inside it). A budget crossed after the last
+# guard was reported (the sweep) reads after-roster, never "never".
+_pf_tail_fields() {  # $1 = wall s; prints the two summary fields
+    local _t=$(( $1 - _PF_BUDGET ))
+    if [ "$_t" -le 0 ]; then
+        printf 'budget-reached-at=never tail=0s'
+    else
+        printf 'budget-reached-at=%s tail=%ss' "${_PF_REACHED:-after-roster}" "$_t"
+    fi
+}
+
+# ORDER 2275-fcpy. THE BENCH. A mid-tier host ran 39 guards to their 5 s deadline
+# on every door and threw the answer away: ~52 s of a 149 s door (lenovinha, six
+# idle doors, 2026-11-23). A guard that outlived its deadline on TWO doors in a
+# row, with the same content, is not started here; it is NAMED with the bound
+# and its date, counted benched=, and counted as unanswered (partial:, never
+# ok:), as the deadline skip it replaces was. Retried when its own file changes,
+# after 24 h, under a longer deadline, or with --full. A guard that finishes is
+# forgotten, so a fast host benches nothing.
+# ADVISORY ONLY: no file, a corrupt one, another host's, an unwritable one: every
+# guard starts, and nothing here can refuse. One file per host, beside the common
+# .git, so a fresh worktree starts warm. TILLANDSIAS_PREFLIGHT_BENCH=off disables.
+# Line: path TAB args|- TAB blob TAB times-over TAB bound-s TAB epoch
+_pf_bench_path() {
+    local _c
+    if [ -n "${TILLANDSIAS_PREFLIGHT_BENCH_FILE:-}" ]; then printf '%s' "$TILLANDSIAS_PREFLIGHT_BENCH_FILE"; return 0; fi
+    _c="$(git -C "$SCRIPT_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
+    [ -n "$_c" ] && [ "${_c##*/}" = .git ] || return 1
+    printf '%s/.cache/metrics/preflight-bench.%s.tsv' "${_c%/.git}" "$(uname -n)"
+}
+# $1 = work dir (roster in $1/roster; writes $1/blobs): path TAB blob, existing files only
+_pf_bench_blobs() {
+    cut -f1 "$1/roster" | sort -u | while IFS= read -r _f; do
+        [ ! -f "$SCRIPT_DIR/$_f" ] || printf '%s\n' "$_f"
+    done > "$1/blob-paths"
+    ( cd "$SCRIPT_DIR" && git hash-object --no-filters --stdin-paths ) < "$1/blob-paths" > "$1/blob-ids" 2>/dev/null || return 1
+    paste "$1/blob-paths" "$1/blob-ids" > "$1/blobs"
+}
+# $1 = work dir, $2 = bench file, $3 = door deadline, $4 = decider deadline, $5 = now.
+# Writes $1/<roster index>.benched ("<bound> <epoch>") for each guard not to start.
+_pf_bench_load() {
+    [ -r "$2" ] && [ -s "$1/blobs" ] || return 0
+    awk -F'\t' -v dir="$1" -v dl="$3" -v ddl="$4" -v now="$5" -v host="$(uname -n)" -v bf="$2" '
+        FILENAME == dir "/blobs" { blob[$1] = $2; next }
+        FILENAME == bf {
+            if (FNR == 1) { good = ($0 == "# preflight-bench v1 " host); next }
+            if (!good || NF != 6 || $4 !~ /^[0-9]+$/ || $5 !~ /^[0-9]+$/ || $6 !~ /^[0-9]+$/) next
+            if ($4 + 0 >= 2 && $6 + 0 <= now + 0 && now - $6 < 86400 && blob[$1] == $3) { b[$1 "\t" $2] = $5; t[$1 "\t" $2] = $6 }
+            next
+        }
+        { i++; k = $1 "\t" (NF > 1 ? $2 : "-")
+          d = ($1 ~ /^scripts\/(lua\/)?check-/) ? ddl : dl
+          if ((k in b) && d + 0 <= b[k] + 0) { f = dir "/" i ".benched"; print b[k], t[k] > f; close(f) } }
+    ' "$1/blobs" "$2" "$1/roster" 2>/dev/null || { rm -f "$1"/*.benched; return 0; }
+}
+# $1 = work dir ($1/outcomes: path TAB args|- TAB over|done TAB deadline), $2 = bench file, $3 = now
+_pf_bench_save() {
+    local _tmp
+    [ -s "$1/outcomes" ] && [ -s "$1/blobs" ] || return 0
+    mkdir -p "${2%/*}" 2>/dev/null || return 0
+    _tmp="$2.$$.tmp"
+    [ -r "$2" ] && cp "$2" "$1/bench.old" 2>/dev/null || : > "$1/bench.old"
+    awk -F'\t' -v OFS='\t' -v dir="$1" -v now="$3" -v host="$(uname -n)" '
+        FILENAME == dir "/blobs" { blob[$1] = $2; next }
+        FILENAME == dir "/bench.old" {
+            if (FNR == 1) { good = ($0 == "# preflight-bench v1 " host); next }
+            if (!good || NF != 6 || $4 !~ /^[0-9]+$/ || $5 !~ /^[0-9]+$/ || $6 !~ /^[0-9]+$/) next
+            if ($6 + 0 > now + 0 || now - $6 > 604800) next
+            k = $1 "\t" $2; h[k] = $3; n[k] = $4; b[k] = $5; t[k] = $6; next
+        }
+        { k = $1 "\t" $2
+          if ($3 == "done") { delete h[k]; next }
+          if ($3 != "over" || blob[$1] == "") next
+          if (!(k in h) || h[k] != blob[$1]) n[k] = 0
+          h[k] = blob[$1]; n[k]++; b[k] = $4; t[k] = now }
+        END { print "# preflight-bench v1 " host; for (k in h) print k, h[k], n[k], b[k], t[k] }
+    ' "$1/blobs" "$1/bench.old" "$1/outcomes" > "$_tmp" 2>/dev/null && mv "$_tmp" "$2" 2>/dev/null || rm -f "$_tmp" 2>/dev/null
+    return 0
+}
+
 _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, $4 = args
     local _p="$1" _d="$2" _out="$3" _pid _tick
     # ORDER 1499-m9fj: THE GATE'S ARGUMENTS, WORD FOR WORD. A guard run without
@@ -1132,6 +1219,8 @@ _pf_launcher() {  # $1 = work dir, $2 = deadline, $3 = jobs, $4 = decider deadli
             13) continue ;; # own-deadline: _pf_long_lane runs it (1631-6w8z)
             *) echo "not-launched 0" > "$_dir/$_i.rc"; continue ;;
         esac
+        # 2275-fcpy: benched on this host; the reporter names and counts it.
+        if [ -f "$_dir/$_i.benched" ]; then echo "benched 0" > "$_dir/$_i.rc"; continue; fi
         while :; do
             _live=""; _n=0
             for _pid in $_pids; do
@@ -1905,6 +1994,22 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     fi
     _pf_roster="$(_preflight_roster | sort -u)"
     _pf_wall0=$SECONDS
+    _PF_REACHED=""  # 2272-cuxh: never an outer door's
+    # 2275-fcpy: the bench, off under --full and an overridden deadline, where
+    # "finished" and "over" mean something else.
+    _pf_bench_n=0; _pf_bench_names=""; _pf_bench_file=""
+    if [[ "$FLAG_PREFLIGHT_FULL" != true ]] && [ "${TILLANDSIAS_PREFLIGHT_BENCH:-on}" != off ] \
+       && [ -z "${TILLANDSIAS_PREFLIGHT_TIMEOUT:-}" ]; then
+        _pf_bench_file="$(_pf_bench_path)" || _pf_bench_file=""
+    fi
+    if [ -n "$_pf_bench_file" ]; then
+        printf '%s\n' "$_pf_roster" | grep . > "$_pf_dir/roster" || true
+        if _pf_bench_blobs "$_pf_dir"; then
+            _pf_bench_load "$_pf_dir" "$_pf_bench_file" "$_pf_deadline" "$_pf_ddeadline" "$(date +%s)" || true
+        else
+            _pf_bench_file=""
+        fi
+    fi
     # 1631-6w8z: the long lane starts FIRST, so its guards get the most budget.
     _pf_lane_limit=1
     [[ "$FLAG_PREFLIGHT_FULL" != true ]] || _pf_lane_limit=0
@@ -1992,6 +2097,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
             fi
             sleep 0.1 2>/dev/null || sleep 1
         done
+        _pf_note_budget $(( SECONDS - _pf_wall0 )) "$_pf_total" "$_pf_path"
         read -r _pf_rc _pf_el < "$_pf_dir/$_pf_i.rc"
         if [ "$_pf_pd" -eq 13 ] && [ -f "$_pf_dir/$_pf_i.lane-deadline" ]; then
             read -r _pf_gdl < "$_pf_dir/$_pf_i.lane-deadline"
@@ -2001,6 +2107,12 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
             else
                 echo "note:preflight:$_pf_label:own-deadline — ran beside the roster for ${_pf_el}s, deadlined at ${_pf_gdl}s of the door's budget (1631-6w8z)"
             fi
+        fi
+        if [ "$_pf_rc" = "benched" ]; then
+            read -r _pf_bb _pf_bt < "$_pf_dir/$_pf_i.benched"
+            echo "skip:preflight:$_pf_label:benched:over-${_pf_bb}s — outlived its ${_pf_bb}s deadline on two doors in a row on this host, last $(( ( $(date +%s) - _pf_bt ) / 3600 ))h ago (epoch $_pf_bt); not started, retried within 24 h, when its file changes, or with --full; the gate still runs it (2275-fcpy)"
+            _pf_bench_n=$((_pf_bench_n + 1)); _pf_bench_names="$_pf_bench_names $_pf_label"
+            continue
         fi
         if [ "$_pf_rc" = "not-launched" ]; then
             # The launcher and this pass disagreed (or the launcher died): run
@@ -2016,6 +2128,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
         [ ! -s "$_pf_tmp.swept" ] || sed "s|\$| (after $_pf_label)|" "$_pf_tmp.swept"
         if [ "$_pf_rc" -eq 0 ]; then
             _pf_ran=$((_pf_ran + 1))
+            printf '%s\t%s\tdone\t%s\n' "$_pf_path" "${_pf_args:--}" "$_pf_gdl" >> "$_pf_dir/outcomes"
             grep -E '^note:' "$_pf_tmp" || true
         else
             # ORDER 1384-bqhy — ONE CLASSIFIER. This branch used to grep the
@@ -2039,6 +2152,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
                     _pf_cantrun=$((_pf_cantrun + 1)) ;;
                 timed-out)
                     echo "skip:preflight:$_pf_label:deadline:$(( SECONDS - _pf_t0 ))s — outlived the ${_pf_gdl}s front-door deadline; the gate still runs it"
+                    [ "$_pf_pd" -eq 13 ] || printf '%s\t%s\tover\t%s\n' "$_pf_path" "${_pf_args:--}" "$_pf_gdl" >> "$_pf_dir/outcomes"
                     _pf_deadline_n=$((_pf_deadline_n + 1)) ;;
                 cannot-start)
                     # THE RUNNER COULD NOT START IT (macneo 2026-09-22: exec: setsid: not found).
@@ -2052,6 +2166,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
                     echo "could-not-run:preflight:$_pf_label:no-space — runner resource exhaustion (No space left on device); nothing was learned about the tree" >&2 ;;
                 refused)
                     _pf_failed=$((_pf_failed + 1))
+                    printf '%s\t%s\tdone\t%s\n' "$_pf_path" "${_pf_args:--}" "$_pf_gdl" >> "$_pf_dir/outcomes"
                     cat "$_pf_tmp" >&2
                     # 1631-6w8z: a .lua guard is confirmed through its runner, not bash
                     _pf_alone="bash $_pf_path${_pf_args:+ $_pf_args}"
@@ -2106,8 +2221,10 @@ PFEOF
     # the roster, which is true on every host, rather than any number, which is
     # true on none of them for long.
     _pf_wall=$(( SECONDS - _pf_wall0 ))
-    _pf_counts="ran=$_pf_ran declared-skip=$_pf_declskip skipped-by-deadline=$_pf_deadline_n could-not-run=$_pf_cantrun refused=$_pf_failed"
-    _pf_sum=$(( _pf_ran + _pf_declskip + _pf_deadline_n + _pf_cantrun + _pf_failed ))
+    _pf_iso="$_pf_iso $(_pf_tail_fields "$_pf_wall")"
+    _pf_counts="ran=$_pf_ran declared-skip=$_pf_declskip skipped-by-deadline=$_pf_deadline_n benched=$_pf_bench_n could-not-run=$_pf_cantrun refused=$_pf_failed"
+    _pf_sum=$(( _pf_ran + _pf_declskip + _pf_deadline_n + _pf_bench_n + _pf_cantrun + _pf_failed ))
+    [ -z "$_pf_bench_file" ] || _pf_bench_save "$_pf_dir" "$_pf_bench_file" "$(date +%s)" || true
     if [ "$_pf_sum" -ne "$_pf_total" ]; then
         # A CATEGORY SET THAT DOES NOT ADD UP CANNOT BE READ AT ALL, and a
         # miscount here would hide exactly what this row exists to surface.
@@ -2120,12 +2237,13 @@ PFEOF
     # NOT VOUCHED FOR: a guard cut off by the deadline and a guard the runner
     # could not start are both guards that did not examine this tree. A
     # DECLARED skip is not in this number — that one ran and said so.
-    _pf_unanswered=$(( _pf_deadline_n + _pf_cantrun ))
+    _pf_unanswered=$(( _pf_deadline_n + _pf_bench_n + _pf_cantrun ))
 
     if [ "$_pf_failed" -gt 0 ]; then
         _afford "$_pf_failed guard(s) refused this tree; each is named above as refused:preflight:<guard> with its own why and remedy" \
             "fix each named guard's complaint, then re-run ./build.sh --preflight until refused=0"
         echo "refused:preflight:$_pf_counts sum=$_pf_sum $_pf_iso wall=${_pf_wall}s" >&2
+        echo "benched:preflight:$_pf_bench_n${_pf_bench_names:+ —$_pf_bench_names}" >&2
         exit 1
     fi
     # ORDER 2112-nlrf. On darwin, a tree that changes a cfg-gated crate gets its
@@ -2163,10 +2281,12 @@ PFEOF
         # The exit stays 0 because nothing REFUSED; the token changes because
         # nothing vouched either.
         echo "partial:preflight:$_pf_counts sum=$_pf_sum $_pf_iso wall=${_pf_wall}s"
+        echo "benched:preflight:$_pf_bench_n${_pf_bench_names:+ —$_pf_bench_names}"
         echo "partial:preflight: ${_pf_unanswered} guard(s) did not examine this tree — this run does not vouch for them; the gate still runs them" >&2
         exit 0
     fi
     echo "ok:preflight:$_pf_counts sum=$_pf_sum $_pf_iso wall=${_pf_wall}s"
+    echo "benched:preflight:$_pf_bench_n${_pf_bench_names:+ —$_pf_bench_names}"
     exit 0
 fi
 
