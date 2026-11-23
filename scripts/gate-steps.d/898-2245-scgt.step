@@ -11,3 +11,4 @@ STEP_ERROR="the scratch-git decider admitted a bare git -C on a scratch repo, or
 STEP_OK="Added fixture git -C calls go through scratch_git"
 STEP_READS="scripts/lua/test-fixture-scratch-git-added.lua scripts/lua/check-fixture-scratch-git-added.lua"
 # msys record: yolanda 2026-11-22 msys ok:fixture-scratch-git-added-fixture:6 at 0d69a111e (the real checkout's origin untouched afterwards)
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:fixture-scratch-git-added-fixture:6"
