@@ -27,9 +27,8 @@ local ROOT = fixture.repo_root()
 local PATH = env.get("PATH") or "/usr/bin:/bin"
 local HOME = env.get("HOME") or ""
 
-local w = proc.run{ argv = { "which", "sccache" }, env = { PATH = PATH } }
-if w.code ~= 0 then T:skip("no-sccache") end
-local SC = text.trim(w.stdout)
+local SC = fixture.which("sccache", PATH)
+if not SC then T:skip("no-sccache") end
 local WRAP = ROOT .. "/scripts/sccache-wrapper.sh"
 
 local W = T:scratch()
@@ -76,7 +75,7 @@ r = build("/tmp")
 T:arm("arm4 server survives its starter's deleted TMPDIR", r.code == 0,
     "compile failed after the starter's TMPDIR was deleted: " .. (r.stderr or ""):sub(1, 300))
 
-if proc.run{ argv = { "which", "timeout" }, env = { PATH = PATH } }.code == 0 then
+if fixture.which("timeout", PATH) then
     fs.write(W.rel .. "/hungsc", "#!/bin/sh\nexec sleep 3600\n")
     T:must{ "chmod", "+x", W.abs .. "/hungsc" }
     r = T:run{ "timeout", "60", WRAP, "rustc", "-vV", timeout_ms = 90000,

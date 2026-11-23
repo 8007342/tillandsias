@@ -25,7 +25,7 @@ local uname = text.trim(proc.run{ argv = { "uname", "-s" } }.stdout or "")
 if uname ~= "Linux" then T:skip("linux-only-unit-tests:" .. uname) end
 
 local cargo = { "cargo" }
-if proc.run{ argv = { "which", "cargo" } }.code ~= 0 then cargo = { "toolbox", "run", "cargo" } end
+if not fixture.which("cargo") then cargo = { "toolbox", "run", "cargo" } end
 
 local function arm(label, filter)
     local argv = {}

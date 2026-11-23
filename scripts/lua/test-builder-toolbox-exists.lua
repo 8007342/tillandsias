@@ -33,8 +33,7 @@ fs.write(W.rel .. "/fn.sh", table.concat(buf, "\n") .. "\n")
 fs.write(W.rel .. "/probe.sh", '. "$1"\n_toolbox_exists && echo exists || echo absent\n')
 
 local function which(t)
-    local r = T:must{ "which", t }
-    return text.trim(r.stdout)
+    return fixture.which(t) or T:refuse("no-tool", t .. " is not on PATH")
 end
 local BASH = which("bash")
 local TOOLS = {}
