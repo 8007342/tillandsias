@@ -38,7 +38,7 @@ end
 
 local top = proc.run{ argv = { "git", "rev-parse", "--show-toplevel" }, timeout_ms = 30000 }
 local ROOT = text.trim(top.stdout or "")
-if not top.ok or ROOT == "" then ROOT = text.trim(proc.run{ argv = { "pwd", "-P" } }.stdout or ".") end
+if not top.ok or ROOT == "" then ROOT = "." end -- outside git: the runner's own cwd
 
 if not fs.exists("cheatsheets") then
     log.raw("ERROR: cheatsheets/ directory not found at " .. ROOT .. "/cheatsheets")
