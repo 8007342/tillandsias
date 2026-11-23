@@ -1,4 +1,4 @@
-# @trace order:1309-qc95, spec:git-mirror-service
+# @trace order:1309-qc95, order:2237-f9b6, spec:git-mirror-service
 # Litmus: the authenticated ssh push lane REFUSES when enabled but unwired,
 # instead of falling open to the anonymous git:// path.
 name: litmus:ssh-lane-refuses-when-unwired
@@ -11,16 +11,16 @@ description: >
   redirect is NOT the fix: the anonymous insteadOf covers push as well as
   fetch, so an absent redirect lets the unauthenticated path win silently.
   Carries a mutation arm that reintroduces the pre-fix wording and requires
-  the unit arms to red.
+  the unit arms to red, in a scratch shared clone (never the checkout; 2237-f9b6).
 severity: high
 size: small
 
 preconditions:
-  - scripts/test-ssh-lane-refuses-when-unwired.sh exists
+  - scripts/lua/test-ssh-lane-refuses-when-unwired.lua exists
   - crates/tillandsias-headless/src/main.rs exists
 
 critical_path:
   - step: "the lane refuses when unwired, and the guard has teeth"
-    command: "scripts/test-ssh-lane-refuses-when-unwired.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-ssh-lane-refuses-when-unwired.lua 2>&1"
     timeout_ms: 600000
     expected_behavior: "ok: ssh-lane-refuses-when-unwired PASS"
