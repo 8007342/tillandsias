@@ -25,6 +25,7 @@
 -- Usage: tillandsias-plan script run scripts/lua/test-fixtures-ignore-inherited-git-dir.lua
 -- Verdict: ok:fixtures-ignore-inherited-git-dir:<n> | violation:fixtures-ignore-inherited-git-dir:<n>-failed
 
+local BASH = require("common.fixture").posix_shell("/bin/bash") -- Git's bash on native Windows (2246-fkea)
 local FX = "scripts/test-check-credential-channel.sh"
 local UNSET = "unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE"
 local pass, fail = 0, 0
@@ -63,7 +64,7 @@ end
 -- 1
 local V = victim("one")
 local before = state(V)
-run({ "bash", root .. "/" .. FX }, { GIT_DIR = V .. "/.git" }, 300000)
+run({ BASH, root .. "/" .. FX }, { GIT_DIR = V .. "/.git" }, 300000)
 local after = state(V)
 if before == after then ok("1 FIXTURE an inherited GIT_DIR's repo is untouched (" .. after .. ")")
 else bad("1 FIXTURE the victim changed: before=[" .. before .. "] after=[" .. after .. "]") end
@@ -106,7 +107,7 @@ local function mutant(name, drop_guard)
     end
     fs.write(MUT, table.concat(keep, "\n") .. "\n")
     local b4 = state(p)
-    run({ "bash", root .. "/" .. MUT }, { GIT_DIR = p .. "/.git" }, 300000)
+    run({ BASH, root .. "/" .. MUT }, { GIT_DIR = p .. "/.git" }, 300000)
     proc.run({ argv = { "rm", "-f", root .. "/" .. MUT }, timeout_ms = 10000 })
     return b4, state(p)
 end
