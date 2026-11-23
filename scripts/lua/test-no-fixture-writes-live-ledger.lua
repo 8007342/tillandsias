@@ -23,7 +23,8 @@
 -- Verdict: PASS: no-fixture-writes-live-ledger <n>/<n> (1320-44rs) then ok:no-fixture-writes-live-ledger:<n>/<n>
 --          or FAIL: ... then violation:no-fixture-writes-live-ledger:<n>-failed
 
-local root = text.trim(proc.run({ argv = { "git", "rev-parse", "--show-toplevel" }, timeout_ms = 30000 }).stdout or "")
+local fixture = require "common.fixture"
+local root = fixture.repo_root()
 local C = root .. "/scripts/check-no-fixture-writes-live-ledger.sh"
 local REL = "target/plan-scratch/no-fixture-live-ledger-" .. tostring(time.now_ms())
 local W = root .. "/" .. REL
@@ -50,7 +51,7 @@ end
 local function flags(name, body)
     body = body:gsub("__LED__", "plan/index.d"):gsub("__LSD__", "plan/loop_status.d")
     fs.write(REL .. "/" .. name .. ".sh", body .. "\n")
-    local r = proc.run({ argv = { "bash", C, W .. "/" .. name .. ".sh" }, env = E, timeout_ms = 60000 })
+    local r = proc.run({ argv = { fixture.posix_shell(), C, W .. "/" .. name .. ".sh" }, env = E, timeout_ms = 60000 })
     local o = (r.stdout or "") .. (r.stderr or "")
     return r.code ~= 0 and o:find("violation:fixture-writes-live-ledger:" .. REL .. "/" .. name .. ".sh:", 1, true) ~= nil
 end
@@ -74,7 +75,7 @@ if flags("j", 'cd "$ROOT"\ngit worktree add --detach -q "$wt" HEAD\ncd "$wt" || 
 if wrongly == "" then ok("arm 2: the scaffold idioms and a read are accepted") else bad("arm 2: wrongly flagged:" .. wrongly) end
 
 -- 3
-local r = proc.run({ argv = { "bash", C }, env = E, timeout_ms = 120000 })
+local r = proc.run({ argv = { fixture.posix_shell(), C }, env = E, timeout_ms = 120000 })
 local o = text.trim((r.stdout or "") .. (r.stderr or ""))
 local last = o:match("([^\n]*)$") or ""
 if r.code == 0 and last:match("^ok:fixtures%-write%-scaffolds%-only:%d+ checked$") then
