@@ -340,7 +340,6 @@ scripts scripts/census-litmus-layer-classification.sh 5
 scripts scripts/census-litmus-step-enforcement.sh 4
 scripts scripts/centicolon-grade.sh 2
 scripts scripts/change-class.sh 3
-scripts scripts/check-added-fragments-parse.sh 3
 scripts scripts/check-added-test-is-referenced.sh 5
 scripts scripts/check-append-vs-origin-fold.sh 15
 scripts scripts/check-approved-ux-strings.sh 5

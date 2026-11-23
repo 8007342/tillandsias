@@ -398,7 +398,9 @@ _run_decider() { # name -> sets DEC_OUT, returns rc
         check-plan-binary-probe-usage) _cap bash "$SELF_DIR/check-plan-binary-probe-usage.sh" ;;
         check-litmus-pin-claims) _cap bash "$SELF_DIR/check-litmus-pin-claims.sh" ;;
         check-script-exec-bits) _cap bash "$SELF_DIR/check-script-exec-bits.sh" ;;
-        check-added-fragments-parse) DEC_OUT="$(TILLANDSIAS_FRAGMENT_PARSE_BASE="$BASE" bash "$SELF_DIR/check-added-fragments-parse.sh" 2>&1)"; return $? ;;
+        check-added-fragments-parse)
+            _lua_runner "$name" || return 3
+            _cap env TILLANDSIAS_REPO_ROOT="$ROOT" TILLANDSIAS_FRAGMENT_PARSE_BASE="$BASE" TILLANDSIAS_SCRIPT_RUNNER_BIN="$_lb" "$_lb" script run "$SELF_DIR/lua/check-added-fragments-parse.lua" ;;
         check-scorable-obligation-added) _cap bash "$SELF_DIR/check-scorable-obligation-added.sh" "$BASE" ;;
         check-gate-step-regimes) _cap bash "$SELF_DIR/check-gate-step-regimes.sh" ;;
         check-added-test-is-referenced) DEC_OUT="$(TILLANDSIAS_ADDED_TEST_BASE="$BASE" bash "$SELF_DIR/check-added-test-is-referenced.sh" 2>&1)"; return $? ;;
