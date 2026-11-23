@@ -191,7 +191,7 @@ resolve_plan_binary() {
 # whose validator surface differed from trunk's, so the pre-push lane refused
 # it as STALE inside test-pre-push-plan-lane-fails-closed-without-binary).
 # With $3 the copy is refreshed only when that checkout's HEAD is contained in
-# ${TILLANDSIAS_PLAN_COPY_TRUNK_REF:-origin/linux-next}; otherwise it is left
+# ${TILLANDSIAS_PLAN_COPY_TRUNK_REF:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}; otherwise it is left
 # as it is and the answer says why. Without $3 the old contract holds.
 #
 # Prints exactly one token: absent | current | refreshed |
@@ -206,7 +206,7 @@ refresh_plan_binary_copy() {
         return 0
     fi
     if [ -n "$root" ] && ! git -C "$root" merge-base --is-ancestor HEAD \
-            "${TILLANDSIAS_PLAN_COPY_TRUNK_REF:-origin/linux-next}" 2>/dev/null; then
+            "${TILLANDSIAS_PLAN_COPY_TRUNK_REF:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}" 2>/dev/null; then
         printf '%s\n' refresh-skipped-off-trunk
         return 0
     fi

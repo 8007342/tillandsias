@@ -273,7 +273,7 @@ if [ "${CYCLE_PREFLIGHT_SKIP_BUILD:-0}" != "1" ]; then
         echo "warn:preflight:plan:expert-refresh-refused: $plan_bin does not run here, so it was NOT installed over $expert_bin (1060-wxdh)"
     fi
     if [ "$expert_report" = "refresh-skipped-off-trunk" ]; then
-        echo "warn:preflight:plan:expert-refresh-skipped-off-trunk: $(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD) is not contained in ${TILLANDSIAS_PLAN_COPY_TRUNK_REF:-origin/linux-next}, so its build was NOT installed over $expert_bin (2217-ab8h)"
+        echo "warn:preflight:plan:expert-refresh-skipped-off-trunk: $(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD) is not contained in ${TILLANDSIAS_PLAN_COPY_TRUNK_REF:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}, so its build was NOT installed over $expert_bin (2217-ab8h)"
     fi
     plan_verdict="${plan_verdict}+expert-${expert_report}"
 
