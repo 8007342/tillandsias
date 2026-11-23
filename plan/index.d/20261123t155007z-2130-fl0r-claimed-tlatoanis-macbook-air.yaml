@@ -3,7 +3,7 @@ events:
   - packet_id: build-sh-floor-runs-fmt-lua-parse-and-the-packets-own-litmus-in-under-two-minutes
     event:
       type: claimed
-      ts: "2026-11-23T21:00:00Z"
+      ts: "2026-11-23T15:50:07Z"
       host: tlatoanis-macbook-air
       summary: |-
         claimed by tlatoanis-macbook-air at macuahuitl-fedora's direction (yolanda at WIP cap): merge linux-next into #1220, measure ok:floor and a sabotage mutant on darwin, undraft.
