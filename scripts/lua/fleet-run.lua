@@ -145,6 +145,9 @@ if GOT ~= TREE then refuse("tree-mismatch:" .. TREE .. ":" .. GOT) end
 local st_rc, dirty = dgit("status", "--porcelain")
 if st_rc ~= 0 then cnr("git-status") end
 if dirty ~= "" then refuse("dirty-tree:" .. #text.lines(dirty)) end
+-- A checkout has target/ and a fresh extract does not; without it scratch.declare
+-- drops <repo>/target as a base and refuses every T:scratch() (2266-acwj).
+if run({ "mkdir", "-p", D .. "/target" }) ~= 0 then cnr("mkdir-target") end
 
 -- Exactly one step file with this number.
 -- (the runner's policy denies a shell, so the glob is git's pathspec)

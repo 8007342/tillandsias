@@ -27,8 +27,10 @@
 --     (RED before 2250-44uy round 3: the depth=1 extract had no base)
 --  13 a skip verdict is reported as one: result=skip in the regime line and
 --     skip:fleet-run, never ok:fleet-run (a skip is not evidence)
+--  14 the extract has a target/ dir, so the scratch door admits a step's scratch
+--     (RED before 2266-acwj: scratch.declare refused target/plan-scratch)
 --
--- GRAMMAR ok:fleet-run-shape:13 | violation:fleet-run-shape:<n>-failed
+-- GRAMMAR ok:fleet-run-shape:14 | violation:fleet-run-shape:<n>-failed
 
 local top = proc.run({ argv = { "git", "rev-parse", "--show-toplevel" }, timeout_ms = 30000 })
 local ROOT = text.trim(top.stdout or "")
@@ -85,6 +87,7 @@ step(4, 'b="${TILLANDSIAS_GATE_DIFF_BASE:-}"\n'
     .. 'if git diff --name-only "$b" -- added.txt | grep -q .; then echo violation:scratch-added:added.txt; exit 1; fi\n'
     .. 'echo ok:scratch-added:0\n')
 step(5, "echo skip:scratch:nothing-to-judge\n")
+step(6, "if [ -d target ]; then echo ok:scratch:1; else echo violation:scratch:no-target-dir; exit 1; fi\n")
 for _, f in ipairs({ "fixture", "verdict" }) do
     fs.write(R.rel .. "/lib/lua/common/" .. f .. ".lua", fs.read("lib/lua/common/" .. f .. ".lua"))
 end
@@ -128,6 +131,9 @@ arm2("12 an added line is judged against the merge-base, not skipped", c == 1
 c, o = fr(5)
 arm2("13 a skip is reported as a skip, never ok", c == 0 and text.contains(o, ":result=skip:")
     and text.contains(o, "\nskip:fleet-run:step=5") and not text.contains(o, "\nok:fleet-run"), "rc=" .. tostring(c) .. " " .. o)
+c, o = fr(6)
+arm2("14 the extract has a target dir for the scratch door", c == 0 and text.contains(o, "verdict=ok:scratch:1"),
+    "rc=" .. tostring(c) .. " " .. o)
 T:run{ fixture.posix_shell("/bin/bash"), "-s", stdin = "sleep 8\n" }
 arm2("10 the step's child is killed with it", not fs.exists(R.rel .. "/marker"), "the child outlived the step")
 local left = T:run{ "find", R.abs .. "/target/work/fleet-run", "-mindepth", "1", "-maxdepth", "1", "-type", "d", "-not", "-name", "cargo-target*" }
@@ -135,4 +141,4 @@ arm2("11 no extract is left behind", left.code == 0 and text.trim(left.stdout or
 T:cleanup()
 
 if #failed > 0 then verdict.emit("violation:fleet-run-shape:" .. #failed .. "-failed", 1) end
-verdict.ok("fleet-run-shape", "13")
+verdict.ok("fleet-run-shape", "14")
