@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-test-mirror-healthcheck-quiet-to-lua
+    order: 2274-i758
+    status: ready
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua]
+    estimated_hours: 1
+    title: |
+      Port scripts/test-mirror-healthcheck-quiet.sh (92 lines, gate step 720) to Lua; the in-container payload stays POSIX sh because it runs inside the tillandsias-git image.
+    context: |
+      Coordinator direction 2026-11-23: one Lua-first port from the carried shell-to-lua list while waiting on records. Chosen because no open work ref touches it (test-cycle-claims-report.sh was the first offer but yoga's open 2130-trcy edits it) and it is gated (step 720), so the port stays gated.
+    exit_criteria:
+      - "scripts/lua/test-mirror-healthcheck-quiet.lua replaces the .sh with the same three arms and the same named skips"
+      - "mutants on images/git/healthcheck.sh: a connecting probe reds arm 2; an always-ok probe reds arm 3"
+      - "step 720 runs the Lua port, with a fresh second-regime record"
+    unscoreable: "a port; the mutants are the evidence it still discriminates."
+    next_action: "Second-regime record, then land."
+    provenance: coordinator direction (macuahuitl-fedora, 2026-11-23); filed by lenovinha.
+    related: [1310-rec6]
+    events:
+      - {type: filed, ts: '2026-11-23T17:39:27Z', host: lenovinha, summary: port test-mirror-healthcheck-quiet to Lua filed}
