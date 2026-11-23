@@ -1775,9 +1775,9 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
        && [ "${TILLANDSIAS_SKIP_REMOTE_PROBE:-0}" != 1 ]; then
         _rr_bin="$(. "$SCRIPT_DIR/scripts/plan-binary-probe.sh" && resolve_plan_binary 2>/dev/null || true)"
         if [ -n "$_rr_bin" ]; then
-            _rr_rc=0; _rr_out="$( cd "$SCRIPT_DIR" && "$_rr_bin" script run scripts/lua/probe-remote-reachable.lua 2>&1 )" || _rr_rc=$?  # set -e-safe: a bare capture aborts SILENTLY on rc=1 (2239-rmun)
-            if [ "$_rr_rc" -ne 0 ]; then
-                printf '%s\n' "$_rr_out" >&2
+            _rr_rc=0; ( cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh && . scripts/remote-probe-judge.sh && remote_probe_judge "$_rr_bin" ) || _rr_rc=$?
+            if [ "$_rr_rc" -ne 0 ] && [ "$_rr_rc" -ne 10 ]; then echo "could-not-run:remote-probe:judge-error:rc=$_rr_rc — the remote was not judged (2256-tt3v)" >&2; fi
+            if [ "$_rr_rc" -eq 10 ]; then
                 echo "refused:preflight:remote-unreachable"
                 echo "  why: this host cannot reach the remote, so nothing this gate vouches for can be pushed (2239-rmun)" >&2
                 echo "  remedy: a human restores this host's access (see the probe's remedy above); until then SUSPEND work here — no retries, no backoff" >&2
@@ -4764,25 +4764,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # absent from a shallow clone.
     # 1218-25z3's must-ship-next advisory fixture is gate step 951 (2173-inst).
 
-    # ORDER 1369-sjbc. The release jobs upload a staged copy to `unstable` whose
-    # installers default to unstable; the versioned copy keeps stable. Hermetic,
-    # a few seconds; wired in local-ci.sh as well.
-    _step "Checking the unstable-channel installer default (1369-sjbc)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-unstable-installer-defaults-to-unstable.sh" 2>&1; then
-        _error "an installer fetched from the unstable release can again install stable"
-        exit 1
-    fi
-    _info "unstable-channel installer default fixture passed"
-
-    # ORDER 1380-zmpi. Every installer ends with a PENDING ACTIONS banner; the
-    # fixture RUNS each banner block (bash, and PowerShell where present).
-    # Hermetic, a few seconds; wired in local-ci.sh as well.
-    _step "Checking the installers' PENDING ACTIONS banner (1380-zmpi)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-installers-print-pending-banner.sh" 2>&1; then
-        _error "an installer can again finish without telling the user what is still pending"
-        exit 1
-    fi
-    _info "pending-actions banner fixture passed"
+    # ORDER 1369-sjbc and 1380-zmpi: the unstable-installer default and the
+    # PENDING ACTIONS banner fixtures moved to gate steps 405 and 404 (Lua, 2111-inst).
 
     # ORDER 970-7fqk. The stale-stamp refusal names paths whose CONTENT moved,
     # on the same axis the staleness decision uses, and keeps the mtime list as
@@ -6543,6 +6526,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Frozen diff-base fixture passed"
+
+    # ORDER 2241-f8jg — `rev-parse --verify <40-hex>` answers 0 for a missing
+    # object, so a frozen base absent from a checkout read as valid and the
+    # diff-scoped guards judged nothing. Each must take its named
+    # unavailable-base path instead.
+    _step "Checking the diff-scoped guards name a missing base (2241-f8jg)..."
+    if ! _run_lua_decider "scripts/lua/test-added-deciders-refuse-a-missing-base.lua" 2>&1; then
+        _error "a diff-scoped guard verified a base that names no commit and judged past it — verify the base as <base>^{commit}; see the FAIL lines above (2241-f8jg)"
+        exit 1
+    fi
+    _info "Missing diff-base fixture passed"
 
     # ORDER 1581-d9ig — no fixture prunes or gcs the operator's checkout. Two
     # fixtures' teardown ran `git -C "$ROOT" worktree prune`, which inside the

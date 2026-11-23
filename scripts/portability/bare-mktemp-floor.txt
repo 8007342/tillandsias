@@ -51,7 +51,6 @@ scripts/test-build-image-installed-version-alias.sh 1
 scripts/test-build-step-timing-attribution.sh 1
 scripts/test-census-enforced-reachability-split.sh 1
 scripts/test-check-credential-channel.sh 1
-scripts/test-check-installer-prompts.sh 1
 scripts/test-check-stranded-in-progress.sh 1
 scripts/test-claude-forge-bypass-preaccepted.sh 1
 scripts/test-clear-vault-credentials-partial-is-nonzero.sh 1
@@ -137,7 +136,6 @@ scripts/test-litmus-steps-can-fail.sh 1
 scripts/test-litmus-tracked-file-kill-safety.sh 2
 scripts/test-loop-status-audit-reads-current-emitter.sh 1
 scripts/test-macos-model-share-writable.sh 1
-scripts/test-macos-signing-seam.sh 1
 scripts/test-macos-vz-orphan-diagnosis.sh 1
 scripts/test-metrics-log-fallback-is-loud.sh 1
 scripts/test-metrics-log-path-agreement.sh 1
@@ -159,7 +157,6 @@ scripts/test-pre-push-version-guard.sh 1
 scripts/test-pre-push-work-ref-lane.sh 1
 scripts/test-pre-receive-yaml-gate.sh 1
 scripts/test-preflight-fixtures-default-target.sh 1
-scripts/test-preflight-stale-plan-binary.sh 1
 scripts/test-pretooluse-command-policy.sh 1
 scripts/test-provider-device-auth.sh 1
 scripts/test-reclaim-stranded-claims.sh 1

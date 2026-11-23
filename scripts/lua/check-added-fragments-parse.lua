@@ -65,7 +65,7 @@ end
 local base = env.get("TILLANDSIAS_FRAGMENT_PARSE_BASE") or ""
 if base == "" then base = env.get("TILLANDSIAS_GATE_DIFF_BASE") or "" end
 if base == "" then base = "origin/linux-next" end
-if not okr(git("rev-parse", "--verify", base)) then
+if not okr(git("rev-parse", "--verify", "--quiet", base .. "^{commit}")) then
     verdict.emit("ok:added-fragments-parse:0 checked", 0,
         "  note: base ref '" .. base .. "' unavailable — added-fragment enforcement skipped")
 end

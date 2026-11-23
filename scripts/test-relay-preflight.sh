@@ -29,7 +29,7 @@ W="$(mktemp -d "$_tmpbase/relay-preflight.XXXXXX")"
 scratch_trap 'rm -rf "$W"'
 
 pass=0
-total=11
+total=14
 ok()  { echo "ok:   $1"; pass=$((pass + 1)); }
 bad() { echo "FAIL: $1: $2"; }
 
@@ -447,6 +447,75 @@ if [ "$RC" = 0 ] && grep -q '^ok:relay-preflight:' <<<"$OUT" && grep -q '^item: 
 else
     bad "arm11" "rc=$RC out=[$OUT]"
     printf '%s\n' "$ERR" | grep -vE '^item: .* ok ' | sed 's/^/    err: /' | head -12
+fi
+
+# ── arms 12-14: the caller's checkout is left as it was found (2252-2mnf) ───
+# PRE-FIX: after a green run HEAD was refs/heads/relay/<utc> (yoga: the next
+# commit landed there and the push sent the old head).
+CLONE_R="$W/clone-r"
+_clone "$BASE_BARE" "$CLONE_R"
+scratch_git "$CLONE_R" "${GC[@]}" checkout -qb work/r
+echo "change r" > "$CLONE_R/r.txt"
+scratch_git "$CLONE_R" "${GC[@]}" add -A
+scratch_git "$CLONE_R" "${GC[@]}" commit -qm "work/r: harmless file"
+_h0="$(scratch_git "$CLONE_R" symbolic-ref HEAD)"
+_run "$CLONE_R" work/r --base origin/linux-next
+_h1="$(scratch_git "$CLONE_R" symbolic-ref HEAD)"; _rc1="$RC"; _e1="$ERR"
+_relay="$(scratch_git "$CLONE_R" for-each-ref --format='%(refname:short)' refs/heads/relay/)"
+_run "$CLONE_R" --plan work/r --base origin/linux-next
+_h2="$(scratch_git "$CLONE_R" symbolic-ref HEAD)"; _rc2="$RC"
+if [ "$_rc1" = 0 ] && [ "$_rc2" = 0 ] && [ "$_h1" = "$_h0" ] && [ "$_h2" = "$_h0" ] && [ -n "$_relay" ] \
+   && grep -q "^note:relay-preflight:restored:work/r — the merged tree is on $_relay" <<<"$_e1"; then
+    ok "arm12: a green run and a --plan run leave HEAD on $_h0, and name the kept relay branch"
+else
+    bad "arm12" "rc=$_rc1/$_rc2 before=$_h0 after=$_h1 plan=$_h2 relay=[$_relay]"
+fi
+
+scratch_git "$CLONE_E" "${GC[@]}" checkout -q work/bad-dialect
+_run "$CLONE_E" work/bad-dialect --base origin/linux-next
+_h1="$(scratch_git "$CLONE_E" symbolic-ref HEAD)"
+scratch_git "$CLONE_R" "${GC[@]}" checkout -q --detach work/r
+_d0="$(scratch_git "$CLONE_R" rev-parse HEAD)"
+_rcr="$RC"; _run "$CLONE_R" work/r --base origin/linux-next
+_d1="$(scratch_git "$CLONE_R" rev-parse HEAD)"
+if [ "$_rcr" = 1 ] && [ "$_h1" = refs/heads/work/bad-dialect ] && [ "$RC" = 0 ] && [ "$_d1" = "$_d0" ] \
+   && ! scratch_git "$CLONE_R" symbolic-ref -q HEAD >/dev/null; then
+    ok "arm13: a refused run leaves HEAD on its branch; a detached caller is left detached at its SHA"
+else
+    bad "arm13" "refused rc=$_rcr head=$_h1; detached rc=$RC $_d0 -> $_d1"
+fi
+
+# A deadline kill: a selected fixture hangs, the group gets TERM.
+K_SEED="$W/k-seed"
+_seed "$K_SEED"
+printf '#!/usr/bin/env bash\necho v1\n' > "$K_SEED/scripts/kk-subject.sh"
+printf '#!/usr/bin/env bash\n# exercises scripts/kk-subject.sh\n: > "%s/kk-running"\nsleep 60\n' "$W" > "$K_SEED/scripts/test-kk-hang.sh"
+chmod +x "$K_SEED"/scripts/kk-subject.sh "$K_SEED"/scripts/test-kk-hang.sh
+scratch_git "$K_SEED" "${GC[@]}" add -A
+scratch_git "$K_SEED" "${GC[@]}" commit -qm "kk-subject and a fixture that hangs"
+_origin "$K_SEED" "$W/kk-origin.git"
+CLONE_K="$W/clone-k"
+_clone "$W/kk-origin.git" "$CLONE_K"
+scratch_git "$CLONE_K" "${GC[@]}" checkout -qb work/kk
+printf '#!/usr/bin/env bash\necho v2\n' > "$CLONE_K/scripts/kk-subject.sh"
+scratch_git "$CLONE_K" "${GC[@]}" add -A
+scratch_git "$CLONE_K" "${GC[@]}" commit -qm "work/kk"
+set -m
+( cd "$CLONE_K" && exec bash scripts/relay-preflight.sh work/kk --base origin/linux-next >"$W/kk.out" 2>&1 </dev/null ) &
+_kp=$!
+set +m
+_n=0
+while [ ! -e "$W/kk-running" ] && kill -0 "$_kp" 2>/dev/null && [ "$_n" -lt 600 ]; do sleep 0.1; _n=$((_n + 1)); done
+_mid="$(scratch_git "$CLONE_K" symbolic-ref --short HEAD)"
+kill -TERM -- "-$_kp" 2>/dev/null
+wait "$_kp" 2>/dev/null; _krc=$?
+_h1="$(scratch_git "$CLONE_K" symbolic-ref HEAD)"
+case "$_mid" in (relay/*) _m=1 ;; (*) _m=0 ;; esac
+if [ "$_m" = 1 ] && [ "$_krc" = 143 ] && [ "$_h1" = refs/heads/work/kk ]; then
+    ok "arm14: a TERM mid-fixture (the deadline kill) leaves HEAD on its branch"
+else
+    bad "arm14" "mid=$_mid rc=$_krc head=$_h1"
+    sed 's/^/    /' "$W/kk.out" | tail -5
 fi
 
 [ "$pass" = "$total" ] && echo "ok:relay-preflight:$pass/$total" || echo "fail:relay-preflight:$pass/$total"

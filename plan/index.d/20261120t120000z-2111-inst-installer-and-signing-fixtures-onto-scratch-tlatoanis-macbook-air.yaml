@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-20, at the coordinator's request (shell-halving drive).
+packets:
+- packet_id: installer-channel-banner-prompt-pin-and-macos-signing-fixtures-run-on-the-scratch-door-in-lua
+  order: 2111-inst
+  status: in_progress
+  kind: chore
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [lua, shell-burn-down, installer, macos]
+  size: M
+  implementer_tier: sonnet
+  estimated_hours: 3
+  title: 'Five installer and signing fixtures (pending banner, unstable default, prompt ratchet, pinned-base announcement, macOS signing seam) are Lua on scratch.*, and the signing seam is bound for the first time'
+  context: >-
+    Batch 3 of the fixture ports, stacked on work/2109-umac (#1185). Each port keeps its arms. Only the code under test is still shell or PowerShell: the cut installer blocks, the stage script and the installers. Behaviour changes:
+    - Manifests are built and verified with hash.sha256, where the shell used sha256sum and sha256sum -c.
+    - PowerShell presence is probed by running the formatter itself, with no `which`, so the probe also works on native Windows.
+    - The pinned-base harness unsets TILLANDSIAS_RELEASE_BASE and CHANNEL itself. The runner's child env inherits the caller's TILLANDSIAS_*: an injected TILLANDSIAS_RELEASE_BASE reached the child and redded arm 2 (2110-unst).
+    - test-macos-signing-seam was an orphan that the 26-orphan triage had REFUSED to bind. Wired as-is it turned Linux and Windows gates red at its PlistBuddy arm. The port makes 4b-4c a named skip when /usr/libexec/PlistBuddy does not spawn, which was measured with a missing path: 9 arms ok plus the skip line. It is bound by the new gate step 403-2111-inst.
+    - The inline build.sh steps for 1369-sjbc and 1380-zmpi moved to gate steps 405 and 404 (STEP_LUA). Gate step 790-1560-g5d9 and local-ci.sh run the Lua, which also drops local-ci's two `| tee` pipes.
+    - litmus-smoke-release-channel-shape runs the pin port. The installer comments name the Lua file.
+  exit_criteria:
+  - 'On darwin, each port prints its ok line: pending-banner-fixture ran=9 skipped=2 (no PowerShell here), unstable-installer-fixture ran=17 skipped=1, installer-prompts-fixture:6 arms, install-macos-announces-its-pin:7, macos-signing-seam:11.'
+  - 'The shell originals passed on the same tree before deletion.'
+  - 'With a missing PlistBuddy path the signing seam reports the named skip and stays ok.'
+  - 'With TILLANDSIAS_RELEASE_BASE and CHANNEL injected by the caller, the pin port stays 7/7.'
+  - 'No floor, litmus, gate step, build.sh or local-ci.sh line names the five deleted .sh files.'
+  verifiable_closure: 'Measured on tlatoanis-macbook-air 2026-11-20. check-shell-ratchet.lua gave ok (sh=595).'
+  unscoreable: 'The PowerShell arms (pending-banner W1-W2, unstable-installer D run) were not exercised: this host has no PowerShell. A Windows host should run both ports once.'
+  next_action: 'Land after #1171 and #1185. A Windows host runs the two PowerShell arms. openspec/changes/lua-door-environment-inheritance tasks.md still names test-macos-signing-seam.sh, so update that reference when the change is next touched.'
+  provenance: 'tlatoanis-macbook-air 2026-11-20, coordinator request (macuahuitl-fedora).'
+  events:
+  - {type: filed, ts: '2026-11-20T12:00:00Z', host: tlatoanis-macbook-air, summary: 'filed with its PR'}
