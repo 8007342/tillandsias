@@ -142,8 +142,8 @@ a1="$(run_hook refs/heads/work/1315-4a7j)"
 rc1="${a1##*__RC__}"
 if [ "${rc1:-1}" -ne 0 ]; then
     bad "ARM 1: a work/<order> push with no stamp was REFUSED (rc=$rc1) — the lane is not open, and hosts keep using salvage/ as their everyday branch"
-elif printf '%s' "$a1" | grep -q 'prefer work branches'; then
-    if printf '%s' "$a1" | grep -qE '^warn:pre-push:'; then
+elif grep -q 'prefer work branches' <<<"$a1"; then
+    if grep -qE '^warn:pre-push:' <<<"$a1"; then
         ok "ARM 1: a work push with no stamp is ACCEPTED, each red decider prints warn:pre-push:<decider>: and the affordance follows"
     else
         ok "ARM 1: a work push with no stamp is ACCEPTED and carries the affordance (no decider was red on this tree, so no warn line to show)"
@@ -159,7 +159,7 @@ a2="$(run_hook refs/heads/linux-next)"
 rc2="${a2##*__RC__}"
 if [ "${rc2:-0}" -eq 0 ]; then
     bad "ARM 2: the SAME stampless commit was ACCEPTED to linux-next — the work lane has disabled the only safety net the trunk has"
-elif printf '%s' "$a2" | grep -qi 'stamp'; then
+elif grep -qi 'stamp' <<<"$a2"; then
     ok "ARM 2: the same stampless commit is still REFUSED to linux-next for the missing stamp — the integration gate is untouched"
 else
     ok "ARM 2: the same commit is still refused to linux-next (rc=$rc2)"
@@ -187,10 +187,10 @@ if [ -z "$rx" ]; then
     bad "ARM 4: creation_regex not found in $MD"
 else
     good=0; stray=0
-    printf '%s' "$rx" | grep -q 'work/' && good=1
+    grep -q 'work/' <<<"$rx" && good=1
     if [ "$good" -eq 1 ]; then
         # the grammar must be the packet-id shape, not a wildcard
-        if printf '%s' "$rx" | grep -qE 'work/\[0-9\]\{[0-9],[0-9]\}-\[a-z0-9\]\{4\}'; then
+        if grep -qE 'work/\[0-9\]\{[0-9],[0-9]\}-\[a-z0-9\]\{4\}' <<<"$rx"; then
             ok "ARM 4: creation_regex admits work/<order> by the PACKET-ID grammar, so work/foo remains a stray the sweep reaps"
         else
             bad "ARM 4: creation_regex admits work/ but not by the packet-id grammar — work/foo would become a legal ref and the sweep loses its grammar"
@@ -219,10 +219,10 @@ if [ ! -f "$PROV" ]; then
 else
     PLAN_BIN="${TILLANDSIAS_PLAN_BIN:-$(. "$ROOT/scripts/plan-binary-probe.sh" && resolve_plan_binary)}"
     line="$(cd "$ROOT" && TILLANDSIAS_PROVENANCE_REPO="$S" TILLANDSIAS_PROVENANCE_REF=HEAD "$PLAN_BIN" script run "$PROV" -- 50.years 2>/dev/null | head -1)"
-    if printf '%s' "$line" | grep -q 'queue=1' \
-       && printf '%s' "$line" | grep -q 'plan=1' \
-       && printf '%s' "$line" | grep -q 'relay=1' \
-       && printf '%s' "$line" | grep -q 'direct=1'; then
+    if grep -q 'queue=1' <<<"$line" \
+       && grep -q 'plan=1' <<<"$line" \
+       && grep -q 'relay=1' <<<"$line" \
+       && grep -q 'direct=1' <<<"$line"; then
         ok "ARM 5: the classifier counts one of each correctly ($line)"
     else
         bad "ARM 5: the classifier miscounted the scaffold — got: ${line:-<nothing>}"

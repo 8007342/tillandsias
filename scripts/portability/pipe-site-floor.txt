@@ -719,7 +719,6 @@ scripts scripts/test-plan-binary-runnability-precondition.sh 10
 scripts scripts/test-plan-field-get.sh 2
 scripts scripts/test-plan-fragments-lane-affordance.sh 2
 scripts scripts/test-plan-only-lane-structural.sh 8
-scripts scripts/test-plan-orders-fragment-fold.sh 7
 scripts scripts/test-podman-mock-refusal.sh 4
 scripts scripts/test-podman-mock-secret-lifecycle.sh 4
 scripts scripts/test-portability-idioms.sh 13
@@ -731,7 +730,7 @@ scripts scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh 7
 scripts scripts/test-pre-push-trailer-states-what-it-saw.sh 2
 scripts scripts/test-pre-push-version-guard-sigpipe.sh 3
 scripts scripts/test-pre-push-version-guard.sh 1
-scripts scripts/test-pre-push-work-ref-lane.sh 12
+scripts scripts/test-pre-push-work-ref-lane.sh 3
 scripts scripts/test-pre-receive-yaml-gate.sh 2
 scripts scripts/test-precommit-zero-trace-scan-scope.sh 6
 scripts scripts/test-preflight-front-door.sh 8
@@ -754,12 +753,11 @@ scripts scripts/test-reset-state-contract.sh 3
 scripts scripts/test-run-verb-agent-door.sh 3
 scripts scripts/test-running-image-freshness.sh 6
 scripts scripts/test-salvage-audit.sh 7
-scripts scripts/test-salvage-net.sh 13
+scripts scripts/test-salvage-net.sh 7
 scripts scripts/test-scorable-closure-quoting.sh 5
 scripts scripts/test-scorable-obligation-gate.sh 15
 scripts scripts/test-scorable-obligation-splitter.sh 14
 scripts scripts/test-script-exec-bits.sh 3
-scripts scripts/test-seam-writers-canonical.sh 7
 scripts scripts/test-secrets.sh 7
 scripts scripts/test-selector-drops-cross-branch-claims.sh 6
 scripts scripts/test-selector-flags-host-scoped-criteria.sh 4
@@ -772,13 +770,12 @@ scripts scripts/test-sidecar-arch-derivation.sh 1
 scripts scripts/test-sidecar-staleness-stamp.sh 2
 scripts scripts/test-sigpipe-verdict-measured.sh 1
 scripts scripts/test-sigpipe-verdict-pipelines.sh 3
-scripts scripts/test-silverblue-update-skew-probe.sh 7
+scripts scripts/test-silverblue-update-skew-probe.sh 2
 scripts scripts/test-skills-single-source.sh 8
 scripts scripts/test-smoke-verifies-a-signature.sh 7
 scripts scripts/test-spawn-failure-names-program.sh 3
 scripts scripts/test-spec-index-repo-relative-rung.sh 3
-scripts scripts/test-spec-index-staging-capacity.sh 4
-scripts scripts/test-ssh-lane-sidecar.sh 6
+scripts scripts/test-ssh-lane-sidecar.sh 3
 scripts scripts/test-status-channel-absent-is-first-class.sh 10
 scripts scripts/test-summarize-pubspec.sh 3
 scripts scripts/test-support/github-login-fake.sh 2
