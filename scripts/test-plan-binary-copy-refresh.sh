@@ -28,6 +28,13 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# The arms judge THIS fixture's scratch repos. Inside a gate the caller exports
+# its frozen diff base, a sha the scratch repos do not have, and the copy
+# refresh (which falls back through it) then read every scratch checkout as
+# off-trunk: run 32 evicted #1330 on the CONTROL arm. Never inherit it
+# (the 2242-u39b class). The production check keeps reading it: inside a real
+# gate HEAD is trunk plus the change, and skipping the refresh there is right.
+unset TILLANDSIAS_GATE_DIFF_BASE TILLANDSIAS_GATE_DIFF_BASE_ROOT
 cd "$ROOT" || exit 2
 fail=0; pass=0
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
