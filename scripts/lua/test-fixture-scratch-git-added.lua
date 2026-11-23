@@ -28,10 +28,17 @@ do
         BASH = (ep:gsub("/[^/]+/libexec/git%-core$", "/bin/bash.exe"))
     end
 end
+local fixture = require "common.fixture"
+local ROOT = fixture.repo_root()
+-- 2265-4pja: on native Windows the runner path is C:\… or C:/…, which the old
+-- `sub(1, 1) ~= "/"` read as relative and joined to ROOT (msys under
+-- fleet-run: ROOT/C:\…). An absolute path is /x OR a drive path; the drive
+-- test is common.fixture.is_abs()'s, inline until #1402 lands it on trunk.
+-- With no runner set, the probe's binary, never a hard-coded target/release.
 local RUNNER = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN")
-if not RUNNER or RUNNER == "" then RUNNER = "target/release/tillandsias-plan" end
-local ROOT = text.trim(proc.run{ argv = { "git", "rev-parse", "--show-toplevel" } }.stdout or "")
-if RUNNER:sub(1, 1) ~= "/" then RUNNER = ROOT .. "/" .. RUNNER end
+if not RUNNER or RUNNER == "" then RUNNER = fixture.plan_binary() end
+if RUNNER ~= "" and RUNNER:sub(1, 1) ~= "/" and not RUNNER:find("^%a:[/\\]") then RUNNER = ROOT .. "/" .. RUNNER end
+RUNNER = fixture.native_path(RUNNER)
 local rel = "target/plan-scratch/scratch-git-added-" .. tostring(time.now_ms())
 fs.mkdir(rel)
 local ABS = ROOT .. "/" .. rel
