@@ -6078,6 +6078,22 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # is a no-op rather than a gate. It runs here, where a binary exists.
     # Ported to Lua (1642-cc54 carry): with no binary it is now could-not-run
     # (exit 3), which this gate refuses, instead of a pass.
+    # ORDER 2246-fkea — an added Lua fixture line that roots at `pwd -P` or
+    # spawns a bare bash/sed passes here and fails on a native Windows runner
+    # (three ports in one day, #1388 the third). Refused at the source.
+    _step "Checking added Lua fixtures use native-safe roots and shells (2246-fkea)..."
+    if ! _run_lua_decider "scripts/lua/check-lua-fixture-native-argv-added.lua" 2>&1; then
+        _error "an added scripts/lua line roots at pwd -P or spawns a bare bash/sed — use common.fixture's repo_root() / posix_shell(); see the REFUSED lines above (2246-fkea)"
+        exit 1
+    fi
+    _info "Native argv check passed"
+    _step "Checking the native-argv decider refuses what it should (2246-fkea)..."
+    if ! _run_lua_decider "scripts/lua/test-lua-fixture-native-argv-added.lua" 2>&1; then
+        _error "check-lua-fixture-native-argv-added.lua no longer refuses a pwd -P root or a bare bash/sed argv, or refuses the helper form; see the FAIL lines above (2246-fkea)"
+        exit 1
+    fi
+    _info "Native argv fixture passed"
+
     _step "Checking that added fragments' declared closures resolve (885-92iu)..."
     if ! _run_lua_decider "scripts/lua/check-declared-closures-added.lua" 2>&1; then
         _error "this change files a packet whose verifiable_closure names a litmus test that does not resolve (885-92iu)"

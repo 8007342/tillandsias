@@ -28,13 +28,7 @@
 local GH = env.get("TILLANDSIAS_PROBE_GH") or "gh"
 local GIT = env.get("TILLANDSIAS_PROBE_GIT") or "git"
 local T = tonumber(env.get("TILLANDSIAS_PROBE_TIMEOUT_MS") or "") or 20000
-local BASH = "/bin/bash"
-do
-    local ep = text.trim(proc.run({ argv = { "git", "--exec-path" }, timeout_ms = 10000 }).stdout or "")
-    if ep:find("^%a:/.*/libexec/git%-core$") then
-        BASH = (ep:gsub("/[^/]+/libexec/git%-core$", "/bin/bash.exe"))
-    end
-end
+local BASH = require("common.fixture").posix_shell("/bin/bash") -- Git's bash on native Windows (2246-fkea)
 local function argv_of(bin, ...)
     local a = bin:find("%.sh$") and { BASH, bin } or { bin }
     for _, x in ipairs({ ... }) do a[#a + 1] = x end
