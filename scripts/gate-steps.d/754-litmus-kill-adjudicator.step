@@ -14,4 +14,5 @@ STEP_ERROR="the litmus kill-time adjudicator does not classify by cpu.pressure d
 STEP_OK="Litmus kill-time adjudicator check passed"
 STEP_SERIAL="runs the real litmus runner"
 STEP_LANES="litmus"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin PASS 7/7 arms at 213905e79 (fleet-run)"
 STEP_READS="scripts/test-litmus-kill-adjudicator.sh"

@@ -6,4 +6,5 @@ STEP_DESC="Checking image rebuild keeps the installed binary's launch tag (747-k
 STEP_SCRIPT="scripts/test-build-image-installed-version-alias.sh"
 STEP_ERROR="an image rebuild can orphan the tag the installed binary launches by — every forge launch would be dead on arrival (747-knbp)"
 STEP_OK="Image-rebuild launch-tag gate passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin ok launch tag resolvable under version skew at 213905e79 (fleet-run)"
 STEP_READS="scripts/test-build-image-installed-version-alias.sh"

@@ -6,4 +6,5 @@ STEP_DESC="Checking --changed --intake defers, marks HEAVY, and matches cargo's 
 STEP_LUA="scripts/lua/test-gate-changed-intake.lua"
 STEP_ERROR="--changed --intake no longer defers whole-tree/slow fixtures by name, marks an unscopable change HEAVY, or derives the crate graph cargo resolves (2248-zcqh)"
 STEP_OK="--changed --intake fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin ok:gate-changed-intake:12 arms at 213905e79 (run directly; fleet-run reds it because it deletes the other .step files the fixture reads)"
 STEP_READS="scripts/lua/test-gate-changed-intake.lua"
