@@ -8,4 +8,5 @@ STEP_ERROR="./build.sh --changed's fixture pool lost its order, isolation, seria
 STEP_OK="--changed input-selection fixture passed"
 STEP_SERIAL="asserts wall-clock bounds (four 1 s stub fixtures under 2.5 s at 4 jobs); pool load would make it flaky"
 STEP_LANES="timing"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin ok:gate-changed-parallel-fixtures:6/6 at 35680bdf4 (run directly, idle host)"
 STEP_READS="scripts/lua/test-gate-changed-parallel-fixtures.lua"
