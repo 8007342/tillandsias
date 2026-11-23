@@ -181,7 +181,7 @@ else
     else
         _get() { grep -oE "$1=[0-9]+" <<<"$verdict" | head -1 | tr -cd '0-9'; }
         _s=0
-        for k in ran declared-skip skipped-by-deadline could-not-run refused; do
+        for k in ran declared-skip skipped-by-deadline benched could-not-run refused; do
             _v="$(_get "$k")"; _s=$(( _s + ${_v:-0} ))
         done
         _stated="$(_get sum)"
