@@ -11,7 +11,7 @@
 --
 -- No worktree (operator ruling 2026-10-11): target/work/fleet-run/<commit>/ is
 -- its own repository (no remote), which fetches that one commit from this
--- checkout and checks it out. HEAD^{tree} must equal <ref>^{tree} AND the files
+-- checkout and checks it out, afresh on every run (not a cache). HEAD^{tree} must equal <ref>^{tree} AND the files
 -- on disk must match it (git status clean), so nothing unstated is run. The
 -- files come from git's own objects, not a tar (2259-fk3m): on native Windows
 -- tar loses the exec bits and symlinks, and GNU tar reads C:/ as a host. The
@@ -156,7 +156,7 @@ local r = proc.run({ argv = argv, cwd = D, timeout_ms = 3600000, env = benv })
 local src = (r.status == "exited") and r.code or -1
 if WINDOWS and src ~= 0 and tostring(src) == (step_text:match('\nSTEP_SKIP_EXIT="?(%d+)') or "") then src = 0 end
 local o = (r.stdout or "") .. "\n" .. (r.stderr or "")
-fs.write("target/work/fleet-run/" .. COMMIT .. ".log", o)
+fs.write("target/work/fleet-run/" .. COMMIT .. "-" .. STEP .. ".log", o)
 
 -- The step's last verdict-shaped line (<word>:<word>...), read only AFTER the
 -- step's own STEP_DESC line and before the door's next [build] line, so setup
@@ -173,4 +173,4 @@ for _, l in ipairs(text.lines(WINDOWS and (r.stdout or "") or o)) do
     elseif t:match("^[%a][%w-]*:[%w]") and not t:match("^regime:") then vline = t end
 end
 out.line("regime:" .. PLATFORM .. ":step=" .. STEP .. ":rc=" .. src .. ":sha=" .. TREE .. ":verdict=" .. vline)
-verdict.ok("fleet-run", "step=" .. STEP .. " rc=" .. src .. " log=target/work/fleet-run/" .. COMMIT .. ".log")
+verdict.ok("fleet-run", "step=" .. STEP .. " rc=" .. src .. " log=target/work/fleet-run/" .. COMMIT .. "-" .. STEP .. ".log")
