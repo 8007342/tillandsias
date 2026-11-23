@@ -615,6 +615,36 @@ SELECT_ONLY=0
 # UNCLASSIFIED, never fall back to a number that measures something else.
 # LITMUS_PSI_FILE overrides the path so the hermetic fixture can inject
 # counters (scripts/test-litmus-kill-adjudicator.sh).
+# ORDER 2132-2yjt. The same `some total=` reader for io.pressure and
+# memory.pressure. A step killed with CPU starvation excluded was labelled
+# "cause UNCLASSIFIED" while the host was paging: v56.11.20.1 ci-full on
+# macuahuitl, ~29 GB swapped out, three steps timed out at 2% CPU stall, and
+# the same steps take 4-5% of their budget on an idle host. The io/memory
+# files sit beside the cpu one: LITMUS_PSI_FILE's directory when a fixture
+# injects counters, else the same cgroup the CPU counter was read from.
+_lt_res_stall_us() { # $1 = io | memory
+    local cpu_f dir f
+    if [ -n "${LITMUS_PSI_FILE:-}" ]; then
+        dir="$(dirname "$LITMUS_PSI_FILE")"
+    else
+        cpu_f="$(_lt_cpu_pressure_path)"
+        dir="$(dirname "$cpu_f")"
+    fi
+    f="$dir/$1.pressure"
+    [ -r "$f" ] || return 0
+    awk '$1 == "some" { for (i = 2; i <= NF; i++) if ($i ~ /^total=/) { sub(/^total=/, "", $i); print $i; exit } }' "$f" 2>/dev/null
+}
+
+_lt_cpu_pressure_path() {
+    local own
+    own="$(sed -n 's/^0::\(.*\)$/\1/p' /proc/self/cgroup 2>/dev/null | head -1)"
+    if [ -n "$own" ] && [ "$own" != "/" ] && [ -r "/sys/fs/cgroup${own}/cpu.pressure" ]; then
+        printf '%s\n' "/sys/fs/cgroup${own}/cpu.pressure"
+    else
+        printf '%s\n' "/sys/fs/cgroup/cpu.pressure"
+    fi
+}
+
 _lt_cpu_stall_us() {
     local f="${LITMUS_PSI_FILE:-}"
     if [ -z "$f" ]; then
@@ -2072,6 +2102,7 @@ run_litmus_test_file() {
         # 956-llei: stall counter + wall clock at launch, diffed at kill time.
         local _lt_psi0 _lt_t0
         _lt_psi0="$(_lt_cpu_stall_us)"; _lt_t0="$(date +%s)"
+        _lt_io0="$(_lt_res_stall_us io)"; _lt_mem0="$(_lt_res_stall_us memory)"
         local _lt_t0_ms; _lt_t0_ms="$(timing_now_ms 2>/dev/null || echo 0)"
         # 956-llei: stdin is /dev/null, ALWAYS. The per-spec test loop feeds
         # its bound test names through a here-string on stdin, and a step that
@@ -2253,6 +2284,23 @@ run_litmus_test_file() {
                     # says so honestly. The path with PARTIAL data must not
                     # produce more confidence than the path with none.
                     log_warn "  cpu.pressure some-stall ${_lt_stall_us}us over ${_lt_elapsed}s (${_lt_stall_pct}%) in this cgroup — CPU starvation EXCLUDED; cause otherwise UNCLASSIFIED, because this counter measures only waiting for a CPU and does not see I/O, locks, process-table pressure, or pattern-kill effects from concurrent steps. Re-run this step ALONE before treating it as too slow: a step that passes alone and reds in the suite is interference, not a budget."
+                    # ORDER 2132-2yjt: the two pressures the CPU line cannot
+                    # see, from the same cgroup over the same window. Reported
+                    # only when readable on both ends; the verdict is unchanged.
+                    local _lt_res _lt_r0 _lt_r1 _lt_rus _lt_rpct
+                    for _lt_res in io memory; do
+                        if [ "$_lt_res" = io ]; then _lt_r0="${_lt_io0:-}"; else _lt_r0="${_lt_mem0:-}"; fi
+                        _lt_r1="$(_lt_res_stall_us "$_lt_res")"
+                        { [ -n "$_lt_r0" ] && [ -n "$_lt_r1" ] && [ "$_lt_r1" -ge "$_lt_r0" ]; } 2>/dev/null || continue
+                        _lt_rus=$(( _lt_r1 - _lt_r0 ))
+                        _lt_rpct=$(( _lt_rus / (_lt_elapsed * 10000) ))
+                        if [ "$_lt_rpct" -ge "${LITMUS_STALL_CONTENDED_PCT:-25}" ]; then
+                            local _lt_label=MEMORY; [ "$_lt_res" = io ] && _lt_label=I/O  # explicit labels: bash 3.2 has no case conversion
+                            log_warn "  ${_lt_res}.pressure some-stall ${_lt_rus}us over ${_lt_elapsed}s (${_lt_rpct}%) in this cgroup — step STALLED ON ${_lt_label} at kill time; a host that is paging or I/O-bound can time out a step that is fast when idle, so check the host (swap, disk) and re-run before treating this as a regression"
+                        else
+                            log_warn "  ${_lt_res}.pressure some-stall ${_lt_rus}us over ${_lt_elapsed}s (${_lt_rpct}%) in this cgroup — ${_lt_res} stall below the contended threshold"
+                        fi
+                    done
                 fi
             fi
             return 1
