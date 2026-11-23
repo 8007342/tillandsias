@@ -21,7 +21,17 @@
 --
 -- Verdict: ok:rank-refusal-hits:<n> arms | violation:rank-refusal-hits:<n> failed
 
-local root = text.trim(proc.run{ argv = { "pwd", "-P" } }.stdout or "")
+local root = text.trim(proc.run{ argv = { "git", "rev-parse", "--show-toplevel" }, timeout_ms = 30000 }.stdout or "")
+-- Native Windows (yolanda, msys): `pwd -P` answers /c/..., which the runner
+-- refuses as a relative cwd; git answers C:/... A bare `bash` there resolves
+-- to WSL's, so Git's own bash is derived from its exec path (2218-x4s3).
+local BASH = "bash"
+do
+    local ep = text.trim(proc.run({ argv = { "git", "--exec-path" }, timeout_ms = 10000 }).stdout or "")
+    if ep:find("^%a:/.*/libexec/git%-core$") then  -- mingw64/ or ucrt64/, per Git build
+        BASH = (ep:gsub("/[^/]+/libexec/git%-core$", "/bin/bash.exe"))
+    end
+end
 local R = root .. "/scripts/rank-refusal-hits.sh"
 local pass, failn = 0, 0
 local function ok(m) pass = pass + 1; out.line("ok:   " .. m) end
@@ -33,7 +43,7 @@ for _, d in ipairs({ "", "/ledger", "/issues", "/l5", "/l6" }) do proc.run{ argv
 local function cleanup() proc.run{ argv = { "find", W, "-delete" }, timeout_ms = 60000 } end
 
 local function rank(args)
-    local argv = { "bash", R }
+    local argv = { BASH, R }
     for _, a in ipairs(args) do argv[#argv + 1] = a end
     local r = proc.run{ argv = argv, cwd = root, timeout_ms = 120000 }
     return (r.status == "exited" and r.code or -1), (r.stdout or "")

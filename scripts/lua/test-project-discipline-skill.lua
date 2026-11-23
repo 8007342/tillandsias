@@ -19,7 +19,17 @@
 --
 -- Verdict: ok:project-discipline-skill:<pass>/<total> | fail:project-discipline-skill:<pass>/<total>
 
-local root = text.trim(proc.run{ argv = { "pwd", "-P" } }.stdout or "")
+local root = text.trim(proc.run{ argv = { "git", "rev-parse", "--show-toplevel" }, timeout_ms = 30000 }.stdout or "")
+-- Native Windows (yolanda, msys): `pwd -P` answers /c/..., which the runner
+-- refuses as a relative cwd; git answers C:/... A bare `bash` there resolves
+-- to WSL's, so Git's own bash is derived from its exec path (2218-x4s3).
+local BASH = "bash"
+do
+    local ep = text.trim(proc.run({ argv = { "git", "--exec-path" }, timeout_ms = 10000 }).stdout or "")
+    if ep:find("^%a:/.*/libexec/git%-core$") then  -- mingw64/ or ucrt64/, per Git build
+        BASH = (ep:gsub("/[^/]+/libexec/git%-core$", "/bin/bash.exe"))
+    end
+end
 local SKILL = "skills/project-discipline/SKILL.md"
 local PROFILE = root .. "/images/default/config-overlay/mcp/agent-profile.sh"
 local pass, total = 0, 4
@@ -41,7 +51,7 @@ for _, l in ipairs(text.lines(fs.read("methodology.yaml"))) do
     if s and l == "      project-discipline:" then f = true end
     if f and l:find("path: skills/project-discipline/SKILL.md", 1, true) then reg = true; break end
 end
-local sr = proc.run{ argv = { "bash", root .. "/scripts/check-skills-single-source.sh" }, cwd = root, timeout_ms = 120000 }
+local sr = proc.run{ argv = { BASH, root .. "/scripts/check-skills-single-source.sh" }, cwd = root, timeout_ms = 120000 }
 local single = text.trim(sr.stdout or "")
 local single_rc = sr.status == "exited" and sr.code or -1
 if fs.exists(SKILL) and reg and single_rc == 0 and text.starts_with(single, "ok:skills-single-source") then
@@ -83,7 +93,7 @@ else bad("arm 3: no section for: " .. table.concat(missing, " ")) end
 local H, P = W .. "/home", W .. "/some-project"
 proc.run{ argv = { "mkdir", "-p", H .. "/.codex/skills/project-discipline", P } } -- a user-owned entry
 fs.write(rel .. "/home/.codex/skills/project-discipline/SKILL.md", "")
-local src = proc.run{ argv = { "bash", "-s" }, cwd = P, timeout_ms = 120000,
+local src = proc.run{ argv = { BASH, "-s" }, cwd = P, timeout_ms = 120000,
     stdin = 'set -euo pipefail; source "$PROFILE"; source "$PROFILE"; echo sourced\n',
     env = { HOME = H, PROFILE = PROFILE, TILLANDSIAS_SHARED_SKILLS_ROOT = root .. "/skills", TILLANDSIAS_AGENT = "claude" } }
 local src_out = (src.stdout or "") .. (src.stderr or "")
