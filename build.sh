@@ -7537,7 +7537,10 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # handoff. Promotion to a refusal is an operator decision, and the moment
     # for it is when dev binaries are signed and SAC stops being a coin flip.
     _step "Reporting Windows-only source verification state (716-f5kc)..."
-    _windows_only_verdict="$(bash "$SCRIPT_DIR/scripts/check-windows-only-sources-verified.sh" 2>/dev/null || echo "stale:sources-check-failed:windows-only")"
+    _wo_plan="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _wo_plan=""
+    # 2243-wosv: the Lua port (one file, --platform macos for the macOS scope).
+    _windows_only_verdict="$( [ -n "$_wo_plan" ] && cd "$SCRIPT_DIR" && "$_wo_plan" script run scripts/lua/check-windows-only-sources-verified.lua 2>/dev/null </dev/null )" || _windows_only_verdict=""
+    case "$_windows_only_verdict" in ok:*|skip:*|stale:*|missing:*) ;; *) _windows_only_verdict="stale:sources-check-failed:windows-only" ;; esac
     case "$_windows_only_verdict" in
         ok:* | skip:*)
             _info "Windows-only sources: $_windows_only_verdict"
@@ -7552,13 +7555,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
             _warn "  No host has committed an attestation for these yet — this is a fact about"
             _warn "  the repository, NOT a claim that the sources are broken or unverified."
             _warn "  On a Windows host: cargo test -p tillandsias-windows-tray --bins | \\"
-            _warn "    scripts/check-windows-only-sources-verified.sh attest --from -"
+            _warn "    tillandsias-plan script run scripts/lua/check-windows-only-sources-verified.lua -- attest --from -"
             ;;
         *)
             _warn "Windows-only sources: $_windows_only_verdict"
             _warn "  A Linux build compiles src/stubs/ for these — this gate did NOT read them."
             _warn "  Verify natively (cargo test -p tillandsias-windows-tray), then:"
-            _warn "    scripts/check-windows-only-sources-verified.sh attest --from <transcript>"
+            _warn "    tillandsias-plan script run scripts/lua/check-windows-only-sources-verified.lua -- attest --from <transcript>"
             ;;
     esac
 
@@ -7568,7 +7571,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # read as healthy. Same gate, same vocabulary, same attestation format; only
     # the scope differs.
     _step "Reporting macOS-only source verification state (739-6r6n)..."
-    _macos_only_verdict="$(bash "$SCRIPT_DIR/scripts/check-macos-only-sources-verified.sh" 2>/dev/null || echo "stale:sources-check-failed:macos-only")"
+    _macos_only_verdict="$( [ -n "$_wo_plan" ] && cd "$SCRIPT_DIR" && "$_wo_plan" script run scripts/lua/check-windows-only-sources-verified.lua -- --platform macos 2>/dev/null </dev/null )" || _macos_only_verdict=""
+    case "$_macos_only_verdict" in ok:*|skip:*|stale:*|missing:*) ;; *) _macos_only_verdict="stale:sources-check-failed:macos-only" ;; esac
     case "$_macos_only_verdict" in
         ok:* | skip:*)
             _info "macOS-only sources: $_macos_only_verdict"
@@ -7581,13 +7585,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
             _warn "  No host has committed an attestation for these yet — this is a fact about"
             _warn "  the repository, NOT a claim that the sources are broken or unverified."
             _warn "  On a macOS host: cargo test -p tillandsias-macos-tray --bins | \\"
-            _warn "    scripts/check-macos-only-sources-verified.sh attest --from -"
+            _warn "    tillandsias-plan script run scripts/lua/check-windows-only-sources-verified.lua -- --platform macos attest --from -"
             ;;
         *)
             _warn "macOS-only sources: $_macos_only_verdict"
             _warn "  A Linux or Windows build compiles stubs for these — this gate did NOT read them."
             _warn "  Verify natively (cargo test -p tillandsias-macos-tray --bins), then:"
-            _warn "    scripts/check-macos-only-sources-verified.sh attest --from <transcript>"
+            _warn "    tillandsias-plan script run scripts/lua/check-windows-only-sources-verified.lua -- --platform macos attest --from <transcript>"
             ;;
     esac
 
