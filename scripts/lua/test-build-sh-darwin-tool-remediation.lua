@@ -34,7 +34,7 @@ end
 if not fs.exists("build.sh") then verdict.refused(NAME, "no build.sh") end
 local build = fs.read("build.sh")
 
-local bash_bin = text.trim(proc.run{ argv = { "which", "bash" } }.stdout or "")
+local bash_bin = require("common.fixture").which("bash") or ""
 if bash_bin == "" then verdict.could_not_run(NAME, "no bash on PATH") end
 
 check("build-sh-parses", proc.run{ argv = { bash_bin, "-n", "build.sh" }, timeout_ms = 60000 }.code == 0)

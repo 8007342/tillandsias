@@ -313,8 +313,58 @@ elif [ "$CHANGED_N" -eq 0 ]; then
     echo "ok:gate-changed:no-changes base=${BASE:-files} fixtures=0/$POP_N crates=0"
     exit 0
 fi
+# ORDER 2250-gwfy — AT INTAKE, A build.sh EDIT CONFINED TO WIRED FIXTURE
+# BLOCKS IS NOT A GUARD HIT. Most build.sh edits add or change one
+# `_step … if ! _run… ; _error … exit 1 ; fi ; _info …` block inside --check,
+# and the replay (2249-tif9) found build.sh behind 11 of 22 HEAVY heads. The
+# rule is deliberately STRICT: every added or removed line must be a block
+# line (comment, blank, _step, `if ! _run`/`_run_lua_decider`, _error, _warn,
+# exit 1, fi, _info) and lie inside the --check section; anything else (a
+# variable, a trap, the step loop, a multi-line block with its own state)
+# stays heavy:guard:build.sh. The fixtures named on the changed `_run` lines
+# are then SELECTED (because=build.sh-block), alongside every fixture whose
+# declared inputs name build.sh. Without --intake nothing here applies.
+# The diff comes from git (`git diff -U0 <base> -- build.sh`), or, under
+# --files, from TILLANDSIAS_GATE_CHANGED_BUILD_DIFF (the replay supplies it);
+# with neither, build.sh stays a guard.
+: > "$WORK/build-block-fx"
+_build_block_only=0
+if [ "$INTAKE" = 1 ] && grep -qx 'build.sh' "$WORK/changed"; then
+    if [ -n "$FILES_FROM" ]; then
+        _bd="${TILLANDSIAS_GATE_CHANGED_BUILD_DIFF:-}"
+        [ -n "$_bd" ] && [ -f "$_bd" ] && cp "$_bd" "$WORK/build.diff" || : > "$WORK/build.diff"
+    else
+        git diff -U0 "$BASE" -- build.sh > "$WORK/build.diff" 2>/dev/null || : > "$WORK/build.diff"
+    fi
+    _chk_lo="$(grep -n '^if \[\[ "\$FLAG_CHECK" == true \]\]; then' build.sh | head -n 1 | cut -d: -f1)"
+    _chk_hi="$(grep -n '^elif \[\[ "\$FLAG_TEST\$FLAG_CHECK' build.sh | head -n 1 | cut -d: -f1)"
+    if [ -s "$WORK/build.diff" ] && [ -n "$_chk_lo" ] && [ -n "$_chk_hi" ]; then
+        _bb="$(awk -v lo="$_chk_lo" -v hi="$_chk_hi" -v out="$WORK/build-block-fx" '
+            /^@@/ { s = $0; sub(/^@@ -[0-9,]+ \+/, "", s); sub(/[, ].*/, "", s); n = s + 0; next }
+            /^(\+\+\+|---)/ { next }
+            /^[+-]/ {
+                l = substr($0, 2)
+                if (n < lo || n > hi) { bad = 1 }
+                else if (l ~ /^[[:space:]]*(#.*)?$/ || l ~ /^[[:space:]]*_step "/ || l ~ /^[[:space:]]*_error "/ \
+                    || l ~ /^[[:space:]]*_warn "/ || l ~ /^[[:space:]]*_info "/ || l ~ /^[[:space:]]*exit 1$/ || l ~ /^[[:space:]]*fi$/) { }
+                else if (l ~ /^[[:space:]]*if ! _run_lua_decider "scripts\/lua\/[^"]+" 2>&1; then$/) {
+                    f = l; sub(/.*_run_lua_decider "/, "", f); sub(/".*/, "", f); print f > out
+                } else if (l ~ /^[[:space:]]*if ! _run bash "\$SCRIPT_DIR\/scripts\/[^"]+"( [^;]*)? 2>&1; then$/) {
+                    f = l; sub(/.*_run bash "\$SCRIPT_DIR\//, "", f); sub(/".*/, "", f); print f > out
+                } else { bad = 1 }
+                if (substr($0, 1, 1) == "+") n++
+                next
+            }
+            END { print (bad ? "machinery" : "block-only") }' "$WORK/build.diff")"
+        [ "$_bb" = "block-only" ] && _build_block_only=1
+    fi
+fi
 if [ -z "$_why_all" ]; then
-    _g="$(grep -E "$_guard_re" "$WORK/changed" | head -n 1)"
+    if [ "$_build_block_only" = 1 ]; then
+        _g="$(grep -vx 'build.sh' "$WORK/changed" | grep -E "$_guard_re" | head -n 1)"
+    else
+        _g="$(grep -E "$_guard_re" "$WORK/changed" | head -n 1)"
+    fi
     [ -z "$_g" ] && _g="$(grep -F -f "$WORK/plan-closure" "$WORK/changed" | grep -E '^crates/' | head -n 1)"
     [ -n "$_g" ] && _why_all="guard:$_g"
 fi
@@ -364,6 +414,40 @@ if [ -n "$_why_all" ]; then
     exit 0
 fi
 
+# 2250-gwfy: the fixtures a block-only build.sh edit wires are selected.
+if [ "$_build_block_only" = 1 ] && [ -s "$WORK/build-block-fx" ]; then
+    sort -u "$WORK/build-block-fx" | while IFS= read -r _bf; do
+        # a REMOVED block names a fixture that may be gone: select only what
+        # the population still runs, or the run loop would count it unrun.
+        awk -F'\t' -v f="$_bf" '$3 == f && $4 == "" { found = 1 } END { exit !found }' "$WORK/pop" || continue
+        grep -q "^$_bf	" "$WORK/fx-sel" 2>/dev/null || printf '%s\tbuild.sh-block\n' "$_bf"
+    done >> "$WORK/fx-sel"
+    sort -o "$WORK/fx-sel" "$WORK/fx-sel"
+    FX_N="$(wc -l < "$WORK/fx-sel" | tr -d ' ')"
+fi
+
+# ORDER 2260-qw67: a guard build.sh declares `gate-context` (its preflight
+# precondition table) answers about a RUNNING gate, not the tree, so a scoped run
+# has no subject for it. It was run anyway, without the arguments its call site
+# passes on a continuation line, and read could-not-run on every sample. Left out
+# of the SELECTION, never of the population: its inputs must stay mapped, or a
+# change to one would select everything. Named; the full gate still runs it.
+awk -F'|' '/^_preflight_preconditions\(\)/ { t = 1; next } t && /^PRECONDS$/ { exit }
+           t && $2 == "gate-context" { print $1 }' build.sh > "$WORK/gate-context"
+if [ -s "$WORK/gate-context" ]; then
+    : > "$WORK/fx-ctx"
+    while IFS=$'\t' read -r _u _why; do
+        _fp="${_u%% *}"
+        if grep -qxF -- "${_fp##*/}" "$WORK/gate-context"; then
+            echo "skip:gate-changed:gate-context:$_fp — build.sh declares it has no subject outside a running gate" >&2
+        else
+            printf '%s\t%s\n' "$_u" "$_why" >> "$WORK/fx-ctx"
+        fi
+    done < "$WORK/fx-sel"
+    mv "$WORK/fx-ctx" "$WORK/fx-sel"
+    FX_N="$(wc -l < "$WORK/fx-sel" | tr -d ' ')"
+fi
+
 # INTAKE: defer whole-tree readers and declared-slow fixtures to the bundle.
 : > "$WORK/fx-deferred"
 if [ "$INTAKE" = 1 ]; then
@@ -372,7 +456,10 @@ if [ "$INTAKE" = 1 ]; then
         _fp="${_u%% *}"
         if [ "$_why" = "*" ]; then
             printf '%s\twhole-tree\n' "$_u" >> "$WORK/fx-deferred"
-        elif [ -n "$(sed -n '1,40{/preflight: gate-only-decider/d;/^\(#\|--\) preflight: gate-only/p;}' "$_fp" 2>/dev/null | head -n 1)" ]; then
+        # awk, not sed: `\(a\|b\)` alternation is GNU-only, and BSD sed matched
+        # nothing, so on darwin no declared-slow fixture was ever deferred
+        # (macbookair, #1402: 974's DEFER-SLOW arm red there and on trunk).
+        elif [ -n "$(awk 'NR > 40 { exit } /preflight: gate-only-decider/ { next } /^(#|--) preflight: gate-only/ { print; exit }' "$_fp" 2>/dev/null)" ]; then
             printf '%s\tslow\n' "$_u" >> "$WORK/fx-deferred"
         else
             printf '%s\t%s\n' "$_u" "$_why" >> "$WORK/fx-keep"

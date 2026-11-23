@@ -169,7 +169,7 @@ local function git(args)
 end
 local base_ok
 do
-    local r = git({ "rev-parse", "--verify", BASE })
+    local r = git({ "rev-parse", "--verify", "--quiet", BASE .. "^{commit}" })
     base_ok = r.status == "exited" and r.code == 0
 end
 local added = {}

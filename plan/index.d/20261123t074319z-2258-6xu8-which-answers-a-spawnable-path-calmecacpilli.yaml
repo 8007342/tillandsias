@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: requested by macuahuitl-fedora 2026-11-22 (yolanda-windows' msys runs of #1408).
+packets:
+  - packet_id: fixture-which-spawnable-and-two-toolbox-fixtures-on-msys
+    order: "2258-6xu8"
+    status: claimed
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, fixtures, windows, portability]
+    estimated_hours: 3
+    title: "fixture.which() answers a spawnable path on native Windows; test-builder-toolbox-exists and test-build-sh-darwin-tool-remediation on native msys"
+    context: |
+      On native msys both fixtures are red, on trunk too. Confirmed cause at #1408: which() answered /usr/bin/bash, an MSYS
+      mount native_path() cannot map, and the native spawn failed (os error 3); test-common-fixture arm 12 did not spawn
+      its hit. Untested next suspects: builder-toolbox-exists symlinks tools into a narrow PATH (copies on msys), and
+      build-sh-darwin-tool-remediation takes a root from pwd -P.
+    exit_criteria:
+      - "Slice 1: which() maps its hit with cygpath on native Windows, and arm 12 spawns it."
+      - "Slice 2: both fixtures pass on native msys, or name the regime they have no subject in."
+    unscoreable: "pinned-elsewhere: test-common-fixture arm 12 (slice 1); the two fixtures on msys (slice 2)."
+    next_action: "Land slice 1; slice 2 from yolanda's msys output."
+    provenance: "macuahuitl-fedora 2026-11-22, from yolanda-windows."
+    events:
+      - type: filed
+        ts: "2026-11-23T07:43:19Z"
+        host: calmecacpilli
+        summary: "filed and claimed; slice 1 in the same change"

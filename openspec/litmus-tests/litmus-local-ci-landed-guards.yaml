@@ -1,0 +1,34 @@
+# @trace spec:ci-release
+# @trace order:2231-zmzd
+#
+# local-ci.sh to Lua, slice 5: the "Recently Landed Guards" section is one
+# roster (scripts/lua/local-ci-landed-guards.lua) run by one loop in
+# local-ci.sh. Red with a mutant that turns a report into a gate (arms 1-2)
+# or drops a Lua guard's arguments (arm 3).
+name: litmus:local-ci-landed-guards
+spec: ci-release
+phase: pre-build
+description: local-ci's landed-guards roster has 18 well-formed rows whose guards exist, and its loop passes, fails, reports and names missing guards as the bash copies did
+severity: medium
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary); bash; git; a scratch repository under target/plan-scratch; no network, no podman
+
+critical_path:
+  - step: "roster shape; gate fail vs report; Lua guard arguments and log; a missing guard; no runner"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-local-ci-landed-guards.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:local-ci-landed-guards:5 arms"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "five arms"
+  log_fields:
+    spec: "ci-release"
+    test: "local-ci-landed-guards"
+
+rollback:
+  on_failure: "read the FAIL lines; the roster is scripts/lua/local-ci-landed-guards.lua and the loop is the Recently Landed Guards section of scripts/local-ci.sh"
+  command: "grep -n '2231-zmzd' scripts/local-ci.sh scripts/lua/local-ci-landed-guards.lua"

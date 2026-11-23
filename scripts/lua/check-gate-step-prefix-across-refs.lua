@@ -26,6 +26,7 @@
 --   ok:gate-step-prefix-across-refs:no-new-steps
 --   refused:gate-step-prefix-across-refs:<file>:<holder-ref>:<holder-file>
 --   skip:gate-step-prefix-across-refs:no-trunk-ref (the trunk ref is not fetched here)
+--   skip:gate-step-prefix-across-refs:no-work-refs (...) (nothing under the work-ref namespace: the cross-ref half judged nothing)
 --
 -- Seams: TILLANDSIAS_STEP_PREFIX_TRUNK (default origin/linux-next, or
 -- TILLANDSIAS_GATE_DIFF_BASE when set), TILLANDSIAS_STEP_PREFIX_REFS (default
@@ -95,10 +96,11 @@ local function hold(ref)
 end
 hold(TRUNK)
 local cutoff = os.time() - WINDOW * 86400
-local n_refs = 0
+local n_refs, n_seen = 0, 0
 do
     local _, out = git({ "for-each-ref", "--format=%(committerdate:unix) %(refname:short)", REFS })
     for _, l in ipairs(text.lines(out)) do
+        if l ~= "" then n_seen = n_seen + 1 end
         local ts, ref = l:match("^(%S*) (.*)$")
         if ref and ref ~= "" and (tonumber(ts) or 0) >= cutoff
             and not git({ "merge-base", "--is-ancestor", ref, TRUNK })
@@ -143,4 +145,11 @@ for _, f in ipairs(added) do
     end
 end
 
+-- No work ref fetched at all (a fleet-run extract, a fresh clone) is not a clean
+-- scan: the trunk half was judged, the cross-ref half judged nothing. Named, never
+-- ok (yolanda 2026-11-23: step 730 via fleet-run read ok:...:0 refs scanned).
+if n_seen == 0 then
+    verdict.emit("skip:" .. NAME .. ":no-work-refs (" .. n_added .. " added, clean against " .. TRUNK
+        .. "; nothing under " .. REFS .. " here, so no other host's refs were judged)", 0)
+end
 verdict.emit("ok:" .. NAME .. ":" .. n_added .. " added, " .. n_refs .. " refs scanned", 0)

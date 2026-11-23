@@ -148,9 +148,9 @@ if [ "${TILLANDSIAS_SKIP_REMOTE_PROBE:-0}" != 1 ] && [ -z "${CI:-}" ] && [ -z "$
    && [ -f scripts/lua/probe-remote-reachable.lua ]; then
     _rr_bin="$(. scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null || true)"
     if [ -n "$_rr_bin" ]; then
-        _rr_rc=0; _rr_out="$("$_rr_bin" script run scripts/lua/probe-remote-reachable.lua 2>&1)" || _rr_rc=$?  # set -e-safe (2239-rmun)
-        if [ "$_rr_rc" -ne 0 ]; then
-            printf '%s\n' "$_rr_out" >&2
+        _rr_rc=0; ( . scripts/plan-binary-probe.sh && . scripts/remote-probe-judge.sh && remote_probe_judge "$_rr_bin" ) || _rr_rc=$?
+        if [ "$_rr_rc" -ne 0 ] && [ "$_rr_rc" -ne 10 ]; then echo "could-not-run:remote-probe:judge-error:rc=$_rr_rc — the remote was not judged (2256-tt3v)" >&2; fi
+        if [ "$_rr_rc" -eq 10 ]; then
             echo "${RED:-}✗ pre-push: refused:pre-push:remote-unreachable — this host cannot reach the remote (2239-rmun)${RST:-}" >&2
             echo "  why: a push that cannot land must not spend the gate first, and a loop must not retry it" >&2
             echo "  remedy: a human restores this host's access (the probe's remedy is above); SUSPEND work on this host until \`tillandsias-plan script run scripts/lua/probe-remote-reachable.lua\` answers ok" >&2
@@ -1713,14 +1713,17 @@ attempt_plan_only_lane() {
     # fragment at its author was bypassed by the only path that skips the build,
     # which is the path fragments actually take. Measured windows 2026-08-15:
     # `packets: [unclosed` pushed clean through this lane.
-    if [[ -f scripts/check-added-fragments-parse.sh ]]; then
-        if ! out="$(bash scripts/check-added-fragments-parse.sh 2>&1)"; then
+    # ORDER 2223-afpl: the gate is Lua on `script run`, on the plan_bin this
+    # lane resolved above; its capability was checked before the status-loss
+    # guard, and a guard that cannot run is a refusal (787-f7dh).
+    if [[ -f scripts/lua/check-added-fragments-parse.lua ]]; then
+        if ! out="$(TILLANDSIAS_REPO_ROOT="$REPO_ROOT" TILLANDSIAS_SCRIPT_RUNNER_BIN="$plan_bin" "$plan_bin" script run scripts/lua/check-added-fragments-parse.lua 2>&1)"; then
             echo "plan-only lane: validation FAILED — check-added-fragments-parse refused (full gate required):" >&2
             echo "$out" | head -6 | sed 's/^/  /' >&2
             return 1
         fi
     else
-        LANE_NOTES+=("scripts/check-added-fragments-parse.sh absent — skipped")
+        LANE_NOTES+=("scripts/lua/check-added-fragments-parse.lua absent — skipped")
     fi
 
     # ORDER 1069-5sp4: THE SCORABLE-OBLIGATION GUARD CANNOT RUN

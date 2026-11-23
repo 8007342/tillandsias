@@ -51,7 +51,6 @@ scripts/test-build-image-installed-version-alias.sh 1
 scripts/test-build-step-timing-attribution.sh 1
 scripts/test-census-enforced-reachability-split.sh 1
 scripts/test-check-credential-channel.sh 1
-scripts/test-check-installer-prompts.sh 1
 scripts/test-check-stranded-in-progress.sh 1
 scripts/test-claude-forge-bypass-preaccepted.sh 1
 scripts/test-clear-vault-credentials-partial-is-nonzero.sh 1
@@ -93,7 +92,7 @@ scripts/test-gate-memory-wsl2-guest.sh 1
 scripts/test-gate-stamp-memoization.sh 1
 scripts/test-gate-stamp-scope.sh 1
 scripts/test-gate-stamp.sh 1
-scripts/test-gate-step-metrics-isolation.sh 2
+scripts/test-gate-step-metrics-isolation.sh 1
 scripts/test-git-credential-helper.sh 1
 scripts/test-git-mirror-existing-volume-hardening.sh 1
 scripts/test-git-mirror-ref-convergence.sh 1
@@ -116,12 +115,10 @@ scripts/test-hook-mover-enumeration-is-batched.sh 2
 scripts/test-host-slug-resolution.sh 2
 scripts/test-image-build-convergence.sh 1
 scripts/test-inference-mkdir-fatal-1183-j9dk.sh 1
-scripts/test-inference-pull-failure-classification.sh 1
 scripts/test-install-path.sh 3
 scripts/test-installer-probes-by-attempt-not-by-help.sh 2
 scripts/test-installer-provisions-once.sh 1
 scripts/test-installer-reports-wsl-guest-shape.sh 1
-scripts/test-installer-reset-probe.sh 1
 scripts/test-land-merges-trunk.sh 1
 scripts/test-land-notice-names-unrun-litmus.sh 1
 scripts/test-land-queue.sh 1
@@ -137,8 +134,6 @@ scripts/test-litmus-runner-reports-rc.sh 2
 scripts/test-litmus-steps-can-fail.sh 1
 scripts/test-litmus-tracked-file-kill-safety.sh 2
 scripts/test-loop-status-audit-reads-current-emitter.sh 1
-scripts/test-macos-model-share-writable.sh 1
-scripts/test-macos-signing-seam.sh 1
 scripts/test-macos-vz-orphan-diagnosis.sh 1
 scripts/test-metrics-log-fallback-is-loud.sh 1
 scripts/test-metrics-log-path-agreement.sh 1
@@ -160,9 +155,7 @@ scripts/test-pre-push-version-guard.sh 1
 scripts/test-pre-push-work-ref-lane.sh 1
 scripts/test-pre-receive-yaml-gate.sh 1
 scripts/test-preflight-fixtures-default-target.sh 1
-scripts/test-preflight-stale-plan-binary.sh 1
 scripts/test-pretooluse-command-policy.sh 1
-scripts/test-probe-nix-capability-evidence.sh 1
 scripts/test-provider-device-auth.sh 1
 scripts/test-reclaim-stranded-claims.sh 1
 scripts/test-release-tier-freshness.sh 1
@@ -190,7 +183,6 @@ scripts/test-summarize-pubspec.sh 1
 scripts/test-timing-record-carries-reproduced.sh 1
 scripts/test-timing-record-carries-root.sh 1
 scripts/test-tool-materialize-litmus-surfaces-arm.sh 1
-scripts/test-toolbox-refusal-wsl-exception.sh 1
 scripts/test-trace-coverage.sh 1
 scripts/test-tray-asset-placeholder-refused.sh 1
 scripts/test-uninstall-matcher-spares-bystanders.sh 1

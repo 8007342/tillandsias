@@ -19,8 +19,13 @@
 #        masked regimes. A decider refusing everything would pass arms 1-2.
 # ARM 4  A fixture that SKIPS when it cannot find the binary is refused too:
 #        a skip is as blind as a failure.
-# ARM 5  A fixture red in the caller's own regime is NOT this class: noted,
-#        never refused.
+# ARM 5  A fixture red in the caller's own regime is NOT this class. (2262-5kk6)
+#        a: one no gate runs is refused as ungated-red, with its own last line.
+#        PRE-FIX RESULT: FAILS, it was a note and the guard answered ok.
+#        b: one a .step runs is a note naming that step;  c: so is one build.sh
+#        runs inline;  d: a commented-out or `|| true` call is not a gate, nor is
+#        a step that merely MENTIONS it;  e: could-not-run (exit 3) is a note.
+#        f: one red only from the guard's scratch cwd is a note, not a red.
 # ARM 6  With no arguments the population is the added fixtures (untracked
 #        against the base), and the count is the fixtures examined.
 # ARM 7  No timeout command: a NAMED skip, never an unbounded run.
@@ -128,11 +133,53 @@ else
 fi
 
 o5="$(by_ctd scripts/test-red.sh)"; rc5=$?
-if [ "$rc5" -eq 0 ] && [[ "$o5" == *"note:fixture-default-target:red-in-both-or-normal-regime:scripts/test-red.sh"* ]] && [[ "$o5" != *refused:* ]]; then
-    ok "ARM 5 a fixture red in the caller's regime is noted, not refused"
+if [ "$rc5" -eq 1 ] && [[ "$o5" == *"refused:fixture-default-target:ungated-red:scripts/test-red.sh"* ]] \
+   && [[ "$o5" == *"broken regardless"* ]] && [[ "$o5" == *"why:"* ]]; then
+    ok "ARM 5a a red fixture no gate runs is refused, in its own words"
 else
-    bad "ARM 5 the always-red fixture was mis-classed (rc=$rc5): $(printf '%s' "$o5" | tail -2 | tr '\n' ';')"
+    bad "ARM 5a expected ungated-red (rc=$rc5): $(printf '%s' "$o5" | tail -2 | tr '\n' ';')"
 fi
+# d first: none of these gates it.
+mkdir -p "$R/scripts/gate-steps.d"
+printf 'STEP_SCRIPT="scripts/test-other.sh"\nSTEP_READS="scripts/test-red.sh"\n# STEP_SCRIPT="scripts/test-red.sh"\n' > "$R/scripts/gate-steps.d/010-mention.step"
+printf '    # _run bash "$SCRIPT_DIR/scripts/test-red.sh" 2>&1\n    _run bash "$SCRIPT_DIR/scripts/test-red.sh" 2>&1 || true\n' > "$R/build.sh"
+o5="$(by_ctd scripts/test-red.sh)"; rc5=$?
+if [ "$rc5" -eq 1 ] && [[ "$o5" == *"ungated-red:scripts/test-red.sh"* ]]; then
+    ok "ARM 5d a mention, a comment and an advisory call are not gates"
+else
+    bad "ARM 5d a non-gate was taken for one (rc=$rc5): $(printf '%s' "$o5" | tail -2 | tr '\n' ';')"
+fi
+printf '    if ! _run bash "$SCRIPT_DIR/scripts/test-red.sh" 2>&1; then\n' > "$R/build.sh"
+o5="$(by_ctd scripts/test-red.sh)"; rc5=$?
+if [ "$rc5" -eq 0 ] && [[ "$o5" == *"scripts/test-red.sh:rc=1 gated-by: build.sh inline step — broken regardless"* ]] && [[ "$o5" != *refused:* ]]; then
+    ok "ARM 5c one build.sh runs inline is a note that says so"
+else
+    bad "ARM 5c (rc=$rc5): $(printf '%s' "$o5" | tail -2 | tr '\n' ';')"
+fi
+rm -f "$R/build.sh"
+printf 'STEP_SCRIPT="scripts/test-red.sh"\n' > "$R/scripts/gate-steps.d/020-red.step"
+o5="$(by_ctd scripts/test-red.sh)"; rc5=$?
+if [ "$rc5" -eq 0 ] && [[ "$o5" == *"scripts/test-red.sh:rc=1 gated-by: step 020-red.step — broken regardless"* ]] && [[ "$o5" != *refused:* ]]; then
+    ok "ARM 5b one a step runs is a note naming the step"
+else
+    bad "ARM 5b (rc=$rc5): $(printf '%s' "$o5" | tail -2 | tr '\n' ';')"
+fi
+rm -rf "$R/scripts/gate-steps.d"
+printf '#!/usr/bin/env bash\necho "could-not-run:x:no-tool"; exit 3\n' > "$R/scripts/test-cnr.sh"
+o5="$(by_ctd scripts/test-cnr.sh)"; rc5=$?
+if [ "$rc5" -eq 0 ] && [[ "$o5" == *"note:fixture-default-target:could-not-run:scripts/test-cnr.sh — could-not-run:x:no-tool"* ]]; then
+    ok "ARM 5e could-not-run is a note, not a red"
+else
+    bad "ARM 5e (rc=$rc5): $(printf '%s' "$o5" | tail -2 | tr '\n' ';')"
+fi
+printf '#!/usr/bin/env bash\n[ -d scripts ] || { echo "not in the checkout"; exit 1; }\necho ok:cwd\n' > "$R/scripts/test-cnr.sh"
+o5="$(by_ctd scripts/test-cnr.sh)"; rc5=$?
+if [ "$rc5" -eq 0 ] && [[ "$o5" == *"note:fixture-default-target:red-only-from-scratch-cwd:scripts/test-cnr.sh:rc=1 — not in the checkout"* ]]; then
+    ok "ARM 5f one red only from the scratch cwd is a note that says so"
+else
+    bad "ARM 5f (rc=$rc5): $(printf '%s' "$o5" | tail -2 | tr '\n' ';')"
+fi
+rm -f "$R/scripts/test-cnr.sh"
 
 # ARM 7: no timeout command (a stock macOS without coreutils) is a NAMED
 # skip, never an unbounded run of a fixture that might hang the gate.
@@ -200,7 +247,10 @@ git -C "$R" config user.email f@x.invalid; git -C "$R" config user.name f
 git -C "$R" add scripts/preflight-fixtures-default-target.sh scripts/plan-binary-probe.sh
 git -C "$R" commit -qm base
 git -C "$R" update-ref refs/remotes/origin/linux-next HEAD
-o6="$(cd "$R" && by_ctd)"; rc6=$?
+# The gate exports its frozen TILLANDSIAS_GATE_DIFF_BASE, a commit this scratch
+# repo does not hold (2241-f8jg: a missing base is now named, not judged), so
+# the arm names its own base.
+o6="$(cd "$R" && TILLANDSIAS_DEFAULT_TARGET_BASE= TILLANDSIAS_GATE_DIFF_BASE=refs/remotes/origin/linux-next by_ctd)"; rc6=$?
 if [ "$rc6" -eq 0 ] && [ "$(printf '%s' "$o6" | tail -1)" = "ok:fixture-default-target:1 checked" ]; then
     ok "ARM 6 a bare run finds the one added fixture and counts it"
 else

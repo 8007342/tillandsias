@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: claims-across-branches-attribution-spawns-one-awk-per-fragment
+    order: 2271-5v9r
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 1
+    title: |
+      check-claims-across-branches.sh spawns one awk per ledger fragment to attribute a sibling's claim (~6,500 per sibling), so a check on a claimed packet takes ~36 s; one awk over all fragments gives identical answers in a fraction of a second.
+    context: |
+      Found while profiling test-claims-across-branches.sh (41 s) for the coordinator (2026-11-23): 36 s sat in arm 1, and a timestamped trace showed 19,682 iterations of the per-fragment awk loop in _claim_host_on_branch. That cost is the product's, not only the fixture's: every claimed-elsewhere check pays it, and it grows with the fragment backlog.
+    exit_criteria:
+      - "_claim_host_on_branch reads all fragments in one awk, resetting block state per file, fed by find -print0 | sort -z | xargs -0"
+      - "old and new answer identically for a sample of real packets"
+      - "a fixture arm pins the per-file reset: dropping it reds the arm; the old per-file code passes it"
+    unscoreable: "a performance fix; the identical-answer comparison and the reset arm are the evidence."
+    next_action: "Land."
+    provenance: coordinator direction (macuahuitl-fedora, 2026-11-23, profile claims-across-branches); filed by lenovinha.
+    related: [1034-whsp, 2270-7gp6]
+    events:
+      - {type: filed, ts: '2026-11-23T16:33:10Z', host: lenovinha, summary: claims check spawns one awk per fragment filed}

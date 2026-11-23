@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 699-usxc).
+#
+# added-fragments-parse-to-lua-slice-1.status was ALREADY 'implemented', so no field changed — but the caller
+# supplied a note, and discarding it silently is what this packet is about.
+events:
+  - packet_id: added-fragments-parse-to-lua-slice-1
+    event:
+      type: note
+      ts: "2026-11-22T22:35:51Z"
+      host: calmecacpilli
+      summary: |-
+        slice 2: the pre-push plan lane, relay-preflight and three litmus files run scripts/lua/check-added-fragments-parse.lua on script run (passing TILLANDSIAS_SCRIPT_RUNNER_BIN); the shim is deleted and both floors lowered; litmus added-fragment-parse-gate-shape and fold-incompleteness-typed-shape pass, test-relay-preflight and test-claims-fleet-visible pass

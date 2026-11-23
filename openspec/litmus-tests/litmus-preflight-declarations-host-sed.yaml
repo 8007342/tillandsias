@@ -22,4 +22,4 @@ critical_path:
   - step: "the door reads gate-only, gate-only-decider and serial under the host sed"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-preflight-declarations-host-sed.lua 2>&1"
     timeout_ms: 30000
-    expected_behavior: "ok:preflight-declarations-host-sed:5"
+    expected_behavior: "ok:preflight-declarations-host-sed:6"

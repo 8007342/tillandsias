@@ -11,7 +11,7 @@
 #                                       CANONICAL: it carries the resolution loop
 #                                       inline and is pinned by
 #                                       test-cycle-preflight-cargo-resolution.sh.
-#   scripts/check-cheatsheet-tiers.sh   1005-m6rz. Printed a bare
+#   scripts/lua/check-cheatsheet-tiers.lua 1005-m6rz. Printed a bare
 #                                       `cargo: command not found` as a
 #                                       validation ERROR on the commit hook.
 #   scripts/host-capability-probe.sh    1005-m6rz. Refuses without a runnable
@@ -102,7 +102,7 @@ cargo_resolve() {
 cargo_sites() {
     cat <<'SITES'
 scripts/cycle-preflight.sh
-scripts/check-cheatsheet-tiers.sh
+scripts/lua/check-cheatsheet-tiers.lua
 scripts/host-capability-probe.sh
 scripts/check-host-tools.sh
 build.sh
