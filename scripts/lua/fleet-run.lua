@@ -75,7 +75,11 @@ local D = BASE .. "/" .. COMMIT
 run({ "rm", "-rf", D })
 if run({ "mkdir", "-p", D }) ~= 0 then cnr("mkdir") end
 local TAR = BASE .. "/" .. COMMIT .. ".tar"
-if run({ "git", "-C", ROOT, "archive", "-o", TAR, COMMIT }, { timeout_ms = 300000 }) ~= 0 then cnr("archive") end
+-- No eol conversion on either side, unconditionally: on a core.autocrlf=true
+-- host (yolanda, msys 2026-11-23) archive + add produced a tree that did not
+-- equal <ref>^{tree}; the assertion below caught it. Harmless elsewhere.
+if run({ "git", "-C", ROOT, "-c", "core.autocrlf=false", "-c", "core.eol=lf", "archive", "-o", TAR, COMMIT },
+        { timeout_ms = 300000 }) ~= 0 then cnr("archive") end
 local xrc = run({ "tar", "-xf", TAR, "-C", D }, { timeout_ms = 300000 })
 run({ "rm", "-f", TAR })
 if xrc ~= 0 then cnr("extract") end
@@ -89,7 +93,7 @@ local function dgit(...)
     return run(argv, { env = GENV, timeout_ms = 300000 })
 end
 if dgit("init", "-q") ~= 0 then cnr("git-init") end
-if dgit("add", "-A", "-f") ~= 0 then cnr("git-add") end
+if dgit("-c", "core.autocrlf=false", "add", "-A", "-f") ~= 0 then cnr("git-add") end
 if dgit("commit", "-q", "--no-verify", "-m", "fleet-run " .. COMMIT) ~= 0 then cnr("git-commit") end
 local _, GOT = dgit("rev-parse", "HEAD^{tree}")
 if GOT ~= TREE then refuse("tree-mismatch:" .. TREE .. ":" .. GOT) end
