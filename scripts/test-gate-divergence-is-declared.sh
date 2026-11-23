@@ -72,9 +72,16 @@ BASELINE_UNTRIAGED=0    # 2026-09-12 (1087-h2z9: all 22 triaged). May fall, neve
 # scripts in prose at length, and a mention is not an invocation (1055-6yp8).
 # 1384-ddua: a decider may be a .lua on `script run`; both sides see it, or a
 # ported decider would drop out of the population and its gap go unnoticed.
+# 2231-zmzd: local-ci.sh runs every row of its landed-guards roster, so the
+# roster's guard paths are local-ci's invocations too. They left local-ci.sh
+# for the roster in slice 5, and without this the six of them declared below
+# read as "not in the gap" while still running only in --ci-full.
 _invoked_by_local_ci() {
-    sed 's/[[:space:]]*#.*//' scripts/local-ci.sh \
-        | grep -oE 'scripts/[a-zA-Z0-9_./-]+\.(sh|lua)' | sort -u
+    {
+        sed 's/[[:space:]]*#.*//' scripts/local-ci.sh
+        [ -f scripts/lua/local-ci-landed-guards.lua ] \
+            && sed 's/^[[:space:]]*--.*//' scripts/lua/local-ci-landed-guards.lua
+    } | grep -oE 'scripts/[a-zA-Z0-9_./-]+\.(sh|lua)' | sort -u
 }
 _invoked_by_check() {
     {

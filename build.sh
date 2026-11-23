@@ -6471,6 +6471,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Unknown-host claim fixture passed"
 
+    # ORDER 2244-ge9s — step 380's negative control splits a log on purpose;
+    # it must never do it into the host's shared log under this gate's run id,
+    # where a step in another lane is charged with it (#1369, #1349).
+    _step "Checking the metrics-isolation fixture keeps off the shared timing log (2244-ge9s)..."
+    if ! _run_lua_decider "scripts/lua/test-metrics-isolation-keeps-off-the-shared-log.lua" 2>&1; then
+        _error "test-gate-step-metrics-isolation.sh wrote a record carrying the gate's run id into a log the gate's leak check reads — keep its split in a fixture-private fallback dir with the run id unset; see the FAIL lines above (2244-ge9s)"
+        exit 1
+    fi
+    _info "Metrics-isolation shared-log fixture passed"
+
     # ORDER 2242-u39b — the pre-push-hook fixtures test their scratch
     # checkout, never a frozen base the caller left behind without its _ROOT.
     _step "Checking the pre-push fixtures ignore an inherited diff base (2242-u39b)..."
