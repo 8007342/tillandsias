@@ -184,7 +184,7 @@ YAML
 # router sidecar with cargo and reads the live timing logs: 21 s on yoga, over
 # 8 minutes on a cold tree, and a closure of the whole scripts/ tree. The
 # runner's own pass-through and adjudication are pinned by its own fixtures
-# (test-litmus-step-pipefail, test-litmus-step-timing, ...), which still run.
+# (test-litmus-step-pipefail, test-litmus-step-timing.lua, ...), which still run.
 arms_cmd="$(sed -n 's/^[[:space:]]*command: "\(bash scripts\/test-tool-materialize\.sh[^"]*\)"$/\1/p' "$STEP_FILE" | head -1)"
 step_out="$TMP/arm1.out"
 if [ -z "$arms_cmd" ]; then

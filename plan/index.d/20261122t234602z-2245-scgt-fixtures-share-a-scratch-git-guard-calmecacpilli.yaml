@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: the 2244-crgd follow-up sweep, made P1 by macuahuitl-fedora 2026-11-22.
+packets:
+  - packet_id: fixtures-share-a-scratch-git-guard
+    order: "2245-scgt"
+    status: implemented
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [gate, fixture, hermetic, git]
+    estimated_hours: 3
+    title: "Fixtures that drive scratch git share one guard (scratch_git, scratch_trap), and a decider refuses a newly added bare git -C \"$var\" in a fixture"
+    context: |
+      2244-crgd hardened test-check-credential-channel.sh after it rewrote this checkout's origin. The same shape
+      (`trap '<cleanup>' EXIT INT TERM`, which RESUMES after a kill, plus `git -C "$var"`, which is the cwd when $var
+      is empty) sat in 20 more fixtures.
+      scripts/test-support/scratch-git.sh: scratch_git <dir> refuses an empty path or one whose git dir is the real
+      checkout's (init/clone exempt from the resolve check, since they create the scratch repo; the subcommand is found
+      past -c options); scratch_trap '<cleanup>' runs it on EXIT and exits on INT/TERM.
+      Swept, mechanically: 19 fixtures source it, their traps become scratch_trap, and every `git -C "$VAR"` on a
+      scratch repo becomes scratch_git ($ROOT, $REAL_ROOT and $REPO_ROOT, which read the real repo on purpose, are left).
+      test-branch-discipline-verb's fixture_git routes a leading -C through scratch_git.
+      Left alone: test-claims-fleet-visible.sh, whose one site is inside a heredoc that writes a separate /bin/sh hook,
+      and test-check-credential-channel.sh (2244-crgd, #1375, has its own guard).
+      Decider scripts/lua/check-fixture-scratch-git-added.lua (diff-scoped, top-level scripts/test-*.sh only, door
+      roster): an added bare `git -C "$VAR"` is refused unless $VAR names the real repo or the line carries
+      `scratch-git-ok: <why>`. Its fixture is gate step 898.
+    exit_criteria:
+      - "All 19 rewritten fixtures pass, as they did on the untouched tree (baseline 20/20 rc 0, after 19/19 rc 0); origin unchanged throughout."
+      - "test-fixture-scratch-git-added.lua 6/6: bare refused naming file:line, scratch_git passes, $ROOT passes, a reasoned marker passes and an empty one does not, base sites not re-litigated, non-fixture scripts not judged."
+      - "check-fixture-scratch-git-added.lua is ok on this change itself."
+    unscoreable: "pinned-elsewhere: gate step 898 and the 19 fixtures' own gate steps."
+    next_action: "Land."
+    provenance: "macuahuitl-fedora 2026-11-22: the sweep is P1, as a shared scratch-git helper plus a decider."
+    related: [2244-crgd, 2224-gdir]
+    events:
+      - type: filed
+        ts: "2026-11-22T23:46:02Z"
+        host: calmecacpilli
+        summary: "filed implemented: 19/19 fixtures pass after the sweep; decider fixture 6/6"

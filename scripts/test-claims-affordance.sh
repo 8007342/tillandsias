@@ -27,6 +27,7 @@
 #
 #   PASS: claims-affordance <n>/<n>
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
 
 # 1948-xbaf skips a sibling that is an ancestor of HEAD. The stub arms below
 # need the sibling folds to happen whatever the live refs look like: when
@@ -42,7 +43,7 @@ ok()  { pass=$((pass + 1)); echo "ok:   $1"; }
 bad() { fail=$((fail + 1)); echo "FAIL: $1"; [ -n "${2:-}" ] && echo "      $2"; }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/claims-afford.XXXXXX")" || { echo "FAIL: mktemp"; exit 1; }
-trap 'rm -rf "$W"' EXIT INT TERM
+scratch_trap 'rm -rf "$W"'
 
 # A stub plan binary. $2 = the status it answers; $3 = what `ready any` prints.
 mkstub() {
@@ -131,10 +132,10 @@ R="$W/repo"
 mkdir -p "$R/scripts" "$R/plan/index.d"
 cp "$CHECK" "$ROOT/scripts/plan-binary-probe.sh" "$R/scripts/"
 printf 'packets: []\n' > "$R/plan/index.yaml"
-git -C "$R" init -q -b work/fixture
-git -C "$R" -c user.email=f@f -c user.name=f add -A >/dev/null
-git -C "$R" -c user.email=f@f -c user.name=f commit -q -m base
-git -C "$R" update-ref refs/remotes/origin/linux-next HEAD
+scratch_git "$R" init -q -b work/fixture
+scratch_git "$R" -c user.email=f@f -c user.name=f add -A >/dev/null
+scratch_git "$R" -c user.email=f@f -c user.name=f commit -q -m base
+scratch_git "$R" update-ref refs/remotes/origin/linux-next HEAD
 
 # ARM 9 — ORDER 1435-ebcx. PER-PACKET mode with zero siblings folded must refuse
 # like --batch, not answer ok. A fresh scratch checkout with NO sibling ref.
@@ -142,12 +143,12 @@ R0="$W/repo0"
 mkdir -p "$R0/scripts" "$R0/plan/index.d"
 cp "$CHECK" "$ROOT/scripts/plan-binary-probe.sh" "$R0/scripts/"
 printf 'packets: []\n' > "$R0/plan/index.yaml"
-git -C "$R0" init -q -b work/fixture
-git -C "$R0" -c user.email=f@f -c user.name=f add -A >/dev/null
-git -C "$R0" -c user.email=f@f -c user.name=f commit -q -m base
+scratch_git "$R0" init -q -b work/fixture
+scratch_git "$R0" -c user.email=f@f -c user.name=f add -A >/dev/null
+scratch_git "$R0" -c user.email=f@f -c user.name=f commit -q -m base
 rc="$(run "$R0" TILLANDSIAS_PLAN_BIN="$W/free/tillandsias-plan" bash scripts/check-claims-across-branches.sh SOME-PKT --no-fetch)"
 if [ "$rc" = 2 ] && [ "$(first)" = "blocked:no-siblings-folded" ] && has_afford; then
-    git -C "$R0" update-ref refs/remotes/origin/linux-next HEAD
+    scratch_git "$R0" update-ref refs/remotes/origin/linux-next HEAD
     rc2="$(run "$R0" TILLANDSIAS_PLAN_BIN="$W/free/tillandsias-plan" bash scripts/check-claims-across-branches.sh SOME-PKT --no-fetch)"
     case "$(first)" in
         (ok:cross-branch-claims:1*) okv=1 ;;
@@ -164,7 +165,7 @@ fi
 
 # ARM 2 — in the scratch checkout (which now has a resolvable sibling), with
 # origin pointed at a path that does not exist, so the fetch itself fails.
-git -C "$R" remote add origin "$W/no-such-remote"
+scratch_git "$R" remote add origin "$W/no-such-remote"
 rc="$(run "$R" TILLANDSIAS_PLAN_BIN="$W/free/tillandsias-plan" bash scripts/check-claims-across-branches.sh SOME-PKT)"
 if [ "$rc" = 2 ] && [ "$(first)" = "blocked:fetch-failed" ] && has_afford; then
     rc2="$(run "$R" TILLANDSIAS_PLAN_BIN="$W/free/tillandsias-plan" bash scripts/check-claims-across-branches.sh SOME-PKT --no-fetch)"
