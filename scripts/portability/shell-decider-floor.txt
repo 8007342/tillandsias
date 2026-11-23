@@ -307,7 +307,6 @@ scripts/test-loop-status-audit-reads-current-emitter.sh
 scripts/test-lua-determinism.sh
 scripts/test-lww-channel-alias.sh
 scripts/test-lww-channel-consumers.sh
-scripts/test-macos-model-share-writable.sh
 scripts/test-macos-vsock-inference-closure.sh
 scripts/test-macos-vz-orphan-diagnosis.sh
 scripts/test-mcp-plan-resolver-pinning.sh
