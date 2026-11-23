@@ -19,9 +19,16 @@
 #   9 --run RUNS what --list selects: an argless fixture executes (an empty
 #     tab field once shifted the row and nothing ran), and a red selected
 #     fixture fails the run
+#  10 (2260-qw67) this fixture, run with TILLANDSIAS_GATE_CHANGED_ROOT naming
+#     another tree, is still green (pre-fix: 8 of 9 red)
+#  11 (2260-qw67) a guard build.sh declares gate-context is not run, and is named;
+#     its neighbours still are (pre-fix: run argless, could-not-run)
 # FAILS ON THE PRE-FIX TREE: there scripts/gate-changed.sh does not exist and
 # build.sh has no --changed, so every arm reports could-not-run / FAIL.
 set -uo pipefail
+# 2260-qw67: every child judges THIS fixture's tree, never one a caller's
+# environment names (a measurement harness exports it).
+unset TILLANDSIAS_GATE_CHANGED_ROOT
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SUBJECT="$ROOT/scripts/gate-changed.sh"
@@ -134,6 +141,28 @@ out2="$(bash "$T/scripts/gate-changed.sh" --run --files "$TMP/changed" 2>&1)"; r
 if [ "$rc" -eq 0 ] && has "$out" "ok:gate-changed:fixture:scripts/test-a.sh" && has "$out" "ok:gate-changed fixtures=1 " \
    && [ "$rc2" -eq 1 ] && has "$out2" "fail:gate-changed:fixture:scripts/test-a.sh"; then arm 9 ok
 else arm 9 no "--run did not execute exactly the selection (rc=$rc [$out]) or a red fixture passed (rc=$rc2 [$out2])"; fi
+
+# 10: the inherited root. One level of recursion, stopped by the marker.
+if [ -z "${GATE_CHANGED_FX_INNER:-}" ]; then
+    mkdir -p "$TMP/other"
+    out="$(GATE_CHANGED_FX_INNER=1 TILLANDSIAS_GATE_CHANGED_ROOT="$TMP/other" bash "${BASH_SOURCE[0]}" 2>&1)"; rc=$?
+    if [ "$rc" -eq 0 ] && has "$out" "ok:gate-changed-selects-by-input:10"; then arm 10 ok
+    else arm 10 no "an inherited TILLANDSIAS_GATE_CHANGED_ROOT was followed (rc=$rc [$out])"; fi
+fi
+
+# 11: gate-context. test-a becomes declared; test-b is not.
+cat >> "$T/build.sh" <<'EOF'
+_preflight_preconditions() {
+    cat <<'PRECONDS'
+test-a.sh|gate-context|answers about a running gate
+test-b.sh|policy-binary|some other precondition
+PRECONDS
+}
+EOF
+out="$(sel data/a.txt data/b.txt)"
+if ! has "$out" "select:fixture:scripts/test-a.sh" && has "$out" "select:fixture:scripts/test-b.sh" \
+   && has "$out" "skip:gate-changed:gate-context:scripts/test-a.sh"; then arm 11 ok
+else arm 11 no "a gate-context guard was run, its neighbour dropped, or the skip unnamed: $out"; fi
 
 if [ "$fail" -gt 0 ]; then
     echo "FAIL:gate-changed-selects-by-input:$fail-of-$((pass + fail))"

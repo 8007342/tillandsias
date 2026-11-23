@@ -75,7 +75,7 @@ end
 local base = env.get("TILLANDSIAS_CLOSURE_EVIDENCE_BASE")
 if base == nil or base == "" then base = env.get("TILLANDSIAS_GATE_DIFF_BASE") end
 if base == nil or base == "" then base = "origin/linux-next" end
-if not ok(git("rev-parse", "--verify", base)) then
+if not ok(git("rev-parse", "--verify", "--quiet", base .. "^{commit}")) then
     verdict.emit("ok:" .. NAME .. ":0 checked", 0,
         "  note: base ref '" .. base .. "' unavailable — closure-evidence enforcement skipped")
 end

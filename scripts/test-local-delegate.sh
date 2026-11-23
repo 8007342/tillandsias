@@ -24,6 +24,7 @@
 # PRE-FIX RESULT: FAILS — scripts/local-delegate.sh is absent, so every arm's
 # verdict line is missing (arm 5 fails on the absent files).
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DELEGATE="$ROOT/scripts/local-delegate.sh"
 LUA="$ROOT/scripts/lua/local-delegate.lua"
@@ -41,7 +42,7 @@ export TILLANDSIAS_PLAN_BIN="$_plan"
 
 _tmpbase="$ROOT/target/plan-scratch"; mkdir -p "$_tmpbase" 2>/dev/null || _tmpbase="${TMPDIR:-/tmp}"
 W="$(mktemp -d "$_tmpbase/local-delegate.XXXXXX")"
-trap 'rm -rf "$W"' EXIT INT TERM
+scratch_trap 'rm -rf "$W"'
 
 # The stub transport. Real curl for anything that is not the stub host.
 mkdir -p "$W/bin"
@@ -100,9 +101,9 @@ echo "FAIL: greeting.txt is '$(cat greeting.txt)', want hello"; exit 1
 EOF
     printf 'hi\n' > "$d/repo/greeting.txt"
     printf 'keep me\n' > "$d/repo/other.txt"
-    git -C "$d/repo" init -q
-    git -C "$d/repo" add -A
-    git -C "$d/repo" -c user.name=fixture -c user.email=fixture@example.invalid \
+    scratch_git "$d/repo" init -q
+    scratch_git "$d/repo" add -A
+    scratch_git "$d/repo" -c user.name=fixture -c user.email=fixture@example.invalid \
         -c commit.gpgsign=false commit -qm fixture
 }
 
@@ -123,10 +124,10 @@ drive "$A" http://stub.invalid
 if [ "$OUT" = "ok:local-delegate:9-ldfx:ok:rounds=1:closure=passed" ] && [ "$RC" -eq 0 ] \
    && [ "$(runs "$A")" = 1 ] && [ "$(head_of "$A")" = "$h0" ] \
    && [ "$(cat "$A/repo/greeting.txt")" = hello ] \
-   && [ "$(git -C "$A/repo" status --porcelain)" = " M greeting.txt" ]; then
+   && [ "$(scratch_git "$A/repo" status --porcelain)" = " M greeting.txt" ]; then
     ok "1 in-bounds edit + passing closure -> ok, closure ran once, edit uncommitted"
 else
-    bad "1 got '$OUT' rc=$RC runs=$(runs "$A") status='$(git -C "$A/repo" status --porcelain | tr '\n' ' ')'"; sed 's/^/    /' "$A/stderr"
+    bad "1 got '$OUT' rc=$RC runs=$(runs "$A") status='$(scratch_git "$A/repo" status --porcelain | tr '\n' ' ')'"; sed 's/^/    /' "$A/stderr"
 fi
 
 # 2 — a stray edit outside owned_files.

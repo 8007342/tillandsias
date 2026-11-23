@@ -61,6 +61,25 @@ function M.posix_shell(default)
     return GIT_BASH or default or "bash"
 end
 
+-- ORDER 2257-qnt7. Where PATH finds a tool, or nil. Never spawn `which`: it is a
+-- package of its own, absent in the WSL builder, where a spawn failure read as
+-- "the tool is missing". `type -P` is bash's own PATH search: no function,
+-- alias or builtin. path: the PATH to search (default: this process's). On
+-- native Windows the answer is made spawnable (2258-6xu8): /usr/bin/bash is an MSYS
+-- mount no drive rule can map, so cygpath says where it is, and the .exe that
+-- msys hides is put back.
+function M.which(tool, path)
+    -- The PATH is set inside the shell: a narrow one must not stop it starting.
+    local r = proc.run{ argv = { M.posix_shell(), "-s", "--", tool, path }, timeout_ms = 10000,
+        stdin = '[ $# -lt 2 ] || P="$2"\nhit="$(PATH="${P-$PATH}"; type -P -- "$1")" || exit 1\n'
+            .. 'if command -v cygpath >/dev/null 2>&1; then\n'
+            .. '  case "$hit" in (*.exe) ;; (*) [ ! -f "$hit.exe" ] || hit="$hit.exe" ;; esac\n'
+            .. '  hit="$(cygpath -m -- "$hit")" || exit 1\nfi\nprintf "%s\\n" "$hit"\n' }
+    local p = text.trim(r.stdout or "")
+    if r.code ~= 0 or p == "" then return nil end
+    return p
+end
+
 -- ORDER 2246-fkea. A path a native spawn can resolve, from whatever spelling a
 -- shell or the scratch door handed back: an MSYS drive path /c/x becomes C:/x
 -- (Git bash's $PWD and resolve_plan_binary answer that form, and a native

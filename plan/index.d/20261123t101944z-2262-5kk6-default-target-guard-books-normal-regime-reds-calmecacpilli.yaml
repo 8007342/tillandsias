@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: ruled by macuahuitl-fedora 2026-11-23.
+packets:
+  - packet_id: default-target-guard-books-a-normal-regime-red-as-a-note
+    order: "2262-5kk6"
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, fixtures]
+    estimated_hours: 3
+    owned_files:
+      - scripts/preflight-fixtures-default-target.sh
+    title: "preflight-fixtures-default-target books a fixture that is red in the NORMAL regime as a note, so one nothing else gates stays red unseen"
+    context: |
+      On rc_n != 0 the guard prints note:fixture-default-target:red-in-both-or-normal-regime and moves on. Seen on #1358
+      (2026-11-22): test-running-image-freshness, test-scorable-closure-quoting, test-toolbox-refusal-wsl-exception. The
+      note keeps only the rc, so the gate log cannot say why. On calmecacpilli the first two were green 2/2 and the third
+      is red (2118-9rn9).
+    exit_criteria:
+      - "Each fixture the guard finds red in the normal regime is either gated elsewhere, and the note NAMES that step, or the guard reports it red."
+      - "The note carries the fixture's own last verdict or FAIL line."
+      - "Arms: a red fixture no gate runs fails the guard; one a step runs is a note naming the step; a green one is unaffected."
+    unscoreable: "fixture-scored: the new arms are the pin; they do not exist yet"
+    next_action: "Read which steps and inline build.sh blocks run each fixture (gate-changed.sh already extracts that population)."
+    provenance: "macuahuitl-fedora 2026-11-23."
+    events:
+      - {type: filed, ts: '2026-11-23T10:19:44Z', host: calmecacpilli, summary: filed}
