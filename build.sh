@@ -3257,6 +3257,37 @@ if [ -n "$GATE_STEPS_ROOT" ]; then
     exit $?
 fi
 
+# ORDER 2243-urcy — WHICH TEST RUNNER THIS HOST USES, SAID ONCE, BY NAME.
+# nextest when `cargo nextest` answers (the builder toolbox installs it from a
+# pinned release asset, scripts/with-tillandsias-builder.sh); otherwise the
+# cargo test path the gate always had. Either way one line names the regime,
+# so a host that silently fell back is visible in its gate log, never a guess.
+# TILLANDSIAS_GATE_NEXTEST=0 forces cargo test (a named, deliberate choice).
+_TEST_RUNNER=""
+_test_runner_is_nextest() {
+    if [ -z "$_TEST_RUNNER" ]; then
+        local _v=""
+        if [ "${TILLANDSIAS_GATE_NEXTEST:-auto}" = 0 ]; then
+            _TEST_RUNNER=cargo-test
+            _info "test-runner:cargo-test:forced-by-TILLANDSIAS_GATE_NEXTEST=0"
+        elif _v="$(cargo nextest --version 2>/dev/null)" && _v="${_v%%$'\n'*}" && [ -n "$_v" ]; then
+            _TEST_RUNNER=nextest
+            _info "test-runner:nextest:${_v#cargo-nextest }"
+        else
+            _TEST_RUNNER=cargo-test
+            _info "test-runner:cargo-test:nextest-absent"
+        fi
+    fi
+    [ "$_TEST_RUNNER" = nextest ]
+}
+# _nextest_transcript <nextest.log> — the log in cargo test's transcript shape.
+_nextest_transcript() {
+    local _nt_bin=""
+    _nt_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || return 1
+    case "$_nt_bin" in ./*) _nt_bin="$SCRIPT_DIR/${_nt_bin#./}" ;; esac
+    ( cd "$SCRIPT_DIR" && "$_nt_bin" script run --helper scripts/lua/nextest-to-libtest.lua -- "$1" )
+}
+
 # ORDER 1384-ddua — a gate-inline decider that is a .lua runs through the ONE
 # runner. A host whose plan binary is absent or predates `script run` gets a
 # LOUD could-not-run (exit 3), which the gate refuses like any failure: a stale
@@ -5411,9 +5442,36 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # would land on the ratchet as new-red. If that happens, restoring
     # `-- --test-threads=1` here is a one-line mitigation and the real defect is
     # the shared state on that host, not this line.
+    # ORDER 2243-urcy: the transcript conversion below must not hide a new red.
+    # Red-first: a single failing test through the converter is refused by the
+    # ratchet, and a converter that reports FAIL as ok is the mutant it catches.
+    _nxr_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh && resolve_plan_binary)" || _nxr_bin=""
+    case "$_nxr_bin" in ./*) _nxr_bin="$SCRIPT_DIR/${_nxr_bin#./}" ;; esac
+    if ! TILLANDSIAS_PLAN_BIN="$_nxr_bin" \
+        _run_lua_decider "scripts/lua/test-nextest-transcript-ratchet.lua" 2>&1; then
+        _error "the nextest transcript conversion no longer feeds the failure-set ratchet faithfully (2243-urcy)"
+        exit 1
+    fi
+    # ORDER 2243-urcy: nextest when this host has it. It runs the test BINARIES
+    # concurrently and each test in its own process: ~28 s against ~91 s on
+    # yoga, 0 failures in a 10-run soak. Its log is rewritten into this
+    # transcript's shape by scripts/lua/nextest-to-libtest.lua (same keys), and
+    # doctests, which nextest does not run, still come from `cargo test --doc`.
+    if _test_runner_is_nextest; then
+        _ws_nx_log="$SCRIPT_DIR/target/test-nextest-workspace-gate.log"
+        _run cargo nextest run --workspace --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" \
+            >"$_ws_nx_log" 2>&1 || _ws_test_rc=$?
+        cat "$_ws_nx_log"
+        _nextest_transcript "$_ws_nx_log" >"$_WS_TEST_TRANSCRIPT" || { _error "could not convert the nextest log $_ws_nx_log (2243-urcy)"; exit 1; }
+        _ws_doc_rc=0
+        _run cargo test --workspace --doc --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" \
+            2>&1 | tee -a "$_WS_TEST_TRANSCRIPT" || _ws_doc_rc="${PIPESTATUS[0]}"
+        [ "$_ws_test_rc" -eq 0 ] && _ws_test_rc="$_ws_doc_rc"
+    else
     _run cargo test --workspace --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" \
         2>&1 |
         tee "$_WS_TEST_TRANSCRIPT" || _ws_test_rc="${PIPESTATUS[0]}"
+    fi
     if ! _ws_baseline_verdict="$(bash "$SCRIPT_DIR/scripts/check-test-baseline.sh" --from "$_WS_TEST_TRANSCRIPT")"; then
         _error "$_ws_baseline_verdict"
         _error "the workspace suite's failure set moved (cargo rc=$_ws_test_rc) — transcript: $_WS_TEST_TRANSCRIPT"
@@ -5516,10 +5574,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
     else
         _warn "feature-gated: could not form the default/feature test lists (default=$(printf '%s\n' "$_fg_def" | grep -c .), all=$(printf '%s\n' "$_fg_all" | grep -c .), new=$_fg_new); running the WHOLE set (2161-ctdd)"
     fi
+    # ORDER 2243-urcy: under nextest each test is its own process, so the
+    # in-process races --test-threads=1 serialised cannot occur (~45 s against
+    # ~97 s on yoga, 0 failures in a 10-run soak); _fg_filter is libtest's
+    # --exact form, which nextest accepts after `--`.
+    if _test_runner_is_nextest; then
+    _run cargo nextest run -p tillandsias-headless --bin tillandsias \
+        --features tray,listen-vsock --no-fail-fast \
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" ${_fg_filter[@]+-- "${_fg_filter[@]}"} 2>&1 |
+        tee "$_fg_transcript" || _fg_rc="${PIPESTATUS[0]}"
+    else
     _run cargo test -p tillandsias-headless --bin tillandsias \
         --features tray,listen-vsock --no-fail-fast \
         --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 ${_fg_filter[@]+"${_fg_filter[@]}"} 2>&1 |
         tee "$_fg_transcript" || _fg_rc="${PIPESTATUS[0]}"
+    fi
     if [[ $_fg_rc -ne 0 ]]; then
         _error "the tray/listen-vsock test set failed (cargo rc=$_fg_rc) — transcript: $_fg_transcript"
         _error "these tests compile only with --features tray,listen-vsock; the --workspace pass above cannot see them"
