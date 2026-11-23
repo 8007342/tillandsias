@@ -834,6 +834,24 @@ _pf_budget() {
     esac
 }
 
+# ORDER 2272-cuxh. WHERE THE DOOR WAS WHEN ITS BUDGET RAN OUT, and how far past
+# it ran. The time is the budget itself, so the reporter's POSITION is what is
+# kept: the first roster guard it was still on. Sets _PF_REACHED once.
+_pf_note_budget() {  # $1 = elapsed s, $2 = roster position, $3 = guard
+    [ -z "${_PF_REACHED:-}" ] || return 0
+    [ "$1" -lt "$_PF_BUDGET" ] || _PF_REACHED="$2:${3##*/}"
+}
+# tail = seconds past the budget (0 inside it). A budget crossed after the last
+# guard was reported (the sweep) reads after-roster, never "never".
+_pf_tail_fields() {  # $1 = wall s; prints the two summary fields
+    local _t=$(( $1 - _PF_BUDGET ))
+    if [ "$_t" -le 0 ]; then
+        printf 'budget-reached-at=never tail=0s'
+    else
+        printf 'budget-reached-at=%s tail=%ss' "${_PF_REACHED:-after-roster}" "$_t"
+    fi
+}
+
 _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, $4 = args
     local _p="$1" _d="$2" _out="$3" _pid _tick
     # ORDER 1499-m9fj: THE GATE'S ARGUMENTS, WORD FOR WORD. A guard run without
@@ -1905,6 +1923,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     fi
     _pf_roster="$(_preflight_roster | sort -u)"
     _pf_wall0=$SECONDS
+    _PF_REACHED=""  # 2272-cuxh: never an outer door's
     # 1631-6w8z: the long lane starts FIRST, so its guards get the most budget.
     _pf_lane_limit=1
     [[ "$FLAG_PREFLIGHT_FULL" != true ]] || _pf_lane_limit=0
@@ -1992,6 +2011,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
             fi
             sleep 0.1 2>/dev/null || sleep 1
         done
+        _pf_note_budget $(( SECONDS - _pf_wall0 )) "$_pf_total" "$_pf_path"
         read -r _pf_rc _pf_el < "$_pf_dir/$_pf_i.rc"
         if [ "$_pf_pd" -eq 13 ] && [ -f "$_pf_dir/$_pf_i.lane-deadline" ]; then
             read -r _pf_gdl < "$_pf_dir/$_pf_i.lane-deadline"
@@ -2106,6 +2126,7 @@ PFEOF
     # the roster, which is true on every host, rather than any number, which is
     # true on none of them for long.
     _pf_wall=$(( SECONDS - _pf_wall0 ))
+    _pf_iso="$_pf_iso $(_pf_tail_fields "$_pf_wall")"
     _pf_counts="ran=$_pf_ran declared-skip=$_pf_declskip skipped-by-deadline=$_pf_deadline_n could-not-run=$_pf_cantrun refused=$_pf_failed"
     _pf_sum=$(( _pf_ran + _pf_declskip + _pf_deadline_n + _pf_cantrun + _pf_failed ))
     if [ "$_pf_sum" -ne "$_pf_total" ]; then

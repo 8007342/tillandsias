@@ -5,7 +5,13 @@
 # 2026-09-20. A front door is a thing people run instead of thinking, so every
 # way it can lie has to be pinned.
 set -uo pipefail
-ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || exit 1
+# 2272-cuxh: ROOT is where this script lives, not where the caller stands. From
+# a directory outside any repository (the 1401-x76w decider starts fixtures
+# there on purpose) the old `git rev-parse || pwd` made ROOT that directory and
+# the fixture died at "cannot create scratch worktree". An inherited GIT_DIR (a
+# hook-launched gate exports one) would redirect every git below.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_PREFIX
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; cd "$ROOT" || exit 1
 # ORDER 1516-wru4: NEVER PLANT IN THE LIVE CHECKOUT. The arms below plant
 # guards and gate steps and append to build.sh; run in place, a concurrent gate
 # or boundary snapshot in this checkout saw them. So the fixture re-execs itself
@@ -15,6 +21,12 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || exit 1
 # overlaid with the live tracked files so uncommitted edits are
 # still what is tested. A sampler watches the live tree the whole run and the
 # outer half refuses if its status or build.sh moved.
+# 2272-cuxh: a signal must END the run. `trap cleanup ... TERM` with no exit ran
+# the cleanup and carried on to the next arm, so a timed-out fixture kept
+# starting nested doors. The exit runs the arm's own EXIT trap.
+_exit_on_signal() {
+    trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP; trap 'exit 141' PIPE
+}
 if [ -z "${FRONT_DOOR_SCRATCH:-}" ]; then
     SCR="$(mktemp -d "${TMPDIR:-/tmp}/front-door.XXXXXX")"
     sampler=""
@@ -26,7 +38,8 @@ if [ -z "${FRONT_DOOR_SCRATCH:-}" ]; then
     }
     trap outer_cleanup EXIT
     trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP
-    git worktree add -q --detach "$SCR" HEAD >/dev/null 2>&1 || { echo "FAIL: cannot create scratch worktree"; exit 1; }
+    _wt_err="$(git worktree add -q --detach "$SCR" HEAD 2>&1)" \
+        || { echo "FAIL: cannot create scratch worktree: $_wt_err"; exit 1; }
     git diff --name-only -z HEAD | while IFS= read -r -d '' f; do
         if [ -e "$f" ]; then mkdir -p "$SCR/$(dirname "$f")"; cp -p "$f" "$SCR/$f"; else rm -f "$SCR/$f"; fi
     done
@@ -122,7 +135,7 @@ chmod +x "$PLANT"
 STEP=scripts/gate-steps.d/999-zz-1305-planted.step
 printf 'STEP_DESC="planted"\nSTEP_SCRIPT="scripts/check-zz-1305-planted.sh"\nSTEP_ERROR="planted"\nSTEP_OK="planted"\n' > "$STEP"
 cleanup() { rm -f "$PLANT" "$STEP"; }
-trap cleanup EXIT INT TERM HUP PIPE
+trap cleanup EXIT; _exit_on_signal
 out="$(TILLANDSIAS_PREFLIGHT_TIMEOUT=5 ./build.sh --preflight 2>&1)"; rc=$?
 if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'zz-1305-planted'; then
     ok "a guard wired into gate-steps.d is picked up and refuses (no silent third state)"
@@ -171,7 +184,7 @@ chmod +x "$PLANT"
 _bs_backup="$(mktemp "${TMPDIR:-/tmp}/build-sh-1499.XXXXXX")"
 cp -p build.sh "$_bs_backup"
 cleanup() { rm -f "$PLANT" "$PLANT_ARGS"; [ -s "$_bs_backup" ] && cp -p "$_bs_backup" build.sh; rm -f "$_bs_backup"; }
-trap cleanup EXIT INT TERM HUP PIPE
+trap cleanup EXIT; _exit_on_signal
 printf '\n_zz_1499_never_called() {\n    _run bash "$SCRIPT_DIR/scripts/check-zz-1499-planted.sh"\n    _run bash "$SCRIPT_DIR/scripts/check-zz-1499-args.sh" zzmode second 2>&1\n}\n' >> build.sh
 out="$(TILLANDSIAS_PREFLIGHT_TIMEOUT=5 ./build.sh --preflight 2>&1)"; rc=$?
 if [ "$rc" -ne 0 ] && grep -q 'zz-1499-planted' <<< "$out"; then
@@ -207,7 +220,7 @@ plant_go "$GO_C" '# preflight: gate-only — a decider claiming it'
 { for p in "$GO_A" "$GO_B" "$GO_C"; do
     printf 'STEP_DESC="planted"\nSTEP_SCRIPT="%s"\nSTEP_ERROR="planted"\nSTEP_OK="planted"\n' "$p"; done; } > "$GO_STEP"
 go_cleanup() { rm -f "$GO_A" "$GO_B" "$GO_C" "$GO_STEP" "$GO_MARK".*; }
-trap go_cleanup EXIT INT TERM HUP PIPE
+trap go_cleanup EXIT; _exit_on_signal
 out="$(TILLANDSIAS_PREFLIGHT_TIMEOUT=5 ./build.sh --preflight 2>&1)"
 if grep -q '^skip:preflight:test-zz-1496-gate-only:gate-only — runs the planted fixture harness end to end$' <<<"$out" \
     && [ ! -e "$GO_MARK.test-zz-1496-gate-only.sh" ]; then
@@ -251,7 +264,7 @@ plant_ser "$SER_C" C ''
 { for p in "$SER_A" "$SER_B" "$SER_C"; do
     printf 'STEP_DESC="planted"\nSTEP_SCRIPT="%s"\nSTEP_ERROR="planted"\nSTEP_OK="planted"\n' "$p"; done; } > "$SER_STEP"
 ser_cleanup() { rm -f "$SER_A" "$SER_B" "$SER_C" "$SER_STEP" "$SER_LOG"; }
-trap ser_cleanup EXIT INT TERM HUP PIPE
+trap ser_cleanup EXIT; _exit_on_signal
 TILLANDSIAS_PREFLIGHT_JOBS=3 TILLANDSIAS_PREFLIGHT_TIMEOUT=5 ./build.sh --preflight >/dev/null 2>&1
 ser="$(tr '\n' ' ' < "$SER_LOG")"
 # overlaps <X> <Y>: 1 when X starts while Y is running or Y starts while X is.
