@@ -35,6 +35,9 @@ local STABLE_BASE = "https://github.com/8007342/tillandsias/releases/latest/down
 local has = text.contains
 local w = T:scratch()
 local BASEPATH = "/usr/bin:/bin:/usr/sbin:/sbin"
+-- Native Windows has no exec bit (scratch.chmod refuses: unix-only); the
+-- script is started through posix_shell() either way (yolanda 2026-11-23).
+local NATIVE_WINDOWS = fixture.posix_shell() ~= "bash"
 
 local function stage(src, dst) -- -> rc, stdout
     local r = proc.run{ argv = { fixture.posix_shell(), STAGE, w.abs .. "/" .. src, w.abs .. "/" .. dst },
@@ -68,7 +71,7 @@ local src = w.leaf .. "/release-artifacts"
 scratch.mkdir(src)
 for _, f in ipairs({ "install.sh", "install-macos.sh", "install-windows.ps1" }) do
     scratch.write(src .. "/" .. f, fs.read("scripts/" .. f))
-    scratch.chmod(src .. "/" .. f, tonumber("755", 8))
+    if not NATIVE_WINDOWS then scratch.chmod(src .. "/" .. f, tonumber("755", 8)) end
 end
 scratch.write(src .. "/tillandsias-tray.exe", "tray\n")
 manifest(src, { "install-windows.ps1", "tillandsias-tray.exe" })
@@ -92,10 +95,13 @@ T:arm("F no stale bundle beside a rewritten installer", not scratch.exists(w.lea
 
 -- A, B and C, both POSIX installers.
 local function resolved(inst, channel)
-    local argv = { "/usr/bin/env", "-u", "TILLANDSIAS_CHANNEL", "-u", "TILLANDSIAS_RELEASE_BASE", "-u", "TILLANDSIAS_VERSION" }
-    if channel then argv[#argv + 1] = "TILLANDSIAS_CHANNEL=" .. channel end
-    for _, a in ipairs({ "TILLANDSIAS_INSTALL_RESOLVE_ONLY=1", fixture.posix_shell(), w.abs .. "/" .. inst }) do argv[#argv + 1] = a end
-    local r = proc.run{ argv = argv, env = { PATH = BASEPATH }, timeout_ms = 30000 }
+    -- No /usr/bin/env: a native spawn cannot resolve it (yolanda 2026-11-23).
+    -- The runner passes the caller's TILLANDSIAS_* through (measured: an
+    -- exported TILLANDSIAS_CHANNEL=stable red A-C), so the three the installers
+    -- read are BLANKED here; each reads empty as unset (:-, -n, PowerShell truthiness).
+    local cenv = { PATH = BASEPATH, TILLANDSIAS_INSTALL_RESOLVE_ONLY = "1", TILLANDSIAS_CHANNEL = channel or "",
+                   TILLANDSIAS_RELEASE_BASE = "", TILLANDSIAS_VERSION = "" }
+    local r = proc.run{ argv = { fixture.posix_shell(), w.abs .. "/" .. inst }, env = cenv, timeout_ms = 30000 }
     return (r.stdout or "") .. (r.stderr or "")
 end
 local function base_ok(out_, want_base, want_src)
@@ -127,14 +133,16 @@ for _, pair in ipairs({ { "unstable", UNSTABLE_BASE, "unstable" }, { "stable", S
     local r
     for _, c in ipairs({ "pwsh", "powershell" }) do
         if not (r and r.status == "exited") then
-            r = proc.run{ argv = { "/usr/bin/env", "-u", "TILLANDSIAS_CHANNEL", "-u", "TILLANDSIAS_VERSION",
-                "TILLANDSIAS_INSTALL_RESOLVE_ONLY=1", c, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
-                w.abs .. "/" .. pair[3] .. "/install-windows.ps1" }, env = { PATH = BASEPATH }, timeout_ms = 60000 }
+            r = proc.run{ argv = { c, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                w.abs .. "/" .. pair[3] .. "/install-windows.ps1" },
+                env = { PATH = BASEPATH, TILLANDSIAS_INSTALL_RESOLVE_ONLY = "1", TILLANDSIAS_CHANNEL = "",
+                    TILLANDSIAS_VERSION = "", TILLANDSIAS_RELEASE_BASE = "" }, timeout_ms = 60000 }
         end
     end
     local po = ((r.stdout or "") .. (r.stderr or "")):gsub("\r", "")
-    -- env exits 127 when the program is absent.
-    if r.status == "exited" and r.code ~= 127 then
+    -- PowerShell is absent only when neither candidate could be STARTED; any
+    -- exit, whatever its code, means it ran and is judged.
+    if r.status == "exited" then
         ps_ran = true
         T:arm("D install-windows.ps1 " .. pair[1] .. " copy resolves its base",
             has(po, "(default of this installer copy) base: " .. pair[2]), po)

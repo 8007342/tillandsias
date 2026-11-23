@@ -49,6 +49,9 @@ for _, f in ipairs({ "install.sh", "install-macos.sh", "install-windows.ps1" }) 
 end
 T:arm("0 each installer has both banner markers exactly once", true)
 
+-- Native Windows has no exec bit (scratch.chmod refuses: unix-only); the
+-- script is started through posix_shell() either way (yolanda 2026-11-23).
+local NATIVE_WINDOWS = fixture.posix_shell() ~= "bash"
 local function bash(cut, env) -- -> combined output
     env.PATH = "/usr/bin:/bin"
     local r = proc.run{ argv = { fixture.posix_shell(), w.abs .. "/" .. cut }, env = env, timeout_ms = 30000 }
@@ -64,7 +67,7 @@ T:arm("L1 no helper: PENDING: none, and no sudo line for a command that is not i
     has(o, "PENDING: none") and not has(o, "sudo"), o)
 
 scratch.write(w.leaf .. "/bin/tillandsias-install-swap-service", "#!/bin/sh\nexit 0\n")
-scratch.chmod(w.leaf .. "/bin/tillandsias-install-swap-service", tonumber("755", 8))
+if not NATIVE_WINDOWS then scratch.chmod(w.leaf .. "/bin/tillandsias-install-swap-service", tonumber("755", 8)) end
 o = linux()
 T:arm("L2 helper, no unit: the exact sudo line under PENDING ACTIONS, and no 'none'",
     has(o, "  sudo " .. idir .. "/tillandsias-install-swap-service") and has(o, "PENDING ACTIONS")

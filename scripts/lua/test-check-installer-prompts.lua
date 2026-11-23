@@ -30,9 +30,9 @@ local SUT = "scripts/lua/check-installer-prompts.lua"
 if not fs.exists(SUT) then T:refuse("decider-missing", SUT) end
 local PLAN = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN")
 if not PLAN or PLAN == "" then PLAN = env.get("TILLANDSIAS_PLAN_BIN") end
-for _, rel in ipairs({ "target/release/tillandsias-plan", "target/debug/tillandsias-plan" }) do
-    if (not PLAN or PLAN == "") and fs.exists(rel) then PLAN = ROOT .. "/" .. rel end
-end
+-- fixture.plan_binary() resolves tillandsias-plan.exe and a native path on msys
+-- (yolanda 2026-11-23: a bare target/release/tillandsias-plan skipped there).
+if not PLAN or PLAN == "" then PLAN = fixture.plan_binary() end
 if not PLAN or PLAN == "" then T:skip("no-script-runner: rebuild it (cargo build --release -p tillandsias-plan)") end
 
 local POP = { "scripts/install.sh", "scripts/install-macos.sh", "scripts/install-windows.ps1" }
