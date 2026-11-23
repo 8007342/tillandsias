@@ -53,7 +53,7 @@ critical_path:
     assert_output_contains: "ok: lane-command-fixture-parses"
 
   - step: "the printed lane command names an existing checkout whose parent is the project root"
-    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-bare-metal-lane-command-is-runnable.lua"
+    command: "P=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) && TILLANDSIAS_PLAN_BIN=\"$P\" \"$P\" script run scripts/lua/test-bare-metal-lane-command-is-runnable.lua"
     timeout_ms: 60000
     expected_behavior: "ok:bare-metal-lane-command-is-runnable:root=<dir> path=<dir>/<project>, or a named skip on a host with no podman or a down enclave"
     assert_exit: 0

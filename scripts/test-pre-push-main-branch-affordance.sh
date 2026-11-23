@@ -20,6 +20,7 @@
 # PRE-FIX RESULT: FAILS at arm 1 — the shell original hardcoded linux-next and
 # never said where the branch came from, and there was no .lua.
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOOK="$ROOT/scripts/hooks/pre-push-main-branch-affordance.sh"
 pass=0; total=5
@@ -34,7 +35,7 @@ command -v git >/dev/null 2>&1 || { echo "skip:main-branch-affordance-fixture:no
 
 _tmpbase="$ROOT/target/plan-scratch"; mkdir -p "$_tmpbase" 2>/dev/null || _tmpbase="${TMPDIR:-/tmp}"
 W="$(mktemp -d "$_tmpbase/main-afford.XXXXXX")"
-trap 'rm -rf "$W"' EXIT INT TERM
+scratch_trap 'rm -rf "$W"'
 
 # hook <cwd> <feed> [env...] -> OUT (stdout), ERR (stderr), RC. Captured, never
 # piped into a verdict (check-sigpipe-verdict-pipelines-added).
@@ -84,7 +85,7 @@ else
 fi
 
 # 4 — FLOOR: a project with no seed pushes main freely.
-BARE="$W/bare"; mkdir -p "$BARE"; git -C "$BARE" -c init.defaultBranch=main init -q
+BARE="$W/bare"; mkdir -p "$BARE"; scratch_git "$BARE" -c init.defaultBranch=main init -q
 hook "$BARE" "refs/heads/main 1 refs/heads/main 2"
 if [ "$RC" -eq 0 ] && [ "$OUT" = "ok:main-branch-affordance" ]; then
     ok "arm 4: no seed (level 0) -> main is ok"

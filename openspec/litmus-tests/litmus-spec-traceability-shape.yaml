@@ -30,7 +30,7 @@ critical_path:
   # fixture, not a grep of trace-coverage.sh: a text pin breaks on any correct
   # refactor and passes any regression that keeps the string.
   - step: "verify the ghost-trace gate reads YAML annotations and ignores prose that merely discusses one"
-    command: "scripts/test-ghost-trace-yaml-anchoring.sh"
+    command: "P=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) && TILLANDSIAS_PLAN_BIN=\"$P\" \"$P\" script run scripts/lua/test-ghost-trace-yaml-anchoring.lua"
     timeout_ms: 180000
 
   # ORDER 1053-a7qr. A cheatsheet's `sources:` anchor is the SAME promise as a
@@ -41,7 +41,7 @@ critical_path:
   # cheatsheets pointed at plan/index.yaml for orders declared only in
   # plan/archive/. Behavioural for the same reason as its sibling.
   - step: "verify a cheatsheet sources anchor must name the file that DECLARES the order, not one that merely mentions it"
-    command: "scripts/test-cheatsheet-source-anchors.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-cheatsheet-source-anchors.lua 2>&1"
     timeout_ms: 180000
 
 observability:

@@ -171,6 +171,7 @@ specs:
   litmus_tests:
   - litmus:archive-answerability-tree-copy
   - litmus:script-run-ignores-inherited-project-root
+  - litmus:local-ci-strict-specs
   - litmus:script-run-roots-at-a-repository
   - litmus:land-queue-host-door-names-its-cause
   - litmus:plan-binary-rebuild-while-running
@@ -367,6 +368,7 @@ specs:
 - spec_id: dev-build
   status: active
   litmus_tests:
+  - litmus:build-dev-cache-ca-trap-cleared
   - litmus:environment-isolation
   - litmus:binary-e2e-smoke
   - litmus:headless-init-status-check-source-built

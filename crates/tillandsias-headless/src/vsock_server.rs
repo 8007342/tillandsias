@@ -4307,7 +4307,24 @@ mod tests {
         });
 
         tokio::time::sleep(Duration::from_millis(50)).await;
+        // ORDER 2239-3kh4: flip it the way production does — the store AND the
+        // wake (wait_for_shutdown_signal calls wake_shutdown_waiters on the
+        // edge). A bare store left the watcher parked until SHUTDOWN_BACKSTOP:
+        // this one test was 30.0 s of the 97 s tray,listen-vsock suite. The
+        // wake repeats until the watcher is done because notify_waiters only
+        // wakes a task already parked; the flag stays the source of truth.
         shutdown.store(true, Ordering::SeqCst);
+        let woke = tokio::time::timeout(Duration::from_secs(5), async {
+            while !watcher.is_finished() {
+                wake_shutdown_waiters();
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await;
+        assert!(
+            woke.is_ok(),
+            "the watcher did not react to the shutdown wake within 5 s; it would wait for the {SHUTDOWN_BACKSTOP:?} backstop"
+        );
         watcher.await.expect("watcher join");
         assert_eq!(state.current_phase(), VmPhase::Stopping);
     }
