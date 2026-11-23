@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: move-inline-check-blocks-to-gate-step-files-batch-3
+    order: 2266-4w3c
+    status: in_progress
+    kind: debt
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      Move the slowest inline --check blocks out of build.sh into gate-step files (batch 3), and drop test-land-queue.sh's inline copy, which has run twice per gate since step 286 bound it (2026-09-28).
+    context: |
+      Coordinator direction 2026-11-23: batch 3 picks the inline blocks with the most gate time first. Measured on lenovinha, one at a time: 160 inline blocks, 354 s serial; the top ten are 212 s (60%). test-land-queue.sh (48 s) was ALREADY gate step 286 and still ran inline, so the gate ran it twice: the inline copy is deleted, not moved. Eight blocks move (litmus-verdict-reads-stdout-only 50 s, gate-changed-intake 24 s, append-event-hermetic 15 s, shell-ratchet fixture 14 s, tray-surface-parity 13 s, litmus-kill-adjudicator 13 s, host-tools 13 s, build-image-alias 10 s); each was read for pool safety: the two that run the real litmus runner go STEP_SERIAL on lane litmus, tray-surface-parity (cargo build on the shared target) on lane cargo, the other five in the pool. test-gate-step-append-no-conflict compares .step files with each other, never with build.sh's inline blocks; a scan of trunk found this one duplicate.
+    exit_criteria:
+      - "each moved block becomes one .step with the same text and fixture; the inline block is deleted"
+      - "gate-changed.sh's population is identical before and after"
+      - "no script runs both inline and as a .step (test-land-queue.sh's inline copy gone)"
+      - "each new step carries a darwin or msys STEP_SECOND_REGIME record before the PR leaves draft"
+    unscoreable: "mechanical move; the per-step verdicts are unchanged by construction."
+    next_action: "Second-regime records via fleet-run, then un-draft."
+    provenance: coordinator direction (macuahuitl-fedora, 2026-11-23); filed by lenovinha.
+    related: [2253-j2at, 2264-6pxd, 1461-5rm6]
+    events:
+      - {type: filed, ts: '2026-11-23T13:56:09Z', host: lenovinha, summary: move inline check blocks batch 3 filed and claimed}
