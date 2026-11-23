@@ -42,7 +42,8 @@ for _, f in ipairs(FIXTURES) do
         failn = failn + 1
         -- A subject that never reached the question is not "tested the
         -- caller's base" (yolanda, msys: all three died as script-error first).
-        local why = (last:find("^refused:script%-error") or last:find("^could%-not%-run") or r.status ~= "exited")
+        local why = (last:find("^refused:script%-error") or last:find("^could%-not%-run") or last:find("^skip:")
+            or r.status ~= "exited")
             and "did not run to its verdict" or "tested the caller's base, not its scratch checkout"
         out.line("FAIL: " .. f[1] .. " " .. why .. " (status=" .. tostring(r.status) .. " rc=" .. tostring(r.code) .. "): " .. last)
     end
