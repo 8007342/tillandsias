@@ -149,7 +149,9 @@ end
 local base = env.get("TILLANDSIAS_AFFORDANCE_BASE") or ""
 if base == "" then base = env.get("TILLANDSIAS_GATE_DIFF_BASE") or "" end
 if base == "" then base = "origin/linux-next" end
-if not okr(git("rev-parse", "--verify", "--quiet", base)) then
+-- `^{commit}` (2241-f8jg): a bare 40-hex "verifies" with no such object here,
+-- and every diff after it would fail quietly and judge nothing.
+if not okr(git("rev-parse", "--verify", "--quiet", base .. "^{commit}")) then
     verdict.emit("ok:refusal-affordance-added:base-unavailable", 0,
         "  note: base ref '" .. base .. "' unavailable — added-line enforcement skipped")
 end

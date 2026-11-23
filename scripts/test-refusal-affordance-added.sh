@@ -29,7 +29,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # ORDER 2221-rfaa: the guard is Lua. Each scratch repo is the CALLER's
 # checkout (the Lua asks git in its PWD), so it is not copied in any more.
 GUARD="$ROOT/scripts/lua/check-refusal-affordance-added.lua"
-pass=0; total=8
+pass=0; total=9
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1"; }
 
@@ -169,6 +169,19 @@ if [ "$xc" = 1 ] && [ "$xb" = 2 ] && grep -q '^audit:refusal-affordance:covered=
 else
     bad "arm 8: [$OUT]"
 fi
+
+# 9 — 2241-f8jg: a base that is a 40-hex with NO such object is unavailable,
+#     by name; it must not "verify" and then judge nothing (0 checked).
+R="$(repo nine)"
+put "$R" '#!/bin/bash
+if [ -z "$X" ]; then
+    echo "refused:thing:no-x" >&2
+    exit 1
+fi'
+OUT="$(cd "$R" && TILLANDSIAS_REPO_ROOT="$R" TILLANDSIAS_AFFORDANCE_BASE=0123456789abcdef0123456789abcdef01234567 "$PLAN" script run "$GUARD" 2>&1)"; RC=$?
+[ "$RC" -eq 0 ] && grep -q '^ok:refusal-affordance-added:base-unavailable$' <<<"$OUT" \
+    && ok "arm 9: a bogus 40-hex base is named base-unavailable, not a silent 0 checked" \
+    || bad "arm 9: rc=$RC [$OUT]"
 
 if [ "$pass" -eq "$total" ]; then
     echo "ok:refusal-affordance-added-fixture:$pass/$total"
