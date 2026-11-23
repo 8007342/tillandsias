@@ -18,7 +18,7 @@
 --
 --   ok:remote-reachable
 --   blocked:remote-unreachable:<cause>   (rc 1; why/remedy on stderr)
---     cause: no-gh | gh-timeout | gh-auth | ls-remote-timeout | ls-remote-auth | ls-remote-failed
+--     cause: gh-timeout | gh-auth | ls-remote-timeout | ls-remote-auth | ls-remote-failed
 --
 -- Seams (the fixture's): TILLANDSIAS_PROBE_GH, TILLANDSIAS_PROBE_GIT name the
 -- binaries (a path ending .sh runs under Git's bash, so a stub works on a
@@ -59,8 +59,11 @@ if g.status == "timed_out" or (g.code == nil and not g.ok) then
             "a HUMAN unlocks this host's login keyring (log in to the desktop session, or unlock it in Passwords and"
             .. " Keys / seahorse), then checks `gh auth status` answers promptly; a session never unlocks or re-logs it.")
     end
-    blocked("no-gh", "`gh` could not be run on this host (" .. tostring(g.stderr or g.status) .. ")",
-        "install gh, or run from a host that has it.")
+    -- A host (or toolbox) without gh is not unreachable: git's own probe below
+    -- still judges the remote. Say so, and skip only the gh half.
+    log.raw("note:remote-probe:no-gh — `gh` could not be run here (" .. tostring(g.stderr or g.status)
+        .. "); its login state is not judged, git ls-remote still is (2239-rmun)")
+    g = { ok = true, code = 0 }
 end
 if g.code ~= 0 then
     local said = text.trim(((g.stdout or "") .. "\n" .. (g.stderr or "")):gsub("\n+", " "))

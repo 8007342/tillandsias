@@ -15,6 +15,11 @@
 --   5 LS-AUTH     git ls-remote refused credentials -> ...:ls-remote-auth
 --   6 GH-HANG     gh hangs (a locked keyring) -> ...:gh-timeout, bounded, remedy names the keyring
 --   7 LOCAL       a non-GitHub origin (a fixture's local remote) never asks gh
+--   8 NO-GH       gh absent (the builder toolbox) is NOT unreachable: a named
+--                 note:remote-probe:no-gh line, ls-remote still judges -> ok
+--   9 NO-GH-BAD   gh absent AND git refused -> ls-remote-auth still blocks
+--  10 CALLERS     build.sh and the pre-push hook capture the probe set -e-safe
+--                 (`|| _rr_rc=$?`): a bare capture under set -e exited rc=1 SILENTLY
 --
 -- Verdict: ok:probe-remote-reachable:<n> or violation:probe-remote-reachable:<failed>.
 
@@ -46,13 +51,13 @@ case "$(cat "$d/git.mode")" in
 esac
 ]==]):gsub("@REL@", function() return rel end))
 
-local function probe(gh_mode, git_mode, url)
+local function probe(gh_mode, git_mode, url, gh_bin)
     fs.write(rel .. "/url", (url or "https://github.com/x/y.git") .. "\n")
     fs.write(rel .. "/gh.mode", gh_mode .. "\n"); fs.write(rel .. "/git.mode", git_mode .. "\n")
     fs.write(rel .. "/calls", "")
     local t0 = time.now_ms()
     local p = proc.run{ argv = { RUNNER, "script", "run", "scripts/lua/probe-remote-reachable.lua" },
-        env = { TILLANDSIAS_PROBE_GH = rel .. "/gh.sh", TILLANDSIAS_PROBE_GIT = rel .. "/git.sh",
+        env = { TILLANDSIAS_PROBE_GH = gh_bin or (rel .. "/gh.sh"), TILLANDSIAS_PROBE_GIT = rel .. "/git.sh",
                 TILLANDSIAS_PROBE_TIMEOUT_MS = "2000" }, timeout_ms = 60000 }
     return text.trim(p.stdout or ""), p.stderr or "", p.code, time.now_ms() - t0, fs.read(rel .. "/calls") or ""
 end
@@ -89,6 +94,29 @@ o, e, rc, ms, calls = probe("none", "ok", "/tmp/scratch/remote.git")
 if o == "ok:remote-reachable" and rc == 0 and not calls:find("gh ", 1, true) then
     ok("7: a non-GitHub origin (a fixture's local remote) is judged by ls-remote alone; gh is not asked")
 else bad("7: local origin answered [" .. o .. "] rc=" .. tostring(rc) .. " calls=[" .. calls .. "]") end
+
+local NOGH = rel .. "/no-such-gh-2239"
+o, e, rc, ms, calls = probe("ok", "ok", nil, NOGH)
+if o == "ok:remote-reachable" and rc == 0 and e:find("note:remote-probe:no-gh", 1, true) and calls:find("git ls-remote", 1, true) then
+    ok("8: gh absent -> a named no-gh note, ls-remote still judged, ok:remote-reachable")
+else bad("8: gh absent answered [" .. o .. "] rc=" .. tostring(rc) .. " err=[" .. e .. "]") end
+
+o, e, rc, ms, calls = probe("ok", "auth", nil, NOGH)
+if o == "blocked:remote-unreachable:ls-remote-auth" and rc == 1 and e:find("note:remote-probe:no-gh", 1, true) then
+    ok("9: gh absent and git refused -> still blocked:remote-unreachable:ls-remote-auth")
+else bad("9: gh absent + refused answered [" .. o .. "] rc=" .. tostring(rc) .. " err=[" .. e .. "]") end
+
+local safe = 0
+for _, f in ipairs({ "build.sh", "scripts/hooks/pre-push-local-gate.sh" }) do
+    local body = fs.read(f) or ""
+    for line in body:gmatch("[^\n]+") do
+        if line:find("probe-remote-reachable.lua", 1, true) and line:find("_rr_out=", 1, true) then
+            if line:find("|| _rr_rc=$?", 1, true) then safe = safe + 1 end
+        end
+    end
+end
+if safe == 2 then ok("10: both callers capture the probe set -e-safe, so a blocked verdict is printed")
+else bad("10: set -e-safe probe captures found " .. safe .. "/2 (a bare `$(...)`; _rr_rc=$? exits silently under set -e)") end
 
 if all_calls:find("gh auth status", 1, true) and not all_calls:find("gh auth login", 1, true)
         and not all_calls:find("gh auth refresh", 1, true) then
