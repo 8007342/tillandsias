@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: assigned by macuahuitl-fedora 2026-11-22 (evictions of #1358 and #1386).
+packets:
+  - packet_id: ca-mint-lock-not-held-across-podman
+    order: "2258-sr65"
+    status: claimed
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [rust, headless, ca, flake]
+    estimated_hours: 3
+    title: "A second CA minter timed out after 5 s behind a first one that called podman with the mint lock held"
+    context: |
+      two_concurrent_ca_minters_end_with_one_matched_pair failed at 5.743 s and 5.021 s in gates of unrelated PRs:
+      "Timed out waiting for CA generation lock". The test has its own HOME; nothing is shared across test processes. The
+      first minter runs podman inspect (30 s budget) while holding the lock and the waiter gives up after 5 s, so a real
+      second process on a loaded host failed the same way. The Vault TLS leaf lock was a copy with the same limit.
+      Known limit: a minter killed while holding the mkdir lock leaves it, and later minters now wait 30 s before erring.
+    exit_criteria:
+      - "podman is called before the mint lock is taken (the_ca_mint_lock_is_not_held_across_podman)."
+      - "A lock held past 5 s makes the second minter wait, not fail (a_second_ca_minter_waits_out_a_slow_first_one)."
+    unscoreable: "pinned-elsewhere: the two named unit tests."
+    next_action: "Land the PR."
+    provenance: "macuahuitl-fedora 2026-11-22; panic text from the pr-1358 and pr-1386 gate logs."
+    events:
+      - type: filed
+        ts: "2026-11-23T06:58:28Z"
+        host: calmecacpilli
+        summary: "filed and claimed; implemented in the same change"
