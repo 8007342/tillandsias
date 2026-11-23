@@ -297,6 +297,48 @@ SHIM
     rm -f "$shim_src"
 }
 
+# ── Helper: cargo-nextest for the gate (order 2243-urcy) ──────────────────
+# The gate's test runner when present (build.sh prints a `test-runner:` line).
+# A PINNED prebuilt release asset verified by sha256, never `cargo install` (a
+# compile) or binstall (the rate-limited GitHub API); Fedora does not package
+# it. ~/.cargo/bin is the toolbox's $HOME, shared with the host, so the extract
+# lands where rustup's tools do. It is NOT part of _toolbox_initialized: a
+# failed download must never make every wrapper call re-run the whole dnf init.
+# Instead an absent binary is ensured here, at most once a day after a failure
+# (the stamp), and the gate then says test-runner:cargo-test:nextest-absent and
+# runs cargo test exactly as before.
+NEXTEST_FAIL_STAMP="$HOME/.cache/tillandsias/cargo-nextest-ensure-failed"
+_ensure_nextest() {
+    [[ -x "$HOME/.cargo/bin/cargo-nextest" ]] && return 0
+    if [[ -n "$(find "$NEXTEST_FAIL_STAMP" -mmin -1440 2>/dev/null)" ]]; then
+        return 0
+    fi
+    _nx_ver=0.9.152
+    case "$(uname -m)" in
+        x86_64)  _nx_arch=x86_64;  _nx_sha=d039b43c3e0958441b6ad0a39c8884d018b3d2e8fb9928f209074b1100b5e17a ;;
+        aarch64) _nx_arch=aarch64; _nx_sha=ca1f81a5b86533eb45ab97e0064aa88e925e53aab9a698ca6331a7cad1f85f07 ;;
+        *)       _nx_arch="" ;;
+    esac
+    if [[ -n "$_nx_arch" ]]; then
+        _nx_tgz="$HOME/.cache/tillandsias/cargo-nextest-$_nx_ver-$_nx_arch.tar.gz"
+        mkdir -p "$(dirname "$_nx_tgz")" "$HOME/.cargo/bin"
+        if [[ ! -f "$_nx_tgz" ]]; then
+            curl --proto '=https' --tlsv1.2 -fsSL -o "$_nx_tgz.part" \
+                "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-$_nx_ver/cargo-nextest-$_nx_ver-$_nx_arch-unknown-linux-gnu.tar.gz" \
+                && mv -f "$_nx_tgz.part" "$_nx_tgz"
+        fi
+        _nx_got="$(sha256sum "$_nx_tgz" 2>/dev/null)" || _nx_got=""
+        if [[ "${_nx_got%% *}" == "$_nx_sha" ]]; then
+            tar -xzf "$_nx_tgz" -C "$HOME/.cargo/bin" cargo-nextest \
+                && echo "  [nextest] cargo-nextest $_nx_ver installed (sha256 verified)"
+        else
+            rm -f "$_nx_tgz" "$_nx_tgz.part"
+            touch "$NEXTEST_FAIL_STAMP" 2>/dev/null || true
+            echo "  [nextest] refused: cargo-nextest $_nx_ver asset sha256 mismatch or download failed; the gate will run cargo test (test-runner:cargo-test:nextest-absent)" >&2
+        fi
+    fi
+}
+
 # ── Ensure toolbox exists and is initialized ──────────────────────────────
 if ! _toolbox_exists; then
     echo "[tillandsias-builder] Creating '$TOOLBOX_NAME' toolbox (first run)..."
@@ -373,6 +415,7 @@ if ! _toolbox_initialized; then
 
     echo "[tillandsias-builder] Initialization complete."
 fi
+_ensure_nextest
 
 # ── Re-exec inside the toolbox ────────────────────────────────────────────
 # At this point we are on the host (not in toolbox). Re-exec the current

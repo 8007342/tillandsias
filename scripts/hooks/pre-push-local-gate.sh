@@ -148,7 +148,7 @@ if [ "${TILLANDSIAS_SKIP_REMOTE_PROBE:-0}" != 1 ] && [ -z "${CI:-}" ] && [ -z "$
    && [ -f scripts/lua/probe-remote-reachable.lua ]; then
     _rr_bin="$(. scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null || true)"
     if [ -n "$_rr_bin" ]; then
-        _rr_out="$("$_rr_bin" script run scripts/lua/probe-remote-reachable.lua 2>&1)"; _rr_rc=$?
+        _rr_rc=0; _rr_out="$("$_rr_bin" script run scripts/lua/probe-remote-reachable.lua 2>&1)" || _rr_rc=$?  # set -e-safe (2239-rmun)
         if [ "$_rr_rc" -ne 0 ]; then
             printf '%s\n' "$_rr_out" >&2
             echo "${RED:-}✗ pre-push: refused:pre-push:remote-unreachable — this host cannot reach the remote (2239-rmun)${RST:-}" >&2
