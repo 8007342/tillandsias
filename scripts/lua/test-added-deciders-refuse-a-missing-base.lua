@@ -16,12 +16,12 @@
 --
 -- Verdict: ok:added-deciders-missing-base:<n> | violation:added-deciders-missing-base:<failed>/<n>
 
-local root = text.trim(proc.run{ argv = { "pwd", "-P" } }.stdout or "")
+local fixture = require "common.fixture"
+local root = fixture.repo_root()
+local SH = fixture.posix_shell()
 local MISSING = string.rep("de", 20)
 
-local probe = proc.run{ argv = { "bash", "-s" }, cwd = root, timeout_ms = 60000,
-    stdin = '. scripts/plan-binary-probe.sh\np="$(resolve_plan_binary 2>/dev/null)" || p=""\ncase "$p" in ./*) p="$PWD/${p#./}" ;; esac\nprintf "%s" "$p"\n' }
-local PB = text.trim(probe.stdout or "")
+local PB = fixture.plan_binary()
 if PB == "" then verdict.emit("could-not-run:added-deciders-missing-base:no-plan-binary", 3) end
 
 local OVERRIDES = {
@@ -55,7 +55,7 @@ local CASES = {
 local pass, failn = 0, 0
 for _, c in ipairs(CASES) do
     local fam, path, marker = c[1], c[2], c[3]
-    local argv = fam == "sh" and { "bash", root .. "/" .. path } or { PB, "script", "run", path }
+    local argv = fam == "sh" and { SH, root .. "/" .. path } or { PB, "script", "run", path }
     local r = proc.run{ argv = argv, cwd = root, env = ENV, timeout_ms = 300000 }
     local o = (r.stdout or "") .. (r.stderr or "")
     if o:find(marker, 1, true) then
