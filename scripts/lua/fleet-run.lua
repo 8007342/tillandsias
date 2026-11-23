@@ -1,5 +1,6 @@
 -- @trace order:2250-44uy
 -- @env TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
+-- @env TILLANDSIAS_FLEET_RUN_TIMEOUT_MS
 --
 -- fleet-run.lua — the darwin/msys side of a second-regime request. Given a
 -- gate step NUMBER and a REF (never a command), run exactly that one step of
@@ -25,6 +26,10 @@
 -- checkout's release build when the crates are identical, else one built from
 -- the extracted tree into a shared target dir (one CARGO_TARGET_DIR, serial).
 --
+-- After the regime line: ok:fleet-run (rc 0) only when the step's rc is 0;
+-- violation:fleet-run:step=<n>:rc=<rc> (rc 1) when it is not;
+-- could-not-run:fleet-run:step-did-not-exit:<status> (rc 2) when it was killed.
+--
 -- Refusals (rc 2, one line, nothing run):
 --   refused:fleet-run:usage | bad-step:<s> | bad-ref:<r> | unknown-ref:<r>
 --   refused:fleet-run:no-step:<n> | ambiguous-step:<n>:<count>
@@ -33,7 +38,8 @@
 -- Usage: tillandsias-plan script run scripts/lua/fleet-run.lua -- <step-number> <ref>
 
 -- The extract is removed on every way out; only its log stays. A run that is
--- KILLED cannot do this: its extract stays under target/work/fleet-run.
+-- KILLED cannot do this; the next run sweeps an extract older than four hours
+-- (a step's own deadline is one hour, so that is never a live one).
 local D
 local function drop() if D then proc.run({ argv = { "rm", "-rf", D }, timeout_ms = 300000 }) end end
 local function refuse(what, rc)
@@ -89,7 +95,11 @@ local _, TREE = run({ "git", "-C", ROOT, "rev-parse", COMMIT .. "^{tree}" })
 
 local BASE = ROOT .. "/target/work/fleet-run"
 D = BASE .. "/" .. COMMIT
-run({ "rm", "-rf", D })
+local _, old = run({ "find", BASE, "-maxdepth", "1", "-type", "d", "-mmin", "+240" })
+for _, l in ipairs(text.lines(old)) do
+    if l:match("/%x+$") and #l:match("[^/]+$") == 40 then run({ "rm", "-rf", l }, { timeout_ms = 300000 }) end
+end
+run({ "rm", "-rf", D }, { timeout_ms = 300000 })
 if run({ "mkdir", "-p", D }) ~= 0 then cnr("mkdir") end
 local GENV = { GIT_AUTHOR_NAME = "fleet-run", GIT_AUTHOR_EMAIL = "fleet-run@localhost",
                GIT_COMMITTER_NAME = "fleet-run", GIT_COMMITTER_EMAIL = "fleet-run@localhost",
@@ -125,13 +135,16 @@ if #steps > 1 then refuse("ambiguous-step:" .. STEP .. ":" .. #steps) end
 
 -- The plan binary: reuse this checkout's when the crates match, else build.
 local function subtree(c, p) local _, s = run({ "git", "-C", ROOT, "rev-parse", c .. ":" .. p }); return s end
+-- One persistent target dir for fleet-run, for the plan build AND the step, so
+-- a run does not rebuild the world. Never the checkout's own target/: cargo
+-- would leave this ref's binaries there for the checkout to run (1807-shtg).
+local CTD = BASE .. "/cargo-target"
 local same = true
 for _, p in ipairs({ "crates", "Cargo.lock", "Cargo.toml" }) do
     if subtree("HEAD", p) ~= subtree(COMMIT, p) then same = false end
 end
 local BIN = ROOT .. "/target/release/tillandsias-plan" .. EXE
 if not same or run({ "test", "-x", BIN }) ~= 0 then
-    local CTD = BASE .. "/cargo-target"
     local brc = run({ "cargo", "build", "-q", "--release", "-p", "tillandsias-plan" },
         { cwd = D, env = { CARGO_TARGET_DIR = CTD }, timeout_ms = 1800000 })
     if brc ~= 0 then cnr("plan-build:rc=" .. brc) end
@@ -148,7 +161,7 @@ end
 local step_text = "\n" .. (fs.read("target/work/fleet-run/" .. COMMIT .. "/scripts/gate-steps.d/" .. steps[1]) or "")
 local function field(k) return step_text:match("\n" .. k .. '="([^"\n]*)"') or "" end
 local desc = field("STEP_DESC")
-local benv = { TILLANDSIAS_PLAN_BIN = BIN, TILLANDSIAS_SCRIPT_RUNNER_BIN = BIN }
+local benv = { TILLANDSIAS_PLAN_BIN = BIN, TILLANDSIAS_SCRIPT_RUNNER_BIN = BIN, CARGO_TARGET_DIR = CTD }
 local argv = { BASH, "./build.sh", "--gate-steps", D }
 if WINDOWS then
     benv.TILLANDSIAS_SKIP_WSL2 = "1"   -- a step that runs build.sh must not re-exec into WSL
@@ -157,7 +170,8 @@ if WINDOWS then
     if lua ~= "" then argv = { BIN, "script", "run", lua } else argv = { BASH, script } end
     desc = ""                          -- no door lines around the step's own output
 end
-local r = proc.run({ argv = argv, cwd = D, timeout_ms = 3600000, env = benv })
+local r = proc.run({ argv = argv, cwd = D, env = benv,
+    timeout_ms = tonumber(env.get("TILLANDSIAS_FLEET_RUN_TIMEOUT_MS") or "") or 3600000 })
 local src = (r.status == "exited") and r.code or -1
 if WINDOWS and src ~= 0 and tostring(src) == (step_text:match('\nSTEP_SKIP_EXIT="?(%d+)') or "") then src = 0 end
 local o = (r.stdout or "") .. "\n" .. (r.stderr or "")
@@ -184,4 +198,6 @@ if not ended then vline = "could-not-run:step-did-not-exit:" .. tostring(r.statu
 drop()
 out.line("regime:" .. PLATFORM .. ":step=" .. STEP .. ":rc=" .. src .. ":sha=" .. TREE .. ":verdict=" .. vline)
 if not ended then cnr("step-did-not-exit:" .. tostring(r.status)) end
+if src ~= 0 then verdict.emit("violation:fleet-run:step=" .. STEP .. ":rc=" .. src
+    .. ":log=target/work/fleet-run/" .. COMMIT .. "-" .. STEP .. ".log", 1) end
 verdict.ok("fleet-run", "step=" .. STEP .. " rc=" .. src .. " log=target/work/fleet-run/" .. COMMIT .. "-" .. STEP .. ".log")
