@@ -22,20 +22,35 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; cd "$ROOT"
 W="$(mktemp -d "${TMPDIR:-/tmp}/memo-hit-obs.XXXXXX")"
 trap 'rm -rf "$W"' EXIT INT TERM
+# ORDER 2150-vf2v (priority:build-speed): pin EVERY metrics log cycle-metrics.sh
+# reads to an empty scratch file. Defaulted, they are this host's real
+# .cache/metrics logs; a 95 MB usage log made this fixture 118 s instead of 3 s
+# on macuahuitl. scripts/lua/check-cycle-metrics-fixtures-pin-logs.lua refuses a
+# cycle-metrics fixture that leaves one defaulted.
+for _pin in TILLANDSIAS_EXPERT_USAGE_LOG TILLANDSIAS_CYCLE_FLOW_LOG TILLANDSIAS_EXPERT_HEALTH_LOG; do
+    : > "$W/pinned-$_pin.jsonl"; export "$_pin=$W/pinned-$_pin.jsonl"
+done
+# 2150-vf2v: no arm here reads the expert_accuracy: line, and the groundtruth
+# grader behind it costs ~7.5 s of every report (10.1 s -> 2.6 s); 1105-h8vr's knob.
+export TILLANDSIAS_CYCLE_METRICS_SKIP_GRADE=1
 pass=0; fail=0
 ok()  { echo "ok   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL $1" >&2; fail=$((fail+1)); }
 
 BUILD="$ROOT/build.sh"
 METRICS="$ROOT/scripts/cycle-metrics.sh"
+# 2186-niam: the archiver check moved out of build.sh into a STEP_LUA step;
+# its hit/miss emits are emit_timing("archiver-check-…") calls in the Lua.
+ARCH="$ROOT/scripts/lua/check-archiver-ready-set.lua"
+ARCH_STEP="$ROOT/scripts/gate-steps.d/955-831-ezea.step"
 
 # ── ARM 1: a memo HIT is recorded at all. ───────────────────────────────────
 # Pre-fix, the archiver hit branch was `_info` and nothing else, so a hit
 # produced NO record under any name and the hit rate was not computable.
-arm1() { grep -q 'timing_emit archiver-check-hit' "$1"; }
-arm1 "$BUILD" && ok "ARM 1: a memo hit emits a timing record (archiver)" \
+arm1() { grep -q 'emit_timing("archiver-check-hit"' "$1"; }
+arm1 "$ARCH" && ok "ARM 1: a memo hit emits a timing record (archiver)" \
     || bad "ARM 1: the archiver hit branch emits no timing record"
-sed '/timing_emit archiver-check-hit/d' "$BUILD" > "$W/build-prefix.sh"
+sed '/emit_timing("archiver-check-hit"/d' "$ARCH" > "$W/build-prefix.sh"
 arm1 "$W/build-prefix.sh" \
     && bad "ARM 1 MUTANT: passed on pre-fix code — the arm proves nothing" \
     || ok "ARM 1 reds on pre-fix code (hit branch with no emit)"
@@ -45,21 +60,22 @@ arm1 "$W/build-prefix.sh" \
 # The names must differ, or the rung — which groups by step — would average a
 # cheap hit into the real cost of a miss and the memo would look like it made
 # the step fast rather than skipped it.
-arm2() { # arm2 <file> <prefix>
-    grep -q "timing_emit $2-hit"  "$1" && grep -q "timing_emit $2-miss" "$1"
+arm2() { # arm2 <file> <prefix> — build.sh's timing_emit or the Lua's emit_timing("…"
+    grep -Eq "(timing_emit |emit_timing\(\")$2-hit"  "$1" && grep -Eq "(timing_emit |emit_timing\(\")$2-miss" "$1"
 }
-for step in archiver-check terminology-check; do
-    arm2 "$BUILD" "$step" \
+for pair in "$ARCH:archiver-check" "$BUILD:terminology-check"; do
+    step="${pair##*:}"
+    arm2 "${pair%:*}" "$step" \
         && ok "ARM 2: $step emits distinct -hit and -miss names" \
         || bad "ARM 2: $step does not distinguish hit from miss"
 done
 # The two outcomes must not collapse onto one name.
-if grep -q 'timing_emit archiver-check ' "$BUILD"; then
+if grep -q 'emit_timing("archiver-check"' "$ARCH" || grep -q 'timing_emit archiver-check ' "$BUILD"; then
     bad "ARM 2: a bare archiver-check record exists — hit and miss can collide"
 else
     ok "ARM 2: no bare archiver-check name for the two outcomes to collide on"
 fi
-sed '/timing_emit archiver-check-miss/d' "$BUILD" > "$W/build-nomiss.sh"
+sed '/emit_timing("archiver-check-miss"/d' "$ARCH" > "$W/build-nomiss.sh"
 arm2 "$W/build-nomiss.sh" archiver-check \
     && bad "ARM 2 MUTANT: passed with the miss record deleted" \
     || ok "ARM 2 reds when one of the pair is removed"
@@ -140,15 +156,24 @@ fi
 # measurement of what the step actually costs. The hit/miss records answer
 # "did the memo fire"; the `_run` phase record answers "what does the work
 # cost". They are different numbers and both are required.
-if grep -q '_run bash "\$SCRIPT_DIR/scripts/archive-plan-packets.sh" --check' "$BUILD"; then
+# 2186-niam: the archiver runs as a STEP_LUA step, and the gate's step runner
+# executes every STEP_LUA under `_run`, so the miss stays profiled iff (a) the
+# step is STEP_LUA-wired to the script that does the work and (b) the runner's
+# STEP_LUA line is still a `_run` call.
+_RUN_LUA_LINE='_run env "TILLANDSIAS_SCRIPT_RUNNER_BIN=$_gs_plan" "$_gs_plan" script run "$_gs_root/$STEP_LUA"'
+neg() { # neg <build> <step>
+    grep -qF "$_RUN_LUA_LINE" "$1" \
+        && grep -q '^STEP_LUA="scripts/lua/check-archiver-ready-set.lua"' "$2" \
+        && grep -q '"scripts/archive-plan-packets.sh", "--check"' "$ARCH"
+}
+if neg "$BUILD" "$ARCH_STEP"; then
     ok "NEGATIVE CONTROL: the archiver miss still runs inside _run, so the step stays profiled"
 else
     bad "NEGATIVE CONTROL: the archiver miss left the _run path — the step's real cost is no longer measured"
 fi
-sed 's|_run bash "\$SCRIPT_DIR/scripts/archive-plan-packets.sh" --check|bash "$SCRIPT_DIR/scripts/archive-plan-packets.sh" --check|' \
-    "$BUILD" > "$W/build-norun.sh"
-if grep -q '_run bash "\$SCRIPT_DIR/scripts/archive-plan-packets.sh" --check' "$W/build-norun.sh"; then
-    bad "NEGATIVE CONTROL MUTANT: sed did not lift the call out of _run — mutant invalid"
+grep -vF "$_RUN_LUA_LINE" "$BUILD" > "$W/build-norun.sh"
+if neg "$W/build-norun.sh" "$ARCH_STEP"; then
+    bad "NEGATIVE CONTROL MUTANT: passed with STEP_LUA lifted out of _run — the arm proves nothing"
 else
     ok "NEGATIVE CONTROL reds when the work is lifted out of _run (mutant built and detected)"
 fi

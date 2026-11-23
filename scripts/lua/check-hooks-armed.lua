@@ -19,6 +19,7 @@
 --   ok:hooks-armed:<marker>                       exit 0
 --   degraded:hooks:absent                         exit 1  (no pre-push)
 --   degraded:hooks:stale:<have>-><want>           exit 1  (ours, older)
+--   degraded:hooks:merge-driver-unarmed           exit 1  (2118-asur)
 --   refused:hooks:foreign-pre-push:<path>         exit 3  (not ours)
 --   refused:hooks:<scope>-hooks-path:<dir>        exit 3  (global/system)
 --   blocked:hooks:not-a-checkout                  exit 2
@@ -89,5 +90,16 @@ if have ~= want then
     afford("the installed pre-push is " .. have .. " and the current one is " .. want .. ", so newer guards are not armed",
         "bash scripts/ensure-hooks.sh")
     verdict.emit("degraded:hooks:stale:" .. have .. "->" .. want, 1)
+end
+-- 2118-asur: .gitattributes names a driver; a clone that never configured it
+-- silently gets textual conflicts on every floor. Judged only where the tree
+-- ships the driver.
+if run({ "test", "-f", top .. "/scripts/merge-floor-driver.sh" }) == 0 then
+    local _, drv = run({ "git", "config", "--get", "merge.tillandsias-floor.driver" })
+    if not drv:find("scripts/merge-floor-driver.sh", 1, true) then
+        afford("merge.tillandsias-floor is not configured in this clone, so floor files conflict textually",
+            "bash scripts/ensure-hooks.sh")
+        verdict.emit("degraded:hooks:merge-driver-unarmed", 1)
+    end
 end
 verdict.emit("ok:hooks-armed:" .. want, 0)

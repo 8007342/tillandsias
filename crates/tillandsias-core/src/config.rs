@@ -351,6 +351,24 @@ pub struct GlobalConfig {
     /// @trace spec:forge-hot-cold-split
     #[serde(default)]
     pub forge: ForgeConfig,
+
+    /// Developer-checkout settings (order 2118-u675).
+    #[serde(default)]
+    pub dev: DevConfig,
+}
+
+/// Developer-checkout settings.
+///
+/// ORDER 2118-u675: dev-tier services that need the Tillandsias checkout's own
+/// scripts (the nix cache's `scripts/nix-cache-service.sh prepare`) resolve it
+/// from CONFIGURATION, never from the process's cwd, because an installed tray
+/// is not started from a checkout. Resolution: `TILLANDSIAS_ROOT`, then
+/// `checkout` here, then `<watch_path>/tillandsias` for each scanner path.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct DevConfig {
+    /// Absolute path of this host's Tillandsias checkout, if it has one.
+    #[serde(default)]
+    pub checkout: Option<PathBuf>,
 }
 
 /// Scanner settings.
@@ -497,6 +515,7 @@ impl Default for GlobalConfig {
             agent: AgentConfig::default(),
             i18n: I18nConfig::default(),
             forge: ForgeConfig::default(),
+            dev: DevConfig::default(),
         }
     }
 }

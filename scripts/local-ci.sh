@@ -94,10 +94,29 @@ set +e
 # times each litmus phase; a timing failure must NEVER change local-ci's exit.
 . "$REPO_ROOT/scripts/timing-log.sh" 2>/dev/null || true
 command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
-# 1242-4x53: re-run a failed check's failures once, same regime, and record
-# whether they REPRODUCED. Best-effort like the timing side-channel above.
-. "$REPO_ROOT/scripts/lib-rerun-failed-rust-tests.sh" 2>/dev/null || true
-command -v rerun_failed_rust_tests >/dev/null 2>&1 || rerun_failed_rust_tests() { return 0; }
+# 1242-4x53 / 2215-beb5: the rust-tests check runs, and re-runs its failures
+# once in the SAME regime, through scripts/lua/run-rust-test-on-host.lua
+# (local-ci.sh to Lua, slice 1). Its pass-through env list is in its verdict.
+_rrt_plan=""
+run_rust_tests_lua() { # <run|rerun> [args...] -- <argv...>
+    if [[ -z "$_rrt_plan" ]]; then
+        _rrt_plan="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _rrt_plan=""
+        [[ "$_rrt_plan" == ./* ]] && _rrt_plan="$REPO_ROOT/${_rrt_plan#./}"
+    fi
+    if [[ -z "$_rrt_plan" ]]; then
+        echo "could-not-run:rust-test-on-host:no-plan-binary — no runnable tillandsias-plan to run scripts/lua/run-rust-test-on-host.lua (2215-beb5)"
+        return 3
+    fi
+    (cd "$REPO_ROOT" && "$_rrt_plan" script run scripts/lua/run-rust-test-on-host.lua -- "$@")
+}
+# reproduced=yes|no from the re-run's verdict line; empty when it gave none.
+rust_tests_reproduced() { # <rerun verdict output>
+    case "$1" in
+        *"reproduced=yes"*) echo yes ;;
+        *"reproduced=no"*) echo no ;;
+    esac
+    return 0
+}
 # 765-dfry: per-check duration anchor. Checks run sequentially and each ends
 # in archive_check_log, so "time since the previous archive (or section
 # start)" IS the check's own duration. Re-anchored by log_section and by
@@ -207,70 +226,22 @@ if [[ -n "$CI_IGNORE_SPEC_LIST" ]]; then
     export TILLANDSIAS_STRICT_IGNORE_SPECS="$CI_IGNORE_SPEC_LIST"
 fi
 
-normalize_spec_list() {
-    local raw="${1:-}"
-    raw="${raw//:/ }"
-    raw="${raw//,/ }"
-    for item in $raw; do
-        [[ -n "$item" ]] && printf '%s\n' "$item"
-    done | awk '!seen[$0]++'
-}
-
-spec_in_list() {
-    local needle="$1"
-    local raw_list="${2:-}"
-
-    [[ -z "$raw_list" ]] && return 1
-    while IFS= read -r item; do
-        [[ "$item" == "$needle" ]] && return 0
-    done < <(normalize_spec_list "$raw_list")
-    return 1
-}
-
-get_all_active_specs() {
-    # ORDER 746-htj9: the compiled reader + jq first — both exist in every
-    # environment the gates run in; yq and the awk parser stay as fallbacks
-    # for a fresh clone that has never built the binary.
-    local _bin=""
-    if [[ -f "$REPO_ROOT/scripts/plan-binary-probe.sh" ]]; then
-        # shellcheck source=scripts/plan-binary-probe.sh
-        . "$REPO_ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
-        command -v resolve_plan_binary &>/dev/null && _bin="$(resolve_plan_binary 2>/dev/null)" || _bin=""
-    fi
-    local v
-    if [[ -n "$_bin" ]] && command -v "$JQ" &>/dev/null \
-        && v="$("$_bin" yaml-json "$REPO_ROOT/openspec/litmus-bindings.yaml" 2>/dev/null | "$JQ" -r '.specs[] | select(.status=="active") | .spec_id' 2>/dev/null)"; then
-        [[ -n "$v" ]] && printf '%s\n' "$v"
-    elif command -v yq &>/dev/null; then
-        yq eval '.specs[] | select(.status=="active") | .spec_id' "$REPO_ROOT/openspec/litmus-bindings.yaml" 2>/dev/null || true
-    else
-        awk '
-            /^- spec_id: / {
-                gsub(/^- spec_id: /, "");
-                current_spec = $0
-                next
-            }
-            /^  status: / {
-                gsub(/^  status: /, "");
-                status = $0
-                if (status == "active" && current_spec != "") print current_spec
-            }
-        ' "$REPO_ROOT/openspec/litmus-bindings.yaml"
-    fi
-}
+# ORDER 2220-yj8f (local-ci.sh to Lua, slice 2): the --strict-all spec
+# selection is scripts/lua/local-ci-strict-specs.lua. It replaced
+# get_all_active_specs, spec_in_list and normalize_spec_list, and their
+# jq / yq / awk fallbacks: the plan binary that runs it parses the YAML.
 
 if [[ "$STRICT_ALL" == "1" ]]; then
-    STRICT_LIST="$(get_all_active_specs)"
-    if [[ -n "${CI_IGNORE_SPEC_LIST:-}" ]]; then
-        filtered_list=""
-        while IFS= read -r spec_id; do
-            [[ -z "$spec_id" ]] && continue
-            if ! spec_in_list "$spec_id" "$CI_IGNORE_SPEC_LIST"; then
-                filtered_list+="${spec_id}"$'\n'
-            fi
-        done <<<"$STRICT_LIST"
-        STRICT_LIST="$(printf '%s' "$filtered_list" | awk 'NF')"
+    # Every active spec minus CI_IGNORE_SPEC_LIST (2220-yj8f). With no plan
+    # binary there is nothing to parse the bindings with, and an empty list
+    # would quietly turn --strict-all off, so it stops by name instead.
+    _ss_plan="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _ss_plan=""
+    [[ "$_ss_plan" == ./* ]] && _ss_plan="$REPO_ROOT/${_ss_plan#./}"
+    if [[ -z "$_ss_plan" ]]; then
+        echo "could-not-run:local-ci:strict-all-needs-a-plan-binary — --strict-all selects specs with scripts/lua/local-ci-strict-specs.lua; build one: cargo build --release -p tillandsias-plan (2220-yj8f)" >&2
+        exit 3
     fi
+    STRICT_LIST="$(cd "$REPO_ROOT" && "$_ss_plan" script run --helper scripts/lua/local-ci-strict-specs.lua -- --ignore "${CI_IGNORE_SPEC_LIST:-}")"
     if [[ -n "$STRICT_LIST" ]]; then
         CI_FILTER_SPEC_LIST="$STRICT_LIST"
         CI_STRICT_SPEC_LIST="$STRICT_LIST"
@@ -1165,8 +1136,8 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # result is deterministic (6/6), so this is a real gate on the daily tier.
     # ============================================================================
     log_section "Archiver Concurrent Check (1132-r4mt)"
-    if [[ -f "scripts/test-archiver-concurrent-check.sh" ]]; then
-        if bash scripts/test-archiver-concurrent-check.sh 1 > /tmp/archiver-concurrent.log 2>&1; then
+    if [[ -f "scripts/lua/test-archiver-concurrent-check.lua" ]]; then
+        if "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" script run scripts/lua/test-archiver-concurrent-check.lua -- 1 > /tmp/archiver-concurrent.log 2>&1; then
             log_pass "Concurrent archiver --check runs share no scratch"
             archive_check_log "archiver-concurrent-check" "pass" /tmp/archiver-concurrent.log
         else
@@ -1175,7 +1146,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "archiver-concurrent-check" "fail" /tmp/archiver-concurrent.log
         fi
     else
-        log_fail_missing_guard "archiver-concurrent-check" "scripts/test-archiver-concurrent-check.sh"
+        log_fail_missing_guard "archiver-concurrent-check" "scripts/lua/test-archiver-concurrent-check.lua"
         archive_check_log "archiver-concurrent-check" "skipped"
     fi
 
@@ -1348,7 +1319,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # the headless target. The durable closure is the seam-writer guard
     # (scripts/lua/check-seam-writers-canonical.lua) going gating once 1250-92ty
     # lands; this seat removes the deterministic failure, not the race.
-    if run_rust_test_on_host env TILLANDSIAS_PODMAN_BIN=/bin/false cargo test --workspace --lib --no-fail-fast 2>&1 | tee /tmp/test-check.log; then
+    if run_rust_tests_lua run --regime rust-tests -- env TILLANDSIAS_PODMAN_BIN=/bin/false cargo test --workspace --lib --no-fail-fast 2>&1 | tee /tmp/test-check.log; then
         log_pass "All unit tests pass"
         archive_check_log "rust-tests" "pass" /tmp/test-check.log
     else
@@ -1356,8 +1327,11 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         [[ "$VERBOSE" == "1" ]] && cat /tmp/test-check.log >&2
         # 1242-4x53: did it fail AGAIN, same env and seat? Two reds in one
         # release tier passed on re-run, and until now the record could not say.
-        _rust_reproduced="$(rerun_failed_rust_tests /tmp/test-check.log \
-            run_rust_test_on_host env TILLANDSIAS_PODMAN_BIN=/bin/false cargo test --workspace --lib --no-fail-fast)"
+        # The re-run refuses by name if the regime differs from the first run.
+        _rust_rerun="$(run_rust_tests_lua rerun --regime rust-tests /tmp/test-check.log \
+            -- env TILLANDSIAS_PODMAN_BIN=/bin/false cargo test --workspace --lib --no-fail-fast 2>/dev/null)"
+        _rust_reproduced="$(rust_tests_reproduced "$_rust_rerun")"
+        [[ "$_rust_rerun" == *regime-differs* ]] && log_info "rust-tests re-run refused, the regime differs from the first run (2215-beb5): $_rust_rerun"
         [[ -n "$_rust_reproduced" ]] && log_info "rust-tests failure reproduced on a same-regime re-run: $_rust_reproduced (1242-4x53)"
         archive_check_log "rust-tests" "fail" /tmp/test-check.log "rust-tests.log" "$_rust_reproduced"
     fi
@@ -1765,32 +1739,37 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
 
     # Order 1369-sjbc: the copy the release jobs upload to `unstable` defaults
     # its installers to unstable; the versioned (later stable) copy does not.
-    # Wired in build.sh --check as well; hermetic, a few seconds.
-    if [[ -f "scripts/test-unstable-installer-defaults-to-unstable.sh" ]]; then
-        if bash scripts/test-unstable-installer-defaults-to-unstable.sh 2>&1 | tee /tmp/unstable-installer-default.log; then
+    # Gate step 405 as well; hermetic, a few seconds. Lua since 2111-inst.
+    _ui_plan="$( . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null )" || _ui_plan=""
+    if [[ -f "scripts/lua/test-unstable-installer-defaults-to-unstable.lua" && -n "$_ui_plan" ]]; then
+        if "$_ui_plan" script run scripts/lua/test-unstable-installer-defaults-to-unstable.lua > /tmp/unstable-installer-default.log 2>&1; then
+            cat /tmp/unstable-installer-default.log
             log_pass "Unstable-channel installers default to unstable; stable copies do not"
             archive_check_log "unstable-installer-default" "pass" /tmp/unstable-installer-default.log
         else
+            cat /tmp/unstable-installer-default.log
             log_fail_tracked "unstable-installer-default" "Unstable installer default regression (see /tmp/unstable-installer-default.log)"
             archive_check_log "unstable-installer-default" "fail" /tmp/unstable-installer-default.log
         fi
     else
-        log_fail_missing_guard "unstable-installer-default" "scripts/test-unstable-installer-defaults-to-unstable.sh"
+        log_fail_missing_guard "unstable-installer-default" "scripts/lua/test-unstable-installer-defaults-to-unstable.lua (or no plan binary)"
         archive_check_log "unstable-installer-default" "skipped"
     fi
 
     # Order 1380-zmpi: every installer ends with a PENDING ACTIONS banner.
-    # Wired in build.sh --check as well; hermetic, a few seconds.
-    if [[ -f "scripts/test-installers-print-pending-banner.sh" ]]; then
-        if bash scripts/test-installers-print-pending-banner.sh 2>&1 | tee /tmp/pending-banner.log; then
+    # Gate step 404 as well; hermetic, a few seconds. Lua since 2111-inst.
+    if [[ -f "scripts/lua/test-installers-print-pending-banner.lua" && -n "$_ui_plan" ]]; then
+        if "$_ui_plan" script run scripts/lua/test-installers-print-pending-banner.lua > /tmp/pending-banner.log 2>&1; then
+            cat /tmp/pending-banner.log
             log_pass "Installers end with a PENDING ACTIONS banner"
             archive_check_log "pending-banner" "pass" /tmp/pending-banner.log
         else
+            cat /tmp/pending-banner.log
             log_fail_tracked "pending-banner" "Pending-actions banner regression (see /tmp/pending-banner.log)"
             archive_check_log "pending-banner" "fail" /tmp/pending-banner.log
         fi
     else
-        log_fail_missing_guard "pending-banner" "scripts/test-installers-print-pending-banner.sh"
+        log_fail_missing_guard "pending-banner" "scripts/lua/test-installers-print-pending-banner.lua (or no plan binary)"
         archive_check_log "pending-banner" "skipped"
     fi
 
@@ -1947,8 +1926,8 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # ============================================================================
 
     log_section "Cheatsheet Tier Discipline"
-    if [[ -f "scripts/check-cheatsheet-tiers.sh" ]]; then
-        if bash scripts/check-cheatsheet-tiers.sh --strict 2>&1 | tee /tmp/cheatsheet-tiers.log; then
+    if [[ -f "scripts/lua/check-cheatsheet-tiers.lua" ]]; then
+        if "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" script run scripts/lua/check-cheatsheet-tiers.lua -- --strict 2>&1 | tee /tmp/cheatsheet-tiers.log; then
             log_pass "Cheatsheet tier validation passed"
             archive_check_log "cheatsheet-tiers" "pass" /tmp/cheatsheet-tiers.log
         else
@@ -1957,7 +1936,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "cheatsheet-tiers" "fail" /tmp/cheatsheet-tiers.log
         fi
     else
-        log_fail_missing_guard "cheatsheet-tiers" "scripts/check-cheatsheet-tiers.sh"
+        log_fail_missing_guard "cheatsheet-tiers" "scripts/lua/check-cheatsheet-tiers.lua"
         archive_check_log "cheatsheet-tiers" "skipped"
     fi
 
@@ -2004,8 +1983,8 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # repository, including files nobody has identified? ~66 s here, ~99 s on a
     # floor host, which is why it is daily and not per-land.
     # Declared in scripts/gate-divergence-declared.txt as `excluded`.
-    if [[ -f "scripts/test-plan-binary-probe-usage-determinism-corpus.sh" ]]; then
-        if bash scripts/test-plan-binary-probe-usage-determinism-corpus.sh 2>&1 | tee /tmp/probe-usage-determinism-corpus.log; then
+    if [[ -f "scripts/lua/test-plan-binary-probe-usage-determinism-corpus.lua" ]]; then
+        if "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" script run scripts/lua/test-plan-binary-probe-usage-determinism-corpus.lua 2>&1 | tee /tmp/probe-usage-determinism-corpus.log; then
             log_pass "Probe-usage guard deterministic over the full corpus"
             archive_check_log "probe-usage-determinism-corpus" "pass" /tmp/probe-usage-determinism-corpus.log
         else
@@ -2014,7 +1993,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "probe-usage-determinism-corpus" "fail" /tmp/probe-usage-determinism-corpus.log
         fi
     else
-        log_fail_missing_guard "probe-usage-determinism-corpus" "scripts/test-plan-binary-probe-usage-determinism-corpus.sh"
+        log_fail_missing_guard "probe-usage-determinism-corpus" "scripts/lua/test-plan-binary-probe-usage-determinism-corpus.lua"
         archive_check_log "probe-usage-determinism-corpus" "skipped"
     fi
 

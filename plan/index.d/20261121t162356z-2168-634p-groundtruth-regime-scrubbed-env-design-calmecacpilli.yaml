@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli at macuahuitl-fedora's request, 2026-11-21.
+packets:
+  - packet_id: groundtruth-regime-invariance-lua-env-design
+    order: "2168-634p"
+    status: ready
+    kind: design
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, groundtruth, inference, design]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-groundtruth-regime-invariance.sh
+    title: "Design note before porting check-groundtruth-regime-invariance: the Lua runner's scrubbed child environment changes what its \"live\" regime means"
+    context: |
+      check-groundtruth-regime-invariance.sh grades each groundtruth set twice, in parallel: "live", where tillandsias-plan grade
+      inherits the caller's whole environment, and "dead", where TILLANDSIAS_INFERENCE_ENDPOINT, TILLANDSIAS_EMBED_ENDPOINT
+      and TILLANDSIAS_SPEC_EXPERT_ENDPOINT point at 127.0.0.1:1. A case whose verdict differs between the two is a property
+      of the host, not of the answer.
+      A child under tillandsias-plan script run gets a SCRUBBED base environment (lua_process.rs, 1551-nyzb), not the caller's.
+      A straight port's "live" child would therefore lose any endpoint the operator exported, and silently become a second
+      "dead" regime. The check would then compare dead against dead, and it would report ok:groundtruth-regime-invariant
+      for every case, on every host: a guard that cannot refuse.
+      The rest is mechanical (proc.spawn plus handle:wait for the parallel grades, which test-deciders-within-door-deadline
+      pins at about 2.6 s). The environment rule is the open question.
+    exit_criteria:
+      - "a note, under plan/issues/ or in this row's events, decides how the live regime gets the caller's inference endpoints under script run. One option is to declare them with @env and forward them through proc.spawn's env, which needs that forwarding to be confirmed as a merge, not a replacement. Another is a runner affordance. Another is to keep the decider in shell, with a reason recorded on the allowlist."
+      - "the note names a negative control: with a live endpoint exported and a case that only grades with inference up, the port must report violation:groundtruth-regime-dependent. If the live child lost the endpoint, it would report ok."
+    unscoreable: "a design decision: scored by the negative control it names, run when the port lands."
+    next_action: "Read lua_process.rs's proc.spawn env handling (merge or replace over the scrubbed base), then write the note."
+    provenance: "calmecacpilli triage of the light shell-to-Lua queue, 2026-11-21; macuahuitl-fedora asked for the row."
+    events:
+      - type: filed
+        ts: "2026-11-21T16:23:56Z"
+        host: calmecacpilli
+        summary: "filed on work/2168-634p"

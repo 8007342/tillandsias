@@ -68,7 +68,7 @@ run() {
     out="$("$PLAN" --index "$index" "$@" 2>&1)" || rc=$?
     if [ "$rc" -ne "$want_rc" ]; then
         failures+=("$name: exit=$rc expected=$want_rc (out: $out)")
-    elif [ -n "$want" ] && ! printf '%s' "$out" | grep -Fq "$want"; then
+    elif [ -n "$want" ] && ! grep -Fq "$want" <<<"$out"; then
         failures+=("$name: expected '$want', got: $out")
     fi
 }

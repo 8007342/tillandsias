@@ -9,9 +9,16 @@
 # stub binaries (stale, current, mute, absent). A sabotage that drops the exit
 # reds arm 1.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf); ported from the .sh by 2251-4xvd.
 STEP_DESC="Checking preflight refuses a stale plan binary once, by name (1247-9pr8)"
-STEP_SCRIPT="scripts/test-preflight-stale-plan-binary.sh"
+STEP_LUA="scripts/lua/test-preflight-stale-plan-binary.lua"
 STEP_ERROR="preflight no longer names a stale plan binary up front, so its guards will refuse for it under unrelated names (1247-9pr8); see which arm failed above"
 STEP_OK="preflight names a stale plan binary once and runs nothing after it"
 STEP_SECOND_REGIME="yolanda 2026-09-28 msys ok:preflight-stale-plan-binary:5/5"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target"
+STEP_LANES="cargo"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lua/test-preflight-stale-plan-binary.lua build.sh"

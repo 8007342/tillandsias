@@ -137,7 +137,9 @@ fi
 #           The skip branch must require an EXACT match against the nominated
 #           code and a non-empty nomination, and the refusal branch must remain
 #           reachable for every other non-zero exit.
-loop="$(sed -n '/for _step_file in .*gate-steps\.d/,/^    done$/p' build.sh)"
+# ORDER 2155-gpar: the loop body is now the function _gs_one (the serial loop and the
+# worker pool both call it), so the pinned span is that function.
+loop="$(sed -n '/^_gs_one() {$/,/^}$/p' build.sh)"
 if [ -z "$loop" ]; then
     bad "could not locate the gate-step loop in build.sh — this fixture has drifted from the code it pins"
 else

@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: opening-a-forge-localhost-preview-in-the-operators-own-browser-shows-a-certificate-warning-because-the-tillandsias-ca-is-in-no-host-trust-store
+    field: next_action
+    value: |-
+      Decide the anchor: a new name-constrained preview CA (separate from the Vault/enclave CA) or re-issuing the existing one with name constraints. Write the example.com-rejected fixture first, then the user-scope NSS install and uninstall.
+
+
+      [2026-11-19T23:40:02Z calmecacpilli] Verify on next stable (live checks run on stable releases). Live check: fresh host browser profile opens the localhost preview with no certificate warning.
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: opening-a-forge-localhost-preview-in-the-operators-own-browser-shows-a-certificate-warning-because-the-tillandsias-ca-is-in-no-host-trust-store
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

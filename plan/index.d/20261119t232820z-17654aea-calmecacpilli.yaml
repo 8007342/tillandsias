@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: relay-preflight-runs-the-tray-listen-vsock-pass-when-any-headless-source-changes-not-only-tray
+    field: status
+    value: completed
+    ts: "2026-11-19T23:28:20Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: relay-preflight-runs-the-tray-listen-vsock-pass-when-any-headless-source-changes-not-only-tray
+    event:
+      type: completed
+      ts: "2026-11-19T23:28:20Z"
+      host: calmecacpilli
+      summary: |-
+        status 'completed' with evidence_refs: 752039ff63 ok:relay-preflight-tray-trigger:11
+  - packet_id: relay-preflight-runs-the-tray-listen-vsock-pass-when-any-headless-source-changes-not-only-tray
+    event:
+      type: note
+      ts: "2026-11-19T23:28:20Z"
+      host: calmecacpilli
+      summary: |-
+        triage: exit criteria verified on trunk

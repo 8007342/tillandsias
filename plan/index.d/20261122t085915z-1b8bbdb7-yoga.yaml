@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-feature-gated-test-pass-runs-only-the-tests-the-default-build-lacks
+    field: status
+    value: implemented
+    ts: "2026-11-22T08:59:15Z"
+    host: yoga
+
+events:
+  - packet_id: the-feature-gated-test-pass-runs-only-the-tests-the-default-build-lacks
+    event:
+      type: note
+      ts: "2026-11-22T08:59:15Z"
+      host: yoga
+      summary: |-
+        landed: its PR merged into linux-next (implemented event of 2026-11-22T08:58:02Z names the PR and merge sha); exit criteria not re-run here

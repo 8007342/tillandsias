@@ -24,6 +24,13 @@
 # ARM 6  With no arguments the population is the added fixtures (untracked
 #        against the base), and the count is the fixtures examined.
 # ARM 7  No timeout command: a NAMED skip, never an unbounded run.
+# ARM 8  (2206-js5t) A scripts/lua/test-*.lua fixture is examined too: one
+#        whose child resolves the plan binary after `cd /` passes while a plan
+#        binary is on PATH and is REFUSED by name. PRE-FIX RESULT: FAILS, the
+#        decider counted no .lua (`0 checked`).
+# ARM 9  NEGATIVE CONTROL for 8: the absolutising Lua fixture is admitted
+#        and counted. Arms 8-9 need a REAL runner (a stub cannot run Lua), so
+#        they copy the caller's plan binary and skip by name without one.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEC="$ROOT/scripts/preflight-fixtures-default-target.sh"
@@ -136,6 +143,55 @@ else
     bad "ARM 7 expected skip:fixture-default-target:no-timeout-command (rc=$rc7): $(printf '%s' "$o7" | tail -2 | tr '\n' ';')"
 fi
 
+# ARMS 8-9: Lua fixtures, run by a real runner copied to the default target
+# of a second scratch repo and to a PATH directory (the mask).
+REALP="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || REALP=""
+case "$REALP" in ""|/*) ;; *) REALP="$ROOT/${REALP#./}" ;; esac
+caps=""; [ -n "$REALP" ] && caps="$("$REALP" capabilities 2>/dev/null)"
+if ! grep -qx script <<<"$caps"; then # sigpipe-ok: herestring, no upstream writer
+    echo "skip:arm-8-9:no-real-lua-runner"
+else
+    L="$W/lrepo"
+    mkdir -p "$L/scripts/lua" "$L/target/release" "$W/lpath"
+    # The Lua runner roots a decider at the repository containing its cwd and
+    # refuses outside one (2213-ag5u), so the stand-in checkout is a repository.
+    git init -q "$L"
+    cp "$DEC" "$ROOT/scripts/plan-binary-probe.sh" "$L/scripts/"
+    cp "$REALP" "$L/target/release/tillandsias-plan"; cp "$REALP" "$W/lpath/tillandsias-plan"
+    cat > "$L/scripts/res-cd-first.sh" <<'EOS'
+. scripts/plan-binary-probe.sh
+cd / || exit 1
+P="$(resolve_plan_binary)" || exit 2
+"$P" capabilities >/dev/null
+EOS
+    cat > "$L/scripts/res-absolute.sh" <<'EOS'
+. scripts/plan-binary-probe.sh
+P="$(resolve_plan_binary)" || exit 2
+case "$P" in /*) ;; *) P="$PWD/${P#./}" ;; esac
+cd / || exit 1
+"$P" capabilities >/dev/null
+EOS
+    for k in cd-first absolute; do
+        printf 'local r = proc.run{ argv = { "bash", "scripts/res-%s.sh" }, timeout_ms = 60000 }\nif r.ok then verdict.ok("lua-%s") end\nverdict.refused("lua-%s")\n' "$k" "$k" "$k" > "$L/scripts/lua/test-$k.lua"
+    done
+    by_lpath() { (cd "$L" && env -u TILLANDSIAS_PLAN_BIN -u TILLANDSIAS_SCRIPT_RUNNER_BIN -u CARGO_TARGET_DIR PATH="$W/lpath:$BASEPATH" bash "$L/scripts/preflight-fixtures-default-target.sh" "$@" 2>&1); }
+    o8="$(by_lpath scripts/lua/test-cd-first.lua)"; rc8=$?
+    if [ "$rc8" -ne 0 ] && [[ "$o8" == *"refused:fixture-default-target:scripts/lua/test-cd-first.lua"* ]]; then
+        ok "ARM 8 a Lua fixture masked by a plan binary on PATH is refused"
+    else
+        bad "ARM 8 expected the cd-first Lua fixture refused (rc=$rc8): $(printf '%s' "$o8" | tail -2 | tr '\n' ';')"
+    fi
+    o9="$(by_lpath scripts/lua/test-absolute.lua)"; rc9=$?
+    # Not noted as red in both regimes: a fixture the runner refused everywhere
+    # is "checked" and noted, which would admit it vacuously (2213-ag5u).
+    if [ "$rc9" -eq 0 ] && [ "$(printf '%s' "$o9" | tail -1)" = "ok:fixture-default-target:1 checked" ] \
+       && [[ "$o9" != *"red-in-both-or-normal-regime"* ]]; then
+        ok "ARM 9 the absolutising Lua fixture is admitted and counted"
+    else
+        bad "ARM 9 expected the absolutising Lua fixture admitted (rc=$rc9): $(printf '%s' "$o9" | tail -2 | tr '\n' ';')"
+    fi
+fi
+
 # ARM 6: population mode. Base holds only the decider and resolver; the
 # absolutising fixture is added (untracked), the rest are removed.
 rm -f "$R/scripts/test-cd-first.sh" "$R/scripts/test-skips.sh" "$R/scripts/test-red.sh"
@@ -144,7 +200,10 @@ git -C "$R" config user.email f@x.invalid; git -C "$R" config user.name f
 git -C "$R" add scripts/preflight-fixtures-default-target.sh scripts/plan-binary-probe.sh
 git -C "$R" commit -qm base
 git -C "$R" update-ref refs/remotes/origin/linux-next HEAD
-o6="$(cd "$R" && by_ctd)"; rc6=$?
+# The gate exports its frozen TILLANDSIAS_GATE_DIFF_BASE, a commit this scratch
+# repo does not hold (2241-f8jg: a missing base is now named, not judged), so
+# the arm names its own base.
+o6="$(cd "$R" && TILLANDSIAS_DEFAULT_TARGET_BASE= TILLANDSIAS_GATE_DIFF_BASE=refs/remotes/origin/linux-next by_ctd)"; rc6=$?
 if [ "$rc6" -eq 0 ] && [ "$(printf '%s' "$o6" | tail -1)" = "ok:fixture-default-target:1 checked" ]; then
     ok "ARM 6 a bare run finds the one added fixture and counts it"
 else

@@ -41,7 +41,7 @@ ALLOWLIST=(
   "images/default/config-overlay/mcp/forge-plan.sh"   # overlay: wraps tillandsias-plan
   "images/default/config-overlay/mcp/project-info.sh" # overlay: plan_query routes through query --json
   "scripts/drain-queue.sh"                            # overlay: extract_ready_packets routes through query --status ready
-  "scripts/check-plan-schema-divergence.sh"           # base-only-reason: reads ONLY default_status_values vocabulary (schema-level, fragments are packet additions and can never carry it)
+  "scripts/lua/check-plan-schema-divergence.lua"      # base-only-reason: reads ONLY default_status_values vocabulary (schema-level, fragments are packet additions and can never carry it)
   "crates/tillandsias-plan/src/main.rs"               # overlay: the CLI itself (Ledger::load_with_fragments)
   "crates/tillandsias-plan/src/lib.rs"                # overlay: the CLI itself (Ledger::load_with_fragments)
   "crates/tillandsias-plan/src/fragments.rs"          # overlay: the fragment engine

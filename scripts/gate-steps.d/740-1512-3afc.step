@@ -13,3 +13,7 @@ STEP_SCRIPT="scripts/test-gate-step-prefix-across-refs.sh"
 STEP_ERROR="the gate-step prefix check no longer refuses a prefix another unlanded ref holds, or refuses one it should accept (1512-3afc); see which arm failed above"
 STEP_OK="gate-step prefix check refuses cross-ref collisions and accepts free prefixes"
 STEP_SECOND_REGIME="yolanda 2026-09-30 msys ok:gate-step-prefix-across-refs-fixture:8/8"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/gate-steps.d/** scripts/lua/check-gate-step-prefix-across-refs.lua scripts/plan-binary-probe.sh scripts/test-gate-step-prefix-across-refs.sh"

@@ -27,3 +27,10 @@ STEP_SCRIPT="scripts/check-plan-binary-current.sh"
 STEP_ERROR="this host's plan binary WRITES on a read-only invocation — see the remedy above (1079-qb8k)"
 STEP_OK="Plan-binary write-is-opt-in check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:plan-binary-write-is-opt-in+role-satisfies (the probe resolved to the release-dir plan binary)"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target; drives podman"
+STEP_LANES="cargo podman"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="crates/tillandsias-plan/** crates/tillandsias-plan/Cargo.toml crates/tillandsias-plan/src/** plan/index.d/** plan/index.yaml scripts/check-plan-binary-current.sh scripts/cycle-preflight.sh scripts/hooks/pre-push-local-gate.sh scripts/plan-binary-probe.sh scripts/test-expire-claims-write-is-opt-in.sh scripts/test-plan-only-lane-structural.sh"

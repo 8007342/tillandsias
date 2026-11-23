@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-21: build-speed packet 8, part 2 (touch only what differs from the last gated tree).
+packets:
+  - packet_id: the-gate-touches-only-the-files-that-differ-from-the-last-gated-tree
+    order: "2162-bpqz"
+    status: in_progress
+    kind: perf
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, gate, cargo, shared-target]
+    estimated_hours: 4
+    owned_files:
+      - build.sh
+      - scripts/shared-target.sh
+      - scripts/lua/test-gate-touch.lua
+    title: "The gate touches only the files that differ from the last gated tree"
+    context: |
+      Every gate touched every tracked file (1599-egzz), so cargo recompiled all workspace crates even for a
+      no-Rust PR (macuahuitl #1237: 69 Compiling lines, ~105 s of build for 22 s of tests). A green gate now
+      records the tree it built (<target>/.gate-tree-snapshot); the next gate touches only paths whose blob
+      changed, and falls back to touching everything when the snapshot names another checkout, any cargo
+      fingerprint is newer than it, or it is absent. shared-target.sh no longer touches everything when only
+      the same checkout's index changed. Measured on yoga, same checkout, docs-only change: gate 1 64
+      Compiling, gate 2 precise:1 path and 5 Compiling (tillandsias-embed and its dependants; cause not yet
+      found: an isolated tracked docs edit does not rebuild embed, so a gate step is suspected).
+    exit_criteria:
+      - "On a no-Rust PR the cargo steps show 0 Compiling lines (yoga: 5 remain) and the Rust steps total <=60 s on macuahuitl."
+      - "test-gate-touch arms 4-6: precise touch, fallback on a newer fingerprint, fallback on another checkout."
+    unscoreable: "Compiling-line counts across two gates on one checkout are the measure"
+    provenance: "coordinator build-speed queue (report packet 8), 2026-11-21."
+    events:
+      - type: filed
+        ts: "2026-11-21T19:53:00Z"
+        host: yoga
+        summary: "filed and claimed; 64 -> 5 measured, 0 not yet"

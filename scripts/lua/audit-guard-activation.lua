@@ -87,7 +87,10 @@ local SURFACES = {
     -- 1261-bn7v: a guard run from the pre-push hook's plan-only lane, the only
     -- surface that sees a plan-only push and has already fetched origin.
     "scripts/hooks/pre-push-local-gate.sh",
-    -- 861-n7f5: check-engine-cpu-dispatch.sh via a $(dirname)-relative path.
+    -- 2167-gmfl: build.sh calls the memory-floor BOOTSTRAP at gate start (it
+    -- must run before a plan binary exists), which execs the Lua decider.
+    "scripts/check-gate-memory-floor.sh",
+    -- 861-n7f5: check-engine-cpu-dispatch (the .lua since 2199-luab) via a $(dirname)-relative path.
     "scripts/bench-inference-floor.sh",
     -- 1129-xm5z: check-host-tools.sh's SPEC table names each <prover>, which
     -- test-host-tools.sh then runs from a variable (invisible to a name scan).

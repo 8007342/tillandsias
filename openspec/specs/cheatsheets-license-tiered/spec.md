@@ -500,7 +500,7 @@ The lifecycle SHALL be a CRDT, not a state machine: a single cheatsheet MAY simu
 ## Litmus Chain
 
 Smallest actionable boundary:
-- `bash scripts/check-cheatsheet-tiers.sh --strict`
+- `tillandsias-plan script run scripts/lua/check-cheatsheet-tiers.lua -- --strict`
 
 Sibling tests:
 - `tillandsias-plan script run scripts/lua/check-cheatsheet-sources.lua -- --no-sha`

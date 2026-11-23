@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha (tech-debt session, 2026-11-20).
+packets:
+  - packet_id: sigpipe-verdict-pipelines-n-z-batch-6a-eleven-single-site-files
+    order: 2118-n8e5
+    status: in_progress
+    kind: debt
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixtures, sigpipe, ratchet]
+    estimated_hours: 1
+    related: [2123-ivi5, 2126-4cyq]
+    owned_files:
+      - scripts/scan-litmus-false-pass.sh
+    title: |
+      Batch 6a of 2126-4cyq (the n-z half of 2123-ivi5): convert the remaining 11 single-site test and scan files to here-strings.
+    context: |
+      The last five n-z files are on the release or gate path and wait for a coordinator ruling: promote-stable.sh, resolve-smoke-release.sh, check-release-asset-integrity.sh, hooks/pre-push-local-gate.sh and check-plan-binary-probe-usage.sh.
+    exit_criteria:
+      - 'each converted file keeps its trunk verdicts; the pipe floors drop by 11'
+    unscoreable: "the census tool is the measure, per 2123-ivi5"
+    next_action: Preflight, push work/2118-n8e5, open PR.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20.
+    events:
+      - type: filed
+        ts: "2026-11-20T11:42:37Z"
+        host: lenovinha
+        summary: sigpipe n-z batch 6a (eleven files).

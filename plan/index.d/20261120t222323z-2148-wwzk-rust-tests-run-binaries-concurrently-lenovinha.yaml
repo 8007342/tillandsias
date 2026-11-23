@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (2026-11-20): post-stable, P10 item (b) redone.
+packets:
+  - packet_id: gate-rust-test-binaries-run-concurrently-without-holding-the-cargo-lock
+    order: 2148-wwzk
+    status: ready
+    kind: infrastructure
+    priority: p3
+    desired_release: post-stable
+    pickup_role: linux
+    capability_tags: [gate, build, performance]
+    estimated_hours: 8
+    depends_on: [gate-roster-declared-inputs-shared-content-memo-concurrent-rust-families]
+    title: |
+      The gate's Rust test families compile in the foreground (cargo test --no-run) and their test BINARIES run concurrently with the shell steps, so no background cargo holds the target-dir lock.
+    context: |
+      P10 item (b), measured on lenovinha 2026-11-20 on the same tree, back to back: concurrent 1612 s against serial 1398 s, peak RAM 33%.
+      The opt-in version ran the three cargo test commands as a background chain. Cargo holds the target-dir lock for the WHOLE command, test execution included, so every foreground step that runs cargo waited for a whole family:
+        - archiver check 9 s became 321 s (ensure_fresh_plan_binary);
+        - claim-names 7 s became 97 s;
+        - cloud-usage 4 s became 24 s.
+      It saved 271 s and lost about 470 s, so that commit was dropped unpushed.
+      This variant: build all three families with cargo test --no-run --message-format=json in the foreground, then execute the listed test binaries directly in the background, with cargo's per-binary Running headers printed by the chain. Each family still joins at its own step with the same transcript, rc and judgement.
+      macuahuitl 2026-11-20: the roughly 5 min it saves is smaller than what batching (P6-P8) multiplies, so it waits until after stable.
+    exit_criteria:
+      - 'scripts/check-test-baseline.sh judges a cargo-test transcript and the chain''s direct-binary transcript identically: a fixture feeds BOTH formats the same pass/fail set and gets the same verdict (new-red, tolerated, stale), and it is red if either format drifts'
+      - 'no foreground cargo step waits on the lock while the chain runs: on one real gate, the archiver, claim-names and cloud-usage steps are within 20% of their serial times'
+      - 'measured on lenovinha and macuahuitl: the concurrent gate is faster than serial on the same tree, with peak RAM under 70%'
+    unscoreable: 'unpinnable-until-the-guard-exists: the both-formats baseline fixture named in the exit criteria lands with the change (1136-n8sh).'
+    next_action: After stable. Start with the both-formats fixture for check-test-baseline.sh, red first. Then the --no-run JSON executable list and the direct-binary chain, then two measured gates per host.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20, at macuahuitl-fedora's direction; measurements from gate runs gate-1795210082052-2130631 (concurrent) and gate-1795211694653-2554952 (serial).
+    events:
+      - type: filed
+        ts: "2026-11-20T22:23:23Z"
+        host: lenovinha
+        summary: post-stable P10 (b) variant; the opt-in cargo-chain version measured slower and was dropped.

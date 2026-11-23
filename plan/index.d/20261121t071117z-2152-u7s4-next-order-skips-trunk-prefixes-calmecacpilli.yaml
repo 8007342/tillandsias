@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli at macuahuitl-fedora's request, 2026-11-21 (yoga measured the duplicate).
+packets:
+  - packet_id: next-order-skips-prefixes-already-on-trunk
+    order: "2152-u7s4"
+    status: implemented
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [plan, ledger]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+      - scripts/lua/test-next-order-skips-trunk.lua
+      - scripts/gate-steps.d/933-2152-u7s4.step
+    title: "next-order mints above the highest prefix on origin/linux-next, not only above this checkout's fold"
+    context: |
+      next-order handed out 2149 after 2149-3zy5 had landed (yoga). Cause: the mint reads only the LOCAL fold
+      (allocate::highest_prefix), so a checkout that has fetched but not merged trunk mints a prefix trunk already
+      carries. With no explicit prefix, next-order now also reads trunk's fragment NAMES with one `git ls-tree`
+      (TILLANDSIAS_NEXT_ORDER_TRUNK, default origin/linux-next) and mints above the higher of the two, noting it on
+      stderr. Order segments longer than 6 digits are ignored: event fragments are `<ts>-<8-hex>-<host>`, and an
+      all-digit hash with a 4-letter host (`-33163463-yoga-silverblue.yaml`) has an order's shape; the first draft
+      minted 33163464 from it.
+    exit_criteria:
+      - "scripts/lua/test-next-order-skips-trunk.lua: a checkout behind trunk (local max 10, trunk 20) mints 21; on the trunk binary it mints 11 (2 of 4 arms red)."
+      - "the event fragment 20260928t130215z-33163463-yoga-silverblue.yaml is not read as a prefix (unit test next_order_reads_prefixes_from_trunk_fragment_names)."
+    unscoreable: "decider-not-litmus: scored by gate step 933-2152-u7s4."
+    next_action: "Land; then a darwin/msys host records STEP_SECOND_REGIME for step 933."
+    provenance: "macuahuitl-fedora 2026-11-21, item (b); duplicate observed by yoga."
+    events:
+      - type: filed
+        ts: "2026-11-21T07:11:17Z"
+        host: calmecacpilli
+        summary: "filed and implemented on work/2152-u7s4"

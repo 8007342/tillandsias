@@ -82,8 +82,12 @@
 # --plan prints phases 3-7's selected items without running them, and two
 # --plan runs on the same inputs print byte-identical item lists.
 #
-# NEVER PUSHES. relay/<utc> is left checked out for scripts/land-on-platform-
-# branch.sh (or the landing queue) to push. `.claude/worktrees/` is agent
+# NEVER PUSHES, and leaves the caller's checkout as it found it (2252-2mnf): the
+# branch (or detached SHA) on entry is checked out again on EVERY exit, INT and
+# TERM included (a SIGKILL runs nothing). It used to stay on relay/<utc> after a
+# green run, and the next commit landed there. After a green run relay/<utc>
+# still EXISTS, named on stderr; check it out to land it with
+# scripts/land-on-platform-branch.sh. `.claude/worktrees/` is agent
 # worktree scratch, out of scope for the dirty-worktree check and any scan.
 
 set -uo pipefail
@@ -91,6 +95,17 @@ set -uo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SELF_DIR/.." && pwd)"
 cd "$ROOT" || exit 2
+
+# ORDER 2110-ghw2: on an immutable host (Silverblue) run inside the
+# tillandsias-builder toolbox, exactly as build.sh does. The host is bare: its
+# cargo has no linker and it has no perl, so every cargo-backed decider,
+# crate test and litmus step failed for a HOST reason (yoga, trunk f3a546f74:
+# ci-release 8 red, 83x podman-cli rebuild-failed-before-test). Podman still
+# reaches the host through the wrapper's host-escape shim. Mutable Linux,
+# macOS, Windows and forges pass through with zero overhead. At the ENTRY
+# point, not inside run-litmus-test.sh: fixtures run the runner with injected
+# fake tools (a fake podman on PATH), and a re-exec there escaped them.
+[[ -f "$SELF_DIR/with-tillandsias-builder.sh" ]] && source "$SELF_DIR/with-tillandsias-builder.sh"
 
 # ORDER 1522-ey4h — RUN THE MERGED COPY OF THIS TOOL, NOT THE PRE-MERGE ONE.
 # The merge below rewrites scripts/relay-preflight.sh on disk, but git replaces
@@ -197,6 +212,25 @@ _restore_clean() {
     git branch -D "$RELAY_BRANCH" >/dev/null 2>&1 || true
 }
 
+# ORDER 2252-2mnf: the one restore, on every exit. A no-op unless this checkout
+# still stands on the relay branch. `exec` (the re-exec below) runs no EXIT trap;
+# the merged copy sets its own.
+_restore_caller() {
+    [ -n "${RELAY_BRANCH:-}" ] && [ -n "${ORIG_REF:-}" ] || return 0
+    [ "$(git symbolic-ref --short -q HEAD)" = "$RELAY_BRANCH" ] || return 0
+    git merge --abort >/dev/null 2>&1 || true
+    if git checkout -q "$ORIG_REF" >/dev/null 2>&1; then
+        echo "note:relay-preflight:restored:$ORIG_REF — the merged tree is on $RELAY_BRANCH" >&2
+    else
+        echo "warn:relay-preflight:not-restored — this checkout is still on $RELAY_BRANCH" >&2
+        echo "  why: git could not check $ORIG_REF out (a run may have left files modified: git status)" >&2
+        echo "  remedy: clear what git status names, then git checkout $ORIG_REF, before committing anything" >&2
+    fi
+}
+trap _restore_caller EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 if [ -z "$RP_REEXEC" ]; then
 ORIG_REF="$(git symbolic-ref --short -q HEAD || true)"
 [ -n "$ORIG_REF" ] || ORIG_REF="$(git rev-parse HEAD)"
@@ -243,7 +277,16 @@ for ref in ${refs[@]+"${refs[@]}"}; do
         exit 1
     fi
     _t="$(timing_now_ms)"
-    if ! _cap git merge --no-ff --no-edit "$ref"; then
+    # ORDER 2110-ghw2: the scratch merge commit is never pushed, but git still
+    # needs a committer. Inside the builder toolbox the hostname is `toolbx`
+    # with no domain, so git's auto-detected address is `<user>@toolbx.(none)`
+    # and it REFUSES ("Committer identity unknown"), which this tool reported
+    # as merge-conflict (yoga, 2026-11-20). Only when git has no identity of
+    # its own; a configured one is used as before.
+    _ident=()
+    git var GIT_COMMITTER_IDENT >/dev/null 2>&1 \
+        || _ident=(-c user.name=relay-preflight -c user.email=relay-preflight@invalid)
+    if ! _cap git ${_ident[@]+"${_ident[@]}"} merge --no-ff --no-edit "$ref"; then
         _item "merge:$ref" red "$_t"
         printf '%s\n' "$_CAP_OUT" | sed 's/^/  /' >&2
         _restore_clean
@@ -360,7 +403,9 @@ _run_decider() { # name -> sets DEC_OUT, returns rc
         check-gate-step-regimes) _cap bash "$SELF_DIR/check-gate-step-regimes.sh" ;;
         check-added-test-is-referenced) DEC_OUT="$(TILLANDSIAS_ADDED_TEST_BASE="$BASE" bash "$SELF_DIR/check-added-test-is-referenced.sh" 2>&1)"; return $? ;;
         check-refusal-affordance-added) DEC_OUT="$(TILLANDSIAS_AFFORDANCE_BASE="$BASE" bash "$SELF_DIR/check-refusal-affordance-added.sh" 2>&1)"; return $? ;;
-        check-rust-source-pin-added) DEC_OUT="$(TILLANDSIAS_RUST_PIN_BASE="$BASE" bash "$SELF_DIR/check-rust-source-pin-added.sh" 2>&1)"; return $? ;;
+        check-rust-source-pin-added)
+            _lua_runner "$name" || return 3
+            _cap env TILLANDSIAS_REPO_ROOT="$ROOT" TILLANDSIAS_RUST_PIN_BASE="$BASE" "$_lb" script run "$SELF_DIR/lua/check-rust-source-pin-added.lua" ;;
         check-no-python-scripts)
             _lua_runner "$name" || return 3
             _cap env TILLANDSIAS_REPO_ROOT="$ROOT" "$_lb" script run "$SELF_DIR/lua/check-no-python-scripts.lua" ;;

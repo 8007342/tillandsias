@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-22 at the coordinator's direction (macuahuitl-fedora): RC blocker.
+packets:
+  - packet_id: lane-command-fixture-falls-back-to-the-installed-plan-binary
+    order: "2238-zbze"
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, fixtures, release]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-bare-metal-lane-command-is-runnable.lua
+      - openspec/litmus-tests/litmus-bare-metal-lane-command-is-runnable.yaml
+    title: "litmus:bare-metal-lane-command-is-runnable is red on untouched trunk: its fixture falls back to the installed tillandsias-plan on PATH"
+    context: |
+      relay-preflight of work/2222-xjgu (and an untouched trunk checkout) on yoga:
+        violation:bare-metal-lane-command:unexpected-verdict:refused:script-error:check-bare-metal-host-initialized
+      The litmus command resolves this tree's plan binary but does not export it; the fixture reads
+      TILLANDSIAS_SCRIPT_RUNNER_BIN / TILLANDSIAS_PLAN_BIN and, with neither set, fell back to `tillandsias-plan` on
+      PATH (~/.local/bin, the installed and older binary), under which the newer checker ends refused:script-error.
+      Green on the same tree with TILLANDSIAS_PLAN_BIN set. Blocks every relay and release preflight.
+    exit_criteria:
+      - "The litmus step exports the plan binary it resolves (TILLANDSIAS_PLAN_BIN), as litmus-unreferenced-lane-fixtures-run already does."
+      - "The fixture never falls back to a PATH binary; with no binary named it answers could-not-run:bare-metal-lane-command:no-plan-binary-named."
+    unscoreable: "the defect needs an installed plan binary older than the tree; pinned by the could-not-run arm when no binary is named"
+    provenance: "coordinator 2026-11-22: RC blocker, after yoga's #1365 preflight"
+    events:
+      - type: filed
+        ts: "2026-11-22T23:00:00Z"
+        host: yoga
+        summary: "filed with the fix: fixture fell back to the installed plan binary"

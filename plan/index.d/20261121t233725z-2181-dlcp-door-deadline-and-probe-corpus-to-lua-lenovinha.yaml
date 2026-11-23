@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Shell-to-Lua backlog (coordinator direction, 2026-11-21).
+packets:
+  - packet_id: the-door-deadline-and-probe-usage-corpus-fixtures-are-lua-and-both-sh-are-deleted
+    order: 2181-dlcp
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua]
+    estimated_hours: 2
+    title: |
+      Port scripts/test-deciders-within-door-deadline.sh (66 lines) and scripts/test-plan-binary-probe-usage-determinism-corpus.sh (65 lines) to scripts/lua/, repoint their litmus and local-ci callers, and delete both .sh files.
+    context: |
+      Next shell-to-lua candidates. No open work ref touches either file (checked).
+    exit_criteria:
+      - 'each Lua fixture reaches the same outcome as its .sh on this host, and a mutation fails it; the litmus and local-ci run the Lua; both .sh files and their floor lines are gone'
+    unscoreable: 'unpinnable-until-the-guard-exists: the parity run is recorded in the PR.'
+    next_action: 'Port, prove parity, open the PR.'
+    provenance: shell-to-lua backlog; filed by lenovinha.
+    depends_on: []
+    related: [1500-gu5r, 1518-8p5k, 1130-qk7d]
+    events:
+      - {type: filed, ts: '2026-11-21T23:37:25Z', host: lenovinha, summary: filed the door-deadline and probe-corpus ports}
