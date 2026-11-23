@@ -27,7 +27,11 @@
 -- Verdict: after the .sh's summary line, ok:issue-capture-lane:<n> |
 -- violation:issue-capture-lane:<f> | skip:issue-capture-lane:no-validator
 
-local root = text.trim(proc.run{ argv = { "pwd", "-P" } }.stdout or "")
+-- 2246-fkea helpers (yolanda, msys: `pwd -P` gave /c/..., a "relative" cwd to
+-- the native runner, and a bare bash is WSL's there).
+local fixture = require "common.fixture"
+local SH = fixture.posix_shell()
+local root = fixture.repo_root()
 local pass, fail = 0, 0
 local function ok(m) out.line("ok:   " .. m); pass = pass + 1 end
 local function bad(m) log.raw("FAIL: " .. m); fail = fail + 1 end
@@ -91,7 +95,7 @@ G({ "push", "-q", "-u", "origin", "linux-next" })
 -- PRECONDITION (889-twhe, 1058-fenk): resolve the validator from the CHECKOUT
 -- and RUN it; the bit is a claim, running it is evidence.
 fs.write(rel .. "/resolve.sh", ". scripts/plan-binary-probe.sh && resolve_plan_binary\n")
-local probe = text.trim(proc.run{ argv = { "bash", W .. "/resolve.sh" }, env = HENV }.stdout or "")
+local probe = text.trim(proc.run{ argv = { SH, W .. "/resolve.sh" }, env = HENV }.stdout or "")
 if probe:sub(1, 2) == "./" then probe = root .. "/" .. probe:sub(3)
 elseif probe ~= "" and probe:sub(1, 1) ~= "/" then probe = root .. "/" .. probe end
 local why = ""
@@ -139,7 +143,7 @@ end
 local function run_guard()
     local rsha = text.trim(G({ "rev-parse", "origin/linux-next" }).stdout or "")
     local head = text.trim(G({ "rev-parse", "HEAD" }).stdout or "")
-    local r = proc.run{ argv = { "bash", "scripts/hooks/pre-push-local-gate.sh" }, cwd = WC, env = HENV,
+    local r = proc.run{ argv = { SH, "scripts/hooks/pre-push-local-gate.sh" }, cwd = WC, env = HENV,
         stdin = "refs/heads/linux-next " .. head .. " refs/heads/linux-next " .. rsha .. "\n", timeout_ms = 600000 }
     return (r.stdout or "") .. (r.stderr or "")
 end

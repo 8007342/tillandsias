@@ -39,7 +39,12 @@ for _, f in ipairs(FIXTURES) do
     if r.code == 0 and last:find(f[2], 1, true) == 1 then
         pass = pass + 1; out.line("ok:   " .. f[1] .. " stays green with an inherited base (" .. last .. ")")
     else
-        failn = failn + 1; out.line("FAIL: " .. f[1] .. " tested the caller's base, not its scratch checkout (rc=" .. tostring(r.code) .. "): " .. last)
+        failn = failn + 1
+        -- A subject that never reached the question is not "tested the
+        -- caller's base" (yolanda, msys: all three died as script-error first).
+        local why = (last:find("^refused:script%-error") or last:find("^could%-not%-run") or r.status ~= "exited")
+            and "did not run to its verdict" or "tested the caller's base, not its scratch checkout"
+        out.line("FAIL: " .. f[1] .. " " .. why .. " (status=" .. tostring(r.status) .. " rc=" .. tostring(r.code) .. "): " .. last)
     end
 end
 

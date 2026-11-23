@@ -120,11 +120,14 @@ T:arm("6 WORKSPACE workspace-inherited deps resolve; commented-out ones do not",
 -- 7, 8, 9
 local function lint(env)
     local r = proc.run{ argv = { PB, "script", "run", LINT }, cwd = ROOT, env = env, timeout_ms = 600000 }
-    return (r.status == "exited" and r.code or -1), text.trim(r.stdout or "")
+    -- stderr kept for the arm's detail (yolanda, msys: arm 7 once read
+    -- could-not-run with no reason recorded).
+    return (r.status == "exited" and r.code or -1), text.trim(r.stdout or ""), text.trim(r.stderr or "")
 end
-rc, o = lint({})
+local lerr
+rc, o, lerr = lint({})
 T:arm("7 LINT-OK the derived graph equals cargo's on the live tree",
-    rc == 0 and text.starts_with(o, "ok:gate-changed-crate-graph:"), "rc=" .. rc .. " out=" .. o)
+    rc == 0 and text.starts_with(o, "ok:gate-changed-crate-graph:"), "rc=" .. rc .. " out=" .. o .. " err=" .. (lerr or ""):sub(1, 400))
 
 -- 7b (2253-j2at, yolanda msys): cargo metadata on native Windows prints
 -- C:\...\Cargo.toml. The same live graph, every path rewritten to that form
