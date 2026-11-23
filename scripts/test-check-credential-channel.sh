@@ -40,19 +40,9 @@ W="$(mktemp -d "${TMPDIR:-/tmp}/cred-channel-test.XXXXXX")" || { echo "FAIL: no 
 trap 'rm -rf "$W"' EXIT
 trap 'rm -rf "$W"; exit 143' TERM
 trap 'rm -rf "$W"; exit 130' INT
-# Every scratch git call names its repo by a NON-EMPTY path whose git dir is
-# not the real checkout's; anything else is refused before git runs, so no arm
-# can reach the checkout (an empty -C is the cwd; a scratch dir whose .git is
-# gone resolves upward).
-REAL_GITDIR="$(git -C "$REAL_ROOT" rev-parse --absolute-git-dir 2>/dev/null)"
-scratch_git() {
-    local d="$1"; shift
-    if [ -z "$d" ] || [ "$(git -C "$d" rev-parse --absolute-git-dir 2>/dev/null)" = "$REAL_GITDIR" ]; then
-        echo "FAIL: scratch git target is empty or resolves to the REAL checkout: [$d] (2244-crgd)" >&2
-        exit 2
-    fi
-    git -C "$d" "$@"
-}
+# Every scratch git call goes through the shared guard (2245-scgt): it refuses
+# an empty path or one whose git dir is the real checkout's.
+. "$REAL_ROOT/scripts/test-support/scratch-git.sh"
 D_ok() { [ -n "${D:-}" ] && [ -d "$D" ] || { echo "FAIL: scratch repo path is empty or missing: [${D:-}] (2244-crgd)" >&2; exit 2; }; }
 
 mkdir -p "$W/bin" "$W/bin-noauth"
