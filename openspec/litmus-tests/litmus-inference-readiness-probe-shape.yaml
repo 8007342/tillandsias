@@ -8,7 +8,7 @@ backend: fake
 
 preconditions:
   - repository checkout is available
-  - scripts/orchestrate-enclave.sh and scripts/test-inference.sh are present
+  - scripts/orchestrate-enclave.sh and scripts/lua/test-inference.lua are present
 
 critical_path:
   - step: "assert orchestrator waits for inference container health in status-check mode"
@@ -45,12 +45,12 @@ critical_path:
     expected_behavior: "ok: NO_PROXY pin fails when the exemption is dropped"
 
   - step: "assert inference cache mounts at the ollama home path"
-    command: "grep -F '/home/ollama/.ollama/models:rw' scripts/orchestrate-enclave.sh && grep -F '/home/ollama/.ollama/models:rw' scripts/test-inference.sh"
+    command: "grep -F '/home/ollama/.ollama/models:rw' scripts/orchestrate-enclave.sh && grep -F '/home/ollama/.ollama/models:rw' scripts/lua/test-inference.lua"
     timeout_ms: 2000
     expected_behavior: "/home/ollama/.ollama/models"
 
   - step: "assert standalone inference diagnostic probes the local API"
-    command: "grep -F '/api/version' scripts/test-inference.sh"
+    command: "grep -F '/api/version' scripts/lua/test-inference.lua"
     timeout_ms: 2000
     expected_behavior: "/api/version"
 
@@ -66,4 +66,4 @@ observability:
 
 rollback:
   on_failure: "inspect the orchestrator and inference diagnostic scripts for stale proxy or probe wiring"
-  command: "sed -n '1,240p' scripts/orchestrate-enclave.sh && sed -n '1,220p' scripts/test-inference.sh"
+  command: "sed -n '1,240p' scripts/orchestrate-enclave.sh && sed -n '1,220p' scripts/lua/test-inference.lua"

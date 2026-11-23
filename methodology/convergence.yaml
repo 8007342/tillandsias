@@ -758,7 +758,12 @@ carried_obligations:
         One file from the counter's population ported to scripts/lua/ on
         `tillandsias-plan script run` with the same verdict grammar, or
         retired; the .sh deleted and both floor files lowered through
-        `check-shell-ratchet.lua --dump-floors` in the same commit.
+        `check-shell-ratchet.lua --dump-floors` in the same commit. Also an
+        item (2219-crmv): deleting a top-level scripts/*.sh OUTSIDE the
+        population and the bootstrap allowlist (a wrapper or a tombstone),
+        when the change deletes more such scripts than it adds, so a rename
+        never pays (`paid:retired-uncounted:<path>`). The counter does not
+        move for it; the payment is the retirement itself.
       item_ceiling_lines: 150
       item_ceiling_measured: >
         2026-10-10, existing floor files by wc -l: 38 at or under 60 lines,

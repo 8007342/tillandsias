@@ -38,10 +38,11 @@
 # The mutation control at the end proves the tripwire is real by running the
 # PRE-864-8tqv script through it and requiring it to trip.
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
 
 REAL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/promote-stable-gate-test.XXXXXX")"
-trap 'rm -rf "$WORK"' EXIT INT TERM
+scratch_trap 'rm -rf "$WORK"'
 
 pass=0; fail=0
 VER="v0.4.260817.1"

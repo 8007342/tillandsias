@@ -34,6 +34,7 @@
 # draft of this file ran it from the real checkout and leaked two fragments
 # into it (yoga, 2026-10-09T19:36Z) — the defect, reproduced by its own test.
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 pass=0; fail=0
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
@@ -109,7 +110,7 @@ if [ ! -e "$MARK" ]; then
 else
     kill -KILL -- "-$pid" 2>/dev/null
     wait "$pid" 2>/dev/null
-    dirty="$(git -C "$S" status --porcelain)"
+    dirty="$(scratch_git "$S" status --porcelain)"
     if [ -z "$dirty" ]; then
         ok "ARM 1: SIGKILL after the live-accept arm leaves the checkout clean"
     else
@@ -136,7 +137,7 @@ rm -rf "$W/s2"
 S="$W/s3"; seed "$S"
 out3="$(cd "$S" && TILLANDSIAS_PLAN_BIN="$REAL_PLAN" bash scripts/test-append-event-archived-refusal.sh 2>&1)"
 rc3=$?
-dirty3="$(git -C "$S" status --porcelain)"
+dirty3="$(scratch_git "$S" status --porcelain)"
 if [ "$rc3" -eq 0 ] && [ -z "$dirty3" ] && grep -q 'a LIVE packet still accepts events' <<<"$out3"; then
     ok "ARM 3: an uninterrupted run passes, exercises the live-accept arm, and leaves the checkout clean"
 else

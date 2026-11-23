@@ -17,6 +17,7 @@
 # Hermetic: scratch git repos under a temp dir. Nothing touches this checkout,
 # nothing runs the gate.
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fail=0; pass=0
@@ -24,7 +25,7 @@ ok()  { echo "ok: $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/gate-step-append.XXXXXX")"
-trap 'rm -rf "$W"' EXIT INT TERM
+scratch_trap 'rm -rf "$W"'
 
 # A scratch repo with a committed baseline, then two branches off it.
 # core.autocrlf=false: on MSYS a rewritten line ending is a spurious diff, and
@@ -43,14 +44,14 @@ new_repo() { # new_repo <dir> <seed-file> <seed-content>
 #      git merges them with no conflict and both steps survive.
 R="$W/data"
 new_repo "$R" "scripts/gate-steps.d/010-existing.step" 'STEP_SCRIPT="scripts/test-existing.sh"'
-git -C "$R" checkout -q -b hostA
+scratch_git "$R" checkout -q -b hostA
 printf 'STEP_SCRIPT="scripts/test-a.sh"\n' > "$R/scripts/gate-steps.d/060-order-a.step"
-git -C "$R" add -A && git -C "$R" commit -q -m "hostA adds a step"
-git -C "$R" checkout -q master 2>/dev/null || git -C "$R" checkout -q main
-git -C "$R" checkout -q -b hostB
+scratch_git "$R" add -A && scratch_git "$R" commit -q -m "hostA adds a step"
+scratch_git "$R" checkout -q master 2>/dev/null || scratch_git "$R" checkout -q main
+scratch_git "$R" checkout -q -b hostB
 printf 'STEP_SCRIPT="scripts/test-b.sh"\n' > "$R/scripts/gate-steps.d/070-order-b.step"
-git -C "$R" add -A && git -C "$R" commit -q -m "hostB adds a step"
-if git -C "$R" merge -q --no-edit hostA >/dev/null 2>&1; then
+scratch_git "$R" add -A && scratch_git "$R" commit -q -m "hostB adds a step"
+if scratch_git "$R" merge -q --no-edit hostA >/dev/null 2>&1; then
     a=$(ls "$R/scripts/gate-steps.d" | grep -c 'order-a'); b=$(ls "$R/scripts/gate-steps.d" | grep -c 'order-b')
     if [ "$a" = 1 ] && [ "$b" = 1 ]; then
         ok "two hosts adding .step files merge with no conflict and both steps survive"
@@ -66,17 +67,17 @@ fi
 R2="$W/inline"
 new_repo "$R2" "build.sh" '    _step "existing"
     _info "existing passed"'
-git -C "$R2" checkout -q -b hostA
+scratch_git "$R2" checkout -q -b hostA
 printf '    _step "existing"\n    _info "existing passed"\n    _step "hostA"\n    _info "hostA passed"\n' > "$R2/build.sh"
-git -C "$R2" add -A && git -C "$R2" commit -q -m "hostA appends inline"
-git -C "$R2" checkout -q master 2>/dev/null || git -C "$R2" checkout -q main
-git -C "$R2" checkout -q -b hostB
+scratch_git "$R2" add -A && scratch_git "$R2" commit -q -m "hostA appends inline"
+scratch_git "$R2" checkout -q master 2>/dev/null || scratch_git "$R2" checkout -q main
+scratch_git "$R2" checkout -q -b hostB
 printf '    _step "existing"\n    _info "existing passed"\n    _step "hostB"\n    _info "hostB passed"\n' > "$R2/build.sh"
-git -C "$R2" add -A && git -C "$R2" commit -q -m "hostB appends inline"
-if git -C "$R2" merge -q --no-edit hostA >/dev/null 2>&1; then
+scratch_git "$R2" add -A && scratch_git "$R2" commit -q -m "hostB appends inline"
+if scratch_git "$R2" merge -q --no-edit hostA >/dev/null 2>&1; then
     bad "CONTROL: two inline appends merged cleanly — this suite cannot tell the shapes apart"
 else
-    git -C "$R2" merge --abort 2>/dev/null || true
+    scratch_git "$R2" merge --abort 2>/dev/null || true
     ok "CONTROL: two inline appends to one region DO conflict — arm 1 has teeth"
 fi
 

@@ -5594,7 +5594,14 @@ mod tests {
         use std::io::{BufRead, BufReader, Write};
         use std::os::unix::net::UnixStream;
 
-        struct Slow;
+        // ORDER 2239-3kh4: the slow call is held on a GATE the test opens only
+        // after the fast answer arrived, not on a 3 s sleep (3.2 s of the
+        // tray,listen-vsock suite). Ordering then holds by construction: if the
+        // connection serialised calls, id 2 could not arrive while the gate is
+        // shut, and the bounded wait turns that into a failed ordering
+        // assertion instead of a hang.
+        type Gate = std::sync::Arc<(std::sync::Mutex<bool>, std::sync::Condvar)>;
+        struct Slow(Gate);
         impl crate::imagegen_tool::Engine for Slow {
             fn generate(
                 &self,
@@ -5603,7 +5610,11 @@ mod tests {
                 names: &[String],
                 _p: &mut dyn FnMut(crate::imagegen_tool::Progress),
             ) -> Result<crate::imagegen_tool::EngineOut, String> {
-                std::thread::sleep(std::time::Duration::from_secs(3));
+                let (open, cv) = &*self.0;
+                let guard = open.lock().unwrap_or_else(|e| e.into_inner());
+                let _ = cv
+                    .wait_timeout_while(guard, std::time::Duration::from_secs(10), |o| !*o)
+                    .unwrap_or_else(|e| e.into_inner());
                 for n in names {
                     image::RgbImage::new(job.width, job.height)
                         .save(out_dir.join(n))
@@ -5616,17 +5627,20 @@ mod tests {
                 })
             }
         }
+        let gate: Gate =
+            std::sync::Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
         let _g = crate::imagegen_tool::SEAM_TEST_LOCK
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         let scratch =
             tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
         crate::imagegen_tool::install_seam(Some(crate::imagegen_tool::Seam {
-            engine: std::sync::Arc::new(Slow),
+            engine: std::sync::Arc::new(Slow(std::sync::Arc::clone(&gate))),
             scratch_root: scratch.path().to_path_buf(),
             ceiling: "I0".into(),
             present: Some(vec!["I0".into()]),
         }));
+        let release = std::sync::Arc::clone(&gate);
         let order = with_known_demo_project(|| {
             let (server_side, client_side) = UnixStream::pair().expect("pair");
             let identity = LaneIdentity::new("demo", "default");
@@ -5647,6 +5661,11 @@ mod tests {
                     serde_json::from_str(&lines.next().unwrap().unwrap()).unwrap();
                 if let Some(id) = v.get("id").and_then(|i| i.as_u64()) {
                     order.push((id, t0.elapsed()));
+                    if id == 2 {
+                        // the fast answer is in: release the slow call
+                        *release.0.lock().unwrap_or_else(|e| e.into_inner()) = true;
+                        release.1.notify_all();
+                    }
                 }
             }
             drop(w);
