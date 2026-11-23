@@ -74,7 +74,6 @@ scripts/test-added-test-is-referenced.sh
 scripts/test-agent-identity.sh
 scripts/test-append-event-archived-refusal.sh
 scripts/test-append-vs-origin-fold.sh
-scripts/test-archiver-concurrent-check.sh
 scripts/test-archiver-could-not-run-is-self-naming.sh
 scripts/test-archiver-could-not-run-verdict.sh
 scripts/test-archiver-ruby-could-not-run.sh
@@ -308,7 +307,6 @@ scripts/test-litmus-scalar-unescape.sh
 scripts/test-litmus-stdin-does-not-eat-the-spec-list.sh
 scripts/test-litmus-step-model.sh
 scripts/test-litmus-step-pipefail.sh
-scripts/test-litmus-step-timing.sh
 scripts/test-litmus-steps-can-fail.sh
 scripts/test-litmus-structured-assert.sh
 scripts/test-litmus-terminal-verdict.sh

@@ -1136,8 +1136,8 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # result is deterministic (6/6), so this is a real gate on the daily tier.
     # ============================================================================
     log_section "Archiver Concurrent Check (1132-r4mt)"
-    if [[ -f "scripts/test-archiver-concurrent-check.sh" ]]; then
-        if bash scripts/test-archiver-concurrent-check.sh 1 > /tmp/archiver-concurrent.log 2>&1; then
+    if [[ -f "scripts/lua/test-archiver-concurrent-check.lua" ]]; then
+        if "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" script run scripts/lua/test-archiver-concurrent-check.lua -- 1 > /tmp/archiver-concurrent.log 2>&1; then
             log_pass "Concurrent archiver --check runs share no scratch"
             archive_check_log "archiver-concurrent-check" "pass" /tmp/archiver-concurrent.log
         else
@@ -1146,7 +1146,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "archiver-concurrent-check" "fail" /tmp/archiver-concurrent.log
         fi
     else
-        log_fail_missing_guard "archiver-concurrent-check" "scripts/test-archiver-concurrent-check.sh"
+        log_fail_missing_guard "archiver-concurrent-check" "scripts/lua/test-archiver-concurrent-check.lua"
         archive_check_log "archiver-concurrent-check" "skipped"
     fi
 
