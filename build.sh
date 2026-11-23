@@ -1339,6 +1339,7 @@ FLAG_PREFLIGHT_FULL=false
 # ORDER 1916-tsel — the warm-forge fast loop; see scripts/gate-changed.sh.
 FLAG_CHANGED=false
 CHANGED_BASE=""
+FLAG_INTAKE=false
 # ORDER 1384-bqhy — run ONLY the gate-steps.d loop over <root> (whose
 # scripts/gate-steps.d it reads). The fixture's way into the real loop over a
 # scratch tree; --check calls the same function over the checkout.
@@ -1385,6 +1386,7 @@ while [[ $# -gt 0 ]]; do
         # the whole set before a large land. A deadline-skipped guard still runs
         # in the gate, which is its home, so nothing is lost by the default.
         --full)           FLAG_PREFLIGHT_FULL=true ;;
+        --intake)         FLAG_INTAKE=true ;;
         --clean)          FLAG_CLEAN=true ;;
         --install)        FLAG_INSTALL=true ;;
         --remove)         FLAG_REMOVE=true ;;
@@ -1479,6 +1481,13 @@ Build flags:
   --test            Run test suite (cargo test --workspace --no-fail-fast,
                     plus the tray/listen-vsock feature pass)
   --check           Type-check only (cargo check --workspace)
+  --changed [base] --intake
+                    Bundle INTAKE gate (2248-zcqh): the diff-scoped checks a work
+                    ref passes to join a bundle; whole-tree and declared-slow
+                    fixtures are deferred (named on a deferred: line); a change
+                    that cannot be scoped prints heavy:<reason> and exits 10
+                    (the member goes to the bundle HEAVY) instead of running
+                    the full --check.
   --changed [base]  Warm-forge loop: run ONLY the cargo tests and gate fixtures
                     whose declared inputs intersect `git diff base` (default:
                     merge-base with origin/linux-next). A guard file or an
@@ -1686,6 +1695,12 @@ fi
 # scripts/gate-changed.sh derives each fixture's and crate's inputs from the
 # tree and runs only those intersecting the diff; exit 10 means it could not
 # scope the change (a guard file, an unmapped path), so the full --check runs.
+if [[ "$FLAG_INTAKE" == true && "$FLAG_CHANGED" != true ]]; then
+    echo "refused:intake:without-changed" >&2
+    _afford "--intake scopes the --changed loop; alone it names no diff to judge (2248-zcqh)" \
+        "./build.sh --changed <base> --intake"
+    exit 2
+fi
 if [[ "$FLAG_CHANGED" == true ]]; then
     if [[ -n "$CHANGED_BASE" ]]; then
         _chg_base="$(git -C "$SCRIPT_DIR" rev-parse --verify -q "$CHANGED_BASE^{commit}")" || {
@@ -1696,7 +1711,13 @@ if [[ "$FLAG_CHANGED" == true ]]; then
         export TILLANDSIAS_GATE_DIFF_BASE="$_chg_base"
     fi
     _chg_rc=0
-    bash "$SCRIPT_DIR/scripts/gate-changed.sh" --run ${TILLANDSIAS_GATE_DIFF_BASE:+"$TILLANDSIAS_GATE_DIFF_BASE"} || _chg_rc=$?
+    _chg_intake=()
+    [[ "$FLAG_INTAKE" == true ]] && _chg_intake=(--intake)
+    bash "$SCRIPT_DIR/scripts/gate-changed.sh" --run ${_chg_intake[@]+"${_chg_intake[@]}"} ${TILLANDSIAS_GATE_DIFF_BASE:+"$TILLANDSIAS_GATE_DIFF_BASE"} || _chg_rc=$?
+    # 2248-zcqh: at intake an unscopable change is HEAVY, never a full gate.
+    if [[ "$FLAG_INTAKE" == true ]]; then
+        exit "$_chg_rc"
+    fi
     if [[ "$_chg_rc" -eq 10 ]]; then
         echo "note:changed:full — the change could not be scoped (line above names why); running the full ./build.sh --check" >&2
         exec bash "$SCRIPT_DIR/build.sh" --check
@@ -5398,6 +5419,14 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "--changed input-selection fixture passed"
+    # ORDER 2248-zcqh — the bundle intake gate: deferral, HEAVY, legacy
+    # unchanged, and a crate graph held to cargo metadata.
+    _step "Checking --changed --intake defers, marks HEAVY, and matches cargo's crate graph (2248-zcqh)..."
+    if ! _run_lua_decider "scripts/lua/test-gate-changed-intake.lua" 2>&1; then
+        _error "--changed --intake no longer defers whole-tree/slow fixtures by name, marks an unscopable change HEAVY, or derives the crate graph cargo resolves (2248-zcqh)"
+        exit 1
+    fi
+    _info "--changed --intake fixture passed"
 
     # ORDER 1916-tsel — the shared-timing-log leak check names a step only for
     # records carrying ITS gate's run id; two concurrent writers prove a
