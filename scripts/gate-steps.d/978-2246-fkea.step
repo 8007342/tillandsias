@@ -15,4 +15,5 @@ STEP_DESC="Checking added Lua fixtures use native-safe roots and shells (2246-fk
 STEP_LUA="scripts/lua/check-lua-fixture-native-argv-added.lua"
 STEP_ERROR="an added scripts/lua line roots at pwd -P or spawns a bare bash/sed — use common.fixture's repo_root() / posix_shell(); see the REFUSED lines above (2246-fkea)"
 STEP_OK="Native argv check passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:lua-fixture-native-argv-added:0 checked"
 STEP_READS="scripts/lua/check-lua-fixture-native-argv-added.lua"
