@@ -66,10 +66,15 @@ trap 'rm -rf "$TMPDIR_ARM2B"' EXIT
 # audit runs over a scratch repo built to have each case: origin/linux-next, a
 # STALE salvage ref (diverged, tip older than the branch's edit: is-AHEAD), a
 # NEWER diverged work ref (ref-may-be-AHEAD) and an ancestor work ref (nothing
-# differs). SALVAGE_AUDIT_LIVE=1 audits this checkout's real refs instead.
+# differs). TILLANDSIAS_SALVAGE_AUDIT_LIVE=1 audits this checkout's real refs
+# instead; the land queue's --daily-full gate sets it, so the live audit still
+# runs once a day (TILLANDSIAS_ prefixed: only that prefix crosses the toolbox
+# boundary, scripts/with-tillandsias-builder.sh). A normal gate names the
+# skipped live arm on a not-run: line.
 _AUD="$ROOT"
 AUD_CHECK="$CHECK"
-if [ "${SALVAGE_AUDIT_LIVE:-0}" != 1 ]; then
+if [ "${TILLANDSIAS_SALVAGE_AUDIT_LIVE:-0}" != 1 ]; then
+    echo "not-run:salvage-audit:live-refs — arms 1-3 audit a constructed repo; the audit of this checkout's real origin/salvage+work refs runs on the --daily-full gate (TILLANDSIAS_SALVAGE_AUDIT_LIVE=1, 2270-7gp6)"
     _AUD="$TMPDIR_ARM2B/audited"
     AUD_CHECK="$_AUD/scripts/salvage-audit.sh"
     _ag() { git -C "$_AUD" -c user.name=salvfix -c user.email=salvfix@invalid -c commit.gpgsign=false "$@"; }
