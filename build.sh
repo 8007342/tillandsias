@@ -6360,6 +6360,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Unknown-host claim fixture passed"
 
+    # ORDER 2242-u39b — the pre-push-hook fixtures test their scratch
+    # checkout, never a frozen base the caller left behind without its _ROOT.
+    _step "Checking the pre-push fixtures ignore an inherited diff base (2242-u39b)..."
+    if ! _run_lua_decider "scripts/lua/test-pre-push-fixtures-ignore-an-inherited-base.lua" 2>&1; then
+        _error "a pre-push-hook fixture judged the caller's TILLANDSIAS_GATE_DIFF_BASE instead of its scratch checkout — pass TILLANDSIAS_GATE_DIFF_BASE and _ROOT empty in its child env; see the FAIL lines above (2242-u39b)"
+        exit 1
+    fi
+    _info "Inherited diff-base fixture passed"
+
     # ORDER 1592-idmu — the diff-scoped guards read the base frozen at gate
     # start (TILLANDSIAS_GATE_DIFF_BASE), so a fetch mid-gate cannot move it.
     _step "Checking the diff-scoped guards read a frozen base (1592-idmu)..."
