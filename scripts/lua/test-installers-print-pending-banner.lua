@@ -45,7 +45,11 @@ for _, f in ipairs({ "install.sh", "install-macos.sh", "install-windows.ps1" }) 
             "markers:" .. f .. ":begin=" .. nb .. ":end=" .. ne .. " (restore the BEGIN/END-PENDING-BANNER lines in scripts/" .. f .. ")")
     end
     SRC[f] = body
-    scratch.write(w.leaf .. "/" .. f .. ".cut", table.concat(cut, "\n") .. "\n")
+    -- PowerShell dot-sources only a *.ps1, so the Windows cut keeps its real
+    -- name (yolanda 2026-11-23: a .ps1.cut never loaded, and W2 read
+    -- "Format-PendingBanner is not recognized"). The POSIX cuts keep .cut.
+    local cutname = f:match("%.ps1$") and f or (f .. ".cut")
+    scratch.write(w.leaf .. "/" .. cutname, table.concat(cut, "\n") .. "\n")
 end
 T:arm("0 each installer has both banner markers exactly once", true)
 
@@ -103,7 +107,9 @@ T:arm("W3 the banner is printed after the install's finally block", fin ~= nil a
 
 -- W1-W2: the PowerShell formatter, where a PowerShell exists.
 scratch.write(w.leaf .. "/runw.ps1", table.concat({
-    "param([string]$Cut)", ". $Cut", '"---none---"', "Format-PendingBanner -Items @()",
+    "param([string]$Cut)", ". $Cut",
+    "if (Get-Command Format-PendingBanner -ErrorAction SilentlyContinue) { '---defined---' }",
+    '"---none---"', "Format-PendingBanner -Items @()",
     '"---items---"', "Format-PendingBanner -Items @('RESTART REQUIRED: x', 'SIGN OUT AND BACK IN: y')",
 }, "\n") .. "\n")
 -- Try each PowerShell by running the formatter itself; a program that is not
@@ -112,7 +118,7 @@ local r
 for _, c in ipairs({ "pwsh", "powershell" }) do
     if not (r and r.status == "exited") then
         r = proc.run{ argv = { c, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", w.abs .. "/runw.ps1",
-            "-Cut", w.abs .. "/install-windows.ps1.cut" }, timeout_ms = 60000 }
+            "-Cut", w.abs .. "/install-windows.ps1" }, timeout_ms = 60000 }
     end
 end
 local skipped = 0
@@ -122,11 +128,19 @@ if r.status ~= "exited" then
 else
     local po = ((r.stdout or "") .. (r.stderr or "")):gsub("\r", "")
     local none, items, sect = {}, {}, nil
+    local defined, saw_none, saw_items = false, false, false
     for _, l in ipairs(text.lines(po)) do
-        if l == "---none---" then sect = none elseif l == "---items---" then sect = items
+        if l == "---defined---" then defined = true
+        elseif l == "---none---" then sect = none; saw_none = true
+        elseif l == "---items---" then sect = items; saw_items = true
         elseif sect and text.trim(l) ~= "" then sect[#sect + 1] = l end
     end
-    T:arm("W1 no items: the formatter prints nothing", #none == 0, table.concat(none, "|"))
+    -- An empty section proves nothing unless the formatter LOADED and both
+    -- markers printed (yolanda 2026-11-23: W1 passed with it undefined).
+    T:arm("W1 no items: the formatter is defined and prints nothing",
+        defined and saw_none and saw_items and #none == 0,
+        "defined=" .. tostring(defined) .. " markers=" .. tostring(saw_none) .. "/" .. tostring(saw_items)
+            .. " none=" .. table.concat(none, "|"))
     local n = 0
     for _, l in ipairs(items) do if l:sub(1, 5) == "  >> " then n = n + 1 end end
     T:arm("W2 two items: two '>> ' lines and no PENDING: none", n == 2 and not has(po, "PENDING: none"), table.concat(items, "|"))
