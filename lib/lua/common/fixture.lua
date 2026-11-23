@@ -35,6 +35,68 @@ function M.repo_root()
     return ROOT
 end
 
+-- ORDER 2246-fkea (from 2218-x4s3). The POSIX shell a fixture spawns, by a
+-- name the native runner can run on every host. On native Windows a bare
+-- `bash` resolves to WSL's bash.exe (another filesystem, another git), and
+-- /bin/bash does not exist; Git for Windows ships its own, next to git:
+-- `git --exec-path` answers <env>/libexec/git-core (mingw64/ or ucrt64/, per
+-- Git build), and the shell is <env>/bin/bash.exe. Everywhere else, the
+-- caller's default: "bash" (PATH) unless it names one, e.g. "/bin/bash" for a
+-- site that must run the shell build.sh is written for (on macOS /bin/bash is
+-- 3.2 and PATH may find a newer one; the two are not interchangeable).
+-- Use it as argv[1] wherever a fixture would write "bash":
+--   proc.run{ argv = { fixture.posix_shell(), "-s" }, stdin = ... }
+-- check-lua-fixture-native-argv-added.lua refuses a bare "bash" in an added
+-- scripts/lua file, and a root taken from `pwd -P` (use repo_root()).
+local GIT_BASH -- false once probed and absent
+function M.posix_shell(default)
+    if GIT_BASH == nil then
+        GIT_BASH = false
+        local r = proc.run{ argv = { "git", "--exec-path" }, timeout_ms = 10000 }
+        local ep = text.trim(r.stdout or "")
+        if ep:find("^%a:/.*/libexec/git%-core$") then  -- mingw64/ or ucrt64/, per Git build
+            GIT_BASH = (ep:gsub("/[^/]+/libexec/git%-core$", "/bin/bash.exe"))
+        end
+    end
+    return GIT_BASH or default or "bash"
+end
+
+-- ORDER 2246-fkea. A path a native spawn can resolve, from whatever spelling a
+-- shell or the scratch door handed back: an MSYS drive path /c/x becomes C:/x
+-- (Git bash's $PWD and resolve_plan_binary answer that form, and a native
+-- CreateProcess cannot find it: "The system cannot find the path specified"),
+-- and a verbatim \\?\C:\x becomes C:/x (plain_path). Anything else is
+-- returned unchanged, so on Linux and macOS this is the identity: /c/x is
+-- only rewritten when the runner is native Windows (posix_shell() found
+-- Git's bash), because /c is a legal directory everywhere else.
+function M.native_path(p)
+    if type(p) ~= "string" then return p end
+    p = M.plain_path(p)
+    if M.posix_shell() ~= "bash" then  -- "bash" with no default = not native Windows
+        local drive, rest = p:match("^/(%a)/(.*)$")
+        if drive then return drive:upper() .. ":/" .. rest end
+        drive = p:match("^/(%a)$")
+        if drive then return drive:upper() .. ":/" end
+    end
+    return p
+end
+
+-- ORDER 2246-fkea. The plan binary for a fixture to spawn: the probe
+-- (scripts/plan-binary-probe.sh) run under posix_shell(), its answer joined
+-- to repo_root() when relative and made native with native_path(). "" when
+-- the probe resolves nothing. Never build "$PWD/..." inside the probe's
+-- shell: under Git bash that is /c/..., which a native spawn cannot resolve.
+function M.plan_binary()
+    local root = M.repo_root()
+    local r = proc.run{ argv = { M.posix_shell(), "-s" }, cwd = root, timeout_ms = 60000,
+        stdin = '. scripts/plan-binary-probe.sh\np="$(resolve_plan_binary 2>/dev/null)" || p=""\nprintf "%s" "$p"\n' }
+    local p = text.trim(r.stdout or "")
+    if p == "" then return "" end
+    if p:sub(1, 2) == "./" then p = root .. "/" .. p:sub(3)
+    elseif not (p:sub(1, 1) == "/" or p:find("^%a:[/\\]")) then p = root .. "/" .. p end
+    return M.native_path(p)
+end
+
 local SCRATCH = "target/plan-scratch"
 
 -- ORDER 2158-vrb7. scratch.mkdir returns a Windows verbatim path (\\?\C:\...).

@@ -22,7 +22,14 @@ local function bad(why) verdict.emit("violation:bare-metal-lane-command:" .. why
 if not fs.read(CHECKER) then bad("checker-absent:" .. CHECKER) end
 local PLAN = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN")
 if PLAN == nil or PLAN == "" then PLAN = env.get("TILLANDSIAS_PLAN_BIN") end
-if PLAN == nil or PLAN == "" then PLAN = "tillandsias-plan" end
+-- ORDER 2238-zbze: never fall back to `tillandsias-plan` on PATH. That is the
+-- INSTALLED binary, older than this tree, and under it the newer checker ended
+-- refused:script-error, so the step was red on an untouched trunk and blocked
+-- every relay and release preflight. The litmus step exports the binary it
+-- resolved; a caller that names none gets a named could-not-run, not a guess.
+if PLAN == nil or PLAN == "" then
+    verdict.emit("could-not-run:bare-metal-lane-command:no-plan-binary-named (set TILLANDSIAS_PLAN_BIN)", 1)
+end
 
 -- Name a project no container serves: the ONLY branch that prints the lane
 -- command, and it prints it without touching anything.

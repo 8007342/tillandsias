@@ -15,6 +15,7 @@
 # fixtures rather than this script's decision. The stub makes the decision the
 # only variable.
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHECK="$ROOT/scripts/check-claims-across-branches.sh"
 [ -x "$CHECK" ] || { echo "blocked:no-check"; exit 2; }
@@ -24,7 +25,7 @@ ok()  { pass=$((pass+1)); echo "ok   $1"; }
 bad() { fail=$((fail+1)); echo "FAIL $1" >&2; [ -n "${2:-}" ] && echo "     $2" >&2; }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/xbranch-fx.XXXXXX")"
-trap 'rm -rf "$W"' EXIT INT TERM
+scratch_trap 'rm -rf "$W"'
 
 # 1948-xbaf: the stub arms below run against THIS checkout's origin/* refs,
 # whose ancestry to HEAD changes as the fleet pushes. They test the fold
@@ -289,7 +290,7 @@ mkdir -p "$R/scripts" "$R/plan/index.d"
 cp "$CHECK" "$ROOT/scripts/plan-binary-probe.sh" "$R/scripts/"
 printf 'packets: []\n' > "$R/plan/index.yaml"
 printf '# keep\n' > "$R/plan/index.d/README.md"
-_g() { git -C "$R" -c user.email=fx@example.invalid -c user.name=fx -c commit.gpgsign=false "$@"; }
+_g() { scratch_git "$R" -c user.email=fx@example.invalid -c user.name=fx -c commit.gpgsign=false "$@"; }
 _g init -q -b main
 _g add -A && _g commit -q --no-verify -m "sibling's ledger"
 _anc="$(_g rev-parse HEAD)"

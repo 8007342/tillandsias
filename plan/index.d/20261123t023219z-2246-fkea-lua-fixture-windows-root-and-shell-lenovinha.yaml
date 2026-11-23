@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: lua-fixtures-share-a-repo-root-and-posix-shell-helper
+    order: 2246-fkea
+    status: ready
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, windows]
+    estimated_hours: 4
+    title: |
+      Lua fixtures keep hitting the same two native-Windows traps: a root taken from `pwd -P` (msys answers /c/..., which the runner refuses as a relative cwd) and a bare "bash"/"sed" argv (resolves to WSL's on Windows). Give them one shared helper (repo_root() + posix_shell()) and a decider that refuses both shapes in added Lua fixtures.
+    context: |
+      Third port in a day to hit these: steps 886 and 888, then #1388 (2245-pf7x, steps 660 and 276; yolanda-windows, msys, 2026-11-23: "proc.run: cwd '/c/Users/…' is relative"). The fix is an idiom copied by hand: root from `git rev-parse --show-toplevel`, bash from `git --exec-path` with <env>/libexec/git-core replaced by <env>/bin/bash.exe (2218-x4s3; test-preflight-rebuilds-stale-plan-binary.lua, probe-remote-reachable.lua, test-plan-binary-rebuild-while-running.lua, #1302, #1333). Nothing stops the next fixture writing `pwd -P`, and nothing fails on Linux, where both shapes work. Coordinator direction 2026-11-23.
+    exit_criteria:
+      - "one helper, loadable by any scripts/lua fixture, returns repo_root() (git toplevel) and posix_shell() (Git's bash on native Windows, bash elsewhere)"
+      - "the hand-copied sites move to it"
+      - "a decider refuses, in ADDED scripts/lua/*.lua, a root derived from `pwd -P` and an argv whose first element is a bare \"bash\" or \"sed\"; red on a fixture written that way, green on the helper form"
+      - "a second-regime record from a native Windows host"
+    unscoreable: "unpinnable-until-the-guard-exists: the decider and its arms are the deliverable."
+    next_action: "Check what scripts/lua can share today (require path or a runtime module), then write the helper and the decider."
+    provenance: coordinator direction (macuahuitl-fedora, 2026-11-23), from yolanda-windows' msys run of #1388; filed by lenovinha.
+    related: [2245-pf7x, 2218-x4s3]
+    events:
+      - {type: filed, ts: '2026-11-23T02:32:19Z', host: lenovinha, summary: shared Lua fixture root and shell helper filed}

@@ -508,7 +508,7 @@ unbracketed pattern appears anywhere else in the same command line, it
 self-matches again, which is exactly what happened when this was tested. `-x`
 matches the executable name only and never the pattern, so it cannot self-match.
 
-**Instrument B — a file store** (e.g. `store --file=.git/.gh-credentials`):
+**Instrument B — a file store** (e.g. `store --file=.git/.gh-credentials`; 2222-xjgu: such a store is itself refused as plaintext at rest, `blocked:plaintext-credential-store`, so this instrument exists only to measure a host before its operator removes one):
 
 ```bash
 mv <store-file> <store-file>.acceptance-aside      # before the three legs
