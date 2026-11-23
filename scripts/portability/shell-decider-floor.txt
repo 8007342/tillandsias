@@ -21,7 +21,6 @@ scripts/check-deslop-sweep-health.sh
 scripts/check-enclave-ca-consistency.sh
 scripts/check-enclave-network-internal.sh
 scripts/check-enclave-service-health.sh
-scripts/check-engine-cpu-dispatch.sh
 scripts/check-fleet-membership.sh
 scripts/check-forge-findings-persisted.sh
 scripts/check-fragment-ts-skew.sh
@@ -44,7 +43,6 @@ scripts/check-nix-deps-stability.sh
 scripts/check-no-competing-gate.sh
 scripts/check-no-fixture-writes-live-ledger.sh
 scripts/check-no-tracked-binaries.sh
-scripts/check-opsx-generated-dirt.sh
 scripts/check-pickup-role-grammar.sh
 scripts/check-plan-binary-current.sh
 scripts/check-plan-binary-probe-usage.sh
@@ -55,7 +53,6 @@ scripts/check-release-asset-integrity.sh
 scripts/check-release-tier-freshness.sh
 scripts/check-resumable-claim-dirt.sh
 scripts/check-running-image-freshness.sh
-scripts/check-rust-source-pin-added.sh
 scripts/check-salvage-refs-ledger.sh
 scripts/check-scorable-obligation-added.sh
 scripts/check-script-exec-bits.sh
@@ -70,7 +67,6 @@ scripts/check-test-baseline.sh
 scripts/check-tracked-files-unwritten.sh
 scripts/check-unrunnable-platform-arms.sh
 scripts/check-windows-only-sources-verified.sh
-scripts/check-windows-tray-clippy.sh
 scripts/check-windows-tray-diagnose-surface.sh
 scripts/check-yaml-reader-availability.sh
 scripts/test-a-claim-names-a-workstation.sh
@@ -104,7 +100,6 @@ scripts/test-centicolon-extract.sh
 scripts/test-centicolon-grade.sh
 scripts/test-centicolon-ratchet.sh
 scripts/test-change-class.sh
-scripts/test-cheatsheet-source-anchors.sh
 scripts/test-check-bash-dialect.sh
 scripts/test-check-carry-forward.sh
 scripts/test-check-credential-channel.sh
@@ -120,7 +115,6 @@ scripts/test-claims-fleet-visible.sh
 scripts/test-claude-forge-bypass-preaccepted.sh
 scripts/test-clear-vault-credentials-partial-is-nonzero.sh
 scripts/test-clear-vault-host-credentials.sh
-scripts/test-closure-evidence-survives-landing.sh
 scripts/test-closure-guards-name-the-way-out.sh
 scripts/test-cloudflare-login.sh
 scripts/test-cloudflare-oauth-core.sh
@@ -138,7 +132,6 @@ scripts/test-compaction-coverage.sh
 scripts/test-competing-gate-consumer.sh
 scripts/test-competing-gate-no-dispatch-cause.sh
 scripts/test-concurrent-forge-shared-stack.sh
-scripts/test-convergence-dashboard-locale.sh
 scripts/test-convergence-dashboard.sh
 scripts/test-credential-and-proxy-confinement.sh
 scripts/test-credential-channel-affordances.sh
@@ -146,8 +139,6 @@ scripts/test-credential-channel-host-push-lane.sh
 scripts/test-credential-channel-names-a-locked-keyring.sh
 scripts/test-credential-channel-survives-a-killed-probe.sh
 scripts/test-credential-cold-state-probe.sh
-scripts/test-credential-remedy-runnable.sh
-scripts/test-credential-store-worktree.sh
 scripts/test-credential-verdict-script.sh
 scripts/test-cycle-checkout-lock.sh
 scripts/test-cycle-claims-report.sh
@@ -164,7 +155,6 @@ scripts/test-dev-inference-start-refusal-names-cause.sh
 scripts/test-discipline-derive.sh
 scripts/test-discipline-install-hooks.sh
 scripts/test-dispatch-reap.sh
-scripts/test-drain-queue-bare-refuses.sh
 scripts/test-e2e-preflight-live-runtime.sh
 scripts/test-embed-endpoint-derivation.sh
 scripts/test-enclave-network-internal-discovery.sh
@@ -200,7 +190,6 @@ scripts/test-forge-gitconfig-bidirectional-quarantine.sh
 scripts/test-forge-launch-openspec-init-clean.sh
 scripts/test-forge-liveness-probe.sh
 scripts/test-forge-localization-staged.sh
-scripts/test-forge-packed-refs-split-brain.sh
 scripts/test-forge-project-guard-hooks.sh
 scripts/test-forge-project-trust-seeds.sh
 scripts/test-forge-runtime-ca-trust.sh
@@ -217,12 +206,10 @@ scripts/test-fragment-status-loss.sh
 scripts/test-freshness-regime-budget.sh
 scripts/test-gate-divergence-is-declared.sh
 scripts/test-gate-fast-refusals.sh
-scripts/test-gate-host-memory-figure.sh
 scripts/test-gate-memory-refusal.sh
 scripts/test-gate-memory-wsl2-guest.sh
 scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh
 scripts/test-gate-stamp-memoization.sh
-scripts/test-gate-stamp-must-be-earned.sh
 scripts/test-gate-stamp-names-content-movers.sh
 scripts/test-gate-stamp-portable-digest.sh
 scripts/test-gate-stamp-scope.sh
@@ -272,9 +259,7 @@ scripts/test-image-usability-check.sh
 scripts/test-inference-engine-pinned-and-npu-honest.sh
 scripts/test-inference-mkdir-fatal-1183-j9dk.sh
 scripts/test-inference-pull-failure-classification.sh
-scripts/test-inference.sh
 scripts/test-initialize-bare-metal-host-idempotent.sh
-scripts/test-install-hooks-refuses-global-hookspath.sh
 scripts/test-install-macos-announces-its-pin.sh
 scripts/test-install-path.sh
 scripts/test-installer-probes-by-attempt-not-by-help.sh
@@ -292,11 +277,9 @@ scripts/test-land-gate-refusal-names-its-step.sh
 scripts/test-land-merges-trunk.sh
 scripts/test-land-notice-names-unrun-litmus.sh
 scripts/test-land-push-bounded.sh
-scripts/test-land-push-classification.sh
 scripts/test-land-queue.sh
 scripts/test-land-verdict-through-a-pipe.sh
 scripts/test-landed-but-open.sh
-scripts/test-lane-instrument-vs-ledger.sh
 scripts/test-ledger-node-claim-resolution.sh
 scripts/test-ledger-prose-roundtrip.sh
 scripts/test-ledger-ts-guard.sh
@@ -322,7 +305,6 @@ scripts/test-litmus-retired-phase-skip.sh
 scripts/test-litmus-runner-reads-without-jq.sh
 scripts/test-litmus-runner-reports-rc.sh
 scripts/test-litmus-scalar-unescape.sh
-scripts/test-litmus-self-match.sh
 scripts/test-litmus-stdin-does-not-eat-the-spec-list.sh
 scripts/test-litmus-step-model.sh
 scripts/test-litmus-step-pipefail.sh
@@ -344,7 +326,6 @@ scripts/test-macos-vsock-inference-closure.sh
 scripts/test-macos-vz-orphan-diagnosis.sh
 scripts/test-mcp-plan-resolver-pinning.sh
 scripts/test-mcp-run-command-tool.sh
-scripts/test-mcp-server-resilience.sh
 scripts/test-mcp-transport-death-trace.sh
 scripts/test-memo-hit-observability.sh
 scripts/test-meta-orchestration-opsx-sync-merge.sh
@@ -355,15 +336,12 @@ scripts/test-mirror-healthcheck-quiet.sh
 scripts/test-mirror-host-cert-and-sshd.sh
 scripts/test-mirror-receive-wrapper.sh
 scripts/test-mirror-refuses-when-broken.sh
-scripts/test-mirror-relay-state.sh
 scripts/test-mirror-sshd-posture.sh
 scripts/test-mirror-sync-state.sh
-scripts/test-mirror-upstream-auth-overwrite.sh
 scripts/test-mo-full-attest.sh
 scripts/test-mo-full-record-precedes-marker.sh
 scripts/test-mode-only-regression-887-bz88.sh
 scripts/test-must-ship-rows.sh
-scripts/test-native-lint-attested.sh
 scripts/test-nix-cache-service.sh
 scripts/test-nix-toolbox.sh
 scripts/test-no-competing-gate.sh
@@ -373,7 +351,6 @@ scripts/test-no-stale-base-revert.sh
 scripts/test-nvidia-cdi-stale-hostpath.sh
 scripts/test-opencode-entrypoint-prompt.sh
 scripts/test-opencode-render-probe.sh
-scripts/test-opencode-tool-start-follower.sh
 scripts/test-opencode-vault-auth-content.sh
 scripts/test-openspec-pin.sh
 scripts/test-orchestrate-enclave.sh
@@ -382,13 +359,11 @@ scripts/test-packet-tier-fields.sh
 scripts/test-pending-capability-row-does-not-wedge.sh
 scripts/test-pilot-lua-ports.sh
 scripts/test-plan-binary-copy-refresh.sh
-scripts/test-plan-binary-freshness.sh
 scripts/test-plan-binary-locus-native.sh
 scripts/test-plan-binary-probe-release-over-debug.sh
 scripts/test-plan-binary-probe-usage-determinism.sh
 scripts/test-plan-binary-probe-usage-population.sh
 scripts/test-plan-binary-probe.sh
-scripts/test-plan-binary-remedy-names-only-a-runnable-binary.sh
 scripts/test-plan-binary-runnability-precondition.sh
 scripts/test-plan-field-get.sh
 scripts/test-plan-fragments-lane-affordance.sh
@@ -405,10 +380,8 @@ scripts/test-portability-idioms.sh
 scripts/test-pre-push-deletion-only.sh
 scripts/test-pre-push-empty-ref-list.sh
 scripts/test-pre-push-honours-a-live-freeze.sh
-scripts/test-pre-push-issue-capture-lane.sh
 scripts/test-pre-push-linux-next-merged.sh
 scripts/test-pre-push-main-branch-affordance.sh
-scripts/test-pre-push-plan-lane-after-merge.sh
 scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh
 scripts/test-pre-push-trailer-states-what-it-saw.sh
 scripts/test-pre-push-version-guard-sigpipe.sh
@@ -490,7 +463,6 @@ scripts/test-spec-index-staging-capacity.sh
 scripts/test-spec-registry-status.sh
 scripts/test-spec-script-paths.sh
 scripts/test-squid-supervisor.sh
-scripts/test-ssh-lane-refuses-when-unwired.sh
 scripts/test-ssh-lane-sidecar.sh
 scripts/test-status-channel-absent-is-first-class.sh
 scripts/test-stranded-plan-writes.sh

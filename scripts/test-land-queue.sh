@@ -1035,15 +1035,20 @@ GATE
 o18a="$(run_queue)"
 trunk_push plan/index.d/20261017t000000z-probe.yaml 'packets: []'
 o18b="$(run_queue)"; g18="$(gates)"
-if grep -q 'reason=gate-aborted:rc=255' "$GH_COMMENTS" && ! grep -q 'reason=gate-failed' "$GH_COMMENTS" \
+# ORDER 2234-a964 supersedes the comment half: an aborted gate is now
+# could-not-run:host, so it posts NO eviction comment at all (macuahuitl run 29:
+# 14 PRs falsely evicted rc=255 by a keyring quota), and the PR is simply gated
+# again on the next run. What ARM 18 protected still holds: never stale-skipped.
+if ! grep -q 'land-queue:evicted' "$GH_COMMENTS" 2>/dev/null \
+   && grep -q 'could-not-run:host:gate-aborted:rc=255' <<<"$o18a" \
    && [ "$g18" -eq 2 ] && ! grep -q stale-head <<<"$o18b"; then
-    ok "ARM 18: an aborted gate (rc=255) is recorded as gate-aborted and re-gated after a plan-only move, never stale-skipped"
+    ok "ARM 18: an aborted gate (rc=255) is could-not-run:host, evicts and comments nobody, and is re-gated on the next run, never stale-skipped"
 else
-    bad "ARM 18: wanted reason=gate-aborted:rc=255 and a second gate; gates=$g18
+    bad "ARM 18: wanted could-not-run:host:gate-aborted:rc=255, no eviction comment, and a second gate; gates=$g18
 $o18a
 ---
 $o18b
-comments: $(grep -o 'land-queue:evicted[^>]*' "$GH_COMMENTS")"
+comments: $(grep -o 'land-queue:evicted[^>]*' "$GH_COMMENTS" 2>/dev/null)"
 fi
 
 # ── ARM 19 — A CFG-GATED macOS CRATE LANDS ONLY WITH A NATIVE LINT (1235-rfub).
@@ -1573,6 +1578,19 @@ else
 $out34"
 fi
 
+# ──────────────────────────────────────────────────────────── ARM 34b
+# 2238-gpxz WHERE THE WALL CLOCK GOES: a landed candidate prints one
+# timing:land-queue:#N:<stage>=<s>s line per stage, in stage order, and a
+# candidate that stopped at the host door prints none past where it stopped.
+t34="$(grep -o '^timing:land-queue:#42:[a-z+-]*=[0-9]*s$' <<<"$out34" | sed -E 's/^timing:land-queue:#42:([a-z+-]*)=.*/\1/' | tr '\n' ' ')"
+if [ "$t34" = "merge+door plan-refresh preflight gate post-gate+push " ] \
+    && ! grep -q '^timing:land-queue:#41:' <<<"$out34"; then
+    ok "ARM 34b: a landed candidate times every stage in order; one stopped at the door times none"
+else
+    bad "ARM 34b: wanted #42 stages 'merge+door plan-refresh preflight gate post-gate+push' and none for #41; got '$t34'
+$out34"
+fi
+
 # ──────────────────────────────────────────────────────────── ARM 35
 # 2118-tpmy RED ON TRUNK TOO: the untouched test is red twice on the candidate
 # AND on the bare trunk -> hold:trunk-red:<test>. Nobody is evicted, the queue
@@ -1885,7 +1903,9 @@ git -C "$_c51" init -q; git -C "$_c51" config user.email t@l; git -C "$_c51" con
 echo a > "$_c51/x.txt"; echo r > "$_c51/README.md"
 git -C "$_c51" add -A; git -C "$_c51" commit -qm proved
 _b51="$(git -C "$_c51" rev-parse HEAD)"; date -u +%s > "$_c51.marker"
-ms51() { ( cd "$_c51" && TILLANDSIAS_CLASS_BASE="$_b51" TILLANDSIAS_FULL_GATE_MARKER="$_c51.marker" bash scripts/change-class.sh may-skip gate-step:t path:x.txt 2>/dev/null ); }
+# The selector knobs are the CALLER's: --daily-full gates with TILLANDSIAS_CLASS_SELECTOR=off
+# exported, and the arm inherited it (run/run/run on macuahuitl 2026-11-22). Unset them all.
+ms51() { ( cd "$_c51" && unset TILLANDSIAS_CLASS_SELECTOR TILLANDSIAS_TRUNK_BRANCH TILLANDSIAS_CHANGE_CLASS_REMOTE TILLANDSIAS_FULL_GATE_MAX_AGE_S && TILLANDSIAS_CLASS_BASE="$_b51" TILLANDSIAS_FULL_GATE_MARKER="$_c51.marker" bash scripts/change-class.sh may-skip gate-step:t path:x.txt 2>/dev/null ); }
 echo b >> "$_c51/x.txt"; git -C "$_c51" commit -qam x; v51a="$(ms51)"
 git -C "$_c51" reset -q --hard "$_b51"; echo more >> "$_c51/README.md"; git -C "$_c51" commit -qam doc; v51b="$(ms51)"
 echo 1 > "$_c51.marker"; v51c="$(ms51)"
@@ -1895,6 +1915,92 @@ else
     bad "ARM 51: wanted run/skip/run; got '$v51a'/'$v51b'/'$v51c'"
 fi
 
+
+# ARM 53 (2209-dfix): the publish goes through the REAL pre-push hook. The first
+# live --daily-full on macuahuitl (2026-11-22) gated green-or-red and then could
+# not publish: the hook refused refs/attest/daily-red/<epoch> as a new ref needing
+# a full gate. A daily verdict ref is exempt; a non-epoch name under the same
+# namespace and an ordinary branch are not (premise: this repo has no gate stamp,
+# so anything not exempt is refused).
+_c53="$TMP/arm53"; mkdir -p "$_c53/w/scripts/hooks"
+git init -q --bare "$_c53/r.git"
+cp "$ROOT/scripts/hooks/pre-push-local-gate.sh" "$_c53/w/scripts/hooks/"; cp "$ROOT/scripts/gate-stamp.sh" "$_c53/w/scripts/"
+git -C "$_c53/w" init -q; git -C "$_c53/w" config user.email t@l; git -C "$_c53/w" config user.name t
+git -C "$_c53/w" add -A; git -C "$_c53/w" commit -qm base
+git -C "$_c53/w" push -q "$_c53/r.git" HEAD:refs/heads/linux-next 2>/dev/null
+printf '#!/bin/sh\nexec bash scripts/hooks/pre-push-local-gate.sh "$@"\n' > "$_c53/w/.git/hooks/pre-push"; chmod +x "$_c53/w/.git/hooks/pre-push"
+p53() { ( cd "$_c53/w" && git push -q "$_c53/r.git" "HEAD:$1" < /dev/null > /dev/null 2>&1 ); echo $?; }
+v53a="$(p53 refs/attest/daily-full/1795348746)"; v53b="$(p53 refs/attest/daily-red/1795348747)"
+v53c="$(p53 refs/attest/daily-red/not-an-epoch)"; v53d="$(p53 refs/heads/not-exempt)"
+if [ "$v53d" != 0 ] && [ "$v53c" != 0 ] && [ "$v53a" = 0 ] && [ "$v53b" = 0 ]; then
+    ok "ARM 53: the real pre-push hook lets daily-full/daily-red <epoch> refs through and still refuses a non-epoch attest name and a branch (2209-dfix)"
+else
+    bad "ARM 53: wanted push rc 0/0/refused/refused (daily-full, daily-red, non-epoch, branch); got $v53a/$v53b/$v53c/$v53d"
+fi
+
+# ARM 54 (2209-dfix): a held lock is SAID. The 03:42 timer --daily-full died with
+# no output while run 28 held the lock. With a live holder, --daily-full waits
+# (bounded) and then names the holder; a plain run names it too; no gate runs.
+sleep 300 & _h54=$!
+_l54="$(cd "$WORK_DIR" && git rev-parse --show-toplevel)/.git/tillandsias-land-queue.lock"
+mkdir -p "$_l54"; echo "$_h54" > "$_l54/pid"; : > "$GATE_LOG"
+out54a="$(TILLANDSIAS_LAND_QUEUE_DAILY_LOCK_WAIT_S=0 run_queue --daily-full)"; rc54a=$?
+out54b="$(run_queue)"; rc54b=$?
+kill "$_h54" 2>/dev/null; wait "$_h54" 2>/dev/null; rm -rf "$_l54"
+if [ "$rc54a" = 3 ] && [ "$rc54b" = 3 ] && grep -q "^land-queue:daily-full:waiting-for-lock:$_h54 " <<<"$out54a" \
+    && grep -q "^skip:land-queue:daily-full:lock-held:$_h54 " <<<"$out54a" && grep -q "^skip:land-queue:in-flight:$_h54 " <<<"$out54b" \
+    && [ ! -s "$GATE_LOG" ]; then
+    ok "ARM 54: a live lock holder is named by --daily-full (after its bounded wait) and by a plain run; neither gates (2209-dfix)"
+else
+    bad "ARM 54: wanted rc 3/3 naming holder $_h54 and no gate; got rc=$rc54a/$rc54b gates=$(grep -c . "$GATE_LOG")
+$out54a
+$out54b"
+fi
+
+# ARM 55 (2215-trad): a train survives a PLAN-ONLY move of the trunk mid-gate.
+# Run 29 (macuahuitl 2026-11-22) gated a 4-member train ~25 min, then pushed
+# nothing: plan fragments had moved linux-next. The gate here moves the trunk
+# ONCE, from a side clone: 55 by a plan/index.d fragment (adopt, one gate, the
+# train lands on the new tip); 55b by a code file (no adopt, members go singly).
+arm55() { # <name> <moved path> <out var>
+    scaffold "$1"
+    candidate "$1" 1061-aaaa a55.txt A
+    candidate "$1" 1062-bbbb b55.txt B
+    cat > "$GH_PRS" <<JSON
+[{"number":61,"headRefName":"work/1061-aaaa","isDraft":false},
+ {"number":62,"headRefName":"work/1062-bbbb","isDraft":false}]
+JSON
+    _side="$TMP/$1/side"; _once="$TMP/$1/moved"
+    git clone -q "$REMOTE_DIR" "$_side"; git -C "$_side" config user.email t@l; git -C "$_side" config user.name t
+    cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+if [ ! -e "$_once" ]; then
+    : > "$_once"; mkdir -p "$_side/\$(dirname "$2")"; echo moved > "$_side/$2"
+    git -C "$_side" add -A && git -C "$_side" commit -qm move && git -C "$_side" push -q origin HEAD:linux-next
+fi
+exit 0
+GATE
+    _moved55="$(git -C "$_side" rev-parse HEAD)"
+    printf -v "$3" '%s' "$(ARM_BATCH_K=4 ARM_TRAIN_LOG="$TMP/$1/trains.log" run_queue)"
+}
+arm55 arm55 plan/index.d/20261122t000000z-arm55.yaml out55
+_h55="$(git -C "$REMOTE_DIR" rev-parse linux-next)"; _mv55="$(git -C "$TMP/arm55/side" rev-parse HEAD)"
+if grep -q '^train:adopt:plan-only-move:' <<<"$out55" && [ "$(grep -c '^land:6[12] .*train=' <<<"$out55")" -eq 2 ] \
+    && [ "$(grep -c . "$GATE_LOG")" -eq 1 ] && git -C "$REMOTE_DIR" merge-base --is-ancestor "$_mv55" "$_h55" \
+    && [ "$(git -C "$REMOTE_DIR" ls-tree --name-only "$_h55" | grep -c '^[ab]55\.txt$')" -eq 2 ]; then
+    ok "ARM 55: a train whose trunk moved by plan fragments only is adopted onto the new tip and lands on its one gate (2215-trad)"
+else
+    bad "ARM 55: wanted train:adopt, #61/#62 landed by the train, 1 gate, the fragment commit kept; got gates=$(grep -c . "$GATE_LOG")
+$out55"
+fi
+arm55 arm55b src55.rs out55b
+if grep -q '^train:target-moved:' <<<"$out55b" && ! grep -q '^train:adopt' <<<"$out55b" && ! grep -q 'train=' <<<"$(grep '^land:' <<<"$out55b")"; then
+    ok "ARM 55b: a code move mid-gate is not adopted; the train pushes nothing and its members go one at a time"
+else
+    bad "ARM 55b: wanted train:target-moved, no adopt, no train= land; got
+$out55b"
+fi
 printf '\n'
 if [ "$fail" -eq 0 ]; then
     if [ "$skipped" -gt 0 ]; then
