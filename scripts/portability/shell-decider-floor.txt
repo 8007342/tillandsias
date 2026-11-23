@@ -224,7 +224,6 @@ scripts/test-gate-step-prefix-allocation.sh
 scripts/test-gate-step-regimes.sh
 scripts/test-gate-step-skip-exit.sh
 scripts/test-gate-thresholds-are-chosen.sh
-scripts/test-ghost-trace-yaml-anchoring.sh
 scripts/test-git-credential-helper.sh
 scripts/test-git-mirror-dns-identity.sh
 scripts/test-git-mirror-existing-volume-hardening.sh
