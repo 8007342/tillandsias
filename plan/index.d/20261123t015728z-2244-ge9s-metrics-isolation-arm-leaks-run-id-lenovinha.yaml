@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: metrics-isolation-negative-control-leaks-the-gate-run-id
+    order: 2244-ge9s
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      Gate step 380 (test-gate-step-metrics-isolation.sh) writes records stamped with the gate's own TILLANDSIAS_TIMING_RUN_ID into the host's shared /tmp/tillandsias-timing.jsonl, and the litmus lane runs it beside the checkout lane, so whichever step is being watched there is evicted as "leaked … ours=1".
+    context: |
+      #1369 was evicted by step 285 (test-native-lint-attested.lua, checkout lane), and #1349 was evicted the same way; two of the last ~30 gates. Arm 3, the fixture's negative control, unsets TILLANDSIAS_METRICS_FALLBACK_DIR and runs the litmus runner in a non-checkout scratch dir on purpose, so it splits into /tmp. It keeps the inherited run id, and gate-step-metrics-attribution.sh counts every new record carrying that id as the watched step's. Lanes run beside each other (2156-glan), so the watched step is not the writer. Arms 2 and 3 also rm -f the host's shared file and restore it at exit, which deletes what a concurrent step's leak check reads (yoga 2026-11-22: the file was gone). Coordinator direction 2026-11-23: P1, ahead of the draft refreshes.
+    exit_criteria:
+      - "arms 2 and 3 run with the run id unset and a fixture-private fallback dir; neither reads, writes nor deletes /tmp/tillandsias-timing.jsonl"
+      - "an arm runs the fixture under a gate-shaped env (run id + private fallback set) and asserts no record with that run id reaches the shared path it watches: red against today's fixture, green after"
+    unscoreable: "unpinnable-until-the-guard-exists: the run-id arm is the deliverable."
+    next_action: "Point arms 2-3 at a private fallback dir, unset the run id for them, add the run-id arm."
+    provenance: coordinator direction (macuahuitl-fedora, 2026-11-23); found by lenovinha.
+    related: [1204-3s2s, 1916-tsel, 1966-ubsw, 2156-glan, 2189-lktp]
+    events:
+      - {type: filed, ts: '2026-11-23T01:57:28Z', host: lenovinha, summary: metrics-isolation arm leaks the gate run id filed}

@@ -198,6 +198,7 @@ WORK_RE='^work/[0-9]{3,4}-[a-z0-9]{4}$'
 LIMIT=0
 DRY_RUN=0
 DAILY_FULL=0
+STATUS=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --limit)   LIMIT="${2:-0}"; shift 2 ;;
@@ -206,6 +207,7 @@ while [ $# -gt 0 ]; do
         --base=*)  TRUNK="${1#*=}"; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
         --daily-full) DAILY_FULL=1; shift ;;
+        --status) STATUS=1; shift ;;
         *) echo "fail:land-queue:unknown-argument:$1" >&2; exit 1 ;;
     esac
 done
@@ -213,6 +215,14 @@ done
 landed=0; evicted=0; requeued=0; skipped=0; _held=0  # the 2118-tpmy trunk-red FLAG (0|1); the freeze check's path list is _frz_paths (2152-lqrf: one name for both erased a hold)
 
 say() { printf '%s\n' "$*"; }
+# ORDER 2238-gpxz: WHERE A LAND'S WALL CLOCK GOES. One line per stage of each
+# candidate, seconds since the previous mark: merge+door (merge, sidecar, host
+# door), plan-refresh, preflight, gate, post-gate+push (a flaky re-run, the
+# trunk-red check, the push and its retries). Measured
+# 2026-11-22 on macuahuitl: the gate averaged ~13 min while a land took ~30, and
+# nothing said where the other ~17 went. A stage a candidate never reaches
+# prints nothing, so the last line names where it stopped.
+_lq_mark() { say "timing:land-queue:#$1:$2=$((SECONDS - ${_LQ_T:-$SECONDS}))s"; _LQ_T=$SECONDS; }
 
 # ORDER 1375-2x4e: the queue JSON is read with `tillandsias-plan json get`, the jq
 # subset on the binary every gate host already has, not with jq. Resolved from
@@ -345,6 +355,61 @@ delta_plan_only() {
 # holder (up to TILLANDSIAS_LAND_QUEUE_DAILY_LOCK_WAIT_S, default 3 h), saying
 # so; any other caller is told who holds it and exits 3.
 _lock_holder() { local _h; _h="$(cat "$LOCKDIR/pid" 2>/dev/null || true)"; [ -n "$_h" ] && kill -0 "$_h" 2>/dev/null && printf '%s\n' "$_h"; }
+
+# ── ORDER 2248-jihs: `--status` — WHAT IS THE QUEUE DOING, WITHOUT THE LOCK ──
+# One line, read-only, never takes or waits on the lock:
+#   queue:gating:#N work/<ref> phase=<p> elapsed=<s> train=<members|-> waiting=<n>
+#   queue:idle last-land=<sha> <age>s
+# The running queue writes the gating line to $_RUNDIR/current at the start of
+# every phase (and $_LOGROOT/current-run names that dir), so a reader asks the
+# file, not the process. The same line is published to
+# refs/tillandsias/queue/status (a commit whose message is the line) so a host
+# that is not the lander can read it with `git fetch`. Publishing is
+# best-effort and bounded (20 s); TILLANDSIAS_LAND_QUEUE_STATUS_PUBLISH=0 or
+# --dry-run turns it off.
+_LQ_LOGROOT0="${TILLANDSIAS_LAND_QUEUE_LOGDIR:-$ROOT/target/land-queue-logs}"
+_lq_idle_line() {
+    local _l _now
+    _l="$(git log -1 --format='%H %ct' --grep='^land(' "$REMOTE/$TRUNK" 2>/dev/null)"
+    _now="$(date +%s)"
+    if [ -n "$_l" ]; then printf 'queue:idle last-land=%s %ss\n' "${_l%% *}" "$((_now - ${_l#* }))"
+    else printf 'queue:idle last-land=none\n'; fi
+}
+_lq_render() { # <stored line with started=<epoch>> -> the line with elapsed=<s>
+    local _st; _st="$(printf '%s' "$1" | sed -n 's/.* started=\([0-9]*\).*/\1/p')"
+    [ -n "$_st" ] || { printf '%s\n' "$1"; return; }
+    printf '%s\n' "$1" | sed "s/ started=[0-9]*/ elapsed=$(( $(date +%s) - _st ))/"
+}
+_lq_publish() { # <line>
+    [ "${TILLANDSIAS_LAND_QUEUE_STATUS_PUBLISH:-1}" = 1 ] && [ "${DRY_RUN:-0}" -eq 0 ] || return 0
+    local _t _c
+    _t="$(git hash-object -t tree -w /dev/null 2>/dev/null)" || return 0
+    _c="$(printf '%s\n' "$1" | git -c user.name=land-queue -c user.email=land-queue@localhost commit-tree "$_t" 2>/dev/null)" || return 0
+    timeout 20 git push -q "$REMOTE" "+$_c:refs/tillandsias/queue/status" </dev/null >/dev/null 2>&1 || true
+}
+_lq_phase() { # <num> <ref> <phase> [train members]
+    local _w _line
+    _w="$(printf '%s' "${_cands:-}" | grep -c .)"
+    _line="queue:gating:#$1 $2 phase=$3 started=$(date +%s) train=${4:--} waiting=$_w"
+    printf '%s\n' "$_line" > "$_RUNDIR/current" 2>/dev/null || true
+    printf '%s\n' "$_RUNDIR" > "$_LOGROOT/current-run" 2>/dev/null || true
+    _lq_publish "$(_lq_render "$_line")"
+}
+_lq_idle() {
+    local _line; _line="$(_lq_idle_line)"
+    rm -f "$_LOGROOT/current-run" 2>/dev/null || true
+    _lq_publish "$_line"
+}
+if [ "$STATUS" -eq 1 ]; then
+    if _h0="$(_lock_holder)"; then
+        _cur="$(cat "$(cat "$_LQ_LOGROOT0/current-run" 2>/dev/null)/current" 2>/dev/null)"
+        if [ -n "$_cur" ]; then _lq_render "$_cur"
+        else say "queue:gating:? phase=reading-queue holder=$_h0"; fi
+    else
+        _lq_idle_line
+    fi
+    exit 0
+fi
 if _h0="$(_lock_holder)"; then
     if [ "$DAILY_FULL" -eq 1 ]; then
         _wmax="${TILLANDSIAS_LAND_QUEUE_DAILY_LOCK_WAIT_S:-10800}"; _w=0
@@ -391,6 +456,7 @@ _start_ref="$(git symbolic-ref --quiet --short HEAD 2>/dev/null \
               || echo HEAD)"
 cleanup() {
     git checkout -q "$_start_ref" 2>/dev/null || true
+    [ -n "${_LOGROOT:-}" ] && _lq_idle  # ORDER 2248-jihs: the status line says idle once the lander is gone
     rm -rf "$LOCKDIR"
 }
 trap cleanup EXIT INT TERM
@@ -454,7 +520,9 @@ GH_LIST_LIMIT="${TILLANDSIAS_LAND_QUEUE_GH_LIST_LIMIT:-500}"
 # gate, then test-land-queue.sh, then its inner queues, and redded run 26's train;
 # ARM 22's stamp leak was the same class. Called first in every gate subshell, so
 # the queue keeps its settings and the gate (and its fixtures) inherits none.
-_gate_clean_env() { local _v; for _v in $(compgen -v TILLANDSIAS_LAND_QUEUE_); do unset "$_v"; done; }
+# 2215-trad: nor GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE — a caller inside a git hook exports them, and a
+# fixture following them writes the REAL .git/config (calmecacpilli 2026-11-22, #1338).
+_gate_clean_env() { local _v; for _v in $(compgen -v TILLANDSIAS_LAND_QUEUE_); do unset "$_v"; done; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; }
 DAILY_SKIP="${TILLANDSIAS_LAND_QUEUE_DAILY_SKIP:-1}"
 DAILY_NS="refs/attest/daily-full"
 DAILY_RED_NS="refs/attest/daily-red"
@@ -707,6 +775,7 @@ try_batch() {
     if [ "${#nums[@]}" -lt 2 ]; then git checkout -q --detach "$base" 2>/dev/null; return 0; fi
     union="$(git rev-parse HEAD)"
     say "train: ${#nums[@]} members $ids base=${base:0:9} union=${union:0:9}"
+    _lq_phase "${nums[0]}" train train-checks "$ids"
     abandon() { say "train:abandoned:$1 — members $ids go one at a time"; train_log "$ids" "$base" "$union" "abandoned:$1" -; git checkout -q --detach "$base" 2>/dev/null; }
     # freeze
     if [ -n "$(freeze_held_paths "$base" "$union" | head -n 1)" ]; then
@@ -755,6 +824,7 @@ try_batch() {
     # THE ONE GATE
     t0=$SECONDS
     gate_env_for "$base"
+    _lq_phase "${nums[0]}" train train-gate "$ids"
     ( _gate_clean_env; eval "$GATE" ) < /dev/null > "$_RUNDIR/train-gate.log" 2>&1; rc=$?
     gs=$((SECONDS - t0))
     if [ "$rc" -ne 0 ]; then
@@ -766,17 +836,35 @@ try_batch() {
     # The tree that ships is the tree that gated: re-read the trunk.
     git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null
     now="$(git rev-parse "$REMOTE/$TRUNK" 2>/dev/null)"
-    if [ "$now" != "$base" ]; then
-        say "train:target-moved:gated-on=${base:0:9} now=${now:0:9} — nothing pushed; members $ids go one at a time"
-        train_log "$ids" "$base" "$union" "green:target-moved" "$gs"
-        return 0
-    fi
     parents=(-p "$base")
     for hs in "${heads[@]}"; do parents+=(-p "$hs"); done
     c="$(printf 'land-train(%s): %d members into %s, one gate on the union\n\n%s\n' "$ids" "${#nums[@]}" "$TRUNK" "$carried" \
         | GIT_AUTHOR_NAME=land-queue GIT_AUTHOR_EMAIL=land-queue@localhost \
           GIT_COMMITTER_NAME=land-queue GIT_COMMITTER_EMAIL=land-queue@localhost \
           git commit-tree "$union^{tree}" "${parents[@]}")" || { abandon commit-tree-failed; return 0; }
+    # ORDER 2215-trad: A PLAN-ONLY MOVE DOES NOT VOID A TRAIN. Run 29's 4-member
+    # train gated ~25 min and pushed nothing because ledger fragments moved
+    # $TRUNK mid-gate; with an active fleet that is nearly every train. The
+    # singles' adopt rule applies unchanged: when EVERY class between the gated
+    # base and the new tip is plan-ledger (delta_plan_only, the same classifier),
+    # merge the train onto the new tip and push without re-gating. Any other
+    # class, an unreadable answer, or a conflict still sends members one at a time.
+    if [ "$now" != "$base" ]; then
+        if git merge-base --is-ancestor "$base" "$now" 2>/dev/null && delta_plan_only "$base" "$now" \
+            && git checkout -q --detach "$c" 2>/dev/null \
+            && GIT_AUTHOR_NAME=land-queue GIT_AUTHOR_EMAIL=land-queue@localhost \
+               GIT_COMMITTER_NAME=land-queue GIT_COMMITTER_EMAIL=land-queue@localhost \
+               git merge --no-ff -q -m "land-train($ids): adopted over a plan-only move ${base:0:9}..${now:0:9}" "$now" >/dev/null 2>&1; then
+            c="$(git rev-parse HEAD)"
+            say "train:adopt:plan-only-move:gated-on=${base:0:9} now=${now:0:9} classes=plan-ledger — the gate's verdict still describes this code"
+        else
+            git merge --abort 2>/dev/null || true
+            say "train:target-moved:gated-on=${base:0:9} now=${now:0:9} classes=$(printf '%s' "${_delta_classes:-unreadable}" | tr '\n' ',' | sed 's/,$//') — nothing pushed; members $ids go one at a time"
+            train_log "$ids" "$base" "$union" "green:target-moved" "$gs"
+            git checkout -q --detach "$base" 2>/dev/null
+            return 0
+        fi
+    fi
     git push -q "$REMOTE" "$c:refs/heads/$TRUNK" >/dev/null 2>&1
     git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null
     if ! git merge-base --is-ancestor "$c" "$REMOTE/$TRUNK" 2>/dev/null; then
@@ -875,6 +963,8 @@ while next_candidate; do
         esac
     fi
 
+    _LQ_T=$SECONDS  # ORDER 2238-gpxz: the clock _lq_mark reads
+    _lq_phase "$num" "$head" merge+door
     # ── MERGE TARGET + CANDIDATE ─────────────────────────────────────────────
     git checkout -q --detach "$base_sha" 2>/dev/null || {
         say "skip:land-queue:$num:cannot-detach"; skipped=$((skipped + 1)); continue
@@ -1098,6 +1188,8 @@ $_nlwhy
                 continue ;;
         esac
     fi
+    _lq_mark "$num" merge+door
+    _lq_phase "$num" "$head" plan-refresh
     # ── ORDER 1992-lqpb: A CURRENT PLAN BINARY BEFORE ANY DOOR ───────────────
     # The binary's state is this HOST's, never the candidate's: a refresh that
     # cannot make it current stops the run and evicts nobody.
@@ -1131,6 +1223,8 @@ $_nlwhy
         fi
         rm -f "$_rlog"
     fi
+    _lq_mark "$num" plan-refresh
+    _lq_phase "$num" "$head" preflight
     # ── ORDER 1765-q7rg: THE PREFLIGHT DOOR BEFORE THE FULL GATE ─────────────
     # The tree-only deciders answer in about a minute; a decider-level red
     # (exit 1) here is the same red the full gate would reach after ~21 min.
@@ -1154,6 +1248,8 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
         rm -f "$_plog"
     fi
 
+    _lq_mark "$num" preflight
+    _lq_phase "$num" "$head" gate
     _glog="$_RUNDIR/pr-$num-gate.log"
     # No pipeline: a `$GATE | tee` would hand us tee's status, which is the
     # 859-4jny bug one layer over.
@@ -1163,6 +1259,8 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
     [ "$_lane" = plan-only ] && _gcmd="$PLAN_LANE_CHECK"
     ( _gate_clean_env; eval "$_gcmd" ) < /dev/null > "$_glog" 2>&1
     _grc=$?
+    _lq_mark "$num" gate
+    _lq_phase "$num" "$head" post-gate+push
     grep -o 'skip:class-selector:[^ ]*' "$_glog" > "$_RUNDIR/pr-$num-skips" 2>/dev/null || : > "$_RUNDIR/pr-$num-skips"  # 2174-dail: the gate log is removed on a green land
     # ── ORDER 2143-z5uj: A RED IN A TEST THE CANDIDATE DID NOT TOUCH IS RE-RUN
     # ONCE, ON THE IDENTICAL TREE, BEFORE IT EVICTS ANYONE. Measured 2026-11-20:
@@ -1245,6 +1343,16 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
             _deferred="${_deferred}${num}	${head}"$'\n'
             requeued=$((requeued + 1))
             rm -f "$_glog"
+            continue
+        fi
+        # ORDER 2234-a964: rc=255 (podman/crun could not start the gate, a host
+        # going down) or 128+ (a signal) is THIS HOST's state, not a verdict on
+        # the tree, so it is could-not-run:host like the host door (ARM 34):
+        # nobody is evicted, nobody is commented, the run goes on. Measured on
+        # macuahuitl run 29: crun "join keyctl: Disk quota exceeded" from leaked
+        # builder exec sessions evicted 14 PRs with rc=255.
+        if [ "$_grc" -ge 128 ]; then
+            say "could-not-run:host:gate-aborted:rc=$_grc — #$num is not evicted; next candidate (log: $_glog)"
             continue
         fi
         say "evict:land-queue:$num:gate-failed:rc=$_grc${_flaky:+:$_flaky} — full gate log kept at $_glog"
@@ -1357,6 +1465,7 @@ Full gate log kept on the landing host at \`$_glog\`.$(evict_marker "$num" "$hea
     done
     if [ "$_landed_ok" -eq 1 ]; then
         say "land:$num tier=full gate=green base=${base_sha:0:9} head=${head_sha:0:9} merge=${merge_sha:0:9}"
+        _lq_mark "$num" post-gate+push
         not_run_line "$_RUNDIR/pr-$num-skips"
         landed=$((landed + 1))
         continue
