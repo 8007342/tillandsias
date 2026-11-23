@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# inputs: scripts/test-metrics-log-path-agreement.sh scripts/metrics-log-path.sh scripts/plan-binary-probe.sh scripts/check-mcp-expert-health.sh scripts/check-mcp-surface.sh scripts/cycle-metrics.sh scripts/trace-coverage.sh scripts/gate-steps.d/279-1455-d7hc.step plan/index.yaml openspec/litmus-tests/groundtruth/ crates/tillandsias-plan/
 # preflight: serial — writes the fixed /tmp/tillandsias-timing.jsonl and counts lines of the fixed /tmp/forge-expert-usage.jsonl before and after a run
 # test-metrics-log-path-agreement.sh — the writer and the reader of a metrics
 # log must resolve the SAME path, and a record must name the host that made it.

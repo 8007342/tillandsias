@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# inputs: scripts/test-salvage-audit.sh scripts/salvage-audit.sh scripts/gate-steps.d/952-1226-jb8y.step
 # test-salvage-audit.sh — 1226-jb8y: the salvage audit finds refs, separates a
 # stale snapshot from genuinely outstanding content, and refuses rather than
 # reporting an empty result when it could not look.

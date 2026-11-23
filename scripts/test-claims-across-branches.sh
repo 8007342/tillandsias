@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# inputs: scripts/test-claims-across-branches.sh scripts/check-claims-across-branches.sh scripts/plan-binary-probe.sh scripts/test-support/scratch-git.sh scripts/lua/check-claim-confirmed.lua scripts/gate-steps.d/953-1034-whsp.step build.sh plan/index.yaml plan/index.d/ crates/tillandsias-plan/
 # @trace spec:meta-orchestration
 # @trace order:1034-whsp
 #
