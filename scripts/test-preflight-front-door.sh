@@ -154,7 +154,8 @@ out="$(TILLANDSIAS_PREFLIGHT_TIMEOUT=5 ./build.sh --preflight 2>&1)"; rc=$?
 if [ "$rc" -ne 0 ] && grep -q 'zz-1305-planted' <<<"$out"; then
     ok "a guard wired into gate-steps.d is picked up and refuses (no silent third state)"
 else
-    bad "a newly wired guard was invisible to the front door (rc=$rc)"
+    # Never enumerated, deadline-skipped and could-not-start read alike without this.
+    bad "a newly wired guard was invisible to the front door (rc=$rc, ${#out} bytes): $(grep -aE 'zz-1305|:preflight:ran=' <<<"$out" | tail -n 4 | tr '\n' '|')"
 fi
 # ── ARM 2b (1515-iwb3, 1247-amcu criterion 5): THE REFUSAL'S REMEDY RUNS ─────
 # The per-guard refusal must say why and name the command that reruns that
@@ -204,7 +205,7 @@ out="$(TILLANDSIAS_PREFLIGHT_TIMEOUT=5 ./build.sh --preflight 2>&1)"; rc=$?
 if [ "$rc" -ne 0 ] && grep -q 'zz-1499-planted' <<< "$out"; then
     ok "a guard build.sh runs inline is picked up and refuses (1499-m9fj)"
 else
-    bad "a guard the gate runs inline was invisible to the front door (rc=$rc)"
+    bad "a guard the gate runs inline was invisible to the front door (rc=$rc, ${#out} bytes): $(grep -aE 'zz-1499|:preflight:ran=' <<<"$out" | tail -n 4 | tr '\n' '|')"
 fi
 if grep -q '^refused:preflight:check-zz-1499-args\[zzmode second\]$' <<< "$out" \
     && grep -q 'violation:planted-mode-guard' <<< "$out"; then
