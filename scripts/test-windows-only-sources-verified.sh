@@ -124,10 +124,8 @@ test a::undeclared_red ... FAILED
 ' > "$WORK/red.txt"
 out="$(run stamp --from "$WORK/red.txt" 2>/dev/null)"
 [ "$out" = "refused:undeclared-failure:undeclared_red" ]     || fail "case 7: an undeclared red must refuse and name the test, got '$out'"
-printf 'undeclared_red
-' > "$WORK/scripts/windows-only-known-red.txt" 2>/dev/null || {
-    mkdir -p "$WORK/scripts"; printf 'undeclared_red
-' > "$WORK/scripts/windows-only-known-red.txt"; }
+mkdir -p "$WORK/scripts"
+printf 'undeclared_red\n' > "$WORK/scripts/windows-only-known-red.txt"
 out="$(run stamp --from "$WORK/red.txt")"
 [ "$out" = "ok:sources-verified:windows-only:2" ]     || fail "case 7: a DECLARED red must be tolerated, got '$out'"
 echo "ok: case 7 — the stamp demands evidence and refuses undeclared reds"
