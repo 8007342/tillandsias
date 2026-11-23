@@ -134,7 +134,6 @@ scripts/test-litmus-runner-reports-rc.sh 2
 scripts/test-litmus-steps-can-fail.sh 1
 scripts/test-litmus-tracked-file-kill-safety.sh 2
 scripts/test-loop-status-audit-reads-current-emitter.sh 1
-scripts/test-macos-model-share-writable.sh 1
 scripts/test-macos-vz-orphan-diagnosis.sh 1
 scripts/test-metrics-log-fallback-is-loud.sh 1
 scripts/test-metrics-log-path-agreement.sh 1
