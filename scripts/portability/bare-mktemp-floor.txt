@@ -157,7 +157,6 @@ scripts/test-pre-push-version-guard.sh 1
 scripts/test-pre-push-work-ref-lane.sh 1
 scripts/test-pre-receive-yaml-gate.sh 1
 scripts/test-preflight-fixtures-default-target.sh 1
-scripts/test-preflight-stale-plan-binary.sh 1
 scripts/test-pretooluse-command-policy.sh 1
 scripts/test-provider-device-auth.sh 1
 scripts/test-reclaim-stranded-claims.sh 1
