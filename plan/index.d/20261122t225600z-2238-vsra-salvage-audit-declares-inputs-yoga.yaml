@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-22 at the coordinator's direction (macuahuitl-fedora): land-speed CUT 3.
+packets:
+  - packet_id: salvage-audit-gate-step-declares-its-inputs
+    order: "2238-vsra"
+    status: ready
+    kind: speed
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, class-selector, speed]
+    estimated_hours: 1
+    owned_files:
+      - scripts/gate-steps.d/952-1226-jb8y.step
+    title: "Gate step 952 (salvage audit, ~71 s/gate) declares STEP_INPUTS so the class selector can skip it"
+    context: |
+      CUT 3 of the land-speed queue. Of the five slow hermetic steps ranked from macuahuitl's 2026-11-22 timing log, only
+      the salvage audit was undeclared and narrowly scoped: it reads scripts/salvage-audit.sh and
+      scripts/test-salvage-audit.sh plus live origin refs (host state; the daily full run samples them). The ready-set
+      archiver check and its archiver-check-miss timing read plan/** (touched by nearly every PR), and the credential
+      fixtures and door index-lock sweep already declare inputs that are broad because the fixtures really read them.
+    exit_criteria:
+      - "952-1226-jb8y.step declares STEP_INPUTS naming exactly the two scripts; check-gate-step-inputs passes."
+    unscoreable: "the saving appears only once a green daily-full proof exists; measured by the next queue run's skip lines"
+    provenance: "coordinator 2026-11-22 land-speed CUT 3 approval"
+    events:
+      - type: filed
+        ts: "2026-11-22T22:56:00Z"
+        host: yoga
+        summary: "filed with the change: salvage audit declares its inputs"

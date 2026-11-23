@@ -45,6 +45,8 @@
 --  19-21 FORGE-HELPER-SHELL (2049-74tx) the second backlog: its counter
 --                counts helper shell-outs, a port pays it, and an advisory due
 --                change still lands.
+--  RETIRED   (2219-crmv) deleting an uncounted top-level scripts/*.sh pays
+--  RENAMED   (2219-crmv) renaming one pays nothing: silent at landing
 --  17 PAID-BUT-TAKEN (1589-hm2r, measured by yoga) a port duplicating another
 --                open work ref: pre-snapshot prints paid; the fixed guard refuses
 --                refused:carried:paid-but-taken-by:work/<ref>:<item> on every push
@@ -523,6 +525,28 @@ G({ "remote", "remove", "origin" })
 -- second backlog counted by the same guard. Items are the external commands at
 -- command positions in images/default/lib-*.sh; a comment and an `echo grep`
 -- argument are not items.
+-- RETIRED / RENAMED (2219-crmv): deleting a top-level scripts/*.sh OUTSIDE
+-- the population (a wrapper or tombstone) pays; a rename does not.
+G({ "checkout", "-q", "base" }); G({ "checkout", "-q", "-B", "retirebase", "base" })
+write("scripts/tool-old.sh", "#!/usr/bin/env bash\necho retired >&2\nexit 0\n")
+G({ "add", "-A" }); G({ "commit", "-qm", "an uncounted script" })
+G({ "checkout", "-q", "-B", "work/1008-rtrd", "retirebase" })
+G({ "rm", "-q", "scripts/tool-old.sh" })
+write("scripts/check-x.sh", n_lines("x", 10) .. "echo r\n") -- its caller, in the area: the change is due
+G({ "add", "-A" }); G({ "commit", "-qm", "retire an uncounted script" })
+rc, o = judge(true, "retirebase")
+check("RETIRED: deleting an uncounted scripts/*.sh pays at landing with no waiver (2219-crmv)",
+    rc == 0 and has_line(o, "carried:shell-to-lua:paid:retired-uncounted:scripts/tool-old.sh"),
+    "rc=" .. rc .. " out=[" .. o .. "]")
+G({ "checkout", "-q", "-B", "work/1009-rnmd", "retirebase" })
+G({ "mv", "scripts/tool-old.sh", "scripts/tool-new.sh" })
+write("scripts/check-x.sh", n_lines("x", 10) .. "echo r\n")
+G({ "add", "-A" }); G({ "commit", "-qm", "rename an uncounted script" })
+rc, o = judge(true, "retirebase")
+check("RENAMED: a rename of an uncounted scripts/*.sh pays nothing and is refused at landing as silent",
+    rc == 1 and has_line(o, "violation:carried:shell-to-lua:silent") and not o:find(":paid:", 1, true),
+    "rc=" .. rc .. " out=[" .. o .. "]")
+
 G({ "checkout", "-q", "base" }); G({ "checkout", "-q", "-B", "helperbase", "base" })
 fs.mkdir(REL .. "/images"); fs.mkdir(REL .. "/images/default")
 write("methodology/convergence.yaml", fs.read(REL .. "/methodology/convergence.yaml") .. table.concat({

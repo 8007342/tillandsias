@@ -116,7 +116,7 @@ case "$out" in
     *) bad "incident shape returned: $out (rc=$rc)" ;;
 esac
 [ "$rc" -ne 0 ] || bad "incident shape must exit non-zero"
-grep -q "credential-store --file" "$D/.stderr" && ok "remedy names the repo-local seeding" \
+grep -q "gh auth git-credential" "$D/.stderr" && ! grep -q "credential-store --file" "$D/.stderr" && ok "remedy points git at gh (keyring), never a plaintext store (2222-xjgu)" \
     || bad "remedy missing from stderr"
 
 # ── 2. gh green + probe fails + NO interactive helper -> distinct verdict ───
@@ -175,29 +175,28 @@ case "$out" in
 esac
 [ "$rc" -eq 0 ] || bad "verified ok must exit 0"
 
-# ── 4. ORDER 1004-8p76: the store arm PROBES its own channel ───────────────
-# The arm used to answer on the store file's PRESENCE (first ok:, then 1092-uv3k's
-# unverified:). MEASURED on esmeraldinha 2026-09-04: a present store file over a
-# dead gho_ token read green while the dry-run push said "Invalid username or
-# token". It is still checked FIRST (gh is stubbed healthy-or-not irrelevantly).
+# ── 4. ORDER 2222-xjgu: a store file is REFUSED, whatever its probe says ──────
+# It used to be arm 1, probed (1004-8p76) and ranked green on a passing push.
+# A GitHub token in plaintext on durable disk violates credentials_at_rest
+# (methodology/philosophy.yaml), so the file itself is the defect: a refused,
+# a passing and an unrunnable probe all answer blocked:plaintext-credential-store,
+# the remedy never re-seeds a store, and the guard leaves the file in place.
 D="$(scratch d)"; D_ok
-printf 'x\n' > "$(scratch_git "$D" rev-parse --absolute-git-dir)/.gh-credentials"
-out="$(run_guard "$D" "false")"; rc=$?
-case "$out" in
-    blocked:gh-credentials-store-push-refused) ok "4a: a present store file whose push is refused is NOT green ($out)" ;;
-    ok:*|unverified:*) bad "4a: a dead credential behind a present store file read as $out (1004-8p76)" ;;
-    *) bad "4a: store arm with a refused probe returned: $out" ;;
-esac
-[ "$rc" -ne 0 ] || bad "4a: a refused store probe must exit non-zero"
-out="$(run_guard "$D" "true")"; rc=$?
-[ "$out" = "ok:gh-credentials-store-push-verified" ] && [ "$rc" -eq 0 ] \
-    && ok "4b: a store file whose push authenticates -> $out" \
-    || bad "4b: store + passing probe returned: $out rc=$rc"
-# No override and no origin: the probe cannot run, and says so.
-out="$(run_guard "$D" "")"; rc=$?
-[ "$out" = "unverified:gh-credentials-store" ] && [ "$rc" -eq 0 ] \
-    && ok "4c: a store file with no origin to probe is unverified:, not ok: ($out)" \
-    || bad "4c: store + unrunnable probe returned: $out rc=$rc"
+_st="$(scratch_git "$D" rev-parse --absolute-git-dir)/.gh-credentials"
+printf 'x\n' > "$_st"
+for probe in false true ""; do
+    out="$(run_guard "$D" "$probe")"; rc=$?
+    if [ "$out" = "blocked:plaintext-credential-store" ] && [ "$rc" -ne 0 ]; then
+        ok "4: a store file with probe [${probe:-none}] is refused -> $out"
+    else
+        bad "4: a store file with probe [${probe:-none}] returned: $out rc=$rc (want blocked:plaintext-credential-store, rc!=0)"
+    fi
+done
+grep -q 'tillandsias --github-login' "$D/.stderr" && ! grep -q 'credential-store --file\|credential.helper "store' "$D/.stderr" \
+    && ok "4: the remedy is the operator's keyring sign-in, never a plaintext store" \
+    || bad "4: the store refusal's remedy re-seeds a store or omits the sign-in: $(tr '\n' ' ' < "$D/.stderr" | cut -c1-300)"
+[ -s "$_st" ] && ok "4: the guard leaves the file in place (removal is the operator's)" \
+    || bad "4: the guard removed or emptied the store file"
 # GH_TOKEN / GITHUB_TOKEN presence alone is not a green.
 for v in GH_TOKEN GITHUB_TOKEN; do
     arm="gh-token-env"; [ "$v" = GITHUB_TOKEN ] && arm="github-token-env"

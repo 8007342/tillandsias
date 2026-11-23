@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli at the user's direction, 2026-11-22; owner assigned by macuahuitl-fedora.
+packets:
+  - packet_id: remote-unreachable-short-circuit
+    order: "2239-rmun"
+    status: claimed
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [skills, gate, preflight, github, fleet]
+    estimated_hours: 3
+    title: "A host that cannot reach the remote (gh auth down, push/ls-remote failing) stops work entirely: one shared probe, verdict blocked:remote-unreachable:<cause>, no retry and no backoff"
+    context: |
+      The user's words, verbatim (2026-11-22, on calmecacpilli):
+        "Report gh auth is down, and stop wrking. Make sure hosts with a broken gh auth status suspend work. How long
+        have you been "working" but not really doing anythng seful becaus your gh auth token was bad?"
+        "I've refreshes the credentials, report to macuahuitl-fedora, let them know the skills need a shortcircuit to
+        stop retrying with exponential backoff to fully stopping work for hosts unable to push code to remote."
+      Measured: calmecacpilli's gh token went bad around 13:45 PST. Every symptom read as network flakiness ("Failed to
+      connect to github.com:443 after 135413 ms", "graphql: i/o timeout"), never as auth, so the session kept merging
+      and porting locally for about 25 minutes. Nothing of it reached origin, and the coordinator kept routing work to
+      the host. `gh auth status` answered the question at once: "You are not logged into any GitHub hosts".
+      Fix:
+        1. One shared probe, scripts/lua/probe-remote-reachable.lua: `gh auth status` and
+           `git ls-remote origin HEAD`, each under a bounded timeout (no retry, no backoff). It prints
+           ok:remote-reachable, or blocked:remote-unreachable:<cause> with cause one of gh-auth, ls-remote-auth,
+           ls-remote-timeout, ls-remote-failed, no-gh. Each blocked verdict carries why/remedy lines: the remedy
+           names the human step (re-authenticate gh on this host) and never runs it.
+        2. The four loop skills (advance-work-from-plan, meta-orchestration, coordinate-multihost-work,
+           join-the-fleet) run the probe at start and on the FIRST GitHub failure. On blocked they report to the
+           coordinator and the user and SUSPEND: no retries, no further local work, until a human restores access.
+        3. The preflight door and the pre-push lane run the probe and refuse on blocked, so a dead remote is named
+           before minutes of gate time are spent.
+        Never run `gh auth login` or `gh auth refresh` from a session; the probe only reads.
+    exit_criteria:
+      - "With gh stubbed to report no login, the probe prints blocked:remote-unreachable:gh-auth with why/remedy lines, within its timeout, and never invokes gh auth login or refresh."
+      - "With git ls-remote stubbed to hang, the probe prints blocked:remote-unreachable:ls-remote-timeout within its bounded timeout (no retry)."
+      - "With both healthy it prints ok:remote-reachable."
+      - "Each of the four skills' SKILL.md tells the agent to run the probe at start and on the first GitHub failure, and to suspend on blocked."
+      - "./build.sh --preflight and the pre-push lane refuse, naming the cause, when the probe is blocked."
+    unscoreable: "unpinnable-until-the-guard-exists: the probe's fixture (stubbed gh and git) is the deliverable."
+    next_action: "Implement the probe and its fixture, then wire the skills and the door."
+    provenance: "user direction 2026-11-22 (quoted above), relayed to macuahuitl-fedora; macuahuitl-fedora assigned it to calmecacpilli."
+    events:
+      - type: filed
+        ts: "2026-11-22T22:23:17Z"
+        host: calmecacpilli
+        summary: "filed at the user's direction and claimed"
