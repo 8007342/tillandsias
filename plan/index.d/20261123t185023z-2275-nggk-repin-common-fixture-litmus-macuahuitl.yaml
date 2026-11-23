@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl, 2026-11-23. Release-candidate cut blocker.
+packets:
+- packet_id: repin-litmus-common-fixture-arm-count-for-rc-cut
+  order: 2275-nggk
+  status: implemented
+  kind: debt
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [release, litmus, fixtures]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 0.1
+  title: 'Repin litmus:common-fixture to the 12 arms trunk prints, so the release tier is green'
+  context: >-
+    The daily RC gate (./build.sh --ci-full at a5dfa2a32) went red on one pre-build litmus, litmus:common-fixture,
+    expected "ok:common-fixture:8 arms" while trunk prints "ok:common-fixture:12 arms". Only the release tier runs
+    the pre-build litmus, so --check lands never saw the stale pin. The fix is yoga's 9ae6395aa (2253-iher), cherry-picked alone.
+  exit_criteria:
+  - 'litmus:common-fixture passes in the pre-build litmus at the new head.'
+  verifiable_closure: 'litmus:common-fixture passes in the RC cut pre-build litmus.'
+  next_action: >-
+    Implemented. When #1402 lands (adds arm 13) the pin must move to 13 in the same PR.
+  provenance: 'macuahuitl-fedora 2026-11-23, RC cut.'
+  events:
+  - {type: filed, ts: '2026-11-23T18:50:23Z', host: macuahuitl, summary: 'filed for the RC cut, implemented'}
