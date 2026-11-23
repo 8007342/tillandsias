@@ -17,15 +17,15 @@ preconditions:
   - the plan binary (resolve_plan_binary, with score-checks); fixture inputs under target/plan-scratch; no network, no podman
 
 critical_path:
-  - step: "one failure; append; evidence-bundle hashes; all passing; no plan binary; heaviest residual among several"
+  - step: "one failure; append; evidence-bundle hashes; all passing; no plan binary; heaviest residual among several; out-of-order failures; residual reasons listed"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-local-ci-convergence-artifacts.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "ok:local-ci-convergence-artifacts-fixture:6 arms"
+    expected_behavior: "ok:local-ci-convergence-artifacts-fixture:8 arms"
 
 observability:
   traces:
     - "@trace spec:ci-release"
-  expected_log: "six arms"
+  expected_log: "eight arms"
   log_fields:
     spec: "ci-release"
     test: "local-ci-convergence-artifacts"
