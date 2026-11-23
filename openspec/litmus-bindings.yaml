@@ -173,6 +173,7 @@ specs:
   - litmus:local-ci-strict-specs
   - litmus:local-ci-check-catalog
   - litmus:local-ci-convergence-artifacts
+  - litmus:script-run-roots-at-a-repository
   - litmus:land-queue-host-door-names-its-cause
   - litmus:plan-binary-rebuild-while-running
   - litmus:gate-step-declared-inputs-are-mutation-proven
@@ -368,6 +369,7 @@ specs:
 - spec_id: dev-build
   status: active
   litmus_tests:
+  - litmus:build-dev-cache-ca-trap-cleared
   - litmus:environment-isolation
   - litmus:binary-e2e-smoke
   - litmus:headless-init-status-check-source-built
