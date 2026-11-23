@@ -1,4 +1,5 @@
 -- @trace order:1255-s4im
+-- inputs: scripts/lua/check-hooks-armed.lua lib/lua/common/ crates/tillandsias-plan/ scripts/ensure-hooks.sh scripts/install-hooks.sh scripts/merge-floor-driver.sh
 -- @env TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
 --
 -- test-hooks-armed.lua — scripts/lua/check-hooks-armed.lua on scratch repos:

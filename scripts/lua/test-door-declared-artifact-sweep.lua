@@ -1,4 +1,5 @@
 -- @trace order:1630-dwab
+-- inputs: scripts/lua/check-bare-mktemp.lua lib/lua/common/ crates/tillandsias-plan/ build.sh scripts/portability/checkout-writers.txt
 -- @env PATH TILLANDSIAS_SCRIPT_RUNNER_BIN TILLANDSIAS_PLAN_BIN
 --
 -- test-door-declared-artifact-sweep.lua — when the preflight door KILLs a

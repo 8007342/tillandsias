@@ -1,4 +1,5 @@
 -- @trace order:1619-7i9r
+-- inputs: scripts/lua/check-bare-mktemp.lua lib/lua/common/ crates/tillandsias-plan/ scripts/test-capture-helper.sh
 -- @env PATH TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
 --
 -- test-bare-mktemp.lua — both exit criteria of 1619-7i9r.
