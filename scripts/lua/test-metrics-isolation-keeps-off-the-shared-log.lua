@@ -20,10 +20,10 @@
 --
 -- Verdict: ok:metrics-isolation-off-shared-log:<n> | violation:metrics-isolation-off-shared-log:<failed>/<n>
 
-local root = text.trim(proc.run{ argv = { "pwd", "-P" } }.stdout or "")
-local probe = proc.run{ argv = { "bash", "-s" }, cwd = root, timeout_ms = 60000,
-    stdin = '. scripts/plan-binary-probe.sh\np="$(resolve_plan_binary 2>/dev/null)" || p=""\ncase "$p" in ./*) p="$PWD/${p#./}" ;; esac\nprintf "%s" "$p"\n' }
-local PB = text.trim(probe.stdout or "")
+local fixture = require "common.fixture"
+local root = fixture.repo_root()
+local SH = fixture.posix_shell()
+local PB = fixture.plan_binary()
 if PB == "" then verdict.emit("could-not-run:metrics-isolation-off-shared-log:no-plan-binary", 3) end
 
 local RUN = "probe2244-" .. tostring(os.time()) .. "-" .. tostring(math.random(100000, 999999))
@@ -49,7 +49,7 @@ probe
 last="$(tail -n 1 "$fb.out")"; rm -f "$fb.out"
 printf 'rc=%s shared=%s private=%s last=%s\n' "$rc" "$hs" "$hp" "$last"
 ]]
-local r = proc.run{ argv = { "bash", "-s" }, stdin = script, cwd = root, timeout_ms = 900000,
+local r = proc.run{ argv = { SH, "-s" }, stdin = script, cwd = root, timeout_ms = 900000,
     env = { RUN = RUN, SHARED = SHARED, TILLANDSIAS_PLAN_BIN = PB, TILLANDSIAS_SCRIPT_RUNNER_BIN = PB } }
 local line = text.trim(r.stdout or "")
 local rc, hs, hp, last = line:match("^rc=(%d+) shared=(%d) private=(%d) last=(.*)$")
