@@ -41672,6 +41672,16 @@ mod keep_id_warm_tests {
     #[test]
     fn a_built_image_is_keep_id_warm_before_its_first_start() {
         let _lock = crate::runtime_assets::podman_seam_lock();
+        // ORDER 2226-kiwe: the ENV lock too, in the crate's seam->env order.
+        // Every podman call here inherits this process's environment, and on a
+        // builder toolbox podman is a flatpak-spawn shim that forwards each
+        // TILLANDSIAS_* variable as --env=. A neighbouring test that holds the
+        // env lock sets TILLANDSIAS_AGENT_RESULT_FORMAT to the non-UTF-8 bytes
+        // b"json\xfe\xff"; flatpak-spawn then refuses ("Invalid byte sequence in
+        // conversion input") and the warm reads Failed (macuahuitl land gate
+        // for #1295, 2026-11-22). Holding the env lock keeps the environment
+        // still for the whole measurement.
+        let _env = crate::runtime_assets::env_lock();
         let shifting = store_supports_shifting();
         if !keep_id_warm_needed(shifting.as_deref()) {
             eprintln!("skip: this store shifts IDs or cannot say ({shifting:?}); no warm to test");
