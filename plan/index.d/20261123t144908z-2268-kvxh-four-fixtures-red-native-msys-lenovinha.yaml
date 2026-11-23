@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: four-gate-fixtures-red-under-native-msys
+    order: 2268-kvxh
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows]
+    estimated_hours: 4
+    title: |
+      Four gate fixtures are red under native msys on trunk (never run there before: the Windows gate re-execs into the WSL builder): test-gate-changed-intake (arms 7-9), test-litmus-kill-adjudicator, test-host-tools (7/20), test-build-image-installed-version-alias.
+    context: |
+      Surfaced by 2266-4w3c's second-regime round (yolanda, native msys, 2026-11-23) and confirmed NOT caused by that move: the same four are red at origin/linux-next 38c91e61b, run directly with SKIP_WSL2=1. Root causes not investigated. Measured last lines:
+      - test-gate-changed-intake.lua: violation 3-failed, arms 7, 8, 9 (gate-changed-crate-graph missing=46:extra=46/45/47; equal counts suggest a path or CRLF spelling mismatch, unconfirmed). 217 s uncapped.
+      - test-litmus-kill-adjudicator.sh: FAIL advancing counter -> CONTENDED.
+      - test-host-tools.sh: 7/20 red: absent tool windows/cargo; 1004-x9ua x2; 1004-cp6p x3; --platform macos accounts for every declared tool. Several arms rc=127 with empty output.
+      - test-build-image-installed-version-alias.sh: FAIL skew: build-image.sh exited nonzero (fake podman; no real build in its log).
+      All four are green on Linux and on darwin (macbookair, same day). The gate steps (746, 754, 756, 758) carry darwin records; this row is about making them hold on native msys too, or naming a skip where a fixture cannot apply there.
+    exit_criteria:
+      - "each of the four is green under native msys, or skips with a named reason where its subject cannot exist on Windows"
+      - "a native-msys run records each verdict"
+    unscoreable: "unpinnable-until-the-guard-exists: the msys verdicts are the deliverable."
+    next_action: "Start with gate-changed-intake arms 7-9: diff the derived crate graph against cargo's on msys for a path-spelling mismatch."
+    provenance: measured by yolanda (native msys, 2026-11-23); filed by lenovinha.
+    related: [2266-4w3c, 2246-fkea]
+    events:
+      - {type: filed, ts: '2026-11-23T14:49:08Z', host: lenovinha, summary: four gate fixtures red under native msys filed}
