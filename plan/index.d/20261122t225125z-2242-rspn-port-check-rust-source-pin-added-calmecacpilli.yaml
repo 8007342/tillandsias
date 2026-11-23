@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: next smallest free counted check-*.sh, assigned by macuahuitl-fedora 2026-11-22.
+packets:
+  - packet_id: port-check-rust-source-pin-added-to-lua
+    order: "2242-rspn"
+    status: implemented
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, rust, gate]
+    estimated_hours: 2
+    title: "Port check-rust-source-pin-added.sh to Lua, whole file, with mutant parity"
+    context: |
+      A diff-scoped text heuristic (1473-scdq): a newly added `.contains(` on SOURCE TEXT read by include_str! (two
+      let-hops) is refused unless a reasoned `// source-pin-ok:` sits within 3 lines or the test names a negative
+      control. The Lua keeps every rule, including sed's greedy choice of the LAST `.contains(` receiver and of the
+      last `let` on an include_str! line, and the --check-file mode. Per-line Rust regex (text.is_match) stands in for
+      grep -E, so no pattern crosses a newline. Screened: not on a no-binary path (build.sh runs it through
+      _run_lua_decider, relay-preflight through _lua_runner; no pre-push hook calls it).
+    exit_criteria:
+      - "test-rust-source-pin-added.sh is 7/7 against the .sh (baseline) and 7/7 against the Lua: direct pin refused naming file:line, window pin refused, absence admitted, negative control admitted, reasoned marker admits and empty does not, built value not a pin, base pin not re-litigated."
+      - "The .sh is deleted; build.sh, relay-preflight and test-relay-preflight run the Lua; test-relay-preflight passes."
+    unscoreable: "pinned-elsewhere: gate step 289 (test-rust-source-pin-added.sh, 7 arms, mutant parity above)."
+    next_action: "Land."
+    provenance: "macuahuitl-fedora 2026-11-22: next 3 smallest free counted check-*.sh, whole-file ports with mutant parity."
+    events:
+      - type: filed
+        ts: "2026-11-22T22:51:25Z"
+        host: calmecacpilli
+        summary: "filed implemented: fixture 7/7 on both the .sh and the Lua"
