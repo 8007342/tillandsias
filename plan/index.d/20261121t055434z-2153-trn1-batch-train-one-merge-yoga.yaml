@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-21: build-speed queue item 3 (landing pipeline P7, rulings 2026-11-20/21).
+packets:
+  - packet_id: land-queue-batch-train-gates-the-union-once-and-lands-one-merge-commit
+    order: "2153-trn1"
+    status: in_progress
+    kind: perf
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, land-queue, landing-pipeline]
+    estimated_hours: 4
+    owned_files:
+      - scripts/land-queue.sh
+      - scripts/test-land-queue.sh
+    title: "land-queue batch train: gate the union once, land ONE merge commit per batch"
+    context: |
+      Up to TILLANDSIAS_LAND_QUEUE_BATCH_K ready full-lane candidates merge onto the trunk in queue order (a
+      conflicting member is left out). The union passes freeze, carried obligations, native lint, host door,
+      plan refresh and preflight once, then ONE gate. Green lands one commit (first parent the trunk, other
+      parents the member heads, tree the union), so every first-parent commit on the trunk is a gated tree.
+      Red or any door refusing abandons the train with no eviction; members go one at a time. One line per
+      train to trains.log for the flake rate. Default K=1 (off) until the coordinator sets 4 full / 6 light.
+    exit_criteria:
+      - "test-land-queue ARM 41: a train of 3 gates once and lands one first-parent commit with 4 parents carrying all three trees; ARM 41b: a red train evicts nobody and members land singly; ARM 41c: K unset runs no train; a squash (no member parents) reds ARM 41."
+      - "With K set on the coordinator host, run logs show one gate per train and trains.log records each train's result."
+    unscoreable: "the coordinator host's run logs are the measure"
+    provenance: "coordinator build-speed queue item 3, 2026-11-21; operator rulings 2026-11-20 and 2026-11-21."
+    events:
+      - type: filed
+        ts: "2026-11-21T05:54:34Z"
+        host: yoga
+        summary: "filed and claimed"

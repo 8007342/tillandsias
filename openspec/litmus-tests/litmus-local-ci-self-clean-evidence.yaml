@@ -57,7 +57,7 @@ critical_path:
     # asserts byte identity across C and a comma-decimal locale, for both
     # cases, after proving its own premise; a host with no such locale prints a
     # named skip in the verdict's skipped= count.
-    command: "bash scripts/test-convergence-dashboard-locale.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-convergence-dashboard-locale.lua 2>&1"
     success_pattern: "^ok:convergence-dashboard-locale:[0-9]+ arms \\(skipped=[0-9]+\\)$"
     timeout_ms: 60000
 

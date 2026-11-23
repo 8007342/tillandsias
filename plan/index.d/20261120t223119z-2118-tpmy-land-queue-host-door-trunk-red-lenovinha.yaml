@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha. Source: the landing-pipeline redesign (operator 2026-11-20), P11, relayed by macuahuitl-fedora; tokens agreed with yoga's P1 (2143-z5uj).
+packets:
+  - packet_id: land-queue-host-door-and-trunk-red-hold-evict-nobody-for-host-or-trunk-state
+    order: 2118-tpmy
+    status: in_progress
+    kind: infrastructure
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [landing, gate, queue]
+    estimated_hours: 6
+    owned_files:
+      - scripts/lua/land-queue-host-door.lua
+      - scripts/lua/test-land-queue-host-door.lua
+      - scripts/land-queue.sh
+      - scripts/test-land-queue.sh
+    title: |
+      The landing queue asks a host door before every candidate (could-not-run:host:<cause>, nobody evicted, the run goes on) and holds on a trunk red (hold:trunk-red:<test>) instead of evicting.
+    context: |
+      Operator P11, 2026-11-20. Host-state reds were judged as candidate reds and evicted innocent PRs:
+        - a stale plan binary;
+        - a missing staged sidecar in a fresh tree;
+        - old worktrees filling the disk;
+        - /tmp full (macuahuitl, 22 of 32 GB);
+        - swap.
+      Builds on yoga's P1 (#1230, 2143-z5uj), which already covers could-not-run:host:plan-binary-stale (next candidate) and the untouched-test re-run (flaky:<test> or evicted:<test>).
+      This adds, in scripts/lua/land-queue-host-door.lua and scripts/land-queue.sh:
+        - the door's other causes: sidecar-missing, stale-worktrees, disk-low, tmp-low, swap-low. A missing sidecar is staged first.
+        - before an evicted:<test> evicts, ONE gate of the bare trunk, remembered per base. The same failing test there is hold:trunk-red:<test>: nobody is evicted and the run holds (exit 4).
+    exit_criteria:
+      - 'a host-door refusal (stale plan binary, disk, tmp, swap, sidecar, prunable worktrees) is could-not-run:host:<cause> with zero evictions, and the run continues (test-land-queue ARM 34; yoga ARM for plan-binary-stale)'
+      - 'red twice on the candidate AND on trunk is hold:trunk-red:<test>, no eviction, the queue holds; the trunk verdict is reused at the same base (test-land-queue ARMs 35 and 35b); trunk green still evicts (ARM 32b)'
+      - 'each door cause is forced through its seams (litmus:land-queue-host-door-names-its-cause)'
+    verifiable_closure: |
+      litmus:land-queue-host-door-names-its-cause plus scripts/test-land-queue.sh ARMs 34, 35, 35b and 32b, run through the gate's land-queue fixture step.
+    next_action: Land after #1230. Then cleared:stale-head:host only if a host verdict ever writes an eviction marker (today none does, so the stale-head skip never sees one).
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20; operator landing-pipeline redesign P11, relayed by macuahuitl-fedora.
+    events:
+      - type: filed
+        ts: "2026-11-20T22:31:19Z"
+        host: lenovinha
+        summary: P11 host door and trunk-red hold implemented on work/2118-tpmy, stacked on #1230.

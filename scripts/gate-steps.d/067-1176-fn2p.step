@@ -8,9 +8,14 @@
 # Hermetic: extracts the consumer block from build.sh and drives it under a
 # separate bash with a stub probe; a content-built mutant dies on rc 3.
 #
-# STEP_SCRIPT is a LITERAL path (1063-nraf).
+# STEP_LUA is a LITERAL path (1063-nraf). 2183-mfbn ported the fixture to
+# Lua; its ok lines are byte-identical, so the regime pin below still quotes it.
 STEP_DESC="Checking build.sh's gate-memory-floor consumer survives the probe's warning exit under errexit (1176-fn2p)"
-STEP_SCRIPT="scripts/test-gate-memory-floor-consumer.sh"
+STEP_LUA="scripts/lua/test-gate-memory-floor-consumer.lua"
 STEP_ERROR="the gate-memory-floor consumer regressed — a floor-tier warning would kill the gate again under errexit (1176-fn2p)"
 STEP_OK="gate-memory-floor consumer holds"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   the pre-fix capture form dies on rc 3 (rc=3), so the arm has teeth"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="build.sh scripts/check-gate-memory-floor.sh scripts/lua/test-gate-memory-floor-consumer.lua"

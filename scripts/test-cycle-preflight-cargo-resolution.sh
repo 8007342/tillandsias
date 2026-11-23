@@ -235,13 +235,15 @@ esac
 
 # ── 7. CHEATSHEET-TIERS resolves cargo, and SKIPS rather than printing a bare
 #      command-not-found when it is genuinely absent.
-if grep -q 'cargo_resolve' "$ROOT/scripts/check-cheatsheet-tiers.sh"; then
-    ok "check-cheatsheet-tiers resolves cargo through the shared resolver"
+# 2241-chtr: ported to Lua, which resolves cargo the same way in place
+# (PATH, then $CARGO_HOME/bin, then $HOME/.cargo/bin).
+if grep -q '"/.cargo/bin"' "$ROOT/scripts/lua/check-cheatsheet-tiers.lua"; then
+    ok "check-cheatsheet-tiers resolves cargo past PATH, as the shared resolver does"
 else
     bad "check-cheatsheet-tiers still assumes cargo is on PATH"
 fi
-got="$(env -i PATH="$W/nothing:$NOCARGO" HOME="$W/empty-home" \
-        bash "$ROOT/scripts/check-cheatsheet-tiers.sh" 2>&1 | head -1)"
+got="$(cd "$ROOT" && env -i PATH="$W/nothing:$NOCARGO" HOME="$W/empty-home" \
+        "$GUARD_PLAN" script run scripts/lua/check-cheatsheet-tiers.lua 2>&1 | head -1)"
 case "$got" in
     skip:cheatsheet-tiers:cargo-absent*) ok "absent cargo reads as a SKIP, not an ERROR ($got)" ;;
     *"command not found"*) bad "still prints a bare command-not-found: $got" ;;
@@ -263,7 +265,7 @@ EOF
 
 # The three sites the packet names must all be listed — a registry that quietly
 # dropped one would pass the existence arm above while losing the point.
-for want in scripts/cycle-preflight.sh scripts/check-cheatsheet-tiers.sh scripts/host-capability-probe.sh; do
+for want in scripts/cycle-preflight.sh scripts/lua/check-cheatsheet-tiers.lua scripts/host-capability-probe.sh; do
     cargo_sites | grep -qx "$want" \
         && ok "registry lists $want" \
         || bad "registry is missing $want"

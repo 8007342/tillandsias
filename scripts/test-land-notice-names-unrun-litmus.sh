@@ -59,7 +59,7 @@ echo "arm 2 — it names the arm that actually went RED on the motivating commit
 # whole row is decoration.
 if git cat-file -e 4fc7be930^{commit} 2>/dev/null; then
     _out="$(git diff --name-only 4fc7be930^ 4fc7be930 | xargs -r bash "$MAP" 2>/dev/null)"
-    if printf '%s\n' "$_out" | grep -q 'guest-container-metrics-wire-shape'; then
+    if grep -q 'guest-container-metrics-wire-shape' <<<"$_out"; then
         ok "names litmus:guest-container-metrics-wire-shape from that commit's paths"
     else
         bad "the notice would NOT have named the red arm — it would not have helped"

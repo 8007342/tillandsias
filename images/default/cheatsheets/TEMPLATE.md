@@ -1,7 +1,7 @@
 ---
 # Copy this block VERBATIM and fill it in. Every field below is read by a gate
 # or by the expert system; a cheatsheet without frontmatter is invisible to
-# scripts/check-cheatsheet-tiers.sh and to every provenance check, which means
+# scripts/lua/check-cheatsheet-tiers.lua and to every provenance check, which means
 # its claims are uncitable — the experts treat cheatsheets as ground truth
 # (methodology.yaml -> cheatsheets_are_ground_truth_and_enforced_by_local_experts),
 # so an unclassifiable sheet is worse than a missing one.

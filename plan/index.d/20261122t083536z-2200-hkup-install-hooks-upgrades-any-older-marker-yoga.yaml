@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-22: the v9 hook bump (2194-cspr) stranded every v8 host.
+packets:
+  - packet_id: install-hooks-upgrades-any-older-pre-push-marker-of-ours
+    order: "2200-hkup"
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [hooks, fleet]
+    estimated_hours: 1
+    owned_files:
+      - scripts/install-hooks.sh
+      - scripts/test-ensure-hooks.sh
+    title: "install-hooks upgrades any older pre-push marker of ours, so a version bump does not strand the fleet"
+    context: |
+      install-hooks.sh recognised older markers with a hand-kept `v[234567]`. The v9 bump in #1305 (2194-cspr)
+      therefore called every host's v8 hook "unrecognized" and left it in place. Measured on yoga after #1305
+      landed: ensure-hooks refused:hooks:install-failed, and check-hooks-armed reported
+      degraded:hooks:stale:v8->v9. Every host keeps the old guards until someone moves the hook aside by hand.
+      The match is now `tillandsias-pre-push-v[0-9]+`, line-anchored; the current marker is caught first.
+    exit_criteria:
+      - "test-ensure-hooks arm 3b: the marker one below the current (derived from WANT) is upgraded; trunk's installer fails it."
+    unscoreable: "check-hooks-armed across the fleet is the measure"
+    provenance: "found by yoga reinstalling hooks after #1305 landed."
+    events:
+      - type: filed
+        ts: "2026-11-22T08:35:36Z"
+        host: yoga
+        summary: "filed and claimed"

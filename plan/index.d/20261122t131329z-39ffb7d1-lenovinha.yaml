@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: plan-lane-fails-closed-fixture-negative-control-reads-the-hosts-installed-plan-binary
+    event:
+      type: list-replace
+      ts: "2026-11-22T13:13:29Z"
+      agent_id: linux-lenovinha-claude-20261122t131329z
+      host: lenovinha
+      field: exit_criteria
+      items:
+        - "arm 2 hands the hook a plan binary the fixture controls (a current stub planted in the scratch checkout, or PATH stripped of every installed copy), so its verdict no longer depends on ~/.local/bin"
+        - "the fixture is 6/6 with a STALE ~/.local/bin copy on PATH, and its arms still red against the pre-fix hook"
+        - "THE LEAK SOURCE: scripts/check-plan-binary-current.sh installs into ~/.local/bin only a build of trunk (HEAD contained in origin/linux-next with no local commits, or an equal validator surface); off trunk it does not install and prints a named warning saying why, so a branch build never becomes the host's PATH copy"
+        - "an arm for the second half: run check-plan-binary-current.sh on a branch whose surface differs from trunk and assert ~/.local/bin is untouched (in a scratch HOME) and the warning names the branch"
+      summary: |-
+        coordinator 2026-11-22: both halves in one row: the fixture's leak and its source in check-plan-binary-current.sh

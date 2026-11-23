@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-test-toolbox-refusal-wsl-exception-to-lua
+    order: 2262-7t6f
+    status: ready
+    kind: debt
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      Port scripts/test-toolbox-refusal-wsl-exception.sh (147 lines) whole to Lua, with mutant parity: the carried obligation 2118-9rn9 (#1199) deferred so that its unblocking fix could land first.
+    context: |
+      #1199 fixes the fixture's red on Silverblue hosts, where the no-toolbox PATH still found /usr/bin/toolbox, and it was needed first: calmecacpilli's #1422 refuses anything touching that fixture until #1199 lands. Porting the 147-line fixture in the same change would have turned an unblocking fix into a port, so #1199 carries a Carried-Waiver naming this row (coordinator ruling 2026-11-23: keep the waiver text true, do not use too-big for a file under the 150-line ceiling). This row pays that obligation.
+    exit_criteria:
+      - "scripts/lua/test-toolbox-refusal-wsl-exception.lua replaces the .sh with the same arms, and mutant parity is recorded"
+      - "every caller and gate step runs the Lua; the .sh is deleted and its floor lines removed"
+    unscoreable: "whole-file port; the Lua fixture and its mutant record are the deliverable."
+    next_action: "After #1199 lands: port on common.fixture's repo_root()/posix_shell()."
+    provenance: coordinator direction (macuahuitl-fedora, 2026-11-23); filed by lenovinha.
+    related: [2118-9rn9]
+    events:
+      - {type: filed, ts: '2026-11-23T10:57:35Z', host: lenovinha, summary: port test-toolbox-refusal-wsl-exception to Lua filed}

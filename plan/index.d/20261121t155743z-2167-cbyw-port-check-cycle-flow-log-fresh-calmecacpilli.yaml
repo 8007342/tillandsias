@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: shell-to-lua backlog port, assigned by macuahuitl-fedora 2026-11-21.
+packets:
+  - packet_id: port-check-cycle-flow-log-fresh-to-lua
+    order: "2167-cbyw"
+    status: implemented
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, litmus, metrics]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/check-cycle-flow-log-fresh.lua
+      - scripts/check-cycle-flow-log-fresh.sh
+      - openspec/litmus-tests/litmus-cycle-flow-telemetry-shape.yaml
+    title: "Port scripts/check-cycle-flow-log-fresh.sh to scripts/lua (shell-to-lua), and make its three litmus arms able to fail"
+    context: |
+      Same rule, grammar and verdicts as the .sh: commits settled past the grace window and newer than the newest record's
+      ts are cycles that ran without emitting; no settled commits is a named skip. git now runs in the caller's PWD. The
+      .sh cd'd to its own checkout, so from an empty scratch repo it answered
+      violation:cycle-flow-log-stale:absent:commits_since=21346 (this checkout's history) where the litmus arm wants a skip.
+      The arm still showed green because the three staleness arms had no expected_behavior: they echoed "fail:" and exited 0.
+      They also set only the author date, while git log --since/--until filter on committer date, so their fixture commits
+      were never settled. All three now set GIT_COMMITTER_DATE, run the Lua and name their expected line. The default
+      log path restates metrics_default_log's checkout rule (<root>/.cache/metrics/), because the runner refuses a bash child.
+    exit_criteria:
+      - "scripts/check-cycle-flow-log-fresh.sh does not exist; scripts/lua/check-cycle-flow-log-fresh.lua does (on trunk the reverse)."
+      - "on this checkout the Lua prints the .sh's line (violation:cycle-flow-log-stale:absent:commits_since=21346 on 2026-11-21); litmus:cycle-flow-telemetry-shape passes 10/10, and FAILS at step 8 when the Lua is sabotaged to always answer ok."
+    unscoreable: "a port: scored by the litmus named above."
+    next_action: "Land."
+    provenance: "macuahuitl-fedora 2026-11-21 shell-to-lua queue (light ports)."
+    events:
+      - type: filed
+        ts: "2026-11-21T15:57:43Z"
+        host: calmecacpilli
+        summary: "filed and ported on work/2167-cbyw"

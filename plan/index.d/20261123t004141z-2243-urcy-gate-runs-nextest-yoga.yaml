@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-23 at the coordinator's direction (macuahuitl-fedora): land-speed, nextest.
+packets:
+  - packet_id: gate-runs-the-workspace-and-feature-gated-tests-under-nextest
+    order: "2243-urcy"
+    status: ready
+    kind: speed
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, speed, rust, toolbox]
+    estimated_hours: 3
+    owned_files:
+      - build.sh
+      - .config/nextest.toml
+      - scripts/lua/nextest-to-libtest.lua
+      - scripts/lua/test-nextest-transcript-ratchet.lua
+      - scripts/with-tillandsias-builder.sh
+    title: "Gate runs the workspace and tray,listen-vsock test sets under cargo-nextest (~91 s -> ~28 s, ~97 s -> ~45 s on yoga)"
+    context: |
+      cargo test runs the workspace's 120 test binaries one after another, so the set costs roughly the sum of each
+      binary's slowest test. Measured on yoga (warm target, 12 cores), 10-run soak, 0 failures in 20 runs:
+      workspace 91 s -> 27.0-28.5 s (3565 passed), tray,listen-vsock 97 s (--test-threads=1) -> 44.9-45.3 s (1585
+      passed; #1380 removes its 30 s floor). Coordinator conditions: a named regime line, retries = 0 with a
+      slow-timeout, doctests kept, the failure-set ratchet kept through a converted transcript, and the builder
+      toolbox installing nextest so every host gets it.
+    exit_criteria:
+      - "build.sh prints test-runner:nextest:<ver> or test-runner:cargo-test:nextest-absent (or :forced-by-TILLANDSIAS_GATE_NEXTEST=0) and keeps the cargo test path when nextest is absent."
+      - "The workspace set's nextest log is converted to the cargo test transcript shape with identical keys, doctests still run via cargo test --doc, and test-nextest-transcript-ratchet.lua proves a new failure is still refused (red-first, with a FAIL-as-ok mutant)."
+      - ".config/nextest.toml sets retries = 0 and a slow-timeout; with-tillandsias-builder.sh installs a sha256-pinned cargo-nextest release asset when absent."
+    unscoreable: "a wall-time claim; measured by the next queue run's gate phase times on macuahuitl"
+    provenance: "coordinator 2026-11-23 nextest approval after yoga's 10-run soak"
+    events:
+      - type: filed
+        ts: "2026-11-23T00:41:41Z"
+        host: yoga
+        summary: "filed with the change: the gate runs its two big test sets under nextest"

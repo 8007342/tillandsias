@@ -12,4 +12,8 @@ STEP_DESC="Checking the approved-UX-string gate reads today's approvals (1642-cc
 STEP_LUA="scripts/lua/test-approved-ux-strings.lua"
 STEP_ERROR="the approved-UX-string gate misses an operator_note it should read, or approves a prose mention or a reword (1642-cc54) — see the FAIL lines above"
 STEP_OK="Approved-UX-string gate fixture passed"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-12 darwin ok:approved-ux-strings-fixture:5 arms"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin ok:approved-ux-strings-fixture:7 arms"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="crates/tillandsias-headless/src/** crates/tillandsias-headless/src/bringup_progress.rs crates/tillandsias-macos-tray/src/** crates/tillandsias-macos-tray/src/reset_state.rs plan/archive/** plan/index.d/** plan/index.yaml scripts/lua/check-approved-ux-strings.lua scripts/lua/test-approved-ux-strings.lua"

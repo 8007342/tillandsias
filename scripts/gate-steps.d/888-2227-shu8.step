@@ -1,0 +1,14 @@
+# Gate step 2227-shu8 — the builder toolbox's host-escape shim skips, by name,
+# a non-UTF-8 env value instead of handing it to flatpak-spawn (whose glib
+# refusal names neither the variable nor the shim). The shim body is cut from
+# scripts/with-tillandsias-builder.sh as it ships and run against a stub
+# flatpak-spawn; no toolbox or host podman is touched.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the host-escape shim skips a non-UTF-8 env value by name (2227-shu8)"
+STEP_LUA="scripts/lua/test-host-escape-shim-skips-non-utf8-env.lua"
+STEP_ERROR="the host-escape shim forwarded a non-UTF-8 env value to flatpak-spawn, or dropped a valid one (2227-shu8) — see the FAIL lines above"
+STEP_OK="Host-escape shim skips a non-UTF-8 env value by name"
+STEP_READS="scripts/lua/test-host-escape-shim-skips-non-utf8-env.lua scripts/with-tillandsias-builder.sh"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:host-escape-shim-skips-non-utf8-env:3"
+# msys record: yolanda 2026-11-22 msys ok:host-escape-shim-skips-non-utf8-env:3 arms at 692f7b9f9 (after the Lua cut; c85b7a4eb was red with shim-not-found: bare-name spawns)

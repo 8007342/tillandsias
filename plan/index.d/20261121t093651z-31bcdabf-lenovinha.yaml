@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-gate-step-killed-by-its-own-timeout-with-no-assertion-output-is-rerun-once-and-logged-flaky-while-an-assertion-red-is-never-retried
+    field: status
+    value: completed
+    ts: "2026-11-21T09:36:51Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-gate-step-killed-by-its-own-timeout-with-no-assertion-output-is-rerun-once-and-logged-flaky-while-an-assertion-red-is-never-retried
+    event:
+      type: completed
+      ts: "2026-11-21T09:36:51Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 7faf3d477
+  - packet_id: a-gate-step-killed-by-its-own-timeout-with-no-assertion-output-is-rerun-once-and-logged-flaky-while-an-assertion-red-is-never-retried
+    event:
+      type: note
+      ts: "2026-11-21T09:36:51Z"
+      host: lenovinha
+      summary: |-
+        LANDED via land(1251) 7faf3d477 on origin/linux-next: a litmus step killed by its own timeout with no output is re-run once as flaky:<test>#<step>; assertion reds never re-run; litmus litmus-timeout-retry-shape

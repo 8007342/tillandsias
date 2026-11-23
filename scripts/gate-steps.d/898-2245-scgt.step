@@ -1,0 +1,14 @@
+# Gate step 2245-scgt — a fixture line this change ADDS that runs
+# `git -C "$VAR"` on a scratch repo is refused unless it goes through
+# scratch_git (scripts/test-support/scratch-git.sh): an empty or stale scratch
+# path makes git -C act on the cwd, the REAL checkout (2244-crgd). The fixture
+# drives the decider over scratch repos only.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking an added fixture git -C goes through scratch_git (2245-scgt)"
+STEP_LUA="scripts/lua/test-fixture-scratch-git-added.lua"
+STEP_ERROR="the scratch-git decider admitted a bare git -C on a scratch repo, or refused a legitimate one (2245-scgt) — see the FAIL lines above"
+STEP_OK="Added fixture git -C calls go through scratch_git"
+STEP_READS="scripts/lua/test-fixture-scratch-git-added.lua scripts/lua/check-fixture-scratch-git-added.lua scripts/test-support/scratch-git.sh"
+# msys record: yolanda 2026-11-23 msys ok:fixture-scratch-git-added-fixture:9 at 3515c0f59 (native .exe; C:/, C:\ and unset runner; fleet-run rc 0 — red before 2265-4pja, spawn os error 123)
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:fixture-scratch-git-added-fixture:9"

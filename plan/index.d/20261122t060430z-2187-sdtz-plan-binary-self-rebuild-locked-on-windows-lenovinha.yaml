@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: plan-binary-stale-probe-rebuilds-the-running-exe-on-windows
+    order: 2187-sdtz
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [plan-ledger, portability]
+    estimated_hours: 2
+    title: |
+      Under a Lua runner, the archiver's stale-plan-binary probe rebuilds target/release/tillandsias-plan.exe, the image currently running the script; Windows locks it (os error 5), so the check exits 3. Build into a separate CARGO_TARGET_DIR, or refuse with a rebuild-first could-not-run.
+    context: |
+      yolanda-windows, 2026-11-21, msys regime run of step 955-831-ezea on work/2186-niam @ 0dfb03fe1 with a plan binary built from another tree: could-not-run:archiver-ready-set:instrument-exit-3; cargo "failed to remove file ...tillandsias-plan.exe: Access is denied (os error 5)". On Windows the self-rebuild can never succeed while that exe runs.
+    exit_criteria:
+      - 'on msys, a stale runner binary running the archiver check yields either a successful rebuild into a separate target or a named could-not-run that says to rebuild first; never a cargo access-denied'
+    unscoreable: 'unpinnable-until-the-guard-exists: the fixture named in exit_criteria is the deliverable and lands with the fix.'
+    next_action: 'Locate the probe rebuild path and choose between a private target dir and a named refusal.'
+    provenance: msys regime run reported by yolanda-windows; filed by lenovinha.
+    depends_on: []
+    related: [2186-niam, 1287-h6qn]
+    events:
+      - {type: filed, ts: '2026-11-22T06:04:30Z', host: lenovinha, summary: filed the Windows running-exe rebuild lock}

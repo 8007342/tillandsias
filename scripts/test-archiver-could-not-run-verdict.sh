@@ -61,7 +61,7 @@ fi
 
 # ARM 2 — the machine-readable token build.sh's narrow forge skip keys on. Only
 # THIS cause is skip-eligible; a stale plan binary also exits 3 and must not be.
-if printf '%s' "$out" | grep -q 'could-not-run:no-usable-ruby'; then
+if grep -q 'could-not-run:no-usable-ruby' <<<"$out"; then
     ok "the skip-eligible cause is tokenised"
 else
     bad "no could-not-run:no-usable-ruby token — build.sh cannot tell this exit 3 from the others"
@@ -69,20 +69,21 @@ fi
 
 # ARM 3 — THE ONE THAT MATTERS. The output must not assert anything about the
 # ready set, because nothing measured it.
-if printf '%s' "$out" | grep -qi 'CHANGE THE READY SET'; then
+if grep -qi 'CHANGE THE READY SET' <<<"$out"; then
     bad "the output claims the ready set changed on a run that never executed the check"
 else
     ok "no substantive ready-set claim on a check that could not run"
 fi
 
-# ARM 4 — build.sh's own branch text. A grep on the source rather than a full
-# gate run: the routing is a two-line decision and running ./build.sh --check
-# here would cost ten minutes to re-test one `if`.
-if grep -q 'could-not-run:no-usable-ruby' build.sh \
-   && grep -q 'TILLANDSIAS_HOST_KIND:-}" = "forge"' build.sh; then
-    ok "build.sh skips only in a forge and only on the tokenised cause"
+# ARM 4 — the gate step's own branch text (2186-niam moved it from build.sh
+# into scripts/lua/check-archiver-ready-set.lua). A grep on the source rather
+# than a full gate run: the routing is a two-line decision.
+_ars="scripts/lua/check-archiver-ready-set.lua"
+if grep -q 'could-not-run:no-usable-ruby' "$_ars" \
+   && grep -q 'env.get("TILLANDSIAS_HOST_KIND") == "forge"' "$_ars"; then
+    ok "the archiver step skips only in a forge and only on the tokenised cause"
 else
-    bad "build.sh no longer keys the skip on both the forge and the token — it may now skip a stale-binary exit 3"
+    bad "the archiver step no longer keys the skip on both the forge and the token — it may now skip a stale-binary exit 3"
 fi
 
 if [ "$fail" -eq 0 ]; then

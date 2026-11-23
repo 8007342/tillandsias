@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 699-usxc).
+#
+# archiver-ready-set-check-becomes-lua-gate-step.status was ALREADY 'blocked', so no field changed — but the caller
+# supplied a note, and discarding it silently is what this packet is about.
+events:
+  - packet_id: archiver-ready-set-check-becomes-lua-gate-step
+    event:
+      type: note
+      ts: "2026-11-22T06:06:51Z"
+      host: lenovinha
+      summary: |-
+        queued for landing as PR #1301

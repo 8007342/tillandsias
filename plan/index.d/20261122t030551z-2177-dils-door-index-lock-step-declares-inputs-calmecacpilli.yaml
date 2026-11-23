@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: build-speed row, assigned by macuahuitl-fedora 2026-11-22 (option b of the STEP_INPUTS analysis).
+packets:
+  - packet_id: door-index-lock-sweep-step-declares-inputs
+    order: "2177-dils"
+    status: implemented
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, gate, class-selector]
+    estimated_hours: 1
+    owned_files:
+      - scripts/gate-steps.d/860-1650-fb7z.step
+    title: "Gate step 860-1650-fb7z declares STEP_INPUTS (rust, path:.tillandsias/*), so a diff outside them skips its 26-34 s"
+    context: |
+      The slowest step that the static closure tied to build.sh was 860-1650-fb7z (34 s on yoga, lane=host). It does not
+      run the door: it extracts the _pf_* sweep functions from build.sh and runs them in scratch repos. The narrow seam was
+      already there; the closure tool had counted a READ of build.sh as an execution. The extracted functions name no
+      script. An atime trace of a real run in a scratch worktree read exactly build.sh, the fixture and
+      .tillandsias/*.yaml (the plan binary's command policy). The planted Lua guard runs on the plan binary, hence rust.
+      build.sh, the step file and the fixture are implicit inputs. Door-level coverage stays in 885-1753-p925, which
+      declares nothing and always runs.
+    exit_criteria:
+      - "test-gate-step-inputs: each declared and implicit input makes the step run, with no recent FULL gate it runs, and the docs+test tree skips it (21 arms ok, 2026-11-22)."
+      - "Of the last 40 first-parent landings on linux-next, 31 touch none of its inputs and would skip it."
+    unscoreable: "a declaration: scored by test-gate-step-inputs."
+    next_action: "Land. The next candidate for the same pattern is 414-1269-gfdi."
+    provenance: "macuahuitl-fedora 2026-11-22: take the slowest step that dispatches into build.sh, give it a narrow seam, declare STEP_INPUTS with the static plus atime proof."
+    events:
+      - type: filed
+        ts: "2026-11-22T03:05:51Z"
+        host: calmecacpilli
+        summary: "filed and implemented on work/2177-dils"

@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-22 at the coordinator's direction (macuahuitl-fedora): land-speed headline goal.
+packets:
+  - packet_id: land-queue-says-where-a-lands-wall-clock-goes
+    order: "2238-gpxz"
+    status: ready
+    kind: instrument
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [land-queue, metrics, speed]
+    estimated_hours: 1
+    owned_files:
+      - scripts/land-queue.sh
+      - scripts/test-land-queue.sh
+    title: "land-queue prints per-stage wall time per candidate (merge+door, plan-refresh, preflight, gate, post-gate+push)"
+    context: |
+      macuahuitl 2026-11-22 (coordinator, tillandsias-timing.jsonl 10:00-22:59Z): ./build.sh --check averaged 775s over
+      50 runs while a land took ~30 min wall; ~17 min per land was outside the gate and nothing recorded where. Top
+      in-gate steps there: cargo test workspace 103s, tray listen-vsock tests 85s, salvage-audit 71s,
+      archiver-check-miss 60s, plan-archiver ready-set 42s. Before cutting, the out-of-gate stages must be measured.
+    exit_criteria:
+      - "Every candidate prints timing:land-queue:#N:<stage>=<s>s per stage it reaches, in stage order; one stopped early prints none past that stage (test-land-queue ARM 34b, red with the land-queue change reverted)."
+    unscoreable: "the measurement's value is the next live run's numbers on macuahuitl; ARM 34b pins the lines' presence and order"
+    provenance: "coordinator 2026-11-22 land-speed queue item 1-3"
+    events:
+      - type: filed
+        ts: "2026-11-22T22:55:00Z"
+        host: yoga
+        summary: "filed with the instrument: where the ~17 min outside the gate goes"

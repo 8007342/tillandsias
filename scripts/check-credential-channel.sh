@@ -86,8 +86,10 @@ fi
 # constraint).
 #
 # A usable git push credential channel is present when ANY of these holds:
-#   - <common-git-dir>/.gh-credentials exists and is non-empty (repo-local store,
-#     shared by every linked worktree; 1409-65d5), or
+#   - (2222-xjgu: a non-empty <common-git-dir>/.gh-credentials is NOT a channel:
+#     it is a plaintext credential at rest and answers blocked:plaintext-credential-store;
+#     the former repo-local store arm,
+#     1409-65d5, is gone), and the channel is one of:
 #   - GH_TOKEN or GITHUB_TOKEN is set in the environment, or
 #   - `gh auth status` succeeds (reachable, unlocked keyring).
 #
@@ -95,7 +97,7 @@ fi
 #   ^(ok:[a-z0-9-]+|blocked:[a-z0-9-]+|missing:no-credential-channel)$
 # and exits 0 (channel present) or 1 (channel absent or blocked).
 #
-#   ok:gh-credentials-store        repo-local store helper file present + non-empty
+#   blocked:plaintext-credential-store  a store file is on disk (2222-xjgu; was ok:gh-credentials-store)
 #   ok:gh-token-env                GH_TOKEN set
 #   ok:github-token-env            GITHUB_TOKEN set
 #   ok:gh-keyring-push-verified    `gh auth status` green AND a bounded
@@ -506,23 +508,24 @@ _ccc_common_dir() {
   git rev-parse --path-format=absolute --git-common-dir 2>/dev/null
 }
 
-# A helper configured by the pre-1409 remedy carries a RELATIVE store path.
-# It works in the main checkout and fails in every linked worktree, so name it
-# and print the one-line migration (stderr; the verdict line is unchanged).
+# ORDER 2222-xjgu (was 1409-65d5's relative-path migration): ANY `store` helper
+# points git at a plaintext credential file, relative or absolute, so it is
+# named and its removal printed (stderr; the verdict line is unchanged). The old
+# note told hosts to MIGRATE the helper to an absolute store, which kept the
+# plaintext file and spread it to every worktree.
 _ccc_note_relative_store_helper() {
   local all h="" _h
   all="$(git config --local --get-all credential.helper 2>/dev/null)" || true
   while IFS= read -r _h; do
     case "$_h" in
-      ("store --file=/"*) ;;
-      ("store --file="?*) h="$_h"; break ;;
+      ("store"|"store "*) h="$_h"; break ;;
     esac
   done <<< "$all"
   [ -n "$h" ] || return 0
-  echo "note:credential-helper-relative-store:$h" >&2
-  echo "  A RELATIVE store path resolves against the CWD, so a push from a linked" >&2
-  echo "  worktree cannot open it (1409-65d5). MIGRATE (keeps the stored credential):" >&2
-  echo "    git config --local --replace-all credential.helper \"store --file=\$(git rev-parse --path-format=absolute --git-common-dir)/.gh-credentials\" '^store --file=[^/]'" >&2
+  echo "note:credential-helper-plaintext-store:$h" >&2
+  echo "  a store helper keeps a GitHub token in plaintext on disk (credentials_at_rest)." >&2
+  echo "  The operator removes it after signing in to the keyring:" >&2
+  _ccc_store_removal_lines >&2
 }
 
 credential_channel_verdict() {
@@ -732,33 +735,23 @@ credential_channel_verdict() {
   if git_dir="$(_ccc_common_dir)" && [ -n "$git_dir" ]; then
     cred_file="${git_dir}/.gh-credentials"
     if [ -s "$cred_file" ]; then
-      # ORDER 1092-uv3k. `unverified:`, not `ok:`. THIS ARM VERIFIES NOTHING —
-      # it reports that a store file EXISTS and is non-empty. The string was
-      # always narrow and truthful; the prefix was not, because every consumer
-      # pattern-matches on the prefix rather than reading the noun.
-      #
-      # MEASURED: `gh-keyring-push-verified` is referenced in exactly three
-      # files — this check, its fixture, and one comment in check-host-tools.sh
-      # — and NONE requires it. The dispatch preflight every host runs triggers
-      # on `blocked:*` (advance-work-from-plan/SKILL.md:247), so an unverified
-      # arm sails through silently and reads as a credential green.
-      #
-      # esmeraldinha's dead token was never caught by this check for exactly
-      # that reason: their host had a non-empty store file, so arm 4 — the only
-      # arm that probes anything — had never run there.
-      #
-      # THIS RENAME CHANGES NO CONTROL FLOW, deliberately. It cannot false-red
-      # any host, which is why it is safe to land before the real work: arm 1
-      # needs a bounded probe of ITS OWN channel (yoga measured a host where the
-      # store credential authenticates while the keyring token is invalid, so a
-      # fall-through to arm 4 would block a host over a channel git is not
-      # using). Tightening the dispatch rule to require a verified verdict comes
-      # only after that, or it strands store-file hosts with no arm to satisfy.
-      #
-      # ORDER 1004-8p76: the bounded probe of ITS OWN channel now exists, so the
-      # arm probes; `unverified:` remains only for a probe that cannot run.
-      _ccc_probe_arm gh-credentials-store
-      return $?
+      # ORDER 2222-xjgu: A PLAINTEXT STORE IS REFUSED, NOT RANKED. This arm used
+      # to probe the store and answer ok:gh-credentials-store, the highest-ranked
+      # channel. The file is a GitHub token in plaintext on durable disk, which
+      # methodology/philosophy.yaml credentials_at_rest forbids on every host
+      # ("Lost credentials are a better outcome than unencrypted credentials").
+      # Refused even when another channel works: the defect is the file at rest,
+      # not the push. The guard never reads or deletes it; removal is the
+      # operator's. (The 1409-65d5/1004-8p76/1092-uv3k history of this arm is in
+      # git log; it measured a real channel, which is exactly the problem.)
+      echo "  a plaintext GitHub credential store is on disk: $cred_file" >&2
+      echo "  (contents not read). The rule: methodology/philosophy.yaml credentials_at_rest." >&2
+      echo "  REMEDY (the operator; an agent neither signs in nor deletes credentials):" >&2
+      _ccc_seed_remedy_line >&2
+      _ccc_store_removal_lines >&2
+      _afford "a GitHub token is stored in plaintext on durable disk (credentials_at_rest forbids it on every host)" "the operator signs in to the OS keyring (tillandsias --github-login), then removes the store helper and file with the two commands printed above"
+      echo "blocked:plaintext-credential-store"
+      return 1
     fi
   fi
   if [ -n "${GH_TOKEN:-}" ]; then
@@ -915,11 +908,10 @@ credential_channel_verdict() {
         echo "blocked:interactive-credential-helper:${_helpers:-unknown}" >&2
         echo "  gh holds a token but git's helper chain is interactive-only — an" >&2
         echo "  unattended push hangs forever on a prompt. REMEDY:" >&2
-        echo "    # seed repo-local (1052-548e: a bare token is REFUSED and ECHOED)" >&2
-        _ccc_seed_remedy_line >&2
+        echo "    # git asks gh, which reads the OS keyring (2222-xjgu: never a plaintext store)" >&2
         echo "    git config --local --replace-all credential.helper ''         # empty entry DROPS the system manager" >&2
-        echo "    git config --local --add credential.helper \"store --file=\$(git rev-parse --path-format=absolute --git-common-dir)/.gh-credentials\"" >&2
-        _afford "git's credential helper chain is interactive-only, so an unattended push would hang on a prompt" "seed the repo-local credential store and helper with the commands printed above, then re-run"
+        echo "    git config --local --add credential.helper '!gh auth git-credential'" >&2
+        _afford "git's credential helper chain is interactive-only, so an unattended push would hang on a prompt" "point git at gh (keyring-backed) with the commands printed above, then re-run; never a plaintext store (2222-xjgu)"
         echo "blocked:interactive-credential-helper"
         return 1
         ;;
@@ -1098,9 +1090,9 @@ credential_channel_verdict() {
     # explains it: a distinct verdict the cycle must RESOLVE before any
     # committable work, never a bare ok (exit criterion 1).
     echo "  gh auth is green but a bounded non-interactive push probe failed" >&2
-    echo "  (${TILLANDSIAS_CRED_PROBE_CMD:-git push --dry-run origin HEAD}). Seed the repo-local store before committable work:" >&2
+    echo "  (${TILLANDSIAS_CRED_PROBE_CMD:-git push --dry-run origin HEAD}). The operator re-signs in before committable work:" >&2
     _ccc_seed_remedy_line >&2
-    _afford "gh holds a working token but git's non-interactive push probe failed, so git is not using it" "seed the repo-local credential store with the command printed above, then re-run this guard"
+    _afford "gh holds a working token but git's non-interactive push probe failed, so git is not using it" "the operator re-signs in (tillandsias --github-login, OS keyring), then re-run this guard; never a plaintext store (2222-xjgu)"
     echo "blocked:gh-cli-only"
     return 1
   fi
@@ -1462,14 +1454,24 @@ _ccc_verdict_with_lane() {
 _afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
 
 _ccc_seed_remedy_line() {
-    # QUOTED heredoc: every $( ) and every backslash-n must survive verbatim
-    # into the operator's terminal. The `\n` are for THEIR printf, not ours —
-    # an unquoted form expands them here and emits a multi-line broken command,
-    # which is a second way to print a remedy that cannot be run.
+    # ORDER 2222-xjgu: NO REMEDY WRITES A PLAINTEXT STORE. This used to print a
+    # `git credential-store ... store` line seeding <common-git-dir>/.gh-credentials,
+    # a GitHub token in plaintext on durable disk, which methodology/philosophy.yaml
+    # credentials_at_rest forbids ("Lost credentials are a better outcome than
+    # unencrypted credentials", the Tlatoani 2026-10-19). The channel is the OS
+    # keyring, seeded by the OPERATOR (agents_never_sign_in). QUOTED heredoc so
+    # every $( ) reaches the operator's terminal verbatim.
     cat <<'REMEDY'
-    printf 'protocol=https\nhost=github.com\nusername=%s\npassword=%s\n\n' \
-      "$(gh api user --jq .login)" "$(gh auth token)" \
-      | git credential-store --file "$(git rev-parse --path-format=absolute --git-common-dir)/.gh-credentials" store
+    tillandsias --github-login   # the OPERATOR signs in (OS keyring); an agent never does (agents_never_sign_in)
+REMEDY
+}
+
+# ORDER 2222-xjgu: the one remedy for a plaintext store already on disk. Printed
+# for the operator; the guard never deletes it (removal of a credential is theirs).
+_ccc_store_removal_lines() {
+    cat <<'REMEDY'
+    git config --local --unset-all credential.helper '^store'
+    rm -f "$(git rev-parse --path-format=absolute --git-common-dir)/.gh-credentials"
 REMEDY
 }
 

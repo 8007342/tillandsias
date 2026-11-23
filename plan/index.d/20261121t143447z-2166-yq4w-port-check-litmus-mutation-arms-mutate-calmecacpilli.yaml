@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: shell-to-lua backlog port, assigned by macuahuitl-fedora 2026-11-21.
+packets:
+  - packet_id: port-check-litmus-mutation-arms-mutate-to-lua
+    order: "2166-yq4w"
+    status: implemented
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, gate, litmus]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/check-litmus-mutation-arms-mutate.lua
+      - scripts/check-litmus-mutation-arms-mutate.sh
+      - scripts/test-litmus-mutation-arm-guard.sh
+      - build.sh
+    title: "Port scripts/check-litmus-mutation-arms-mutate.sh to scripts/lua (shell-to-lua)"
+    context: |
+      The awk scanner, rewritten in Lua: same step parsing, same mutation regexes (text.is_match) and same verdicts. The
+      two gsubs became Lua patterns. awk's `^` anchors the whole step body, which always starts with a newline, so only a
+      blank-preceded `#` comment was ever stripped, and the port keeps exactly that. The directory may lie outside the
+      repository (the fixture's temp dirs), so it is listed and read through child ls/cat in the caller's PWD.
+    exit_criteria:
+      - "scripts/check-litmus-mutation-arms-mutate.sh does not exist; scripts/lua/check-litmus-mutation-arms-mutate.lua does (on trunk the reverse)."
+      - "on openspec/litmus-tests the Lua prints the .sh's line byte-for-byte (ok:litmus-mutation-arms:0 of 7 named arms, 3030 steps scanned on 2026-11-21), and test-litmus-mutation-arm-guard.sh passes 8/8 on it."
+    unscoreable: "a port: scored by the fixture named above."
+    next_action: "Land."
+    provenance: "macuahuitl-fedora 2026-11-21 shell-to-lua queue (light ports)."
+    events:
+      - type: filed
+        ts: "2026-11-21T14:34:47Z"
+        host: calmecacpilli
+        summary: "filed and ported on work/2166-yq4w"

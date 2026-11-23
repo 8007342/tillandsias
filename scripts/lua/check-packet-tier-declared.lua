@@ -33,7 +33,7 @@ local function git(argv)
     return r.stdout or ""
 end
 
-if not git({ "git", "rev-parse", "--verify", "--quiet", base_ref }) then
+if not git({ "git", "rev-parse", "--verify", "--quiet", base_ref .. "^{commit}" }) then
     log.raw("  note: base ref '" .. base_ref .. "' unavailable — packet-tier-declared check skipped")
     verdict.emit("ok:packet-tier-declared:0", 0)
 end

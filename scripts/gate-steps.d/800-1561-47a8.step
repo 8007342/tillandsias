@@ -24,3 +24,7 @@ STEP_LUA="scripts/lua/check-installer-end-user-output.lua"
 STEP_ERROR="an end-user installer prints power-user or diagnostic text again (1561-9f4x); see the file:line above"
 STEP_OK="the end-user installers print only end-user lines (at or below their floors)"
 STEP_SECOND_REGIME="yolanda-windows 2026-10-10 msys ok:installer-end-user-output"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lua/check-installer-end-user-output.lua scripts/lua/test-check-installer-end-user-output.lua scripts/portability/** scripts/portability/installer-end-user-output-floor.txt"

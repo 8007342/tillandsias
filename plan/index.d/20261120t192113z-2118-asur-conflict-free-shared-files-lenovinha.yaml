@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha. Source: the landing-pipeline redesign (operator 2026-11-20), P4, relayed by macuahuitl-fedora.
+packets:
+  - packet_id: conflict-free-shared-files-floor-merge-driver-bindings-d-fixture-modules
+    order: 2118-asur
+    status: in_progress
+    kind: infrastructure
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [landing, merge, gate, tech-debt]
+    estimated_hours: 10
+    owned_files:
+      - scripts/lua/merge-floor-min.lua
+      - scripts/lua/test-merge-floor-min.lua
+      - .gitattributes
+      - scripts/ensure-hooks.sh
+      - openspec/litmus-bindings.yaml
+      - lib/lua/common/fixture.lua
+    title: |
+      Conflict-free shared files, in three rows:
+      (1) a key-wise-minimum git merge driver for scripts/portability/*-floor.txt;
+      (2) openspec/litmus-bindings.yaml split into a .d/ directory with a generated aggregate;
+      (3) lib/lua/common/fixture.lua split into per-helper modules.
+    context: |
+      Landing-pipeline redesign, operator 2026-11-20, rulings approved. Sibling PRs that each lowered a floor line, added a litmus binding, or added a fixture helper conflicted textually on the same few shared files. Each conflict cost a hand resolution and often an evicted gate.
+      Floors only descend, so their merge is mechanical: a key-wise minimum, with the gate ratchet as the backstop.
+      Row 1 is done on work/2118-asur. Rows 2 and 3 follow as separate PRs.
+    exit_criteria:
+      - 'row 1: two sibling branches lowering, removing and adding lines of the same floor merge clean with the key-wise minimum; without the attribute the same merge conflicts (litmus:floor-merge-driver-merges-clean)'
+      - 'row 2: two sibling branches each adding a litmus binding merge clean, and the generated aggregate equals the committed one'
+      - 'row 3: two sibling branches each adding a fixture helper merge clean, and every existing fixture still requires common.fixture unchanged'
+    verifiable_closure: |
+      litmus:floor-merge-driver-merges-clean (8 arms, mutation-proven: min to max fails 2 arms); rows 2 and 3 add their own sibling-merge arms.
+    next_action: Land row 1. Then row 2 (openspec/litmus-bindings.d plus a generated aggregate with a drift check), then row 3 (common/fixture/<helper>.lua behind the common.fixture facade).
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20; operator landing-pipeline redesign P4, relayed by macuahuitl-fedora.
+    events:
+      - type: filed
+        ts: "2026-11-20T19:21:13Z"
+        host: lenovinha
+        summary: P4 conflict-free shared files; row 1 (floor merge driver) implemented.

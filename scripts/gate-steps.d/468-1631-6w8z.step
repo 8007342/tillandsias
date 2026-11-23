@@ -13,3 +13,10 @@ STEP_LUA="scripts/lua/test-rust-lints.lua"
 STEP_ERROR="the preflight door no longer asks the gate's fmt or clippy refusals, or reports a slow one as refused (1631-6w8z) — see the FAIL lines above"
 STEP_OK="Door cargo-lints fixture passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-12 darwin ok:rust-lints-fixture:10 arms"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target"
+STEP_LANES="cargo"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lua/check-rust-lints.lua scripts/lua/test-rust-lints.lua"

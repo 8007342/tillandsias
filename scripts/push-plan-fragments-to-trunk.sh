@@ -150,7 +150,7 @@ if [ $# -gt 0 ]; then
 fi
 
 # The validator is resolved HERE, in the checkout, where the probe can see
-# it (the lesson of test-pre-push-plan-lane-after-merge.sh). Fail closed
+# it (the lesson of scripts/lua/test-pre-push-plan-lane-after-merge.lua). Fail closed
 # without one, exactly as the lane itself does.
 # shellcheck source=plan-binary-probe.sh
 . "$ROOT/scripts/plan-binary-probe.sh"

@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-22. Coordinator queue item (1) after the operator approved bundle landing.
+packets:
+- packet_id: fleet-run-responder-runs-one-gate-step-of-a-ref-and-answers-a-regime-line
+  order: 2250-44uy
+  status: in_progress
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [gate-steps, second-regime, macos, msys, fleet]
+  size: M
+  implementer_tier: sonnet
+  estimated_hours: 3
+  title: 'fleet-run.lua: given a gate step NUMBER and a REF (never a command), run that one step of that tree on this host and answer regime:<platform>:step=<n>:rc=<rc>:sha=<tree>:verdict=<line>'
+  context: >-
+    Second-regime records have needed the coordinator to relay every ask. Design agreed by macuahuitl-fedora with yolanda (msys): no worktree (operator ruling 2026-10-11).
+    `git archive <ref>` goes into target/work/fleet-run/<commit>/, which gets its own git init plus one commit (add -A -f), and that tree must equal <ref>^{tree}.
+    The extracted tree is the --gate-steps root, with every other step file removed after the assertion; step paths resolve against the root, so a separate scratch root cannot find the fixture.
+    The plan binary is this checkout's release build when crates/, Cargo.toml and Cargo.lock match. Otherwise it is built from the extracted tree into target/work/fleet-run/cargo-target.
+    The verdict is the step's last verdict-shaped line between its STEP_DESC line and the door's next [build] line, so housekeeping lines (prune-darwin-stale-objects) never stand in for it.
+    MEASURED on darwin: `-- 660 work/2245-pf7x` answers regime:darwin:step=660:rc=0:sha=b65cb2b5c:verdict=ok:rank-refusal-hits:6 arms in 1m49s, including a plan rebuild.
+    The script runner's policy denies /bin/sh, so the step lookup is a git pathspec.
+  exit_criteria:
+  - 'scripts/lua/test-fleet-run.lua gives 6/6 (usage, bad step, flag ref, range, shell syntax, HEAD extract + tree match + no-step).'
+  - 'A real one-step run on a peer ref answers a regime line whose verdict is the step''s own (660 above).'
+  - 'The request side (who asks, over which channel) and per-platform record fields: yolanda and the coordinator.'
+  verifiable_closure: 'test-fleet-run.lua on darwin and msys, plus one real regime line per platform.'
+  unscoreable: 'none.'
+  next_action: 'yolanda runs the same script on msys. The coordinator wires the request side.'
+  provenance: 'tlatoanis-macbook-air 2026-11-22, on the coordinator''s (macuahuitl-fedora) queue item (1).'
+  events:
+  - {type: filed, ts: '2026-11-22T18:00:00Z', host: tlatoanis-macbook-air, summary: 'filed with its PR'}

@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: pending-capability-row-could-not-run-reds-the-gate
+    order: 2251-iyiu
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 1
+    title: |
+      Gate step 275 (test-pending-capability-row-does-not-wedge.sh) exits 3 when an arm could not run, and the step declares neither STEP_SKIP_EXIT nor STEP_HOST_STATE, so a load-timed could-not-run evicts a PR as a red.
+    context: |
+      #1249 (5e60118f5) was evicted on it: its kept log reads "8 passed, 0 failed, 1 could-not-run". The KILL arm's child never reached its hold within 30 s under load, and the fixture itself says so with exit 3 (`[ "$cnr" -eq 0 ] || exit 3`). The gate read that as a failure. Found by the coordinator while checking the one miss of the intake replay (2249-tif9), which then became 13/13. A could-not-run is neither a pass nor a red; the gate has a named path for each (1765-q7rg: STEP_HOST_STATE retries once and names a second red flaky:, never violation:).
+    exit_criteria:
+      - "step 275 declares STEP_HOST_STATE naming the load-timed KILL arm, so a first could-not-run settles and retries once, and a repeat is named flaky:/could-not-run rather than a code red"
+      - "the arm's 30 s hold window is either widened with the measured reason or kept, with that choice recorded in the step"
+      - "an arm forces the KILL arm's could-not-run and asserts the gate names it, not violation:"
+    unscoreable: "unpinnable-until-the-guard-exists: the forced could-not-run arm is the deliverable."
+    next_action: "Read 1765-q7rg's STEP_HOST_STATE contract; declare it on 275 with the reason."
+    provenance: coordinator (macuahuitl-fedora, 2026-11-23) from #1249's kept log; filed by lenovinha.
+    related: [1765-q7rg, 1128-4ffr, 2249-tif9]
+    events:
+      - {type: filed, ts: '2026-11-23T05:05:57Z', host: lenovinha, summary: capability-row could-not-run reds the gate filed}
