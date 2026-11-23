@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: litmus-scalar-unescape-and-expert-accuracy-record-shape-to-lua
+    order: 2282-peuy
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [shell-to-lua, gate]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-litmus-scalar-unescape.lua
+      - scripts/lua/test-expert-accuracy-record-shape.lua
+      - scripts/gate-steps.d/927-875-v7hv.step
+      - scripts/gate-steps.d/928-917-6iwv.step
+    title: "Port test-litmus-scalar-unescape.sh and test-expert-accuracy-record-shape.sh to Lua steps 927 and 928; their inline build.sh blocks go"
+    context: |
+      Both on common.fixture; the second no longer skips where jq is absent. The shell versions and their floor lines are deleted.
+    exit_criteria:
+      - "both steps green on Linux and a second regime recorded in each step file"
+      - "mutants red: a raw failure_pattern capture, swapped unescape passes, never-called renamed, an inferred estimated rate"
+    unscoreable: "fixture-scored: the two ports are the pin"
+    provenance: "coordinator macuahuitl-fedora queue 2026-11-23, item 3"
+    related: [875-v7hv, 917-6iwv]
+    events:
+      - {type: claimed, ts: '2026-11-23T23:39:15Z', host: calmecacpilli, summary: two shell fixtures to Lua}

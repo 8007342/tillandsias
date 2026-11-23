@@ -162,7 +162,6 @@ scripts/test-envelope-suite-resolves-the-gates-artifact.sh
 scripts/test-exact-version-literal-added.sh
 scripts/test-exec-bits-guard-end-to-end.sh
 scripts/test-expert-accuracy-provenance.sh
-scripts/test-expert-accuracy-record-shape.sh
 scripts/test-expert-capability-behaviour-skew.sh
 scripts/test-expire-claims-list-live-rows.sh
 scripts/test-expire-claims-reads-the-status-write.sh
@@ -292,7 +291,6 @@ scripts/test-litmus-podman-preflight-trigger.sh
 scripts/test-litmus-retired-phase-skip.sh
 scripts/test-litmus-runner-reads-without-jq.sh
 scripts/test-litmus-runner-reports-rc.sh
-scripts/test-litmus-scalar-unescape.sh
 scripts/test-litmus-stdin-does-not-eat-the-spec-list.sh
 scripts/test-litmus-step-model.sh
 scripts/test-litmus-step-pipefail.sh

@@ -1,0 +1,10 @@
+# Gate step 917-6iwv — a never-called expert records a null rate, and a partial run
+# carries its denominator. Was orphaned once while the ledger said it ran (1063-nraf).
+# Moved here from an inline build.sh step with the fixture's Lua port (2282-peuy).
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the expert-accuracy record shape (917-6iwv)"
+STEP_LUA="scripts/lua/test-expert-accuracy-record-shape.lua"
+STEP_ERROR="the expert-accuracy record shape regressed (917-6iwv) — a never-called expert must record rate=null, never 0 and never 100, and a partial run must carry its denominator"
+STEP_OK="Expert-accuracy record fixture passed"
+STEP_READS="scripts/lua/test-expert-accuracy-record-shape.lua scripts/record-expert-accuracy.sh scripts/derive-host-identity.sh"
