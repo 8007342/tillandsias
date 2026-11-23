@@ -19,7 +19,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
     BIN="$(resolve_plan_binary)" || BIN=""
 else
-    BIN="$(cd "$ROOT" && _p="$(resolve_plan_binary 2>/dev/null)" && case "$_p" in /*) printf '%s' "$_p" ;; *) printf '%s/%s' "$PWD" "${_p#./}" ;; esac)" || BIN=""
+    BIN="$(cd "$ROOT" && _p="$(resolve_plan_binary 2>/dev/null)" && case "$_p" in (/*) printf '%s' "$_p" ;; (*) printf '%s/%s' "$PWD" "${_p#./}" ;; esac)" || BIN=""
 fi
 if [ -z "$BIN" ]; then
     echo "skip:no-plan-binary"
