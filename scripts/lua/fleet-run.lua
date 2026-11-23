@@ -9,19 +9,26 @@
 --
 -- The verdict is LAST because it may contain ':'.
 --
--- No worktree (operator ruling 2026-10-11): `git archive <ref>` is extracted
--- into target/work/fleet-run/<commit>/, given its own `git init` + one commit,
--- and that commit's tree must equal <ref>^{tree} (tracked-but-ignored files
--- are added with -f, so a .gitignore cannot drop them silently). The step is
--- copied alone into a scratch --gate-steps root and run by the extracted
--- tree's own build.sh. The plan binary is this checkout's release build when
--- the crates are identical, else one built from the extracted tree into a
--- shared target dir (one CARGO_TARGET_DIR, serial).
+-- No worktree (operator ruling 2026-10-11): target/work/fleet-run/<commit>/ is
+-- its own repository (no remote), which fetches that one commit from this
+-- checkout and checks it out. HEAD^{tree} must equal <ref>^{tree} AND the files
+-- on disk must match it (git status clean), so nothing unstated is run. The
+-- files come from git's own objects, not a tar (2259-fk3m): on native Windows
+-- tar loses the exec bits and symlinks, and GNU tar reads C:/ as a host. The
+-- step runs alone: the extracted tree, with every other step file removed, is
+-- the --gate-steps root for that tree's own build.sh. On native Windows
+-- build.sh cannot run a step (its setup wants gcc and builds the sidecar, and
+-- the gate there runs in WSL, which is not msys), so the step's STEP_LUA or
+-- STEP_SCRIPT is run directly, as the gate loop does: cwd the tree, and
+-- STEP_SKIP_EXIT counts as rc 0. The loop's STEP_HOST_STATE retry and
+-- metrics-leak check are not applied there. The plan binary is this
+-- checkout's release build when the crates are identical, else one built from
+-- the extracted tree into a shared target dir (one CARGO_TARGET_DIR, serial).
 --
 -- Refusals (rc 2, one line, nothing run):
 --   refused:fleet-run:usage | bad-step:<s> | bad-ref:<r> | unknown-ref:<r>
 --   refused:fleet-run:no-step:<n> | ambiguous-step:<n>:<count>
---   refused:fleet-run:tree-mismatch:<want>:<got> | could-not-run:fleet-run:<why>
+--   refused:fleet-run:tree-mismatch:<want>:<got> | dirty-tree:<files> | could-not-run:fleet-run:<why>
 --
 -- Usage: tillandsias-plan script run scripts/lua/fleet-run.lua -- <step-number> <ref>
 
@@ -48,13 +55,18 @@ local function run(argv, opts)
     return (r.status == "exited") and r.code or -1, text.trim(r.stdout or ""), r.stderr or ""
 end
 
+local fixture = require "common.fixture"
+local BASH = fixture.posix_shell("/bin/bash")   -- Git's bash on native Windows
+local WINDOWS = fixture.posix_shell() ~= "bash"
+local EXE = WINDOWS and ".exe" or ""
+
 local rc, ROOT = run({ "git", "rev-parse", "--show-toplevel" })
 if rc ~= 0 or ROOT == "" then cnr("no-repo") end
 
 local rc_u, uname = run({ "uname", "-s" })
 local PLATFORM = "linux"
 if uname == "Darwin" then PLATFORM = "darwin"
-elseif uname:match("^MINGW") or uname:match("^MSYS") or uname:match("^CYGWIN") then PLATFORM = "msys" end
+elseif WINDOWS then PLATFORM = "msys" end
 
 -- Resolve the ref: as given, else origin/<ref> after fetching that one ref.
 local function resolve(r)
@@ -74,16 +86,6 @@ local BASE = ROOT .. "/target/work/fleet-run"
 local D = BASE .. "/" .. COMMIT
 run({ "rm", "-rf", D })
 if run({ "mkdir", "-p", D }) ~= 0 then cnr("mkdir") end
-local TAR = BASE .. "/" .. COMMIT .. ".tar"
--- No eol conversion on either side, unconditionally: on a core.autocrlf=true
--- host (yolanda, msys 2026-11-23) archive + add produced a tree that did not
--- equal <ref>^{tree}; the assertion below caught it. Harmless elsewhere.
-if run({ "git", "-C", ROOT, "-c", "core.autocrlf=false", "-c", "core.eol=lf", "archive", "-o", TAR, COMMIT },
-        { timeout_ms = 300000 }) ~= 0 then cnr("archive") end
-local xrc = run({ "tar", "-xf", TAR, "-C", D }, { timeout_ms = 300000 })
-run({ "rm", "-f", TAR })
-if xrc ~= 0 then cnr("extract") end
-
 local GENV = { GIT_AUTHOR_NAME = "fleet-run", GIT_AUTHOR_EMAIL = "fleet-run@localhost",
                GIT_COMMITTER_NAME = "fleet-run", GIT_COMMITTER_EMAIL = "fleet-run@localhost",
                GIT_CONFIG_GLOBAL = "/dev/null", GIT_CONFIG_NOSYSTEM = "1" }
@@ -93,10 +95,17 @@ local function dgit(...)
     return run(argv, { env = GENV, timeout_ms = 300000 })
 end
 if dgit("init", "-q") ~= 0 then cnr("git-init") end
-if dgit("-c", "core.autocrlf=false", "add", "-A", "-f") ~= 0 then cnr("git-add") end
-if dgit("commit", "-q", "--no-verify", "-m", "fleet-run " .. COMMIT) ~= 0 then cnr("git-commit") end
+-- No eol conversion (a core.autocrlf=true host); on Windows symlinks are text
+-- files, as in an ordinary checkout there, and the nested path can be long.
+dgit("config", "core.autocrlf", "false")
+if WINDOWS then dgit("config", "core.symlinks", "false"); dgit("config", "core.longpaths", "true") end
+if dgit("fetch", "-q", "--depth=1", ROOT, COMMIT) ~= 0 then cnr("fetch") end
+if dgit("checkout", "-q", "--detach", "FETCH_HEAD") ~= 0 then cnr("checkout") end
 local _, GOT = dgit("rev-parse", "HEAD^{tree}")
 if GOT ~= TREE then refuse("tree-mismatch:" .. TREE .. ":" .. GOT) end
+local st_rc, dirty = dgit("status", "--porcelain")
+if st_rc ~= 0 then cnr("git-status") end
+if dirty ~= "" then refuse("dirty-tree:" .. #text.lines(dirty)) end
 
 -- Exactly one step file with this number.
 -- (the runner's policy denies a shell, so the glob is git's pathspec)
@@ -115,26 +124,37 @@ local same = true
 for _, p in ipairs({ "crates", "Cargo.lock", "Cargo.toml" }) do
     if subtree("HEAD", p) ~= subtree(COMMIT, p) then same = false end
 end
-local BIN = ROOT .. "/target/release/tillandsias-plan"
+local BIN = ROOT .. "/target/release/tillandsias-plan" .. EXE
 if not same or run({ "test", "-x", BIN }) ~= 0 then
     local CTD = BASE .. "/cargo-target"
     local brc = run({ "cargo", "build", "-q", "--release", "-p", "tillandsias-plan" },
         { cwd = D, env = { CARGO_TARGET_DIR = CTD }, timeout_ms = 1800000 })
     if brc ~= 0 then cnr("plan-build:rc=" .. brc) end
-    BIN = CTD .. "/release/tillandsias-plan"
+    BIN = CTD .. "/release/tillandsias-plan" .. EXE
 end
 
 -- One step: the extracted tree IS the --gate-steps root (step paths resolve
--- against it), with every other step file removed AFTER the tree assertion.
+-- against it), with every other step file removed AFTER the tree assertion
+-- (not on Windows, where the step is run directly over the exact tree).
 local _, all = dgit("ls-files", "--", "scripts/gate-steps.d/*.step")
 for _, l in ipairs(text.lines(all)) do
-    if l ~= "" and l ~= "scripts/gate-steps.d/" .. steps[1] then run({ "rm", "-f", D .. "/" .. l }) end
+    if not WINDOWS and l ~= "" and l ~= "scripts/gate-steps.d/" .. steps[1] then run({ "rm", "-f", D .. "/" .. l }) end
 end
-local desc = (fs.read("target/work/fleet-run/" .. COMMIT .. "/scripts/gate-steps.d/" .. steps[1]) or "")
-    :match('\nSTEP_DESC="([^"\n]*)"') or ""
-local r = proc.run({ argv = { "/bin/bash", "./build.sh", "--gate-steps", D }, cwd = D, timeout_ms = 3600000,
-    env = { TILLANDSIAS_PLAN_BIN = BIN, TILLANDSIAS_SCRIPT_RUNNER_BIN = BIN } })
+local step_text = "\n" .. (fs.read("target/work/fleet-run/" .. COMMIT .. "/scripts/gate-steps.d/" .. steps[1]) or "")
+local function field(k) return step_text:match("\n" .. k .. '="([^"\n]*)"') or "" end
+local desc = field("STEP_DESC")
+local benv = { TILLANDSIAS_PLAN_BIN = BIN, TILLANDSIAS_SCRIPT_RUNNER_BIN = BIN }
+local argv = { BASH, "./build.sh", "--gate-steps", D }
+if WINDOWS then
+    benv.TILLANDSIAS_SKIP_WSL2 = "1"   -- a step that runs build.sh must not re-exec into WSL
+    local lua, script = field("STEP_LUA"), field("STEP_SCRIPT")
+    if (lua == "") == (script == "") then cnr("step-names-not-exactly-one-of-STEP_LUA-STEP_SCRIPT") end
+    if lua ~= "" then argv = { BIN, "script", "run", lua } else argv = { BASH, script } end
+    desc = ""                          -- no door lines around the step's own output
+end
+local r = proc.run({ argv = argv, cwd = D, timeout_ms = 3600000, env = benv })
 local src = (r.status == "exited") and r.code or -1
+if WINDOWS and src ~= 0 and tostring(src) == (step_text:match('\nSTEP_SKIP_EXIT="?(%d+)') or "") then src = 0 end
 local o = (r.stdout or "") .. "\n" .. (r.stderr or "")
 fs.write("target/work/fleet-run/" .. COMMIT .. ".log", o)
 
@@ -143,7 +163,8 @@ fs.write("target/work/fleet-run/" .. COMMIT .. ".log", o)
 -- and housekeeping lines never stand in for it.
 local vline = "(no verdict line)"
 local started, done = (desc == ""), false
-for _, l in ipairs(text.lines(o)) do
+-- Run directly (Windows), the verdict is on stdout; a stderr note is not one.
+for _, l in ipairs(text.lines(WINDOWS and (r.stdout or "") or o)) do
     local t = text.trim((l:gsub("\27%[[%d;]*m", "")))
     if done then
     elseif not started then
