@@ -45,9 +45,13 @@ local function merge(tag, o)
     end
     local b = {}
     for _, p in ipairs(COPY) do b[p] = fs.read(p) end
-    b[".gitattributes"] = o.attr == false and "" or
-        "scripts/portability/*-floor.txt merge=tillandsias-floor\n" .. DIV .. " merge=tillandsias-floor\n"
+    local eol = (fs.read(".gitattributes") or ""):match("(%* text=auto eol=lf)") -- the real repo's line
+    b[".gitattributes"] = (eol or "# no eol line in .gitattributes") .. "\n" .. (o.attr == false and "" or
+        "scripts/portability/*-floor.txt merge=tillandsias-floor\n" .. DIV .. " merge=tillandsias-floor\n")
     for p, body in pairs(o.base) do b[p] = body end
+    -- A native Windows checkout's setting, on every host: the repo's own
+    -- eol=lf attribute (below) must win over it.
+    g("config", "core.autocrlf", "true")
     g("config", "merge.tillandsias-floor.driver", o.driver or "bash scripts/merge-floor-driver.sh %O %A %B %P %X %Y")
     put(b)
     local main = text.trim(g("rev-parse", "--abbrev-ref", "HEAD").stdout)
