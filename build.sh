@@ -4974,12 +4974,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "expire-claims write-is-opt-in fixture passed"
 
-    _step "Checking the release runbook's tag/back-merge order (898-zhf3)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-release-runbook-tag-order.sh" 2>&1; then
-        _error "the release runbook prescribes an order the pre-push hook refuses — the next cut deadlocks at the tag push"
-        exit 1
-    fi
-    _info "release runbook tag-order fixture passed"
+    # The release-runbook tag-order fixture moved to gate step 916-2262-bke7 (Lua).
 
     # ORDER 1140-i6ct. The HERMETIC half only. The live fixture
     # (test-vault-shutdown-forwards-sigterm.sh) stops a real container and is
@@ -7341,11 +7336,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _error "scripts/test-git-credential-helper.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
         exit 1
     fi
-    _step "Checking test-guest-unit-hardening (1063-nraf; 62ms)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-guest-unit-hardening.sh" 2>&1; then
-        _error "scripts/test-guest-unit-hardening.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
-        exit 1
-    fi
+    # test-guest-unit-hardening moved to gate step 924-2262-bke7 (Lua).
     _step "Checking test-release-freeze-audit (1255-s4im)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-release-freeze-audit.sh" 2>&1; then
         _error "scripts/test-release-freeze-audit.sh failed — the server-visible freeze audit may no longer name a breach, or the release preflight may no longer refuse one (1255-s4im); read the fixture output above"
