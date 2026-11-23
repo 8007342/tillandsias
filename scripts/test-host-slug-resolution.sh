@@ -20,6 +20,7 @@
 # exact cause, and its `node-name` probe is already shared with
 # scripts/mo-full-attest.sh. These two scripts never adopted it.
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; cd "$ROOT"
 AI="scripts/agent-identity.sh"
 SUBJECTS="scripts/salvage-dirty-worktree.sh scripts/push-plan-fragments-to-trunk.sh"
@@ -36,7 +37,7 @@ SUBJ_PLAN="$(_p="$(resolve_plan_binary 2>/dev/null)" && case "$_p" in (/*) print
 
 rc=0
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/host-slug.XXXXXX")"
-trap 'rm -rf "$tmp"' EXIT INT TERM
+scratch_trap 'rm -rf "$tmp"'
 note() { printf '%s\n' "$*"; }
 fail() { printf 'FAIL:%s\n' "$*" >&2; rc=1; }
 
@@ -142,9 +143,9 @@ esac
 # CHECKPOINT was reached, not that the failure was absent.
 for _subj in push-plan-fragments-to-trunk.sh salvage-dirty-worktree.sh; do
     _r="$(mktemp -d)"; mkdir -p "$_r/scripts"
-    git -C "$_r" init -q
-    git -C "$_r" config user.email t@example.invalid; git -C "$_r" config user.name t
-    printf 'x\n' > "$_r/f"; git -C "$_r" add -A; git -C "$_r" commit -qm base >/dev/null 2>&1
+    scratch_git "$_r" init -q
+    scratch_git "$_r" config user.email t@example.invalid; scratch_git "$_r" config user.name t
+    printf 'x\n' > "$_r/f"; scratch_git "$_r" add -A; scratch_git "$_r" commit -qm base >/dev/null 2>&1
     cp "$ROOT/scripts/$_subj" "$_r/scripts/"
     for _dep in plan-binary-probe.sh; do
         [ -f "$ROOT/scripts/$_dep" ] && cp "$ROOT/scripts/$_dep" "$_r/scripts/"
@@ -187,9 +188,9 @@ done
 for _subj in salvage-dirty-worktree.sh push-plan-fragments-to-trunk.sh; do
     [ -f "$ROOT/scripts/$_subj" ] || { fail "host-slug:arm6:subject missing: $_subj"; continue; }
     _r="$(mktemp -d)"; mkdir -p "$_r/scripts"
-    git -C "$_r" init -q
-    git -C "$_r" config user.email t@example.invalid; git -C "$_r" config user.name t
-    printf 'x\n' > "$_r/f"; git -C "$_r" add -A; git -C "$_r" commit -qm base >/dev/null 2>&1
+    scratch_git "$_r" init -q
+    scratch_git "$_r" config user.email t@example.invalid; scratch_git "$_r" config user.name t
+    printf 'x\n' > "$_r/f"; scratch_git "$_r" add -A; scratch_git "$_r" commit -qm base >/dev/null 2>&1
     cp "$ROOT/scripts/$_subj" "$_r/scripts/"
     for _dep in plan-binary-probe.sh; do
         [ -f "$ROOT/scripts/$_dep" ] && cp "$ROOT/scripts/$_dep" "$_r/scripts/"
@@ -220,9 +221,9 @@ done
 # is a lie (1247-amcu criterion 5).
 for _subj in push-plan-fragments-to-trunk.sh salvage-dirty-worktree.sh; do
     _r="$(mktemp -d "${TMPDIR:-/tmp}/host-slug-arm7.XXXXXX")"; mkdir -p "$_r/scripts"
-    git -C "$_r" init -q
-    git -C "$_r" config user.email t@example.invalid; git -C "$_r" config user.name t
-    printf 'x\n' > "$_r/f"; git -C "$_r" add -A; git -C "$_r" commit -qm base >/dev/null 2>&1
+    scratch_git "$_r" init -q
+    scratch_git "$_r" config user.email t@example.invalid; scratch_git "$_r" config user.name t
+    printf 'x\n' > "$_r/f"; scratch_git "$_r" add -A; scratch_git "$_r" commit -qm base >/dev/null 2>&1
     cp "$ROOT/scripts/$_subj" "$_r/scripts/"
     [ -f "$ROOT/scripts/plan-binary-probe.sh" ] && cp "$ROOT/scripts/plan-binary-probe.sh" "$_r/scripts/"
     printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$_r/scripts/agent-identity.sh"

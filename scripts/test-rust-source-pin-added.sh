@@ -17,6 +17,7 @@
 # PRE-FIX RESULT: FAILS — no guard covered Rust include_str! pins (827-d3dc:
 # 92 of them, four of the ten costliest).
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
 # 1592-idmu: this fixture builds its own repo, so the gate's frozen base (a SHA of
 # the gated checkout) is not its base; its scratch origin/linux-next is.
 unset TILLANDSIAS_GATE_DIFF_BASE
@@ -36,7 +37,7 @@ command -v git >/dev/null 2>&1 || { echo "skip:rust-source-pin-added-fixture:no-
 
 _tmpbase="$ROOT/target/plan-scratch"; mkdir -p "$_tmpbase" 2>/dev/null || _tmpbase="${TMPDIR:-/tmp}"
 W="$(mktemp -d "$_tmpbase/rust-source-pin.XXXXXX")"
-trap 'rm -rf "$W"' EXIT INT TERM
+scratch_trap 'rm -rf "$W"'
 GC=(-c user.email=f@x -c user.name=f)
 
 # repo <name> [base test body]: crates/c/src/lib.rs with a tests module
@@ -45,8 +46,8 @@ repo() {
     mkdir -p "$r/scripts/lua" "$r/crates/c/src"
     cp "$GUARD" "$r/scripts/lua/"
     printf 'pub fn f() -> u8 { 1 }\n#[cfg(test)]\nmod tests {\n%s}\n' "${2:-}" > "$r/crates/c/src/lib.rs"
-    git -C "$r" init -q && git -C "$r" "${GC[@]}" add -A && git -C "$r" "${GC[@]}" commit -qm base
-    git -C "$r" update-ref refs/remotes/origin/linux-next HEAD
+    scratch_git "$r" init -q && scratch_git "$r" "${GC[@]}" add -A && scratch_git "$r" "${GC[@]}" commit -qm base
+    scratch_git "$r" update-ref refs/remotes/origin/linux-next HEAD
     echo "$r"
 }
 put() { printf 'pub fn f() -> u8 { 1 }\n#[cfg(test)]\nmod tests {\n%s}\n' "$2" > "$1/crates/c/src/lib.rs"; }
