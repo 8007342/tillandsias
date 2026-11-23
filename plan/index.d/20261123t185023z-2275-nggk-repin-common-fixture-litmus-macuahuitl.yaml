@@ -9,7 +9,7 @@ packets:
   desired_release: v0.5
   pickup_role: linux
   capability_tags: [release, litmus, fixtures]
-  size: XS
+  size: S
   implementer_tier: sonnet
   estimated_hours: 0.1
   title: 'Repin litmus:common-fixture to the 12 arms trunk prints, so the release tier is green'
