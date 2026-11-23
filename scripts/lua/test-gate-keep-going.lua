@@ -85,6 +85,9 @@ if not src:find(cut, 1, true) then
     T:arm("5 MUTANT premise: the record-and-continue line is in build.sh", false, "not found")
 else
     local MREL = "build-keep-going-mutant.sh"
+    -- A run killed between write and rm (ENOSPC, yoga 2026-11-23) leaves this
+    -- at the repo root; clear any leftover first so debris never accumulates.
+    proc.run({ argv = { "rm", "-f", ROOT .. "/" .. MREL } })
     fs.write(MREL, (src:gsub(cut:gsub("%p", "%%%0"), ":", 1)))  -- the repo root, so build.sh's own SCRIPT_DIR resolves
     rc, o = gate(ROOT .. "/" .. MREL, mixed, { kg = true })
     proc.run({ argv = { "rm", "-f", ROOT .. "/" .. MREL } })
