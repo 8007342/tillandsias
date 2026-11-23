@@ -16,6 +16,26 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
 
 ---
 
+## Remote unreachable: STOP — check FIRST, and on the first GitHub failure (order 2239-rmun)
+
+The user's direction (2026-11-22): a host that cannot push code to the remote
+must stop work entirely, not retry with exponential backoff, and not keep
+doing local work. A host whose gh token went bad kept merging and porting for
+~25 minutes because every symptom ("Failed to connect to github.com:443",
+"graphql: i/o timeout") read as a flaky network.
+
+1. At the start of every loop, AND the moment any GitHub operation fails (a
+   push, `gh pr ...`, `git fetch`/`ls-remote`, an API timeout), run the probe
+   once:
+   `tillandsias-plan script run scripts/lua/probe-remote-reachable.lua`
+2. `ok:remote-reachable` → continue.
+3. `blocked:remote-unreachable:<cause>` → **SUSPEND**: tell the user and the
+   coordinator (by name, with the cause and the probe's why/remedy), push and
+   claim nothing, start no further local work, and do not retry or back off.
+   Wait for a human to restore access, then run the probe again.
+4. Never run `gh auth login` or `gh auth refresh` yourself; restoring access
+   is the human's step on that host.
+
 ## 1 — Orient & Discover Environment
 
 1.  **Git Check**: Run:
@@ -373,7 +393,8 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     through the plan-only lane. The order of the whole flow, from
     join-the-fleet §3: claim by order → `git switch -c work/<order>` from
     `origin/linux-next` → commit and push to `work/<order>` freely → open the
-    PR (draft until the closure evidence is on the row) → the landing queue
+    PR (label `land:hold` until the closure evidence is on the row; a draft
+    is never landed either, but the label is the named hold, 2143-z5uj) → the landing queue
     integrates once → close by order after the landing proves.
 
     `push-plan-fragments-to-trunk.sh` builds one commit parented on
@@ -384,7 +405,7 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     clean. `refused:fragments-to-trunk:trunk-fold:…` means a fragment names a
     packet trunk has never seen (you filed it on this branch): run it without
     arguments so the filing rides along. The control, from any trunk checkout
-    after `git pull`: `scripts/check-claim-confirmed.sh <order> --host <host>`
+    after `git pull`: `tillandsias-plan script run scripts/lua/check-claim-confirmed.lua -- <order> --host <host>`
     → `ok:claim-confirmed` (1370-tjme; `refused:claim-lost` names the earlier
     claimant, and you yield).
 
@@ -627,7 +648,7 @@ skipped it on direct knowledge, which does not scale.
 After the flip is PUSHED, run the control:
 
 ```bash
-git pull && scripts/check-claim-confirmed.sh <order> --host <your-host>   # ok:claim-confirmed:<order>:<host>@<ts>
+git pull && tillandsias-plan script run scripts/lua/check-claim-confirmed.lua -- <order> --host <your-host>   # ok:claim-confirmed:<order>:<host>@<ts>
 ```
 
 `refused:no-live-claim` means the claim did not take (unpushed, wrong field,

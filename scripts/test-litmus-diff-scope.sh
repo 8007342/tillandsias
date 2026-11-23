@@ -91,8 +91,22 @@ nonyq_dir="$suite_tmp/nonyq-bin"
 mkdir -p "$nonyq_dir"
 sanitized_path=""
 IFS=: read -ra _parts <<<"$PATH"
+_shadowed=0
 for _d in "${_parts[@]}"; do
-    [[ -x "$_d/yq" ]] && continue
+    if [[ -x "$_d/yq" ]]; then
+        # 2110-ghw2: never drop the whole dir. In the Fedora builder toolbox yq
+        # is /usr/bin/yq beside bash itself, and dropping /usr/bin left the
+        # parity arm with no bash. Link the dir's other entries instead.
+        for _e in "$_d"/*; do
+            [[ "${_e##*/}" == yq ]] && continue
+            [[ -e "$nonyq_dir/${_e##*/}" ]] || ln -s "$_e" "$nonyq_dir/${_e##*/}" 2>/dev/null
+        done
+        if [[ "$_shadowed" == 0 ]]; then
+            sanitized_path="${sanitized_path:+$sanitized_path:}$nonyq_dir"
+            _shadowed=1
+        fi
+        continue
+    fi
     sanitized_path="${sanitized_path:+$sanitized_path:}$_d"
 done
 
@@ -291,7 +305,7 @@ cp "$ROOT/scripts/lua/check-litmus-dead-inputs.lua" "$ctl/scripts/lua/"
 # The guard is Lua since 1643-q3at; run it with the repo's own plan binary.
 DI_PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || DI_PLAN=""
 case "$DI_PLAN" in ./*) DI_PLAN="$ROOT/${DI_PLAN#./}" ;; esac
-dead_inputs() { (cd "$ctl" && "$DI_PLAN" script run scripts/lua/check-litmus-dead-inputs.lua 2>&1); }
+dead_inputs() { (cd "$ctl" && env -u PROJECT_ROOT -u TILLANDSIAS_REPO_ROOT "$DI_PLAN" script run scripts/lua/check-litmus-dead-inputs.lua 2>&1); }
 printf 'fn main(){}\n' > "$ctl/crates/real/src/main.rs"
 git -C "$ctl" init -q
 git -C "$ctl" config user.email t@example.com

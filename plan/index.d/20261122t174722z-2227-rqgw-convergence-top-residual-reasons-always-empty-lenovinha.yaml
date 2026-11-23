@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: convergence-top-residual-reasons-always-empty
+    order: 2227-rqgw
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 1
+    title: |
+      local-ci's convergence signature has always written top_residual_reasons as [], even on failing runs.
+    context: |
+      Found while porting write_convergence_artifacts (2224-x32n). The bash writer set trap 'rm -f <temp files>' RETURN, then sourced scripts/plan-binary-probe.sh for the score-checks call (977-j6qu). A RETURN trap also fires when a sourced file finishes, so the residual-reasons file was deleted after the loop filled it and before it was read; the record then got []. Measured with the trunk writer: one failing check, file 175 bytes after the loop, top_residual_reasons []. 2224 carries this on purpose (CARRY_EMPTY_TOP_RESIDUAL in scripts/lua/local-ci-convergence-artifacts.lua), on the coordinator's bug-for-bug ruling, so its parity evidence stays pure.
+    exit_criteria:
+      - "a failing run's record lists each failed check's spec, reason and weight in top_residual_reasons; the arm is red before the fix"
+    unscoreable: "unpinnable-until-the-guard-exists: the red-first arm is the deliverable."
+    next_action: "Drop CARRY_EMPTY_TOP_RESIDUAL in the fix PR stacked on 2224-x32n, with a red-first arm; it can share the PR with 2226."
+    provenance: found by lenovinha porting 2224-x32n.
+    depends_on: [local-ci-to-lua-slice-4-convergence-artifacts]
+    related: [2224-x32n, 2226-63ta]
+    events:
+      - {type: filed, ts: '2026-11-22T17:47:22Z', host: lenovinha, summary: top_residual_reasons always empty filed}

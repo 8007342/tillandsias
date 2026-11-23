@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-20).
+packets:
+  - packet_id: check-n-z-lua-port-batch-3-pickup-role-grammar-and-skill-canonicalization
+    order: 2118-98dq
+    status: in_progress
+    kind: debt
+    priority: p2
+    pickup_role: linux
+    capability_tags: [shell-to-lua, debt, scripts, check]
+    estimated_hours: 4
+    owned_files:
+      - scripts/check-pickup-role-grammar.sh
+      - scripts/check-skill-canonicalization.sh
+    title: |
+      check-[n-z] Lua port batch 3: port check-pickup-role-grammar and check-skill-canonicalization (no build.sh or land-path callers, exit codes within 0-3) to scripts/lua/, repoint callers, delete each .sh.
+    context: |
+      Selection rule (coordinator): no build.sh or land-path callers. Left out of this batch, each for a reason:
+      - check-resumable-claim-dirt: exit 4 contract, and the pre-push hook calls it, so it goes to the post-stable set with 2125-adb5;
+      - check-spec-index-resolution-agreement: it runs inside the forge image's MCP overlay, a release-path risk;
+      - the nix, release-asset and running-image checks: need nix, release artifacts or podman state.
+    exit_criteria:
+      - 'both ports match their .sh on the tree and on their tests; every caller names the lua; ./build.sh --preflight refused=0'
+    unscoreable: "a port, scored by each script's own existing test and litmus passing against the lua; the batch adds no new pin"
+    next_action: Port check-pickup-role-grammar, then check-skill-canonicalization.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-20T05:42:22Z"
+        host: lenovinha
+        summary: check-[n-z] lua port batch 3 (two scripts).

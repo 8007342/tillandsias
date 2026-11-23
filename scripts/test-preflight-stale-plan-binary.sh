@@ -49,12 +49,15 @@ mkstub stale 'echo "stale:validator-surface built-from=aaaa checkout=bbbb" >&2; 
 mkstub current 'echo "ok:validator-surface:bbbb"; exit 0'
 mkstub mute 'exit 2'
 
-run() { TILLANDSIAS_PLAN_BIN="$1" bash "$W/block.sh" "$ROOT" > "$W/out" 2>&1; echo $?; }
+# ORDER 2186-x5kv: the block now rebuilds a stale binary once; a planted cargo
+# that fails keeps the real one from running and leaves the stub stale.
+mkstub cargo 'exit 101'
+run() { TILLANDSIAS_PREFLIGHT_CARGO="$W/cargo" TILLANDSIAS_PLAN_BIN="$1" bash "$W/block.sh" "$ROOT" > "$W/out" 2>&1; echo $?; }
 
 # 1
 rc="$(run "$W/stale")"; out="$(cat "$W/out")"
 n="$(grep -c '^refused:preflight:stale-plan-binary' "$W/out")"
-if [ "$rc" = 1 ] && [ "$n" = 1 ] && grep -q 'REMEDY: cargo build --release -p tillandsias-plan' "$W/out" \
+if [ "$rc" = 1 ] && [ "$n" = 1 ] && grep -q 'REMEDY: the door already ran cargo build --release -p tillandsias-plan once' "$W/out" \
    && grep -q 'WHY:' "$W/out" && ! grep -q 'fell-through' "$W/out"; then
     ok "arm 1: a stale binary gives ONE named refusal with WHY and REMEDY, rc 1, nothing after it runs"
 else

@@ -67,7 +67,7 @@ relays `fatal:` for a work ref" is the same benign sweep noise §5 describes.
 ## 2 — Verify, without repairing
 
 ```bash
-scripts/check-bare-metal-host-initialized.sh
+tillandsias-plan script run scripts/lua/check-bare-metal-host-initialized.lua
 ```
 
 Non-mutating: it starts nothing and writes nothing.
@@ -508,7 +508,7 @@ unbracketed pattern appears anywhere else in the same command line, it
 self-matches again, which is exactly what happened when this was tested. `-x`
 matches the executable name only and never the pattern, so it cannot self-match.
 
-**Instrument B — a file store** (e.g. `store --file=.git/.gh-credentials`):
+**Instrument B — a file store** (e.g. `store --file=.git/.gh-credentials`; 2222-xjgu: such a store is itself refused as plaintext at rest, `blocked:plaintext-credential-store`, so this instrument exists only to measure a host before its operator removes one):
 
 ```bash
 mv <store-file> <store-file>.acceptance-aside      # before the three legs
@@ -652,7 +652,7 @@ git rev-list --count HEAD..origin/linux-next     # 0, or merge first
 ## Repairs
 
 Append an entry for every repair actually performed on a real host. Each entry
-carries all five fields; `scripts/check-bare-metal-host-initialized.sh`'s
+carries all five fields; `scripts/lua/check-bare-metal-host-initialized.lua`'s
 fixture refuses an entry missing any of them. This section is how the skill
 evolves — it is a log of what actually broke, not of what might.
 

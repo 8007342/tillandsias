@@ -440,8 +440,14 @@ bench_tool_call() {
 # `dispatch=unchecked:no-engine-binary` — an honest unknown, never an `ok`.
 DISPATCH="unchecked:no-engine-binary"
 if [ -n "${BENCH_ENGINE_BINARY:-}" ]; then
-    DISPATCH="$("$(dirname "${BASH_SOURCE[0]}")/check-engine-cpu-dispatch.sh" \
-                "$BENCH_ENGINE_BINARY" 2>/dev/null)" || true
+    # Order 2199-luab: the check is the Lua port, run by the plan binary.
+    _bench_plan="${TILLANDSIAS_PLAN_BIN:-$(. "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh" 2>/dev/null && resolve_plan_binary 2>/dev/null)}"
+    if [ -n "$_bench_plan" ]; then
+        DISPATCH="$("$_bench_plan" script run "$(dirname "${BASH_SOURCE[0]}")/lua/check-engine-cpu-dispatch.lua" -- \
+                    "$BENCH_ENGINE_BINARY" 2>/dev/null)" || true
+    else
+        DISPATCH="unavailable:no-runnable-plan-binary"
+    fi
     [ -n "$DISPATCH" ] || DISPATCH="unavailable:check-did-not-run"
     case "$DISPATCH" in
         refused:*)

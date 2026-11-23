@@ -729,7 +729,7 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     # moment that cleared seconds later — a whole gated cycle for a blip. A
     # real expiry fails twice and refuses exactly as before; the retry never
     # runs a gh auth command (1025-a896). The delay is overridable so the
-    # fixture (scripts/test-land-auth-retry.sh) does not wait.
+    # fixture (scripts/lua/test-land-auth-retry.lua) does not wait.
     _auth_retried=0
     while :; do
     if [ -n "$_bounder" ]; then

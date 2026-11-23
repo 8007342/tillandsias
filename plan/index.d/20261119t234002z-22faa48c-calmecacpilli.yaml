@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-antigravity-forge-lane-spills-raw-escape-sequences-into-the-terminal-instead-of-taking-keystrokes
+    field: next_action
+    value: 'LEFT (triage 2026-11-19): merge is on trunk; the only proof left is a cargo run on a capable host: cargo test -p tillandsias-headless --features tray tests::an_interactive_sign_in_gets_the_terminal_not_the_output_only_stream -- --exact (plus a PTY run). Close on green with the merge sha.'
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: an-antigravity-forge-lane-spills-raw-escape-sequences-into-the-terminal-instead-of-taking-keystrokes
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

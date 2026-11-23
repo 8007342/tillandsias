@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: build-speed row from yoga's gate profile, assigned by macuahuitl-fedora 2026-11-21.
+packets:
+  - packet_id: pending-capability-row-fixture-off-checkout-lane
+    order: "2175-capw"
+    status: implemented
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, gate, fixture]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-pending-capability-row-does-not-wedge.sh
+      - scripts/gate-steps.d/275-1128-4ffr.step
+    title: "Gate step 275-1128-4ffr writes nothing in the checkout, so it drops lane=checkout and joins the gate pool"
+    context: |
+      Yoga's gate profile has step 275-1128-4ffr running serially on lane=checkout, for 63 s. Measured on calmecacpilli,
+      it wrote three things inside the checkout: target/plan-scratch/ (the scaffolds), .git/index (`git status` refreshes
+      the stat cache under index.lock, which a sibling git step can collide with) and .cache/metrics/forge-expert-usage.jsonl.
+      The scaffolds now live under TILLANDSIAS_PLAN_SCRATCH_BASE (default ${TMPDIR:-/tmp}/tillandsias-plan-scratch-<uid>),
+      the live-state reads use GIT_OPTIONAL_LOCKS=0, and the usage and timing logs point into the scaffold. With STEP_SERIAL
+      and STEP_LANES gone, the step runs in the pool.
+    exit_criteria:
+      - "A run leaves no file in the checkout newer than its start, and git status is the same before and after (measured 2026-11-21: 9/9 in 9.6 s)."
+      - "It still fails on a sabotaged decider: release-preflight always ok fails arms 2, 3 and 4 (4 passed, 3 failed); always blocked fails the precondition."
+      - "It passes with step 885-1753-p925 running beside it."
+    unscoreable: "a fixture change: scored by the fixture's own arms and the two mutants above."
+    next_action: "Land."
+    provenance: "macuahuitl-fedora 2026-11-21: pin the step's checkout writes to scratch so it can leave lane=checkout."
+    events:
+      - type: filed
+        ts: "2026-11-21T21:14:50Z"
+        host: calmecacpilli
+        summary: "filed and implemented on work/2175-capw"

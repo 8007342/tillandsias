@@ -12,3 +12,7 @@ STEP_LUA="scripts/lua/check-no-tracked-binaries.lua"
 STEP_ERROR="a tracked binary is not allowlisted (1087-h2z9)"
 STEP_OK="Tracked-binary check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:no-tracked-binaries:38"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="crates/tillandsias-macos-tray/assets/** crates/tillandsias-windows-tray/assets/** images/dmg/** plan/archive/** scripts/check-no-tracked-binaries.sh"

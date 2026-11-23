@@ -21,6 +21,26 @@ This is the top-level unattended loop intended for:
 It composes the worker, coordination, e2e, and release skills without replacing
 their detailed runbooks.
 
+## Remote unreachable: STOP — check FIRST, and on the first GitHub failure (order 2239-rmun)
+
+The user's direction (2026-11-22): a host that cannot push code to the remote
+must stop work entirely, not retry with exponential backoff, and not keep
+doing local work. A host whose gh token went bad kept merging and porting for
+~25 minutes because every symptom ("Failed to connect to github.com:443",
+"graphql: i/o timeout") read as a flaky network.
+
+1. At the start of every loop, AND the moment any GitHub operation fails (a
+   push, `gh pr ...`, `git fetch`/`ls-remote`, an API timeout), run the probe
+   once:
+   `tillandsias-plan script run scripts/lua/probe-remote-reachable.lua`
+2. `ok:remote-reachable` → continue.
+3. `blocked:remote-unreachable:<cause>` → **SUSPEND**: tell the user and the
+   coordinator (by name, with the cause and the probe's why/remedy), push and
+   claim nothing, start no further local work, and do not retry or back off.
+   Wait for a human to restore access, then run the probe again.
+4. Never run `gh auth login` or `gh auth refresh` yourself; restoring access
+   is the human's step on that host.
+
 ## Invocation Modes — check FIRST, before anything else
 
 The skill is parameterized by the invoking prompt. **Before doing any work —
@@ -450,7 +470,11 @@ On a durable bare-metal DEVELOPMENT host (not an ephemeral forge):
    delete the whole persistent cache rather than prune it
    (`build_cache_hygiene.nix_store_policy`) — `podman image prune` of
    superseded versioned images,
-   the nix-lane guards on hosts with nix (`scripts/test-nix-toolbox.sh`,
+   the nix-lane guards on hosts with nix — "has nix" means
+   `bash scripts/nix-toolbox.sh capability` answers `ok:nix-capability:*`
+   (host OR toolbox), never `command -v nix`: on Silverblue hosts nix lives
+   only in the toolbox, and a `command -v` read skipped all of these steps on
+   lenovinha and macuahuitl (order 2162-evv5) — (`scripts/test-nix-toolbox.sh`,
    `scripts/check-nix-deps-stability.sh` — daily, not per-commit: each is a
    flake evaluation), the enclave nix binary cache on Linux hosts with a
    running enclave (`scripts/nix-cache-service.sh ensure` then
@@ -945,7 +969,7 @@ filing — not the prompt.
 4. **Launch-generated opsx dirt is a refusal (deterministic, order 1440-w8g8)**:
    before refusing on startup dirt, name WHICH dirt it is:
    ```bash
-   scripts/check-opsx-generated-dirt.sh
+   tillandsias-plan script run scripts/lua/check-opsx-generated-dirt.lua
    ```
    It prints exactly one line matching
    `^(ok:clean-tree|launch-dirt:opsx-only|non-opsx:.*)$`. `launch-dirt:opsx-only`
@@ -960,7 +984,7 @@ filing — not the prompt.
    step produced. Moving the generated set to a new openspec version is a
    deliberate `openspec update` + commit under its own packet, never a cycle's
    reaction to dirt. `non-opsx:` (exit 3) is real sibling/operator dirt: fall
-   through to 4b, then to the dirty-start refusal. `ok:clean-tree` (exit 4)
+   through to 4b, then to the dirty-start refusal. `ok:clean-tree` (exit 0; 4 until 2201-opsx)
    means there is nothing to name. The checker is a falsifiable machine
    decision; do not substitute prose judgment for it.
 4b. **Resumable claim dirt (deterministic, order 833-fpe7)**: when the dirt is
@@ -1124,7 +1148,7 @@ It prints exactly one line matching the falsifiable grammar
 absent or blocked. A usable channel is present when ANY of these holds (the
 script checks them in order):
 
-- `<common-git-dir>/.gh-credentials` (absolute `git rev-parse --path-format=absolute --git-common-dir`, so every linked worktree shares it; 1409-65d5) exists and is non-empty (repo-local store helper), or
+- (2222-xjgu) a non-empty `<common-git-dir>/.gh-credentials` is NOT a channel: it is a plaintext token at rest (`methodology/philosophy.yaml` `credentials_at_rest`) and answers `blocked:plaintext-credential-store` first, whatever else works; the channel is one of:
 - `GH_TOKEN` or `GITHUB_TOKEN` is set in the environment, or
 - `gh auth status` succeeds (reachable, unlocked keyring), or
 - `TILLANDSIAS_HOST_KIND=forge` is set AND the enclave git mirror is reachable
@@ -1145,7 +1169,7 @@ Pinned by `litmus:credential-channel-check-shape` and
 into worker drain or any committable work. Instead
 fail loud: file or update a blocker in `plan/issues/` recording the exact
 verdict, the owner (operator), and the smallest next
-action (re-seed `.git/.gh-credentials` via the gh token, inject `GH_TOKEN`
+action (the operator signs in to the OS keyring with `tillandsias --github-login` and removes any plaintext store, inject `GH_TOKEN`
 into the task environment, or — for `blocked:*` — repair the mirror's Vault
 GitHub token / its repo push permission), then stop. Accreting local-only
 commits that cannot be pushed violates the Non-Negotiable Exit Contract and is
@@ -1905,9 +1929,9 @@ another host had claimed that morning. Then claim:
 tillandsias-plan set-field <order> status in_progress \
     --host "$(hostname -s)" --reason "claimed for cycle <UTC ts>"
 git add plan/index.d && git commit -m "claim(<order>): <host>" && git push
-scripts/check-claim-confirmed.sh <order>
+tillandsias-plan script run scripts/lua/check-claim-confirmed.lua -- <order> --host "$(hostname -s)"
 # -> ok:claim-confirmed:<order> | refused:claim-not-on-origin | refused:claim-lost:<order>
-#    | unknown:claim-origin-unreachable (never a pass)
+#    | could-not-run:claim-origin-unreachable (never a pass)
 ```
 
 Push the claim BEFORE the work, not with it — an unpushed claim separates

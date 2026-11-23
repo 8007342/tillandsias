@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-fresh-guest-vault-unseals-with-a-stale-host-keychain-share-and-dies-wrong-key
+    field: next_action
+    value: 'On the first published release whose tree contains 4a66c197d: run the real-host arms on macOS. (a) Fresh-guest arm: with a stale share in the Keychain, destroy the VM dir, run --provision, then one CLI boot (--exec-guest). The share mdat must be newer than run_start, and a second boot must show "vault unsealed" with no "wrong key". (b) Existing-guest wrong-key arm: put a mismatched share in the Keychain, then one CLI boot heals it, and the second boot unseals with no wrong key.'
+    ts: "2026-11-17T05:46:48Z"
+    host: macbookair
+    replaces_sha256: "f6292b30647064a3827a99ceecbb6f0447385ced96b0561342a9a1fbe3702f4e"
+
+events:
+  - packet_id: macos-fresh-guest-vault-unseals-with-a-stale-host-keychain-share-and-dies-wrong-key
+    event:
+      type: note
+      ts: "2026-11-17T05:46:48Z"
+      host: macbookair
+      summary: |-
+        real-host arms gated on a release carrying 4a66c197d

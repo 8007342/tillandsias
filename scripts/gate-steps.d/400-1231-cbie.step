@@ -42,11 +42,14 @@
 # Its fast-lane sibling check-order-citations-resolve.sh (1234-zade) measures
 # 0.05s and correctly stays there.
 #
-# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# STEP_LUA (ported to Lua by 2109-umac) is a LITERAL path on purpose: a binding assembled from a
 # variable is invisible to every name-based scan, including the
 # bound-or-retired guard (1063-nraf). Keep it a plain string.
 STEP_DESC="Checking the uninstaller's tray stop cannot fire off-Darwin (1231-cbie)"
-STEP_SCRIPT="scripts/test-uninstall-tray-stop-is-macos-only.sh"
+STEP_LUA="scripts/lua/test-uninstall-tray-stop-is-macos-only.lua"
 STEP_ERROR="a Linux uninstall killed a process that merely MENTIONED the tray literal (1231-cbie) — uninstall.sh is a shipped artifact; see which arm failed above"
 STEP_OK="Uninstaller tray-stop platform confinement passed"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin PASS: uninstall-tray-stop-is-macos-only 4/4 (1401-p3k7 in-situ: real app + live tray unchanged)"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-20 darwin ok:uninstall-tray-stop-is-macos-only:4 (2109-umac Lua port; arm 1 reds against a pkill -f mutant)"
+STEP_SERIAL="drives podman"
+STEP_LANES="podman"
+STEP_READS="scripts/lua/test-uninstall-tray-stop-is-macos-only.lua scripts/uninstall.sh"

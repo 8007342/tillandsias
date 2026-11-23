@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace order:1063-363b
+# @trace order:1063-363b, order:2188-qaaj
 #
 # Fixture for check-tracked-files-unwritten.sh.
 #
@@ -91,5 +91,36 @@ printf 'scratch\n' > untracked-scratch.txt
     || bad "an untracked file was reported; the guard would be too noisy to keep"
 rm -f untracked-scratch.txt
 
+
+# ── 7. A RETARGETED DIRECTORY SYMLINK is named (order 2188-qaaj) ──────────
+# sha256sum on a symlink to a directory fails EISDIR; with stderr discarded the
+# path was silently absent from the baseline, so a retarget went unseen.
+mkdir -p skills-a/x skills-b/x .claude/skills
+printf 'a\n' > skills-a/x/SKILL.md; printf 'b\n' > skills-b/x/SKILL.md
+ln -s ../../skills-a/x .claude/skills/x
+G add -A >/dev/null; G commit -q -m symlinks
+[ "$(_snap)" = "0" ] && grep -q '  \.claude/skills/x$' "$W/state" \
+    && ok "a tracked symlink to a directory is in the baseline" \
+    || bad "the directory symlink is missing from the baseline"
+rm .claude/skills/x && ln -s ../../skills-b/x .claude/skills/x
+out="$(_verify)"; rc="$(_vrc)"
+if [ "$rc" -ne 0 ] && grep -q '\.claude/skills/x' <<<"$out"; then
+    ok "retargeting a tracked directory symlink is named"
+else
+    bad "a retargeted directory symlink was not reported (rc=$rc)"
+fi
+G checkout -- .claude/skills/x
+
+# ── 8. AN UNHASHABLE PATH REFUSES the snapshot, never drops out ────────────
+chmod 000 skills-a/x/SKILL.md
+rc="$(_snap)"
+chmod 644 skills-a/x/SKILL.md
+if [ "$(id -u)" = 0 ]; then
+    ok "skipped as root (every file is readable): unhashable-path refusal"
+elif [ "$rc" = "2" ] && bash scripts/check-tracked-files-unwritten.sh snapshot "$W/s8" >/dev/null 2>&1; then
+    ok "an unreadable tracked path refuses the snapshot (rc 2), and the restored tree snapshots again"
+else
+    bad "an unreadable tracked path did not refuse the snapshot (rc=$rc)"
+fi
 echo "tracked-files-unwritten-guard: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: rerun-failed-rust-tests-stays-shell-pending-a-section-6-5-ruling
+    order: 2214-pj7i
+    status: blocked
+    kind: decision
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 1
+    title: |
+      scripts/lib-rerun-failed-rust-tests.sh and its fixture stay shell: the re-run must call local-ci.sh's bash function run_rust_test_on_host in the caller's FULL environment, which a Lua helper cannot do.
+    context: |
+      Coordinator asked (2026-11-22) to port test-rerun-failed-rust-tests.sh with the sourced library's runners, or record why it stays .sh. It stays, for two reasons that are properties of the code, not of effort:
+      (1) the runner is a caller-defined bash FUNCTION (local-ci.sh passes run_rust_test_on_host env TILLANDSIAS_PODMAN_BIN=/bin/false cargo test ...); a Lua helper can exec argv, not call a function in its caller's shell;
+      (2) "same regime" is the library's whole contract (1242-4x53: the first failure looked flaky because the re-run differed in TILLANDSIAS_PODMAN_REFUSE_REAL), and the Lua runner scrubs the child environment by design: CARGO_TARGET_DIR alone would move the re-run to a different target dir, which is the exact mistake it exists to prevent.
+      The library is 15 lines, sourced by one caller, never fails it, and is already declared in scripts/gate-divergence-declared.txt as infra. bootstrap-shell-allowlist.txt admits a path only if the design's section 6.5 says it cannot move, and 6.5 has no row for "needs the caller's bash function and full environment", so it is not added there unilaterally.
+    exit_criteria:
+      - "the coordinator rules: either amend section 6.5 with a row for caller-function, full-environment helpers and list the library and its fixture in bootstrap-shell-allowlist.txt, or name the port shape (for example local-ci.sh moving to Lua first, so the runner is no longer a bash function)"
+    unscoreable: "a ruling, not a measurement"
+    next_action: "Coordinator ruling on section 6.5."
+    provenance: coordinator direction; filed by lenovinha.
+    depends_on: []
+    related: [1242-4x53, 1443-xkwb, 2213-ag5u]
+    events:
+      - {type: filed, ts: '2026-11-22T12:47:42Z', host: lenovinha, summary: "stays shell; blocked on a section 6.5 ruling"}

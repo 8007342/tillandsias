@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli at macuahuitl-fedora's request, 2026-11-21.
+packets:
+  - packet_id: land-queue-paid-but-taken-hint-names-the-backlog
+    order: "2152-t5p9"
+    status: implemented
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [landing, carried-obligations]
+    estimated_hours: 1
+    owned_files:
+      - scripts/land-queue.sh
+      - scripts/lua/check-carried-obligations.lua
+      - scripts/lua/test-carried-obligations.lua
+    title: "land-queue's paid-but-taken eviction hint names the backlog, so the waiver it tells you to write is admitted"
+    context: |
+      On refused:carried:paid-but-taken-by:<ref>:<item>, land-queue read field 3 of the verdict as the backlog and told
+      people to write `Carried-Waiver: paid-but-taken-by <reason>`. The guard keys waivers by BACKLOG name (shell-to-lua),
+      so that line was never admitted. The guard now prints the waiver as its own column-0 line,
+      `Carried-Waiver: <backlog> conflict:<item> (#<pr>)`, which land-queue copies into its hint. land-queue also stops
+      reading the backlog from the verdict when the verdict is paid-but-taken-by.
+    exit_criteria:
+      - "test-carried-obligations.lua arm 'PAID-BUT-TAKEN hint' finds a column-0 `Carried-Waiver: shell-to-lua conflict:...` line; on the trunk guard it finds none (hint=nil)."
+      - "arm 'PAID-BUT-TAKEN remedy' commits that copied line verbatim as a trailer and is admitted (waived, exit 0); on the trunk guard it stays refused."
+    unscoreable: "decider-not-litmus: scored by scripts/lua/test-carried-obligations.lua, which build.sh runs on every --check."
+    next_action: "Land."
+    provenance: "macuahuitl-fedora 2026-11-21, item (a)."
+    events:
+      - type: filed
+        ts: "2026-11-21T07:11:04Z"
+        host: calmecacpilli
+        summary: "filed and implemented on work/2152-t5p9; 31/31 arms, 2 red on the trunk guard"

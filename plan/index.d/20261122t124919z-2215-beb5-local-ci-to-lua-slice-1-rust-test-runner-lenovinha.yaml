@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: local-ci-to-lua-slice-1-rust-test-runner-keeps-the-regime
+    order: 2215-beb5
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 4
+    title: |
+      local-ci.sh to Lua, slice 1: the rust-test runner (run_rust_test_on_host) and the same-regime re-run become scripts/lua/run-rust-test-on-host.lua, with an explicit env pass-through list recorded in the verdict.
+    context: |
+      Coordinator ruling on 2214-pj7i (2026-11-22): no allowlist amendment; the port shape is local-ci.sh (2316 lines) to Lua first, in slices, starting here. run_rust_test_on_host is cd REPO_ROOT plus TILLANDSIAS_PODMAN_REFUSE_REAL=1 over an INHERITED environment; the Lua runner scrubs children, so the slice carries the environment explicitly: a named pass-through list (CARGO_TARGET_DIR, RUSTFLAGS, RUSTDOCFLAGS, CARGO_HOME, RUSTUP_HOME, RUSTUP_TOOLCHAIN, CARGO_BUILD_JOBS, CARGO_INCREMENTAL, RUST_BACKTRACE, RUST_TEST_THREADS) is recorded in the verdict and its values in a regime file, and the re-run of exactly the FAILED tests (1242-4x53) refuses by name when the regime differs. local-ci.sh's rust-tests block uses it; the other run_rust_test_on_host callers move in later slices.
+    exit_criteria:
+      - "run mode prints the pass-through list in its verdict and writes the regime; rerun mode re-runs only the FAILED names and answers reproduced=yes|no"
+      - "an arm reds the re-run when CARGO_TARGET_DIR differs from the first run, and another when RUSTFLAGS differs; with the regime unchanged the re-run answers"
+      - "local-ci.sh's rust-tests check runs the Lua runner and re-run; lib-rerun-failed-rust-tests.sh and test-rerun-failed-rust-tests.sh are deleted once nothing sources the library, closing 2214-pj7i"
+    unscoreable: "unpinnable-until-the-guard-exists: the regime arms are the deliverable."
+    next_action: "Write the runner and its fixture, wire the rust-tests block, run it red and green."
+    provenance: coordinator ruling on 2214-pj7i; filed by lenovinha.
+    depends_on: []
+    related: [2214-pj7i, 1242-4x53, 880-tdwn]
+    events:
+      - {type: filed, ts: '2026-11-22T12:49:19Z', host: lenovinha, summary: local-ci.sh slice 1 filed}

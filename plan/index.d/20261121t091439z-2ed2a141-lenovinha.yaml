@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: gate-roster-declared-inputs-shared-content-memo-concurrent-rust-families
+    field: status
+    value: completed
+    ts: "2026-11-21T09:14:39Z"
+    host: lenovinha
+
+events:
+  - packet_id: gate-roster-declared-inputs-shared-content-memo-concurrent-rust-families
+    event:
+      type: completed
+      ts: "2026-11-21T09:14:39Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: f3b42f45c
+  - packet_id: gate-roster-declared-inputs-shared-content-memo-concurrent-rust-families
+    event:
+      type: note
+      ts: "2026-11-21T09:14:39Z"
+      host: lenovinha
+      summary: |-
+        LANDED via land(1224) f3b42f45c on origin/linux-next: (a) declared gate-step inputs, mutation-proven; (d) a content-keyed shared archiver memo with a one-process ledger digest (memo hit 0.3 s)

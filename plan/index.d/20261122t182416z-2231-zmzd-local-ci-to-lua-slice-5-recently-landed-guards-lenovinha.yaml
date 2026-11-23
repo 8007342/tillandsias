@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: local-ci-to-lua-slice-5-recently-landed-guards-roster
+    order: 2231-zmzd
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 3
+    title: |
+      local-ci.sh to Lua, slice 5: the "Recently Landed Guards" block (18 guards in about 380 lines of copy-pasted bash) becomes one roster table and one runner in scripts/lua/local-ci-landed-guards.lua.
+    context: |
+      Coordinator direction 2026-11-22: more local-ci.sh slices if a self-contained block remains past slice 4. This block repeats one shape 18 times: if the guard exists, run it, then pass/fail (16 gates) or always pass (2 reports), and archive its log; if it is missing, log_fail_missing_guard. The Lua runs the roster and prints one result row per guard; local-ci.sh applies the rows to its counters (log_pass / log_fail_tracked / log_fail_missing_guard / archive_check_log), which stay in bash.
+    exit_criteria:
+      - "for each guard and each outcome (pass, fail, missing), the rows applied give the same check ids, statuses, messages and archived logs as the bash block; a mutant reds it"
+      - "the block is one call; the 18 copies are gone"
+    unscoreable: "unpinnable-until-the-guard-exists: the parity fixture is the deliverable."
+    next_action: "Inventory the 18 guards, port, parity-test against the bash block, rewire, PR against linux-next."
+    provenance: coordinator direction; filed by lenovinha.
+    related: [2224-x32n]
+    events:
+      - {type: filed, ts: '2026-11-22T18:24:16Z', host: lenovinha, summary: local-ci.sh slice 5 filed}

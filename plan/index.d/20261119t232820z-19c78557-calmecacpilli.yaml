@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: linux-approval-dialog-shows-macron-doing-the-action-with-curated-calm-sentences-before-the-os-check
+    field: next_action
+    value: |-
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then implement per openspec/changes/os-verified-approval-gates.
+
+
+      [2026-11-19T23:28:20Z calmecacpilli] LEFT: only the sentence-table slice landed (14f5fe1bfa). Still to do: one illustration per action kind, a headless render test (one PNG per kind), and the GTK dialog binary. Exit: a test over the gate table that asserts an illustration file per kind (fails today), plus the render test.
+    ts: "2026-11-19T23:28:20Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: linux-approval-dialog-shows-macron-doing-the-action-with-curated-calm-sentences-before-the-os-check
+    event:
+      type: note
+      ts: "2026-11-19T23:28:20Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

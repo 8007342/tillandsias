@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: shell-to-lua backlog port, assigned by macuahuitl-fedora 2026-11-21.
+packets:
+  - packet_id: port-check-fragment-closure-evidence-added-to-lua
+    order: "2166-ypfh"
+    status: implemented
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, gate, plan]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/check-fragment-closure-evidence-added.lua
+      - scripts/check-fragment-closure-evidence-added.sh
+      - scripts/test-closure-evidence-survives-landing.sh
+      - openspec/litmus-tests/litmus-fragment-closure-evidence-gate-shape.yaml
+      - build.sh
+    title: "Port scripts/check-fragment-closure-evidence-added.sh to scripts/lua (shell-to-lua)"
+    context: |
+      Same grammar (ok:closure-evidence:<n> checked | violation:closure-without-evidence:<n> | skip:stale-plan-binary), exit
+      codes, diff scope and the 1024-c3h3 ghost-SHA advisory. The rule's binary is named by --plan, TILLANDSIAS_PLAN_BIN or
+      TILLANDSIAS_SCRIPT_RUNNER_BIN and may differ from the runner. That is the arm-44 redesign: the stale-binary litmus step
+      used to put a sh stub at target/release, which cannot host `script run`. Now the real binary runs the Lua and the stub
+      is named as the rule's binary. git, file tests and fragment reads run in the caller's PWD (2166-zvst), because the
+      landing fixture runs it from a scratch repo.
+    exit_criteria:
+      - "scripts/check-fragment-closure-evidence-added.sh does not exist; scripts/lua/check-fragment-closure-evidence-added.lua does (on trunk the reverse)."
+      - "litmus:fragment-closure-evidence-gate-shape passes 6/6, including the stub-binary skip and its current-binary negative control; test-closure-evidence-survives-landing.sh passes 5/5 on the Lua."
+    unscoreable: "a port: scored by the litmus and the landing fixture named above."
+    next_action: "Land."
+    provenance: "macuahuitl-fedora 2026-11-21 shell-to-lua queue, item (2)."
+    events:
+      - type: filed
+        ts: "2026-11-21T14:27:24Z"
+        host: calmecacpilli
+        summary: "filed and ported on work/2166-ypfh"

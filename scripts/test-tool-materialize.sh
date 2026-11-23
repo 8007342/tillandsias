@@ -247,9 +247,19 @@ else
     # Materialization disabled by pointing the cache somewhere unwritable, so
     # fast_tool falls through to the 799-tb7q per-call prefix. This is the
     # counterfactual the packet assumed everyone would have to live with.
-    _run percall PATH="$W/bin" TILLANDSIAS_TOOL_CACHE=/proc/nonexistent-914ahsy \
-        XDG_RUNTIME_DIR="$_RT" HOME="${HOME:-/tmp}"
-    _pc_out="$_OUT"; _pc_ms="$_MS"
+    if [ -n "${TILLANDSIAS_TOOL_MATERIALIZE_FORCE_MARGIN_FAIL-}" ]; then
+        # ORDER 2159-n9sa (priority:build-speed): a FORCED margin failure judges
+        # only how the red and the regime skip are REPORTED (the surfaces-arm
+        # fixture), never the measurement, so the slow per-call run (one
+        # `toolbox run` per jq call, most of this fixture's ~24 s) is not paid.
+        # It carries the host verdict and a ratio under 4x. The unforced run,
+        # ARM 0 of that fixture and every plain run, still measures it.
+        _pc_out="$_host_out"; _pc_ms=$(( _mat_ms * 2 + 1 ))
+    else
+        _run percall PATH="$W/bin" TILLANDSIAS_TOOL_CACHE=/proc/nonexistent-914ahsy \
+            XDG_RUNTIME_DIR="$_RT" HOME="${HOME:-/tmp}"
+        _pc_out="$_OUT"; _pc_ms="$_MS"
+    fi
 
     case "$_host_out" in
         *'"status":"ok"'*) : ;;

@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-20 at macuahuitl-fedora's direction: release blocker 4 of the failed v56.11.20.1 cut.
+packets:
+  - packet_id: committable-branch-guard-litmus-scratch-repos-carry-their-own-git-identity
+    order: 2133-fp77
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [litmus, release-blocker, toolbox]
+    estimated_hours: 1
+    owned_files:
+      - openspec/litmus-tests/litmus-committable-branch-guard-shape.yaml
+    title: "litmus:committable-branch-guard-shape's scratch repos carry their own git identity, so the guard is judged on the branch rule and not on an absent committer"
+    context: |
+      The v56.11.20.1 cut failed ci-full on step 2 of litmus:committable-branch-guard-shape: out=blocked:no-git-identity.
+      The gate runs inside the builder toolbox (hostname toolbx, no domain), where git cannot auto-detect a committer,
+      and the guard runs under the plan binary's script-run door, which drops GIT_* identity variables (2128-9q5a).
+      Coordinator ruling 2026-11-20: the smaller fix is the fixture's own: each of its seven scratch `git init` repos gets
+      a repo-local user.name/user.email, which the door cannot drop (a file, not an environment variable).
+    exit_criteria:
+      - "In the builder toolbox, scripts/run-litmus-test.sh runs litmus:committable-branch-guard-shape green. Pre-fix: FAILS (step 2 blocked:no-git-identity)."
+    unscoreable: "the litmus file is the measure"
+    provenance: "cut-v56.11.20.1.log excerpt relayed by the coordinator; yoga reproduction in the toolbox."
+    events:
+      - type: filed
+        ts: "2026-11-20T11:23:40Z"
+        host: yoga
+        summary: "filed and claimed, release blocker"

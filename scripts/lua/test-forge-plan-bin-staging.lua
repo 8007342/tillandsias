@@ -43,6 +43,8 @@ end
 for _, c in ipairs({ "tillandsias-router-sidecar", "tillandsias-otp", "tillandsias-control-wire", "tillandsias-plan" }) do
     fs.mkdir(REL .. "/tree/crates/" .. c .. "/src")
     fs.write(REL .. "/tree/crates/" .. c .. "/src/lib.rs", "pub fn x() {}\n")
+    -- A real crate has a manifest; build-sidecar.sh refuses a tree without one (2118-ywk7).
+    fs.write(REL .. "/tree/crates/" .. c .. "/Cargo.toml", "[package]\nname = \"" .. c .. "\"\nversion = \"0.0.0\"\n")
 end
 fs.write(REL .. "/tree/Cargo.toml", "[workspace]\n")
 fs.write(REL .. "/tree/Cargo.lock", "version = 4\n")

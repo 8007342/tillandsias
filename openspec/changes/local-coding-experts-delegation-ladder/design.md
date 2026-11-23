@@ -66,7 +66,7 @@ local-delegate:<model>:<quant>:<order>:<accepted|rejected|reverted>:<frontier_to
 
 ### Aggregation
 
-`scripts/local-delegate-ladder.sh` groups the tokens by (model, quant) and prints `rung=<R0..R4|none:sample>`. For R1–R3 it requires at least 20 outcomes before it reports a rung.
+`scripts/lua/local-delegate-ladder.lua aggregate` groups the tokens by (model, quant) and prints `rung=<R0..R4|none:sample>`. For R1–R3 it requires at least 20 outcomes before it reports a rung.
 
 ## 4. Bench and replay
 
