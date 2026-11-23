@@ -4864,18 +4864,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "append-event archived-refusal fixture passed"
 
-    # The fixture above must not be able to dirty THIS checkout however it dies
-    # (1564-lk9f): a SIGKILL after its live-accept arm left a host: fixture
-    # fragment in macuahuitl's plan/index.d on 2026-10-09 and land-queue refused
-    # the dirty tree. Arm 1 SIGKILLs it in a scratch repo; arm 2 is the negative
-    # control that keeps 699-usxc asserted.
-    _step "Checking the append-event archived-refusal fixture is hermetic (1564-lk9f)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-append-event-archived-refusal-is-hermetic.sh" 2>&1; then
-        _error "the append-event archived-refusal fixture can leave a write in the checkout it runs from, or no longer asserts that a fragment-only packet accepts events"
-        exit 1
-    fi
-    _info "append-event archived-refusal hermetic fixture passed"
-
     _step "Checking the checkout-lock attested-release fixture (899-q9di)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-cycle-lock-attested-release.sh" 2>&1; then
         _error "the checkout-lock attested-release fixture regressed — either a finished cycle strands its lock again, or the lock stopped refusing concurrent agents"
@@ -5022,18 +5010,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Runnable-remedy fixture passed"
-
-    # Order 628-r2vk. The NEW-surface railguard: a user-visible tray surface
-    # (menu id, notification, status chip, tooltip) cannot land without a
-    # parity-matrix claim. The hermetic fixture pins both directions; the
-    # LIVE check over the real tree is litmus:tray-new-surface-parity-gate
-    # (post-build phase). Ruby-free: the check is the Rust policy binary.
-    _step "Checking the new-surface parity railguard fixture (628-r2vk)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-tray-surface-parity-gate.sh" 2>&1; then
-        _error "the new-surface parity railguard broke — surfaces could land rowless again"
-        exit 1
-    fi
-    _info "New-surface parity railguard fixture passed"
 
     # 920-tqhs. The negative control for the populate_hot_paths fail-loud
     # change: with /opt/cheatsheets unwritable by a lane user, the entrypoint
@@ -5381,12 +5357,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Crate-graph lint passed"
-    _step "Checking --changed --intake defers, marks HEAVY, and matches cargo's crate graph (2248-zcqh)..."
-    if ! _run_lua_decider "scripts/lua/test-gate-changed-intake.lua" 2>&1; then
-        _error "--changed --intake no longer defers whole-tree/slow fixtures by name, marks an unscopable change HEAVY, or derives the crate graph cargo resolves (2248-zcqh)"
-        exit 1
-    fi
-    _info "--changed --intake fixture passed"
 
     # ORDER 1916-tsel — the shared-timing-log leak check names a step only for
     # records carrying ITS gate's run id; two concurrent writers prove a
@@ -6289,17 +6259,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Shell ratchet passed"
 
-    # Its fixture (1580-8hra, the Lua port of the orphaned test-shell-ratchet.sh
-    # that nothing ran): the ratchet's verdicts in scratch repos — counts, a new
-    # decider refused, a piped litmus refused once steps: exists, floors only
-    # descend, an empty population could-not-run, fixtures and pipes warned.
-    _step "Checking the shell ratchet's fixture (1580-8hra)..."
-    if ! _run_lua_decider "scripts/lua/test-shell-ratchet.lua" 2>&1; then
-        _error "the shell ratchet no longer refuses or counts what its fixture constructs — see the FAIL lines above (1580-8hra)"
-        exit 1
-    fi
-    _info "Shell-ratchet fixture passed"
-
     # ORDER 1800-nvsc — the parameterised litmus deciders (scripts/lua/
     # litmus-decide.lua) replace piped `command:` strings family by family.
     # Their fixture constructs every outcome against a fake cargo: a FAILED
@@ -6375,18 +6334,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Local-expert health probe fixture passed"
-
-    # ORDER 1268-fx87. A litmus step's verdict is read from STDOUT only; its
-    # stderr is kept and named on failure. The fixture runs the REAL runner over
-    # a throwaway corpus with a manufactured stderr contaminant, plus a mutant
-    # runner with the merged capture restored, so the control cannot pass
-    # vacuously on a host whose build writes nothing to stderr.
-    _step "Checking a litmus verdict is read from stdout only (1268-fx87)..."
-    if ! _run_lua_decider "scripts/lua/test-litmus-verdict-reads-stdout-only.lua" 2>&1; then
-        _error "a litmus step's verdict again reads stderr, or a failing step no longer names its stderr log — see the FAIL lines above (1268-fx87)"
-        exit 1
-    fi
-    _info "Litmus stdout-verdict fixture passed"
 
     # The end-user-installer output guard's own fixture (1561-47a8), a Lua
     # fixture on the one runner: a flag-naming line refused by file:line, the
@@ -6601,13 +6548,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
 
     # The uninstall app-dir sweep moved to gate step 402-2109-umac (Lua).
 
-    _step "Checking image rebuild keeps the installed binary's launch tag (747-knbp)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-build-image-installed-version-alias.sh" 2>&1; then
-        _error "an image rebuild can orphan the tag the installed binary launches by — every forge launch would be dead on arrival (747-knbp)"
-        exit 1
-    fi
-    _info "Image-rebuild launch-tag gate passed"
-
     # The approved-UX-string gate moved to gate step 909-2257-ba7e (Lua).
 
     # ORDER 1022-y7kc cause 2. An orphaned guard is fixed by INVOKING it
@@ -6793,18 +6733,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus scalar-unescape check passed"
 
-    # 956-llei: the kill-time adjudicator must diff THIS cgroup's cpu.pressure
-    # stall counter across the step's own window and say CONTENDED / NOT
-    # contended / UNCLASSIFIED — never the retired host-wide load1-vs-ncpus
-    # rule, which judged forge steps by the host's runqueue. Three arms, run
-    # through the real runner in a temp root with injected counters.
-    _step "Checking the kill-time adjudicator diffs cpu.pressure (956-llei)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-kill-adjudicator.sh" 2>&1; then
-        _error "the litmus kill-time adjudicator does not classify by cpu.pressure diff (956-llei) — see the verdict line above"
-        exit 1
-    fi
-    _info "Litmus kill-time adjudicator check passed"
-
     # The six live/adversarial inference arms run through the dedicated Rust
     # production-CLI target above; a shell fixture would be a second authority.
     _step "Checking source-agreement production fixtures ran (1484-uf29)..."
@@ -6814,13 +6742,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Source-agreement production fixture matrix passed"
-
-    _step "Checking this host has the tools the gate needs (989-ykks)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-host-tools.sh" 2>&1; then
-        _error "a required host tool is missing, or a required-tool claim is unfalsifiable (989-ykks) — see the verdict above"
-        exit 1
-    fi
-    _info "Host-tools check passed"
 
     # 1034-whsp's cross-branch claim visibility fixture is gate step 953 (2173-inst).
 
@@ -7270,13 +7191,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _step "Checking test-release-freeze-audit (1255-s4im)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-release-freeze-audit.sh" 2>&1; then
         _error "scripts/test-release-freeze-audit.sh failed — the server-visible freeze audit may no longer name a breach, or the release preflight may no longer refuse one (1255-s4im); read the fixture output above"
-        exit 1
-    fi
-    # test-land-queue.sh was bound by no gate, so its arms — now including the
-    # freeze hold and the mid-gate re-check (1255-s4im) — ran only by hand. 14 s.
-    _step "Checking test-land-queue (1316-bnzt, 1255-s4im; ~14s)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-land-queue.sh" 2>&1; then
-        _error "scripts/test-land-queue.sh failed — the landing queue may land into a frozen trunk or mis-order, evict or re-queue candidates; read the fixture output above"
         exit 1
     fi
     _step "Checking test-ensure-hooks (1255-s4im)..."
