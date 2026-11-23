@@ -94,6 +94,8 @@ Bare metal (all three OSes):
    refuse. It installs or upgrades our hook and REFUSES to overwrite a
    pre-push hook this project did not write. The plan-lane scripts run it
    silently before their first push, so a fresh floor-host clone arms itself.
+   It also configures the `tillandsias-floor` merge driver (2118-asur): without
+   it, floor files conflict textually (`degraded:hooks:merge-driver-unarmed`).
 3. **Builder toolbox** (Linux): `scripts/with-tillandsias-builder.sh true`
    creates or reuses `tillandsias-builder` (methodology `toolbox_first_scripts`).
    macOS and Windows hosts have no toolbox; the checker skips this by name.

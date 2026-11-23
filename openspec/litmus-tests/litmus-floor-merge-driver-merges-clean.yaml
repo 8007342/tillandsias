@@ -1,0 +1,37 @@
+# @trace spec:ci-release
+# @trace order:2118-asur
+#
+# Operator 2026-11-20, landing-pipeline redesign P4 (conflict-free shared
+# files): two sibling branches that each lower a line of the same
+# scripts/portability/*-floor.txt conflicted textually on adjacent lines, which
+# cost a hand resolution and often an evicted gate. Floors only descend, so the
+# merge is mechanical: key-wise minimum (scripts/lua/merge-floor-min.lua, wired
+# by .gitattributes plus scripts/ensure-hooks.sh). The gate ratchet stays the
+# backstop. Red before 2118-asur: the driver arm conflicts like the control.
+name: litmus:floor-merge-driver-merges-clean
+spec: ci-release
+phase: pre-build
+description: Two sibling branches lowering, removing and adding lines of the same floor file merge clean through merge=tillandsias-floor, each count the key-wise minimum; without the attribute the same merge conflicts
+severity: medium
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary) and git; scratch repos under target/plan-scratch; no network, no podman
+
+critical_path:
+  - step: "a control merge without the attribute conflicts; the same merge with merge=tillandsias-floor is clean and key-wise minimal"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" && TILLANDSIAS_PLAN_BIN=\"$P\" \"$P\" script run scripts/lua/test-merge-floor-min.lua 2>&1"
+    timeout_ms: 180000
+    expected_behavior: "ok:merge-floor-min:15 arms"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "fifteen arms, listed in the fixture header"
+  log_fields:
+    spec: "ci-release"
+    test: "floor-merge-driver-merges-clean"
+
+rollback:
+  on_failure: "read the FAIL lines; the driver is scripts/lua/merge-floor-min.lua, the wiring .gitattributes and scripts/ensure-hooks.sh"
+  command: "git check-attr merge -- scripts/portability/pipe-site-floor.txt && git config --get merge.floor-min.driver"
