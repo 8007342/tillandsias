@@ -262,7 +262,6 @@ scripts/test-install-macos-announces-its-pin.sh
 scripts/test-install-path.sh
 scripts/test-installer-probes-by-attempt-not-by-help.sh
 scripts/test-installer-reports-wsl-guest-shape.sh
-scripts/test-installer-reset-probe.sh
 scripts/test-installers-print-pending-banner.sh
 scripts/test-installers-quiet-progress.sh
 scripts/test-join-the-fleet-idempotent.sh
