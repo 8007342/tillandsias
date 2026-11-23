@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: pre-push-fixtures-inherit-the-gate-diff-base
+    order: 2242-u39b
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      Four pre-push-hook fixtures pass the caller's TILLANDSIAS_GATE_DIFF_BASE into the scratch checkout's hook; they pass in real gates only because the caller also exports TILLANDSIAS_GATE_DIFF_BASE_ROOT and the hook drops a base frozen in another checkout. A caller that sets the base without its _ROOT turns them red.
+    context: |
+      Found by lenovinha's frozen-base sweep for 2241-f8jg (#1381). With TILLANDSIAS_GATE_DIFF_BASE=<trunk sha> and no _ROOT on unmodified trunk: test-lane-instrument-vs-ledger.lua 3, test-pre-push-issue-capture-lane.lua 9, test-pre-push-plan-lane-after-merge.lua 6, test-plan-only-lane-structural.sh 8/11. All green with _ROOT=<checkout>, which is what build.sh (gate start) and pre-push-local-gate.sh export, and the hook's other-checkout guard unsets the base when _ROOT names another toplevel. So real gates are protected by that guard, and the fixtures are not hermetic: they test whatever base the caller leaves behind. Coordinator direction 2026-11-23: make them hermetic, red-first. test-plan-only-lane-structural.sh is modified on open ref work/2245-scgt and is relayed rather than edited.
+    exit_criteria:
+      - "every scratch arm of the three Lua fixtures passes TILLANDSIAS_GATE_DIFF_BASE and _ROOT as empty to its children"
+      - "an arm runs each fixture with a base set and no _ROOT: red against today's fixtures, green after"
+      - "test-plan-only-lane-structural.sh gets the same treatment on its open ref (relayed to work/2245-scgt's owner)"
+    unscoreable: "unpinnable-until-the-guard-exists: the base-without-root arm is the deliverable."
+    next_action: "Add the two empty keys to GENV/HENV and the line-86 env; add the arm."
+    provenance: coordinator direction (macuahuitl-fedora, 2026-11-23); filed by lenovinha.
+    related: [2241-f8jg, 1592-idmu]
+    events:
+      - {type: filed, ts: '2026-11-23T00:32:15Z', host: lenovinha, summary: pre-push fixtures inherit the gate diff base filed}

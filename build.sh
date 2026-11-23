@@ -46,6 +46,16 @@ trap '{
     kill -TERM $$
 }' TERM
 
+# ORDER 2224-gdir — NO INHERITED REPO LOCATION. Git exports GIT_DIR (and in
+# some hooks GIT_WORK_TREE / GIT_INDEX_FILE) to every hook; a hook-launched
+# build.sh handed it to every guard and fixture, and a fixture's
+# `git -C <scratch> ...` then followed it to the REAL repo:
+# test-check-credential-channel.sh rewrote this checkout's origin and set
+# credential.helper=manager (calmecacpilli 2026-11-22). build.sh names its
+# checkout with -C "$SCRIPT_DIR", and a hook runs from the repo root, so git
+# rediscovers the same repository without them.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX
+
 # On Fedora Silverblue (immutable), transparently re-exec inside the
 # tillandsias-builder toolbox where Rust/gcc/ruby/etc are available.
 # Non-Silverblue hosts skip with zero overhead.
@@ -378,6 +388,15 @@ _CLASS_SKIPPED=0        # how many guards this run did NOT run. A run that
                         # record one — otherwise a chain of scoped runs keeps
                         # renewing its own licence to be scoped, forever.
 _CLASS_SET_MEMO=""      # computed once per run; empty until first asked
+# ORDER 2175-ctin: what the feature-gated cargo test step (tray,listen-vsock,
+# headless bin tests) can READ, in the class selector's grammar (STEP_INPUTS:
+# classes + path: globs). With a daily full proof (2174-dail) the step is
+# skipped when no change touches any of these. GENERATED from the Rust sources
+# by scripts/lua/scan-cargo-test-repo-roots.lua --list (headless + its path-dep
+# closure), and gate step 954 runs that scanner's --check so a new embedded or
+# read path cannot be missed here. Every uncertainty in the scan WIDENS this.
+_CARGO_FEATURE_TEST_INPUTS="rust path:Cargo.toml path:Cargo.lock path:rust-toolchain.toml path:.cargo/** path:.claude/CLAUDE.md path:.claude/CLAUDE.md/** path:.codex path:.codex/** path:.config path:.config/** path:.gemini/GEMINI.md path:.gemini/GEMINI.md/** path:.tillandsias path:.tillandsias/** path:assets path:assets/** path:cloud path:cloud/** path:docs/cheatsheets/github-credential-tools.md path:images path:images/** path:lib/chart.umd.js path:lib/chart.umd.js/** path:lib/highlight.min.css path:lib/highlight.min.css/** path:lib/highlight.min.js path:lib/highlight.min.js/** path:licences/acknowledgements/adefossez-htdemucs.yaml path:licences/acknowledgements/cc-by-4-0--google-deepmind-representations4d.yaml path:licences/acknowledgements/corridor-key-licence-2-0--nikopueringer-corridorkey2-0.yaml path:licences/acknowledgements/mit--ruicheng-moge-2-vitb-normal.yaml path:licences/acknowledgements/nvidia-open-model-license--nvidia-c-radiov4-so400m.yaml path:locales path:locales/** path:observatorium path:observatorium/** path:openspec/changes/studio-asset-pipeline/contract/examples/gatekeeper-v3.character-frames.json path:research path:research/** path:scripts/build-image.sh path:scripts/build-macos-tray.sh path:scripts/check-credential-channel.sh path:scripts/forge-swap/50-tillandsias-swap.rules path:scripts/forge-swap/swap.conf path:scripts/forge-swap/tillandsias-swap path:scripts/forge-swap/tillandsias-swap-gc.service path:scripts/forge-swap/tillandsias-swap-gc.timer path:scripts/forge-swap/tillandsias-swap@.service path:scripts/generate-repo-key.sh path:scripts/manage-cache.sh path:scripts/materialize-macos-tar-to-img.sh path:scripts/nix-cache-service.sh path:scripts/provider-limit-relay.sh path:scripts/run-observatorium.sh path:scripts/test-cloudflare-login.sh path:scripts/test-cloudflare-oauth-core.sh path:scripts/test-cloudflare-token-rotation.sh path:scripts/test-support/podman-mock.sh path:scripts/test-support/secret-tool-fake.sh path:skills path:skills/** path:tests/fixtures/recipe-basic/Recipefile path:tests/fixtures/recipe-basic/Recipefile/** path:tests/fixtures/recipe-basic/manifest.toml path:tests/fixtures/recipe-basic/manifest.toml/** path:tools path:tools/**"
+
 _class_set_once() {
     [ -n "$_CLASS_SET_MEMO" ] && return 0
     _CLASS_SET_MEMO="$(change_class_set 2>/dev/null)" || _CLASS_SET_MEMO="(unavailable)"
@@ -964,7 +983,7 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # (`gate-only-decider`, 1518-8p5k below, is a different token: excluded here.)
     _go="$(sed -n '1,40{/^# preflight: gate-only-decider/d;s/^# preflight: gate-only[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1)"
     if [ -n "$(sed -n '1,40{/^# preflight: gate-only-decider/d;/^# preflight: gate-only/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
-        _reason="$(printf '%s' "$_go" | sed 's/^[—-][[:space:]]*//')"
+        _reason="$(printf '%s' "$_go" | sed -e 's/^—[[:space:]]*//' -e 's/^-[[:space:]]*//')"
         case "$_p" in
             scripts/test-*)
                 if [ -n "$_reason" ]; then
@@ -988,7 +1007,7 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # check-* that NO pre-push hook runs (the push lane keeps every decider it
     # has), only with a reason, and the full gate still runs it.
     if [ -n "$(sed -n '1,40{/^# preflight: gate-only-decider/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
-        _reason="$(sed -n '1,40{s/^# preflight: gate-only-decider[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+        _reason="$(sed -n '1,40{s/^# preflight: gate-only-decider[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed -e 's/^—[[:space:]]*//' -e 's/^-[[:space:]]*//')"
         case "$_p" in
             scripts/check-*)
                 if grep -qF "${_p##*/}" "$SCRIPT_DIR"/scripts/hooks/* 2>/dev/null; then
@@ -1016,7 +1035,7 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # left a Lua guard no way to run alone: the lc-numeric signal fixture
     # (step 455) wrote the same checkout paths as step 450 concurrently.
     if [ -n "$(sed -n '1,40{/^# preflight: serial/p;/^-- preflight: serial/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
-        _reason="$(sed -n '1,40{s/^# preflight: serial[[:space:]]*//p;s/^-- preflight: serial[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+        _reason="$(sed -n '1,40{s/^# preflight: serial[[:space:]]*//p;s/^-- preflight: serial[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed -e 's/^—[[:space:]]*//' -e 's/^-[[:space:]]*//')"
         if [ -n "$_reason" ]; then
             return 12
         fi
@@ -1030,7 +1049,7 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # whole budget, so it neither waits behind the roster nor extends it. A kill
     # is still a deadline skip. The reason is required, as for serial.
     if [ -n "$(sed -n '1,40{/^# preflight: own-deadline/p;/^-- preflight: own-deadline/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
-        _reason="$(sed -n '1,40{s/^# preflight: own-deadline[[:space:]]*//p;s/^-- preflight: own-deadline[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+        _reason="$(sed -n '1,40{s/^# preflight: own-deadline[[:space:]]*//p;s/^-- preflight: own-deadline[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed -e 's/^—[[:space:]]*//' -e 's/^-[[:space:]]*//')"
         if [ -n "$_reason" ]; then
             return 13
         fi
@@ -1320,6 +1339,7 @@ FLAG_PREFLIGHT_FULL=false
 # ORDER 1916-tsel — the warm-forge fast loop; see scripts/gate-changed.sh.
 FLAG_CHANGED=false
 CHANGED_BASE=""
+FLAG_INTAKE=false
 # ORDER 1384-bqhy — run ONLY the gate-steps.d loop over <root> (whose
 # scripts/gate-steps.d it reads). The fixture's way into the real loop over a
 # scratch tree; --check calls the same function over the checkout.
@@ -1366,6 +1386,7 @@ while [[ $# -gt 0 ]]; do
         # the whole set before a large land. A deadline-skipped guard still runs
         # in the gate, which is its home, so nothing is lost by the default.
         --full)           FLAG_PREFLIGHT_FULL=true ;;
+        --intake)         FLAG_INTAKE=true ;;
         --clean)          FLAG_CLEAN=true ;;
         --install)        FLAG_INSTALL=true ;;
         --remove)         FLAG_REMOVE=true ;;
@@ -1460,6 +1481,13 @@ Build flags:
   --test            Run test suite (cargo test --workspace --no-fail-fast,
                     plus the tray/listen-vsock feature pass)
   --check           Type-check only (cargo check --workspace)
+  --changed [base] --intake
+                    Bundle INTAKE gate (2248-zcqh): the diff-scoped checks a work
+                    ref passes to join a bundle; whole-tree and declared-slow
+                    fixtures are deferred (named on a deferred: line); a change
+                    that cannot be scoped prints heavy:<reason> and exits 10
+                    (the member goes to the bundle HEAVY) instead of running
+                    the full --check.
   --changed [base]  Warm-forge loop: run ONLY the cargo tests and gate fixtures
                     whose declared inputs intersect `git diff base` (default:
                     merge-base with origin/linux-next). A guard file or an
@@ -1667,6 +1695,12 @@ fi
 # scripts/gate-changed.sh derives each fixture's and crate's inputs from the
 # tree and runs only those intersecting the diff; exit 10 means it could not
 # scope the change (a guard file, an unmapped path), so the full --check runs.
+if [[ "$FLAG_INTAKE" == true && "$FLAG_CHANGED" != true ]]; then
+    echo "refused:intake:without-changed" >&2
+    _afford "--intake scopes the --changed loop; alone it names no diff to judge (2248-zcqh)" \
+        "./build.sh --changed <base> --intake"
+    exit 2
+fi
 if [[ "$FLAG_CHANGED" == true ]]; then
     if [[ -n "$CHANGED_BASE" ]]; then
         _chg_base="$(git -C "$SCRIPT_DIR" rev-parse --verify -q "$CHANGED_BASE^{commit}")" || {
@@ -1677,7 +1711,13 @@ if [[ "$FLAG_CHANGED" == true ]]; then
         export TILLANDSIAS_GATE_DIFF_BASE="$_chg_base"
     fi
     _chg_rc=0
-    bash "$SCRIPT_DIR/scripts/gate-changed.sh" --run ${TILLANDSIAS_GATE_DIFF_BASE:+"$TILLANDSIAS_GATE_DIFF_BASE"} || _chg_rc=$?
+    _chg_intake=()
+    [[ "$FLAG_INTAKE" == true ]] && _chg_intake=(--intake)
+    bash "$SCRIPT_DIR/scripts/gate-changed.sh" --run ${_chg_intake[@]+"${_chg_intake[@]}"} ${TILLANDSIAS_GATE_DIFF_BASE:+"$TILLANDSIAS_GATE_DIFF_BASE"} || _chg_rc=$?
+    # 2248-zcqh: at intake an unscopable change is HEAVY, never a full gate.
+    if [[ "$FLAG_INTAKE" == true ]]; then
+        exit "$_chg_rc"
+    fi
     if [[ "$_chg_rc" -eq 10 ]]; then
         echo "note:changed:full — the change could not be scoped (line above names why); running the full ./build.sh --check" >&2
         exec bash "$SCRIPT_DIR/build.sh" --check
@@ -1726,6 +1766,27 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     # 300-guard fixture's seam) runs none of that family, so it skips the fetch:
     # the fetch writes .git/FETCH_HEAD and the remote refs, which kept the
     # fixture off the gate pool. The real roster always fetches.
+    # ORDER 2239-rmun: a host that cannot reach the remote stops HERE, named,
+    # before minutes of guards whose result can never be pushed (the user's
+    # direction 2026-11-22: stop work, do not retry). Off in CI (no host login
+    # to judge) and under a replaced roster (the fixture's seam), and by
+    # TILLANDSIAS_SKIP_REMOTE_PROBE=1. Never runs gh auth login/refresh.
+    if [ -z "${TILLANDSIAS_PREFLIGHT_ROSTER_FILE:-}" ] && [ -z "${CI:-}" ] && [ -z "${GITHUB_ACTIONS:-}" ] \
+       && [ "${TILLANDSIAS_SKIP_REMOTE_PROBE:-0}" != 1 ]; then
+        _rr_bin="$(. "$SCRIPT_DIR/scripts/plan-binary-probe.sh" && resolve_plan_binary 2>/dev/null || true)"
+        if [ -n "$_rr_bin" ]; then
+            _rr_rc=0; _rr_out="$( cd "$SCRIPT_DIR" && "$_rr_bin" script run scripts/lua/probe-remote-reachable.lua 2>&1 )" || _rr_rc=$?  # set -e-safe: a bare capture aborts SILENTLY on rc=1 (2239-rmun)
+            if [ "$_rr_rc" -ne 0 ]; then
+                printf '%s\n' "$_rr_out" >&2
+                echo "refused:preflight:remote-unreachable"
+                echo "  why: this host cannot reach the remote, so nothing this gate vouches for can be pushed (2239-rmun)" >&2
+                echo "  remedy: a human restores this host's access (see the probe's remedy above); until then SUSPEND work here — no retries, no backoff" >&2
+                exit 1
+            fi
+        else
+            echo "note:preflight:remote-probe:no-plan-binary — the remote-reachable probe needs the plan binary; not judged (2239-rmun)" >&2
+        fi
+    fi
     [ -n "${TILLANDSIAS_PREFLIGHT_ROSTER_FILE:-}" ] || git -C "$SCRIPT_DIR" fetch -q origin 2>/dev/null || true
     _freeze_gate_diff_base || exit 1
 
@@ -2260,6 +2321,12 @@ ensure_dev_cache() {
             else
                 rm -f "$tmp_cert" "$tmp_key"
                 _warn "Failed to generate CA cert for dev proxy"
+                # 2228-vt2z: release the lock and CLEAR the RETURN trap before
+                # this early return. Left set, the trap outlives the function
+                # and fires again at the next top-level sourced file, where
+                # ca_lock is gone: `unbound variable` under set -u.
+                rmdir "$ca_lock" 2>/dev/null || true
+                trap - RETURN
                 return 0
             fi
         fi
@@ -2904,6 +2971,17 @@ _gs_one() {
     if [ -n "$STEP_INPUTS" ] && [ "$_gs_root" = "$SCRIPT_DIR" ]; then
         _gs_id="gate-step:${_step_file##*/}"; _gs_id="${_gs_id%.step}"
         _gs_inputs="$STEP_INPUTS path:scripts/gate-steps.d/${_step_file##*/} path:$_step_path path:build.sh path:scripts/change-class.sh path:scripts/gate-stamp.sh"
+        # ORDER 2178-luai: A STEP THAT RUNS ON THE PLAN BINARY ALSO READS WHAT THE
+        # RUNTIME READS. lenovinha's atime traces (2026-11-22): every STEP_LUA step
+        # read .tillandsias/command-policies.yaml, .tillandsias/branch-discipline.yaml
+        # and .gitignore through proc.run's policy, and none declared them, so a
+        # policy change could skip the very steps it changes. The runtime's own
+        # source and the methodology file it consults are inputs the same way: a
+        # Lua step judged by a changed runtime is a different check. Added for a
+        # STEP_LUA step, and for a script step whose script names the plan binary.
+        if [ -n "$STEP_LUA" ] || grep -qE 'tillandsias-plan|resolve_plan_binary|TILLANDSIAS_PLAN_BIN' "$_gs_root/$_step_path" 2>/dev/null; then
+            _gs_inputs="$_gs_inputs path:.tillandsias/command-policies.yaml path:.tillandsias/branch-discipline.yaml path:.gitignore path:methodology/distributed-work.yaml path:VERSION path:flake.nix path:crates/tillandsias-plan/* path:crates/tillandsias-exec/* path:Cargo.lock"
+        fi
         # shellcheck disable=SC2086 — the declared inputs are words by design.
         if _class_may_skip "$_gs_id" $_gs_inputs; then
             # shellcheck disable=SC2086
@@ -3003,12 +3081,25 @@ _gs_one() {
     # a record carrying THIS gate's run id still refuses here.
     _metrics_ours=0
     _metrics_leak=""
+    # ORDER 2238-3skn: ONE SNAPSHOT. Attribution, the printed lines and the kept
+    # copy all come from one copy of the log taken here, before anything reads
+    # it. They used to be three reads of the live file (attribute, tail, cp), and
+    # a concurrent step that rotated or truncated it between them left a refusal
+    # that printed an empty block and kept nothing (#1349, macuahuitl
+    # 2026-11-22). TILLANDSIAS_GATE_METRICS_ATTRIBUTION is the fixture's seam.
+    _metrics_attr_bin="${TILLANDSIAS_GATE_METRICS_ATTRIBUTION:-$SCRIPT_DIR/scripts/gate-step-metrics-attribution.sh}"
+    _metrics_snap="${TMPDIR:-/tmp}/gate-leak-$$-${_step_path##*/}.jsonl"
+    _metrics_snap_why=""
     if [ -f "$_metrics_shared" ]; then
-        _metrics_attr="$(bash "$SCRIPT_DIR/scripts/gate-step-metrics-attribution.sh" "$_metrics_shared" "${_metrics_shared_before:-0}" "${TILLANDSIAS_TIMING_RUN_ID:-none}" "$$")" || _metrics_attr="verdict=refuse could-not-attribute"
+        # The step's WINDOW only (lines past the count taken before it ran): the
+        # shared log can be large, and this runs after every step.
+        tail -n "+$(( ${_metrics_shared_before:-0} + 1 ))" "$_metrics_shared" > "$_metrics_snap" 2>/dev/null \
+            || { : > "$_metrics_snap" 2>/dev/null; _metrics_snap_why="copy-failed"; }
+        _metrics_attr="$(bash "$_metrics_attr_bin" "$_metrics_snap" 0 "${TILLANDSIAS_TIMING_RUN_ID:-none}" "$$")" || _metrics_attr="verdict=refuse could-not-attribute"
         case "$_metrics_attr" in
             ours=0\ *verdict=refuse*)
                 _warn "the shared timing log gained id-less record(s) during ${_step_path##*/} ($_metrics_attr); this gate's own fallback is private (1966-ubsw), so they were written outside it and this step is not refused. The line(s):"
-                tail -n "+$(( ${_metrics_shared_before:-0} + 1 ))" "$_metrics_shared" 2>/dev/null | head -n 5 | sed 's/^/    /' >&2
+                head -n 5 "$_metrics_snap" 2>/dev/null | sed 's/^/    /' >&2
                 _metrics_attr="${_metrics_attr%verdict=refuse*}verdict=warn" ;;
             *verdict=warn*) _warn "the shared timing log gained record(s) with no run id during ${_step_path##*/} while another gate is live ($_metrics_attr); they may be that gate's, so this step is not refused (1916-tsel)" ;;
         esac
@@ -3017,21 +3108,25 @@ _gs_one() {
     if [ -z "$_metrics_leak" ] && [ -n "${TILLANDSIAS_METRICS_FALLBACK_DIR:-}" ] && [ -f "$_metrics_private" ] \
        && [ "$(wc -l < "$_metrics_private" 2>/dev/null || echo 0)" -gt "${_metrics_private_before:-0}" ]; then
         _metrics_leak="$_metrics_private"
+        _metrics_snap_why=""
+        tail -n "+$(( ${_metrics_private_before:-0} + 1 ))" "$_metrics_private" > "$_metrics_snap" 2>/dev/null \
+            || { : > "$_metrics_snap" 2>/dev/null; _metrics_snap_why="copy-failed"; }
         _metrics_attr="private-fallback:+$(( $(wc -l < "$_metrics_private") - ${_metrics_private_before:-0} )) verdict=refuse"
         _metrics_shared_before="$_metrics_private_before"
     fi
     if [ -n "$_metrics_leak" ]; then
         if [ "${_metrics_attr#*verdict=refuse}" != "$_metrics_attr" ]; then
             _error "gate step ${_step_path##*/} leaked record(s) into $_metrics_leak — $_metrics_attr (1204-3s2s; 1966-ubsw: the gate's private fallback, or the shared path under this gate's run id)"
-            _error "  The leaked line(s), kept so the next one is diagnosable:"
-            tail -n "+$(( ${_metrics_shared_before:-0} + 1 ))" "$_metrics_leak" 2>/dev/null | head -n 5 | sed 's/^/    /' >&2
-            # ORDER 2189-lktp: and the WHOLE log, copied aside now. Under the pool or
-            # lanes a concurrent step can rotate or truncate the shared file before
-            # anyone reads it (yoga 2026-11-22: the lines above printed nothing and
-            # the file was gone), and the record's own fields name its real writer.
-            _leak_keep="${TMPDIR:-/tmp}/gate-leak-$$-${_step_path##*/}.jsonl"
-            if cp -p "$_metrics_leak" "$_leak_keep" 2>/dev/null; then
-                _error "  the whole log at refusal time is kept at $_leak_keep (line $(( ${_metrics_shared_before:-0} + 1 )) on is this step's window)"
+            # ORDER 2189-lktp + 2238-3skn: the lines and the kept copy are the
+            # SNAPSHOT the verdict was attributed from, so a log rotated or
+            # truncated since cannot empty them. An empty window says so by name.
+            _leak_window="$(head -n 5 "$_metrics_snap" 2>/dev/null)"
+            if [ -n "$_leak_window" ]; then
+                _error "  The leaked line(s), kept so the next one is diagnosable:"
+                printf '%s\n' "$_leak_window" | sed 's/^/    /' >&2
+                _error "  this step's window of the log (from line $(( ${_metrics_shared_before:-0} + 1 )), as attributed) is kept at $_metrics_snap"
+            else
+                _error "  could-not-keep:${_metrics_snap_why:-window-empty} — the snapshot taken before attribution holds no line past $(( ${_metrics_shared_before:-0} )) (2238-3skn); the verdict above is the attribution's own"
             fi
             _error "  That path is the NON-CHECKOUT FALLBACK and it shares production's basename, so those"
             _error "  records carry this host's real name and split the timing log. cycle-metrics.sh will then"
@@ -3043,6 +3138,8 @@ _gs_one() {
             return 1
         fi
     fi
+    # Not refused: the snapshot is kept only as a refusal's evidence.
+    rm -f "$_metrics_snap"
 
     if [ "$_step_rc" -ne 0 ] \
        && [ -n "$STEP_SKIP_EXIT" ] \
@@ -3172,6 +3269,10 @@ _gs_lanes() {
     for _f in "$@"; do
         _lanes="$(sed -n 's/^STEP_LANES="\(.*\)"$/\1/p' "$_f" | head -n 1)"
         set -- $_lanes
+        # 2192-excl: `exclusive` (alone or beside other lanes) means NOTHING else may
+        # run with this step: it reads or counts a fixed host-wide file. It joins the
+        # exclusive phase after the lanes, as a step naming several lanes does.
+        case " $_lanes " in *" exclusive "*) _excl+=("$_f"); continue ;; esac
         if [ "$#" -ne 1 ]; then _excl+=("$_f"); continue; fi
         _i=$((_i + 1)); _names+=("$_f")
         printf '%s\t%s\n' "$_i" "$_f" >> "$_d/lane-$1.list"
@@ -3216,6 +3317,37 @@ if [ -n "$GATE_STEPS_ROOT" ]; then
     _run_gate_steps "$(cd "$GATE_STEPS_ROOT" && pwd)"
     exit $?
 fi
+
+# ORDER 2243-urcy — WHICH TEST RUNNER THIS HOST USES, SAID ONCE, BY NAME.
+# nextest when `cargo nextest` answers (the builder toolbox installs it from a
+# pinned release asset, scripts/with-tillandsias-builder.sh); otherwise the
+# cargo test path the gate always had. Either way one line names the regime,
+# so a host that silently fell back is visible in its gate log, never a guess.
+# TILLANDSIAS_GATE_NEXTEST=0 forces cargo test (a named, deliberate choice).
+_TEST_RUNNER=""
+_test_runner_is_nextest() {
+    if [ -z "$_TEST_RUNNER" ]; then
+        local _v=""
+        if [ "${TILLANDSIAS_GATE_NEXTEST:-auto}" = 0 ]; then
+            _TEST_RUNNER=cargo-test
+            _info "test-runner:cargo-test:forced-by-TILLANDSIAS_GATE_NEXTEST=0"
+        elif _v="$(cargo nextest --version 2>/dev/null)" && _v="${_v%%$'\n'*}" && [ -n "$_v" ]; then
+            _TEST_RUNNER=nextest
+            _info "test-runner:nextest:${_v#cargo-nextest }"
+        else
+            _TEST_RUNNER=cargo-test
+            _info "test-runner:cargo-test:nextest-absent"
+        fi
+    fi
+    [ "$_TEST_RUNNER" = nextest ]
+}
+# _nextest_transcript <nextest.log> — the log in cargo test's transcript shape.
+_nextest_transcript() {
+    local _nt_bin=""
+    _nt_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || return 1
+    case "$_nt_bin" in ./*) _nt_bin="$SCRIPT_DIR/${_nt_bin#./}" ;; esac
+    ( cd "$SCRIPT_DIR" && "$_nt_bin" script run --helper scripts/lua/nextest-to-libtest.lua -- "$1" )
+}
 
 # ORDER 1384-ddua — a gate-inline decider that is a .lua runs through the ONE
 # runner. A host whose plan binary is absent or predates `script run` gets a
@@ -4904,7 +5036,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # those checks and a binary built for another checkout; this fixture pins
     # the contract hermetically.
     _step "Checking point-of-use instrument freshness (851-cduu)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-freshness.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-plan-binary-freshness.lua" 2>&1; then
         _error "ensure_fresh_plan_binary broke its contract — a stale instrument could pass for HEAD"
         exit 1
     fi
@@ -4914,7 +5046,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # named only if it RUNS, so the WSL gate's Linux ELF is never recommended
     # to a Windows host whose .exe it sits beside.
     _step "Checking the stale-binary remedy names only a runnable binary (1267-uafx)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-remedy-names-only-a-runnable-binary.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-plan-binary-remedy-names-only-a-runnable-binary.lua" 2>&1; then
         _error "the plan-only lane's remedy named a binary that cannot run on this host"
         exit 1
     fi
@@ -5045,7 +5177,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # Order 1442-wyf9: the same invariant from the installer's side — run in a
     # clone whose core.hooksPath is GLOBAL (any second clone inside a forge),
     # scripts/install-hooks.sh must refuse rather than arm the guards box-wide.
-    if ! _run bash "$SCRIPT_DIR/scripts/test-install-hooks-refuses-global-hookspath.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-install-hooks-refuses-global-hookspath.lua" 2>&1; then
         _error "scripts/install-hooks.sh wrote into a GLOBAL core.hooksPath — that arms the guards in every repo on the box"
         exit 1
     fi
@@ -5270,12 +5402,34 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "--changed input-selection fixture passed"
+    # ORDER 2248-zcqh — the bundle intake gate: deferral, HEAVY, legacy
+    # unchanged, and a crate graph held to cargo metadata.
+    _step "Checking --changed's derived crate graph equals cargo metadata (2248-zcqh)..."
+    if ! _run_lua_decider "scripts/lua/check-gate-changed-crate-graph.lua" 2>&1; then
+        _error "scripts/gate-changed.sh derives a crate graph cargo does not resolve — intake would skip a dependent crate; see MISSING/EXTRA above (2248-zcqh)"
+        exit 1
+    fi
+    _info "Crate-graph lint passed"
+    _step "Checking --changed --intake defers, marks HEAVY, and matches cargo's crate graph (2248-zcqh)..."
+    if ! _run_lua_decider "scripts/lua/test-gate-changed-intake.lua" 2>&1; then
+        _error "--changed --intake no longer defers whole-tree/slow fixtures by name, marks an unscopable change HEAVY, or derives the crate graph cargo resolves (2248-zcqh)"
+        exit 1
+    fi
+    _info "--changed --intake fixture passed"
 
     # ORDER 1916-tsel — the shared-timing-log leak check names a step only for
     # records carrying ITS gate's run id; two concurrent writers prove a
     # concurrent gate no longer gets the running step blamed and evicted.
     _step "Checking the timing-log leak check blames only its own gate (1916-tsel)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-gate-step-metrics-attribution.sh" 2>&1; then
+    # 2233-vxu9: the fixture is Lua (gate B is a proc.spawn'ed writer). No
+    # runnable plan binary is a failed check, never a pass.
+    _gsma_plan="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _gsma_plan=""
+    case "$_gsma_plan" in ./*) _gsma_plan="$SCRIPT_DIR/${_gsma_plan#./}" ;; esac
+    if [[ -z "$_gsma_plan" ]]; then
+        _error "could-not-run:gate-step-metrics-attribution:no-plan-binary — scripts/lua/test-gate-step-metrics-attribution.lua needs tillandsias-plan script run (1916-tsel)"
+        exit 1
+    fi
+    if ! (cd "$SCRIPT_DIR" && _run "$_gsma_plan" script run scripts/lua/test-gate-step-metrics-attribution.lua) 2>&1; then
         _error "the shared-timing-log leak check attributes records by growth again, or no longer names a leaking step (1916-tsel)"
         exit 1
     fi
@@ -5346,9 +5500,36 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # would land on the ratchet as new-red. If that happens, restoring
     # `-- --test-threads=1` here is a one-line mitigation and the real defect is
     # the shared state on that host, not this line.
+    # ORDER 2243-urcy: the transcript conversion below must not hide a new red.
+    # Red-first: a single failing test through the converter is refused by the
+    # ratchet, and a converter that reports FAIL as ok is the mutant it catches.
+    _nxr_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh && resolve_plan_binary)" || _nxr_bin=""
+    case "$_nxr_bin" in ./*) _nxr_bin="$SCRIPT_DIR/${_nxr_bin#./}" ;; esac
+    if ! TILLANDSIAS_PLAN_BIN="$_nxr_bin" \
+        _run_lua_decider "scripts/lua/test-nextest-transcript-ratchet.lua" 2>&1; then
+        _error "the nextest transcript conversion no longer feeds the failure-set ratchet faithfully (2243-urcy)"
+        exit 1
+    fi
+    # ORDER 2243-urcy: nextest when this host has it. It runs the test BINARIES
+    # concurrently and each test in its own process: ~28 s against ~91 s on
+    # yoga, 0 failures in a 10-run soak. Its log is rewritten into this
+    # transcript's shape by scripts/lua/nextest-to-libtest.lua (same keys), and
+    # doctests, which nextest does not run, still come from `cargo test --doc`.
+    if _test_runner_is_nextest; then
+        _ws_nx_log="$SCRIPT_DIR/target/test-nextest-workspace-gate.log"
+        _run cargo nextest run --workspace --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" \
+            >"$_ws_nx_log" 2>&1 || _ws_test_rc=$?
+        cat "$_ws_nx_log"
+        _nextest_transcript "$_ws_nx_log" >"$_WS_TEST_TRANSCRIPT" || { _error "could not convert the nextest log $_ws_nx_log (2243-urcy)"; exit 1; }
+        _ws_doc_rc=0
+        _run cargo test --workspace --doc --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" \
+            2>&1 | tee -a "$_WS_TEST_TRANSCRIPT" || _ws_doc_rc="${PIPESTATUS[0]}"
+        [ "$_ws_test_rc" -eq 0 ] && _ws_test_rc="$_ws_doc_rc"
+    else
     _run cargo test --workspace --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" \
         2>&1 |
         tee "$_WS_TEST_TRANSCRIPT" || _ws_test_rc="${PIPESTATUS[0]}"
+    fi
     if ! _ws_baseline_verdict="$(bash "$SCRIPT_DIR/scripts/check-test-baseline.sh" --from "$_WS_TEST_TRANSCRIPT")"; then
         _error "$_ws_baseline_verdict"
         _error "the workspace suite's failure set moved (cargo rc=$_ws_test_rc) — transcript: $_WS_TEST_TRANSCRIPT"
@@ -5405,6 +5586,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     #
     # Deliberately NOT routed through the baseline ratchet, matching the
     # --test pass: no known-red entry lives here today, so strict is correct.
+    # ORDER 2175-ctin: skippable against a daily full proof when no change
+    # touches what these tests read (_CARGO_FEATURE_TEST_INPUTS, scanned).
+    # shellcheck disable=SC2086 — the declared inputs are words by design.
+    if _class_may_skip cargo-feature-gated-tests $_CARGO_FEATURE_TEST_INPUTS; then
+    # shellcheck disable=SC2086
+    _class_skip_line cargo-feature-gated-tests $_CARGO_FEATURE_TEST_INPUTS
+    else
     _step "Running feature-gated tests (tray, listen-vsock) — 1074-w7qv..."
     _fg_transcript="$SCRIPT_DIR/target/test-transcript-feature-gated-gate.log"
     mkdir -p "$(dirname "$_fg_transcript")"
@@ -5444,10 +5632,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
     else
         _warn "feature-gated: could not form the default/feature test lists (default=$(printf '%s\n' "$_fg_def" | grep -c .), all=$(printf '%s\n' "$_fg_all" | grep -c .), new=$_fg_new); running the WHOLE set (2161-ctdd)"
     fi
+    # ORDER 2243-urcy: under nextest each test is its own process, so the
+    # in-process races --test-threads=1 serialised cannot occur (~45 s against
+    # ~97 s on yoga, 0 failures in a 10-run soak); _fg_filter is libtest's
+    # --exact form, which nextest accepts after `--`.
+    if _test_runner_is_nextest; then
+    _run cargo nextest run -p tillandsias-headless --bin tillandsias \
+        --features tray,listen-vsock --no-fail-fast \
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" ${_fg_filter[@]+-- "${_fg_filter[@]}"} 2>&1 |
+        tee "$_fg_transcript" || _fg_rc="${PIPESTATUS[0]}"
+    else
     _run cargo test -p tillandsias-headless --bin tillandsias \
         --features tray,listen-vsock --no-fail-fast \
         --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 ${_fg_filter[@]+"${_fg_filter[@]}"} 2>&1 |
         tee "$_fg_transcript" || _fg_rc="${PIPESTATUS[0]}"
+    fi
     if [[ $_fg_rc -ne 0 ]]; then
         _error "the tray/listen-vsock test set failed (cargo rc=$_fg_rc) — transcript: $_fg_transcript"
         _error "these tests compile only with --features tray,listen-vsock; the --workspace pass above cannot see them"
@@ -5481,6 +5680,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Feature-gated tests passed: $_fg_ran test(s) executed under tray,listen-vsock"
+    fi
 
     # ORDER 1713-1dnx: the VM GUEST's feature set, exactly as
     # build-macos-tray.sh and build-guest-binaries.sh build it (listen-vsock,
@@ -5734,93 +5934,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Arrival-routing advisory reported"
 
-    # Order 831-ezea. The archiver is the ONLY bulk drain the ledger has, and
-    # until this line it had ZERO call sites — so its correctness was never
-    # exercised by anything. When it was finally dry-run on 2026-08-19 it
-    # archived two READY rows (424, 437) into a file where they answer `no
-    # packet matches`, while its own `--check` printed "script is idempotent"
-    # and its freshness header cited that as evidence of soundness.
-    #
-    # --check now asserts the actual invariant — archiving moves TERMINAL rows,
-    # so the ready set must be byte-identical across a run — and this wires it
-    # to a caller. 2.0s. Gating a tool nobody invokes yet is deliberate: the
-    # sweep gets its call site under R3, and the gate must predate the sweep
-    # rather than be added after the first bad run.
-    # ORDER 923-ws3r. The two outcomes are now separate exit codes, because the
-    # merged message ("would change the ready set, OR its check could not run")
-    # named both and pointed at neither — and the check spent days red on clean
-    # checkouts for the second reason while its wording invited the first
-    # reading. A violation means STOP. A could-not-run means the INSTRUMENT is
-    # broken and this step has learned nothing about the ledger.
-    _step "Checking the plan archiver preserves the ready set (831-ezea)..."
-    _archiver_rc=0
-    # ORDER 911-m7js. The check is LEDGER-BOUND (16-20s here, 105s on a slow
-    # host, proportional to the ledger) and its inputs are exactly the ledger
-    # plus the archiver itself, so its verdict is memoised on a digest of those
-    # inputs (scripts/archiver-check-memo.sh). A hit repeats a verdict the same
-    # bytes earned; any change to plan/index.yaml, plan/archive, a fragment,
-    # the archiver, its checker or the plan binary is a miss and runs it.
-    # 965-sxec: the output is TEED rather than swallowed, because the exit-3
-    # branch below has to read one token out of it while the operator still
-    # needs to see the whole thing. `_run` stays in the path — it carries the
-    # phase timing and the cd into SCRIPT_DIR, and a capture that dropped it
-    # would silently stop this step being profiled.
-    _archiver_log="$(mktemp "${TMPDIR:-/tmp}/tillandsias-archiver.XXXXXX")"
-    # ORDER 1074-96z9. A memo HIT used to emit nothing at all: this branch was
-    # `_info` and a return, so the step simply vanished from the timing log and
-    # the hit rate was not computable. The audit that nominates steps for
-    # memoisation could therefore never measure whether memoisation WORKED —
-    # and worse, kept re-nominating this already-memoised step, because its
-    # cheap hits no longer accumulated under any name to dilute the old
-    # average. The terminology memo (1054-zvq4) already carries the fix; this
-    # copies that convention rather than inventing a third.
-    #
-    # THE MISS DELIBERATELY STAYS INSIDE `_run`. build.sh's own 965-sxec note
-    # records that `_run` carries the phase timing, so lifting the work out of
-    # it to emit a tidier hit/miss pair would delete the only measurement of
-    # what this step actually COSTS while still satisfying "a hit is recorded".
-    # The hit/miss records answer "did the memo fire"; the `_run` phase record
-    # answers "what does the work cost". Both are needed and they are not the
-    # same number.
-    _arch_t0="$(timing_now_ms)"
-    if _archiver_memo="$(bash "$SCRIPT_DIR/scripts/archiver-check-memo.sh" check 2>/dev/null)"; then
-        _info "$_archiver_memo — ledger and archiver unchanged since the last pass; check not re-run"
-        timing_emit archiver-check-hit check "$_arch_t0" 0 || true
-    else
-        _run bash "$SCRIPT_DIR/scripts/archive-plan-packets.sh" --check 2>&1             | tee "$_archiver_log" || true
-        _archiver_rc="${PIPESTATUS[0]}"
-        [ "$_archiver_rc" -eq 0 ] && bash "$SCRIPT_DIR/scripts/archiver-check-memo.sh" record >/dev/null 2>&1 || true
-        timing_emit archiver-check-miss check "$_arch_t0" "${_archiver_rc:-1}" || true
-    fi
-    if [ "$_archiver_rc" -eq 3 ]; then
-        # ORDER 965-sxec. A forge ships NO ruby by design, so the archiver's
-        # worker cannot run there and the whole forge lane could not reach a
-        # verdict on ./build.sh --check at all — a p0 blocker, filed by an agent
-        # it stopped. Named as a SKIP here rather than a failure, and the skip is
-        # narrow twice over: only inside a forge, and only for the one cause the
-        # script tokenises. A stale plan binary or an unreadable fragment also
-        # exit 3 and still stop the gate, because those are repairable in the
-        # locus that hit them and waving them through would trade a false
-        # substantive verdict for a false green.
-        #
-        # It is LOUD on purpose. The ready set went unverified on this run; a
-        # reader has to be able to see that in the log, which is the 796-4ydb
-        # posture — say what was not checked rather than make one environment's
-        # missing package every host's red build.
-        if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]            && grep -q 'could-not-run:no-usable-ruby' "$_archiver_log" 2>/dev/null; then
-            _warn "SKIPPED the plan archiver check: no usable ruby in this forge (965-sxec). The ready set was NOT verified on this run — the archiver's ruby worker never executed. This is not a statement about the ledger."
-        else
-            _error "the plan archiver's check COULD NOT RUN (exit 3) — this says nothing about the ready set; the instrument is what needs repair (923-ws3r)"
-            exit 1
-        fi
-    elif [ "$_archiver_rc" -ne 0 ]; then
-        _error "the plan archiver would CHANGE THE READY SET, orphan events, or leave archived rows unanswerable — do not sweep"
-        exit 1
-    fi
-    rm -f "$_archiver_log"
-    _info "Plan archiver check passed"
-
-    # Order 965-sxec. The fixture for the branch just above. It pins the VERDICT
+    # Order 965-sxec. The fixture for the archiver step (scripts/gate-steps.d/955-831-ezea.step, 2186-niam). It pins the VERDICT
     # TEXT, not the exit code alone: build.sh failed either way before this, and
     # what was wrong was what it SAID — "the plan archiver would CHANGE THE READY
     # SET" on a run where the check never executed. A test that checked only the
@@ -5841,7 +5955,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # 2026-08-12. Diff-scoped like 634-39ik's enforcement, so a fragment
     # inherited from a sibling only warns and can never red-gate this host.
     _step "Checking that fragments added by this change parse..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-added-fragments-parse.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-added-fragments-parse.lua" 2>&1; then
         _error "this change adds a ledger fragment the fold cannot read — its packets would be invisible to every host; the offending file and reason are named on the check's own output above, and the fragment format is documented in plan/index.d/README.md"
         exit 1
     fi
@@ -5866,7 +5980,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # 827-d3dc found 92 such pins; four of the ten costliest were this shape,
     # and one kept a product defect green (1472-3d29). Diff-scoped.
     _step "Checking newly-added Rust source-literal pins (1473-scdq)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-rust-source-pin-added.sh" 2>&1; then
+    # 2242-rspn: a Lua decider on the one runner since its port.
+    if ! _run_lua_decider "scripts/lua/check-rust-source-pin-added.lua" 2>&1; then
         _error "a newly-added Rust test pins source text with no negative control or reason (1473-scdq); the site and the remedy are printed above"
         exit 1
     fi
@@ -5946,6 +6061,22 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # is a no-op rather than a gate. It runs here, where a binary exists.
     # Ported to Lua (1642-cc54 carry): with no binary it is now could-not-run
     # (exit 3), which this gate refuses, instead of a pass.
+    # ORDER 2246-fkea — an added Lua fixture line that roots at `pwd -P` or
+    # spawns a bare bash/sed passes here and fails on a native Windows runner
+    # (three ports in one day, #1388 the third). Refused at the source.
+    _step "Checking added Lua fixtures use native-safe roots and shells (2246-fkea)..."
+    if ! _run_lua_decider "scripts/lua/check-lua-fixture-native-argv-added.lua" 2>&1; then
+        _error "an added scripts/lua line roots at pwd -P or spawns a bare bash/sed — use common.fixture's repo_root() / posix_shell(); see the REFUSED lines above (2246-fkea)"
+        exit 1
+    fi
+    _info "Native argv check passed"
+    _step "Checking the native-argv decider refuses what it should (2246-fkea)..."
+    if ! _run_lua_decider "scripts/lua/test-lua-fixture-native-argv-added.lua" 2>&1; then
+        _error "check-lua-fixture-native-argv-added.lua no longer refuses a pwd -P root or a bare bash/sed argv, or refuses the helper form; see the FAIL lines above (2246-fkea)"
+        exit 1
+    fi
+    _info "Native argv fixture passed"
+
     _step "Checking that added fragments' declared closures resolve (885-92iu)..."
     if ! _run_lua_decider "scripts/lua/check-declared-closures-added.lua" 2>&1; then
         _error "this change files a packet whose verifiable_closure names a litmus test that does not resolve (885-92iu)"
@@ -6373,6 +6504,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Unknown-host claim fixture passed"
 
+    # ORDER 2242-u39b — the pre-push-hook fixtures test their scratch
+    # checkout, never a frozen base the caller left behind without its _ROOT.
+    _step "Checking the pre-push fixtures ignore an inherited diff base (2242-u39b)..."
+    if ! _run_lua_decider "scripts/lua/test-pre-push-fixtures-ignore-an-inherited-base.lua" 2>&1; then
+        _error "a pre-push-hook fixture judged the caller's TILLANDSIAS_GATE_DIFF_BASE instead of its scratch checkout — pass TILLANDSIAS_GATE_DIFF_BASE and _ROOT empty in its child env; see the FAIL lines above (2242-u39b)"
+        exit 1
+    fi
+    _info "Inherited diff-base fixture passed"
+
     # ORDER 1592-idmu — the diff-scoped guards read the base frozen at gate
     # start (TILLANDSIAS_GATE_DIFF_BASE), so a fetch mid-gate cannot move it.
     _step "Checking the diff-scoped guards read a frozen base (1592-idmu)..."
@@ -6472,7 +6612,14 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Probe evidence-capture guard passed"
 
     _step "Checking a gate stamp cannot be written unearned (940-f77j)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-gate-stamp-must-be-earned.sh" 2>&1; then
+    # 2234-gmmc: the fixture is Lua. No runnable plan binary is a failed check.
+    _gsme_plan="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _gsme_plan=""
+    case "$_gsme_plan" in ./*) _gsme_plan="$SCRIPT_DIR/${_gsme_plan#./}" ;; esac
+    if [[ -z "$_gsme_plan" ]]; then
+        _error "could-not-run:gate-stamp-must-be-earned:no-plan-binary — scripts/lua/test-gate-stamp-must-be-earned.lua needs tillandsias-plan script run (940-f77j)"
+        exit 1
+    fi
+    if ! (cd "$SCRIPT_DIR" && _run "$_gsme_plan" script run scripts/lua/test-gate-stamp-must-be-earned.lua) 2>&1; then
         _error "a caller can stamp a tree the gate never passed — the stamp stops meaning 'this tree is green' (940-f77j)"
         exit 1
     fi
@@ -6857,13 +7004,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # a substantive ledger claim from a command that never executed. Wired here
     # because the defect is invisible on any host that HAS ruby, which is every
     # host that runs this gate; only the stub-PATH arms exercise it.
-    _step "Checking a missing ruby reads as could-not-run, not as a ledger verdict (965-sxec)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-archiver-ruby-could-not-run.sh" 2>&1; then
-        _error "an absent ruby does not route to the could-not-run channel (965-sxec) — see the verdict line above"
-        exit 1
-    fi
-    _info "Archiver could-not-run channel check passed"
-
     # 964-zedm: the index builder must stage where the payload FITS. It staged
     # via the ambient TMPDIR, and in a forge /tmp is a 256 MB tmpfs while the
     # index root is on a 1.2 TB overlay — so a cold 22,645-chunk build died on
@@ -6894,7 +7034,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # boundary of that admission runs INSIDE the gate. Half a second, and a
     # negative control nothing executes cannot protect the hole it names.
     _step "Checking the issue-capture fast lane keeps its boundaries (889-twhe)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-pre-push-issue-capture-lane.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-pre-push-issue-capture-lane.lua" 2>&1; then
         _error "the plan-only lane's plan/issues admission lost a boundary (889-twhe) — see the verdict line above"
         exit 1
     fi
@@ -6935,7 +7075,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # malformed fragment must still be refused, and a real ledger fault must not
     # be blamed on the instrument.
     _step "Checking the lane blames the instrument, not the ledger, when the binary cannot run (1060-6fx7)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-lane-instrument-vs-ledger.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-lane-instrument-vs-ledger.lua" 2>&1; then
         _error "the plan-only lane misattributes an instrument failure to the ledger (1060-6fx7) — see the verdict line above"
         exit 1
     fi
@@ -6961,19 +7101,12 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # is only safe if it does not change the ANSWER — a spec referenced solely
     # from target/ would otherwise be reported as a zero-trace spec that is not
     # one, a false accusation produced by an optimisation.
-    _step "Checking the pre-commit spec sweep's exclusions are answer-preserving (734-sjb3)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-precommit-zero-trace-scan-scope.sh" 2>&1; then
-        _error "excluding build output changed the referenced-spec set (734-sjb3) — see the verdict line above"
-        exit 1
-    fi
-    _info "Zero-trace scan scope pin passed"
-
     # Order 1024-c3h3. An evidence SHA captured before land-on-platform-branch
     # rewrites the commit names a ref that never reaches origin, and a reader
     # cannot tell that from "the code never landed" — opposite diagnoses. The
     # fixture reproduces the rewrite and pins that the two stay separable.
     _step "Checking a rewritten evidence SHA is named with its landed replacement (1024-c3h3)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-closure-evidence-survives-landing.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-closure-evidence-survives-landing.lua" 2>&1; then
         _error "the closure-evidence check no longer separates a rewritten ref from work that never landed (1024-c3h3) — see the verdict line above"
         exit 1
     fi
@@ -7033,7 +7166,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # control, so it belongs inside the gate for the same reason its sibling
     # does — a control nothing executes cannot protect the hole it names.
     _step "Checking the plan-only lane survives the mandated merge without opening a bypass (1056-5344)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-pre-push-plan-lane-after-merge.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-pre-push-plan-lane-after-merge.lua" 2>&1; then
         _error "the plan-only lane's merge scoping lost a boundary (1056-5344) — see the verdict line above"
         exit 1
     fi
@@ -7240,8 +7373,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _step "Checking the probe-usage guard walks its whole population (1128-j9fc)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-probe-usage-population.sh" 2>&1; then
-        _error "scripts/test-plan-binary-probe-usage-population.sh failed — this fixture asserts that check-plan-binary-probe-usage.sh WALKS repo-root *.sh and scripts/gate-steps.d/*.step, not merely that it passes. An unwalked surface and a clean surface produce the same verdict, which is how that guard was found too narrow three times; read which arm failed rather than assuming the binding is at fault"
+    if ! _run_lua_decider "scripts/lua/test-plan-binary-probe-usage-population.lua" 2>&1; then
+        _error "scripts/lua/test-plan-binary-probe-usage-population.lua failed — this fixture asserts that check-plan-binary-probe-usage.sh WALKS repo-root *.sh and scripts/gate-steps.d/*.step, not merely that it passes. An unwalked surface and a clean surface produce the same verdict, which is how that guard was found too narrow three times; read which arm failed rather than assuming the binding is at fault"
         exit 1
     fi
     _step "Checking test-podman-sync-budgets (1063-nraf; 116ms)..."

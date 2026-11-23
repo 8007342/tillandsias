@@ -38,14 +38,14 @@ local r = proc.run{ argv = { "bash", W .. "/resolve.sh" } }
 local REAL = text.trim(r.stdout or "")
 if not r.ok or REAL == "" then
     cleanup()
-    log.raw("FAIL: no runnable plan binary\n")
+    log.raw("FAIL: no runnable plan binary")
     verdict.emit("violation:groundtruth-regime-fails-closed:no-plan-binary", 1)
 end
 if REAL:sub(1, 1) ~= "/" then REAL = root .. "/" .. REAL:gsub("^%./", "") end
 
 local pass, fail = 0, 0
 local function ok(m) out.line("ok:   " .. m); pass = pass + 1 end
-local function bad(m) log.raw("FAIL: " .. m .. "\n"); fail = fail + 1 end
+local function bad(m) log.raw("FAIL: " .. m); fail = fail + 1 end
 
 -- The fake: GT_MODE=kill|failcase, GT_SET=<basename>, GT_REGIME=live|dead.
 -- The dead regime is recognised by EXACTLY the check's closed-port endpoint.

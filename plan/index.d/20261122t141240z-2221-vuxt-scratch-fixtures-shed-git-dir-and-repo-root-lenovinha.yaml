@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: three-scratch-repo-fixtures-shed-inherited-git-dir-and-repo-root
+    order: 2221-vuxt
+    status: blocked
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixture]
+    estimated_hours: 1
+    title: |
+      Harden the three scratch-repo fixtures lenovinha touched in #1323, #1325 and #1330 against an inherited GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE and an inherited TILLANDSIAS_REPO_ROOT.
+    context: |
+      calmecacpilli 2026-11-22: (1) a hook-launched gate inherits GIT_DIR, so a fixture's git -C <scratch> writes the REAL repo (test-check-credential-channel.sh rewrote an origin; fix #1338, which also unsets GIT_* atop build.sh); (2) an inherited TILLANDSIAS_REPO_ROOT makes script run root at the real checkout, overriding the cwd rule of 2213-ag5u.
+      Exposure measured on lenovinha: the real repo and all 61 worktrees are clean (origin correct, no credential.helper in any scope). No script exports TILLANDSIAS_REPO_ROOT globally today (every assignment is scoped to one command), and #1338 covers GIT_* for everything build.sh runs. So this is hardening for direct runs and future callers, not a live defect.
+      Fixtures: scripts/test-plan-binary-copy-refresh.sh arms 6-7 (git init, commit, update-ref in a scratch checkout; #1330), scripts/test-preflight-fixtures-default-target.sh arms 8-9 (git init of the stand-in checkout, Lua fixtures run there; #1325), scripts/test-plan-binary-runnability-precondition.sh (git init, the Lua port run in the scratch checkout; #1323). Blocked until those three land, so no queued PR is re-pushed; it must not touch the lines #1338 edits.
+    exit_criteria:
+      - "each of the three unsets GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE before its first git call, and runs any Lua port inside a scratch checkout with TILLANDSIAS_REPO_ROOT set to that checkout"
+      - "an arm per fixture: with GIT_DIR pointed at a sentinel repo and TILLANDSIAS_REPO_ROOT at a wrong dir, the fixture still passes and the sentinel's config and refs are byte-identical afterwards"
+    unscoreable: "unpinnable-until-the-guard-exists: the sentinel arm is the measure."
+    next_action: "After #1323, #1325 and #1330 land: add the unsets and the scoped TILLANDSIAS_REPO_ROOT, then the sentinel arms."
+    provenance: calmecacpilli's report, relayed by the coordinator; filed by lenovinha.
+    depends_on: [plan-lane-fails-closed-fixture-negative-control-reads-the-hosts-installed-plan-binary, script-run-outside-any-repository-refuses-instead-of-using-the-runners-checkout, plan-binary-freshness-issue-capture-install-hooks-fixtures-become-lua]
+    related: [2217-ab8h, 2213-ag5u, 2212-2m8s]
+    events:
+      - {type: filed, ts: '2026-11-22T14:12:40Z', host: lenovinha, summary: harden three fixtures against inherited GIT_DIR and repo root}

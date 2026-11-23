@@ -9,3 +9,10 @@ STEP_OK="salvage audit fixture passed"
 # cut: the step's own script plus every repo path it names literally.
 STEP_READS="scripts/salvage-audit.sh scripts/test-salvage-audit.sh"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-21 darwin ok:salvage-audit-fixture"
+# ORDER 2238-vsra: DECLARED INPUTS (2118-tnut grammar), so the class selector can skip
+# this step when a candidate touches neither script (only against a green
+# daily-full proof, 2174-dail). The fixture reads exactly these two files plus
+# the clone's live origin/salvage and origin/work REFS; refs are host state, not
+# the candidate's tree, and the daily full run still samples them. ~71 s per
+# gate on macuahuitl (2026-11-22 timing log), the slowest undeclared hermetic step.
+STEP_INPUTS="path:scripts/salvage-audit.sh path:scripts/test-salvage-audit.sh"

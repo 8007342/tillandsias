@@ -34,7 +34,18 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FIXTURE="scripts/test-pre-push-issue-capture-lane.sh"
+# ORDER 2212-2m8s: the issue-capture fixture is Lua now. It runs through the
+# plan binary's script runner, resolved HERE from the checkout (before PATH is
+# stripped below) and handed over by absolute path; inside the scratch checkout
+# the only tillandsias-plan the FIXTURE can find is still the dead ELF.
+FIXTURE="scripts/lua/test-pre-push-issue-capture-lane.lua"
+RUNNER="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || RUNNER=""
+case "$RUNNER" in ./*) RUNNER="$ROOT/${RUNNER#./}" ;; esac
+if [ -z "$RUNNER" ]; then
+    echo "skip:plan-binary-runnability:no-lua-runner — no runnable tillandsias-plan to run the Lua fixture with" >&2
+    echo "plan-binary-runnability: 0 passed, 0 failed (skipped)"
+    exit 0
+fi
 fail=0; pass=0
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
@@ -45,8 +56,14 @@ trap 'rm -rf "$W"' EXIT INT TERM
 # A scratch CHECKOUT: the fixture derives its own ROOT from BASH_SOURCE, so a
 # copy under $W/scripts sees $W as the checkout and $W/target/release as the
 # place cycle-preflight would have built into.
-mkdir -p "$W/scripts/hooks" "$W/target/release"
-cp "$ROOT/$FIXTURE" "$W/scripts/" || exit 2
+mkdir -p "$W/scripts/hooks" "$W/scripts/lua" "$W/target/release"
+# The Lua runner roots a script at the git repository containing its cwd, and
+# outside any repository falls back to the runner's OWN checkout, which has a
+# working binary. So the scratch checkout must be a repository, or the fixture
+# would measure the real checkout (measured 2026-11-22: 27/27 with the base
+# folding, i.e. no unrunnable binary at all).
+git init -q "$W"
+cp "$ROOT/$FIXTURE" "$W/scripts/lua/" || exit 2
 cp "$ROOT/scripts/hooks/pre-push-local-gate.sh" "$W/scripts/hooks/" || exit 2
 for f in plan-binary-probe.sh gate-stamp.sh common.sh check-issue-citation-convention.sh; do
     cp "$ROOT/scripts/$f" "$W/scripts/" 2>/dev/null || true
@@ -71,7 +88,7 @@ chmod +x "$W/target/release/tillandsias-plan"
 # pin must remove it or it certifies a path that host never takes.
 _min_path=/usr/bin:/bin
 out="$(cd "$W" && env -u TILLANDSIAS_PLAN_BIN -u CARGO_TARGET_DIR "PATH=$_min_path" \
-        bash "$W/$FIXTURE" 2>&1)"; rc=$?
+        "$RUNNER" script run "$W/$FIXTURE" 2>&1)"; rc=$?
 
 # NON-VACUITY: prove the stripped PATH really removed the fallback, or arm 1
 # below could pass because the fixture died early for an unrelated reason.
@@ -130,7 +147,7 @@ ctl_bin="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2
 if [ -z "$ctl_bin" ]; then
     echo "skip: no runnable plan binary on this host, control arm not attempted" >&2
 else
-    ctl="$(cd "$ROOT" && bash "$FIXTURE" 2>&1)"; ctl_rc=$?
+    ctl="$(cd "$ROOT" && "$RUNNER" script run "$ROOT/$FIXTURE" 2>&1)"; ctl_rc=$?
     if [ "$ctl_rc" -eq 0 ] && printf '%s' "$ctl" | grep -q 'PRECONDITION: the scratch base ledger folds'; then
         ok "CONTROL: a runnable binary still folds the base and runs the ledger arms"
     else
