@@ -389,7 +389,6 @@ scripts/test-preflight-fixtures-default-target.sh
 scripts/test-preflight-front-door.sh
 scripts/test-preflight-scratch-is-off-checkout.sh
 scripts/test-preflight-setsid-probe.sh
-scripts/test-preflight-stale-plan-binary.sh
 scripts/test-preflight-verdict-categories.sh
 scripts/test-pretooluse-command-policy.sh
 scripts/test-probe-nix-capability-evidence.sh
