@@ -39,6 +39,19 @@ _exit_on_signal() {
     trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP; trap 'exit 141' PIPE
 }
 if [ -z "$_fd_inner" ]; then
+    # 2272-cuxh: the scratch tree has no target/, so its door had no plan binary
+    # to classify with unless one happened to be installed on PATH. On a Mac
+    # with none, 217 of 335 guards read could-not-run:no-classifier, rc 0, and
+    # four arms called the plants invisible (macbookair, trunk and #1443 alike);
+    # Linux passed on ~/.local/bin. The checkout's own binary is copied to the
+    # scratch tree's target/release, where an ordinary checkout has it; not
+    # TILLANDSIAS_PLAN_BIN, which changes what the guards inside the door test.
+    _fd_src="$(. scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _fd_src=""
+    case "$_fd_src" in ""|/*) ;; *) _fd_src="$ROOT/${_fd_src#./}" ;; esac
+    if [ -z "$_fd_src" ] || [ ! -f "$_fd_src" ]; then
+        echo "could-not-run:preflight-front-door:no-plan-binary — the doors below could classify no guard; cargo build --release -p tillandsias-plan, then re-run"
+        exit 2
+    fi
     SCR="$(mktemp -d "${TMPDIR:-/tmp}/front-door.XXXXXX")"
     sampler=""
     # 1600-nn5b: the worktree is removed on EVERY exit, not only after a normal
@@ -51,6 +64,8 @@ if [ -z "$_fd_inner" ]; then
     trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP
     _wt_err="$(git worktree add -q --detach "$SCR" HEAD 2>&1)" \
         || { echo "FAIL: cannot create scratch worktree: $_wt_err"; exit 1; }
+    mkdir -p "$SCR/target/release" && cp -p "$_fd_src" "$SCR/target/release/${_fd_src##*/}" \
+        || { echo "FAIL: cannot place the plan binary in the scratch worktree"; exit 1; }
     git diff --name-only -z HEAD | while IFS= read -r -d '' f; do
         if [ -e "$f" ]; then mkdir -p "$SCR/$(dirname "$f")"; cp -p "$f" "$SCR/$f"; else rm -f "$SCR/$f"; fi
     done
