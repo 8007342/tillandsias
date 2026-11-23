@@ -22,6 +22,12 @@
 --   7 LINT-OK      check-gate-changed-crate-graph.lua passes on the live tree
 --   8 LINT-MISS    an edge cargo has and the derived graph lacks is refused
 --   9 LINT-EXTRA   an edge the derived graph has alone is refused
+--  10 BUILD-BLOCK  (2250-gwfy) a build.sh diff that only adds a wired fixture
+--                  block inside --check is scoped, not heavy, and selects the
+--                  fixture it wires (because=build.sh-block)
+--  11 BUILD-MACH   the same diff plus one non-block line (a variable) stays
+--                  heavy:guard:build.sh
+--  12 BUILD-LEGACY without --intake the block-only diff is still select:all
 --
 -- Verdict: ok:gate-changed-intake:<n> arms | violation:gate-changed-intake:<n>-failed
 
@@ -137,5 +143,49 @@ fs.write(S.rel .. "/graph-extra", table.concat(lines, "\n") .. "\ncrates/tilland
 rc, o = lint({ TILLANDSIAS_CRATE_GRAPH_DERIVED = S.abs .. "/graph-extra" })
 T:arm("9 LINT-EXTRA an edge only the derived graph has is refused",
     rc == 1 and o == "violation:gate-changed-crate-graph:missing=0:extra=1", "rc=" .. rc .. " out=" .. o)
+
+-- 10-12: a synthetic build.sh diff inserted at a line inside --check.
+local lo, hi
+for i, l in ipairs(text.lines(fs.read("build.sh") or "")) do
+    if not lo and l == 'if [[ "$FLAG_CHECK" == true ]]; then' then lo = i end
+    if lo and not hi and text.starts_with(l, 'elif [[ "$FLAG_TEST$FLAG_CHECK') then hi = i end
+end
+local at = lo and math.floor((lo + hi) / 2) or 0
+local FX = "scripts/lua/test-gate-changed-intake.lua"
+local block = {
+    "+    # a wired block, the shape most build.sh edits take",
+    '+    _step "Checking a planted block (2250-gwfy fixture)..."',
+    '+    if ! _run_lua_decider "' .. FX .. '" 2>&1; then',
+    '+        _error "planted block failed"',
+    "+        exit 1",
+    "+    fi",
+    '+    _info "planted block passed"',
+}
+local function diff_file(tag, extra)
+    local lines = { "diff --git a/build.sh b/build.sh", "--- a/build.sh", "+++ b/build.sh",
+        "@@ -" .. at .. ",0 +" .. (at + 1) .. "," .. (#block + #extra) .. " @@" }
+    for _, l in ipairs(block) do lines[#lines + 1] = l end
+    for _, l in ipairs(extra) do lines[#lines + 1] = l end
+    fs.write(S.rel .. "/" .. tag, table.concat(lines, "\n") .. "\n")
+    return S.abs .. "/" .. tag
+end
+local function gc_env(args, env)
+    local argv = { SH, GC }
+    for _, a in ipairs(args) do argv[#argv + 1] = a end
+    local r = proc.run{ argv = argv, cwd = ROOT, timeout_ms = 600000, env = env }
+    return (r.status == "exited" and r.code or -1), (r.stdout or "")
+end
+local BONLY = changes("build-only", { "build.sh" })
+rc, o = gc_env({ "--list", "--intake", "--files", BONLY }, { TILLANDSIAS_GATE_CHANGED_BUILD_DIFF = diff_file("bd-block", {}) })
+T:arm("10 BUILD-BLOCK a block-only build.sh diff is scoped and selects the fixture it wires",
+    rc == 0 and first(o, "select:intake") ~= nil and count(o, "heavy:") == 0
+        and (o:find("select:fixture:" .. FX .. " because=", 1, true) ~= nil),
+    "rc=" .. rc .. " at=" .. at .. " " .. (first(o, "select:") or first(o, "heavy:") or o:sub(1, 200)))
+rc, o = gc_env({ "--list", "--intake", "--files", BONLY }, { TILLANDSIAS_GATE_CHANGED_BUILD_DIFF = diff_file("bd-mach", { "+    _planted_state=1" }) })
+T:arm("11 BUILD-MACH one non-block line keeps build.sh a guard (heavy)",
+    rc == 0 and first(o, "heavy:guard:build.sh") ~= nil, "rc=" .. rc .. " " .. (first(o, "") or ""))
+rc, o = gc_env({ "--list", "--files", BONLY }, { TILLANDSIAS_GATE_CHANGED_BUILD_DIFF = diff_file("bd-legacy", {}) })
+T:arm("12 BUILD-LEGACY without --intake a block-only build.sh diff is still select:all",
+    rc == 0 and first(o, "select:all reason=guard:build.sh") ~= nil, "rc=" .. rc .. " " .. (first(o, "") or ""))
 
 T:finish()

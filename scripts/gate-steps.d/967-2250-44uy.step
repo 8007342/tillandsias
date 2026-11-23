@@ -7,4 +7,6 @@ STEP_LUA="scripts/lua/test-fleet-run.lua"
 STEP_ERROR="fleet-run.lua accepted an argument shape other than <step-number> <ref> (2250-44uy) — see the FAIL lines above"
 STEP_OK="fleet-run responder argument shape pinned"
 STEP_READS="scripts/lua/fleet-run.lua scripts/lua/test-fleet-run.lua"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:fleet-run-shape:6 (and a real one-step run: regime:darwin:step=660:rc=0:...:verdict=ok:rank-refusal-hits:6 arms)"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin ok:fleet-run-shape:11 at d74dd5a52 (fetch form; sha d0fbc4bb same as msys)"
+# Linux, for the record: lenovinha 2026-11-23 ok:fleet-run-shape:11 at d74dd5a52 (fleet-run 967, sha d0fbc4bb, 506 s first run)
+STEP_SECOND_REGIME="yolanda 2026-11-23 msys ok:fleet-run-shape:11 (2259-fk3m; mutants no-could-not-run, red-reads-ok, no-cleanup each red their arm)"

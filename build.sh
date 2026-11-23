@@ -1775,9 +1775,9 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
        && [ "${TILLANDSIAS_SKIP_REMOTE_PROBE:-0}" != 1 ]; then
         _rr_bin="$(. "$SCRIPT_DIR/scripts/plan-binary-probe.sh" && resolve_plan_binary 2>/dev/null || true)"
         if [ -n "$_rr_bin" ]; then
-            _rr_rc=0; _rr_out="$( cd "$SCRIPT_DIR" && "$_rr_bin" script run scripts/lua/probe-remote-reachable.lua 2>&1 )" || _rr_rc=$?  # set -e-safe: a bare capture aborts SILENTLY on rc=1 (2239-rmun)
-            if [ "$_rr_rc" -ne 0 ]; then
-                printf '%s\n' "$_rr_out" >&2
+            _rr_rc=0; ( cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh && . scripts/remote-probe-judge.sh && remote_probe_judge "$_rr_bin" ) || _rr_rc=$?
+            if [ "$_rr_rc" -ne 0 ] && [ "$_rr_rc" -ne 10 ]; then echo "could-not-run:remote-probe:judge-error:rc=$_rr_rc — the remote was not judged (2256-tt3v)" >&2; fi
+            if [ "$_rr_rc" -eq 10 ]; then
                 echo "refused:preflight:remote-unreachable"
                 echo "  why: this host cannot reach the remote, so nothing this gate vouches for can be pushed (2239-rmun)" >&2
                 echo "  remedy: a human restores this host's access (see the probe's remedy above); until then SUSPEND work here — no retries, no backoff" >&2
@@ -4764,25 +4764,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # absent from a shallow clone.
     # 1218-25z3's must-ship-next advisory fixture is gate step 951 (2173-inst).
 
-    # ORDER 1369-sjbc. The release jobs upload a staged copy to `unstable` whose
-    # installers default to unstable; the versioned copy keeps stable. Hermetic,
-    # a few seconds; wired in local-ci.sh as well.
-    _step "Checking the unstable-channel installer default (1369-sjbc)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-unstable-installer-defaults-to-unstable.sh" 2>&1; then
-        _error "an installer fetched from the unstable release can again install stable"
-        exit 1
-    fi
-    _info "unstable-channel installer default fixture passed"
-
-    # ORDER 1380-zmpi. Every installer ends with a PENDING ACTIONS banner; the
-    # fixture RUNS each banner block (bash, and PowerShell where present).
-    # Hermetic, a few seconds; wired in local-ci.sh as well.
-    _step "Checking the installers' PENDING ACTIONS banner (1380-zmpi)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-installers-print-pending-banner.sh" 2>&1; then
-        _error "an installer can again finish without telling the user what is still pending"
-        exit 1
-    fi
-    _info "pending-actions banner fixture passed"
+    # ORDER 1369-sjbc and 1380-zmpi: the unstable-installer default and the
+    # PENDING ACTIONS banner fixtures moved to gate steps 405 and 404 (Lua, 2111-inst).
 
     # ORDER 970-7fqk. The stale-stamp refusal names paths whose CONTENT moved,
     # on the same axis the staleness decision uses, and keeps the mtime list as
@@ -6544,6 +6527,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Frozen diff-base fixture passed"
 
+    # ORDER 2241-f8jg — `rev-parse --verify <40-hex>` answers 0 for a missing
+    # object, so a frozen base absent from a checkout read as valid and the
+    # diff-scoped guards judged nothing. Each must take its named
+    # unavailable-base path instead.
+    _step "Checking the diff-scoped guards name a missing base (2241-f8jg)..."
+    if ! _run_lua_decider "scripts/lua/test-added-deciders-refuse-a-missing-base.lua" 2>&1; then
+        _error "a diff-scoped guard verified a base that names no commit and judged past it — verify the base as <base>^{commit}; see the FAIL lines above (2241-f8jg)"
+        exit 1
+    fi
+    _info "Missing diff-base fixture passed"
+
     # ORDER 1581-d9ig — no fixture prunes or gcs the operator's checkout. Two
     # fixtures' teardown ran `git -C "$ROOT" worktree prune`, which inside the
     # WSL guest deletes every Windows worktree whose C:/ path the guest cannot
@@ -6627,7 +6621,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Mirror rewrite-follow fixture passed"
 
     _step "Checking the nix-capability probe's evidence survives a noisy shell (917-zkge)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-probe-nix-capability-evidence.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-probe-nix-capability-evidence.lua" 2>&1; then
         _error "a capable row can carry shell noise as its proof that nix answered (917-zkge)"
         exit 1
     fi
@@ -6663,17 +6657,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Image-rebuild launch-tag gate passed"
 
-    _step "Checking end-user UX strings against recorded operator approval (626-w3fn)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-approved-ux-strings.sh" 2>&1; then
-        # The script names the file, the string and the ledger it failed to
-        # match, and states the two remedies. spec:tray-ux makes this a
-        # governance gate rather than a style one: an unapproved user-facing
-        # string must not ship, and the in-file unit test cannot catch a
-        # reword because a single find-and-replace edits the assertion too.
-        _error "an end-user UX string is not the one the operator approved in the ledger (626-w3fn, spec:tray-ux)"
-        exit 1
-    fi
-    _info "Approved-UX-string gate passed"
+    # The approved-UX-string gate moved to gate step 909-2257-ba7e (Lua).
 
     # ORDER 1022-y7kc cause 2. An orphaned guard is fixed by INVOKING it
     # (865-n8vq): a guard with no caller on any activation surface is a file
@@ -7226,7 +7210,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Stranded-sweep predicate fixture passed"
 
     _step "Checking the inference pull-failure classifier (525)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-inference-pull-failure-classification.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-inference-pull-failure-classification.lua" 2>&1; then
         _error "a TLS-trust pull failure stopped being distinguishable from an empty cache (525) — see the failing case above"
         exit 1
     fi
@@ -7543,7 +7527,10 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # handoff. Promotion to a refusal is an operator decision, and the moment
     # for it is when dev binaries are signed and SAC stops being a coin flip.
     _step "Reporting Windows-only source verification state (716-f5kc)..."
-    _windows_only_verdict="$(bash "$SCRIPT_DIR/scripts/check-windows-only-sources-verified.sh" 2>/dev/null || echo "stale:sources-check-failed:windows-only")"
+    _wo_plan="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _wo_plan=""
+    # 2243-wosv: the Lua port (one file, --platform macos for the macOS scope).
+    _windows_only_verdict="$( [ -n "$_wo_plan" ] && cd "$SCRIPT_DIR" && "$_wo_plan" script run scripts/lua/check-windows-only-sources-verified.lua 2>/dev/null </dev/null )" || _windows_only_verdict=""
+    case "$_windows_only_verdict" in ok:*|skip:*|stale:*|missing:*) ;; *) _windows_only_verdict="stale:sources-check-failed:windows-only" ;; esac
     case "$_windows_only_verdict" in
         ok:* | skip:*)
             _info "Windows-only sources: $_windows_only_verdict"
@@ -7558,13 +7545,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
             _warn "  No host has committed an attestation for these yet — this is a fact about"
             _warn "  the repository, NOT a claim that the sources are broken or unverified."
             _warn "  On a Windows host: cargo test -p tillandsias-windows-tray --bins | \\"
-            _warn "    scripts/check-windows-only-sources-verified.sh attest --from -"
+            _warn "    tillandsias-plan script run scripts/lua/check-windows-only-sources-verified.lua -- attest --from -"
             ;;
         *)
             _warn "Windows-only sources: $_windows_only_verdict"
             _warn "  A Linux build compiles src/stubs/ for these — this gate did NOT read them."
             _warn "  Verify natively (cargo test -p tillandsias-windows-tray), then:"
-            _warn "    scripts/check-windows-only-sources-verified.sh attest --from <transcript>"
+            _warn "    tillandsias-plan script run scripts/lua/check-windows-only-sources-verified.lua -- attest --from <transcript>"
             ;;
     esac
 
@@ -7574,7 +7561,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # read as healthy. Same gate, same vocabulary, same attestation format; only
     # the scope differs.
     _step "Reporting macOS-only source verification state (739-6r6n)..."
-    _macos_only_verdict="$(bash "$SCRIPT_DIR/scripts/check-macos-only-sources-verified.sh" 2>/dev/null || echo "stale:sources-check-failed:macos-only")"
+    _macos_only_verdict="$( [ -n "$_wo_plan" ] && cd "$SCRIPT_DIR" && "$_wo_plan" script run scripts/lua/check-windows-only-sources-verified.lua -- --platform macos 2>/dev/null </dev/null )" || _macos_only_verdict=""
+    case "$_macos_only_verdict" in ok:*|skip:*|stale:*|missing:*) ;; *) _macos_only_verdict="stale:sources-check-failed:macos-only" ;; esac
     case "$_macos_only_verdict" in
         ok:* | skip:*)
             _info "macOS-only sources: $_macos_only_verdict"
@@ -7587,13 +7575,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
             _warn "  No host has committed an attestation for these yet — this is a fact about"
             _warn "  the repository, NOT a claim that the sources are broken or unverified."
             _warn "  On a macOS host: cargo test -p tillandsias-macos-tray --bins | \\"
-            _warn "    scripts/check-macos-only-sources-verified.sh attest --from -"
+            _warn "    tillandsias-plan script run scripts/lua/check-windows-only-sources-verified.lua -- --platform macos attest --from -"
             ;;
         *)
             _warn "macOS-only sources: $_macos_only_verdict"
             _warn "  A Linux or Windows build compiles stubs for these — this gate did NOT read them."
             _warn "  Verify natively (cargo test -p tillandsias-macos-tray --bins), then:"
-            _warn "    scripts/check-macos-only-sources-verified.sh attest --from <transcript>"
+            _warn "    tillandsias-plan script run scripts/lua/check-windows-only-sources-verified.lua -- --platform macos attest --from <transcript>"
             ;;
     esac
 

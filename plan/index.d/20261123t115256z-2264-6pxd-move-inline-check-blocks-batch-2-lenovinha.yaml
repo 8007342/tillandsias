@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: move-inline-check-blocks-to-gate-step-files-batch-2
+    order: 2264-6pxd
+    status: ready
+    kind: debt
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      Move inline --check fixture blocks out of build.sh into scripts/gate-steps.d/*.step files, batch 2: nine read-only Lua deciders, each pool-safe.
+    context: |
+      The .step series (batch 1: 2253-j2at, #1402). The intake breakdown (2249-tif9) put serial fixtures at 43% of a scoped intake run; every inline block moved to a pool-safe .step moves its time from serial to pool and stops being a build.sh edit (so it no longer makes intake HEAVY). Coordinator direction 2026-11-23: audit each block, default to STEP_SERIAL with a reason when unsure. This batch is nine Lua check-* deciders that read the tree and the diff and write nothing (each read: no fetch, push, scratch, rm or cargo), so all run in the pool.
+    exit_criteria:
+      - "each moved block becomes one .step with the same STEP_DESC/STEP_ERROR/STEP_OK and the same decider; the inline block is deleted"
+      - "gate-changed.sh's population is identical before and after (moved, not lost or doubled)"
+      - "each step carries STEP_READS and a darwin or msys STEP_SECOND_REGIME record before the PR leaves draft"
+    unscoreable: "mechanical move; the per-step verdicts are the deliverable and are unchanged by construction."
+    next_action: "Second-regime records from the Mac's fleet-run, then un-draft."
+    provenance: coordinator direction (macuahuitl-fedora, 2026-11-23); filed by lenovinha.
+    related: [2253-j2at, 2249-tif9, 2250-gwfy]
+    events:
+      - {type: filed, ts: '2026-11-23T11:52:56Z', host: lenovinha, summary: move inline check blocks to gate-step files batch 2 filed}

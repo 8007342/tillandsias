@@ -83,6 +83,16 @@ hooks_dir="$(git -C "$ROOT" rev-parse --path-format=absolute --git-path hooks 2>
     _exit 2
 }
 
+# ORDER 2118-asur: the keyed-set merge driver .gitattributes names. Local config
+# only, and only where the tree ships the driver; says nothing, because this
+# script's output is its hook verdict (check-hooks-armed.lua reports the driver).
+floor_driver='bash scripts/merge-floor-driver.sh %O %A %B %P %X %Y'
+if [ -f "$ROOT/scripts/merge-floor-driver.sh" ] \
+   && [ "$(git -C "$ROOT" config --local --get merge.tillandsias-floor.driver 2>/dev/null)" != "$floor_driver" ]; then
+    git -C "$ROOT" config --local merge.tillandsias-floor.name "keyed set merge for floors and declared divergence (2118-asur)" 2>/dev/null || true
+    git -C "$ROOT" config --local merge.tillandsias-floor.driver "$floor_driver" 2>/dev/null || true
+fi
+
 # The current marker is the installer's, read from it so the two cannot drift.
 want="$(sed -n 's/^PREPUSH_MARKER="# \(tillandsias-pre-push-v[0-9][0-9]*\)"$/\1/p' "$INSTALLER" 2>/dev/null)"
 if [ -z "$want" ]; then
