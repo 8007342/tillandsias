@@ -163,8 +163,9 @@ find_token() { # find_token <id> <ledger_glob>
     done
   done
   [ "${#files[@]}" -gt 0 ] || return 0   # nothing on disk to search -> no token
-  grep -rhoE "delegate-outcome:${id}:[A-Za-z0-9_-]+" "${files[@]}" 2>/dev/null \
-    | head -1 | sed "s/^delegate-outcome:${id}://" || true
+  local _hits
+  _hits="$(grep -rhoE "delegate-outcome:${id}:[A-Za-z0-9_-]+" "${files[@]}" 2>/dev/null || true)"
+  [ -z "$_hits" ] || sed -n "1{s/^delegate-outcome:${id}://;p;}" <<<"$_hits"
 }
 
 # ORDER 943-3xyf. Every pid in THIS process's ancestry, so the default probe

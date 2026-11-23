@@ -260,7 +260,7 @@ codesign --verify --deep --strict --verbose=2 "$APP" >&2
 
 # Check entitlement present
 ENTITLE_DUMP="$(codesign -d --entitlements - "$APP" 2>&1 || true)"
-echo "$ENTITLE_DUMP" | grep -q 'com.apple.security.virtualization' \
+grep -q 'com.apple.security.virtualization' <<<"$ENTITLE_DUMP" \
     || die "com.apple.security.virtualization entitlement NOT present after sign"
 
 # ── 6b. Notarize + staple (only with a real identity AND notary creds) ──

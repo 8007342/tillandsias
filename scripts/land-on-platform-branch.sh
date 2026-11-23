@@ -294,7 +294,7 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
             *) printf '%s\n' "$_alloc_out" | sed "s/^/land: attempt $attempt — /" ;;
         esac
         if [ "$_alloc_rc" -ne 0 ]; then
-            echo "refused:land:gate-step-prefix — $(printf '%s\n' "$_alloc_out" | grep -m1 '^refused:' || printf '%s\n' "$_alloc_out" | tail -1)" >&2
+            echo "refused:land:gate-step-prefix — $(grep -m1 '^refused:' <<<"$_alloc_out" || tail -1 <<<"$_alloc_out")" >&2
             _afford "scripts/allocate-gate-step-prefix.sh could not keep this push's new gate step at a free prefix" \
                 "renumber the step by hand into a free prefix (scripts/gate-steps.d/README.md), commit, then re-run"
             exit 8
