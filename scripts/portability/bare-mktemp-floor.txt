@@ -93,7 +93,7 @@ scripts/test-gate-memory-wsl2-guest.sh 1
 scripts/test-gate-stamp-memoization.sh 1
 scripts/test-gate-stamp-scope.sh 1
 scripts/test-gate-stamp.sh 1
-scripts/test-gate-step-metrics-isolation.sh 2
+scripts/test-gate-step-metrics-isolation.sh 1
 scripts/test-git-credential-helper.sh 1
 scripts/test-git-mirror-existing-volume-hardening.sh 1
 scripts/test-git-mirror-ref-convergence.sh 1
