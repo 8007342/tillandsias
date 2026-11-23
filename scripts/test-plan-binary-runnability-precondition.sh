@@ -65,6 +65,11 @@ mkdir -p "$W/scripts/hooks" "$W/scripts/lua" "$W/target/release"
 git init -q "$W"
 cp "$ROOT/$FIXTURE" "$W/scripts/lua/" || exit 2
 cp "$ROOT/scripts/hooks/pre-push-local-gate.sh" "$W/scripts/hooks/" || exit 2
+# The fixture requires common.fixture (2246-fkea), which requires
+# common.verdict: the runner resolves them under the scratch checkout's
+# lib/lua, so seed that library or the fixture dies at require (2253-j2at,
+# evicted in land run 32).
+mkdir -p "$W/lib/lua" && cp -R "$ROOT/lib/lua/common" "$W/lib/lua/" || exit 2
 for f in plan-binary-probe.sh gate-stamp.sh common.sh check-issue-citation-convention.sh; do
     cp "$ROOT/scripts/$f" "$W/scripts/" 2>/dev/null || true
 done
