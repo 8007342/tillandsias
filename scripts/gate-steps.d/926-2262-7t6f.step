@@ -9,4 +9,5 @@ STEP_DESC="Checking the toolbox refusal's WSL exemption and its negative control
 STEP_LUA="scripts/lua/test-toolbox-refusal-wsl-exception.lua"
 STEP_ERROR="the toolbox refusal lost an arm — either WSL2 is blocked again or a bare Linux host is no longer refused"
 STEP_OK="toolbox refusal WSL-exception fixture passed"
+STEP_SECOND_REGIME="yolanda 2026-11-23 msys ok:toolbox-refusal-wsl-exception:3 arms at b8eed6526 (fixture run directly; mutants no-wsl and no-refusal each red)"
 STEP_READS="scripts/lua/test-toolbox-refusal-wsl-exception.lua scripts/with-tillandsias-builder.sh"
