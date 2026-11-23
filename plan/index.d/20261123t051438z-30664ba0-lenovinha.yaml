@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: conflict-free-shared-files-floor-merge-driver-bindings-d-fixture-modules
+    field: status
+    value: ready
+    ts: "2026-11-23T05:14:38Z"
+    host: lenovinha
+
+events:
+  - packet_id: conflict-free-shared-files-floor-merge-driver-bindings-d-fixture-modules
+    event:
+      type: note
+      ts: "2026-11-23T05:14:38Z"
+      host: lenovinha
+      summary: |-
+        handed to calmecacpilli by coordinator ruling (2026-11-23): they take the ledger/floor merge driver and extend scripts/lua/merge-floor-min.lua on work/2118-asur (#1223) rather than restart

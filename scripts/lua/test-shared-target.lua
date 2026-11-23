@@ -31,13 +31,7 @@
 -- Verdict: ok:test-shared-target:<passed> (could-not-run arms named above it)
 -- or violation:test-shared-target:<failed>.
 
-local BASH = "/bin/bash"
-do
-    local ep = text.trim(proc.run({ argv = { "git", "--exec-path" }, timeout_ms = 10000 }).stdout or "")
-    if ep:find("^%a:/.*/libexec/git%-core$") then  -- mingw64/ or ucrt64/, per Git build
-        BASH = (ep:gsub("/[^/]+/libexec/git%-core$", "/bin/bash.exe"))
-    end
-end
+local BASH = require("common.fixture").posix_shell("/bin/bash") -- Git's bash on native Windows (2246-fkea)
 local rel = "target/plan-scratch/shared-target-" .. tostring(time.now_ms())
 fs.mkdir(rel)
 -- A script FILE, not bash -c: the scratch holds a whole repo and its worktree,
