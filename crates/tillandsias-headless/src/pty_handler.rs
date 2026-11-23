@@ -2126,34 +2126,51 @@ mod tests {
         matches!(err, PtyOpenError::EmptyArgv);
     }
 
+    /// ORDER 2234-a964. This test used to open a real interactive `/bin/bash -l`
+    /// on a pty and end right after `shutdown_all()`. An interactive bash ignores
+    /// SIGTERM, and the SIGKILL that `spawn_terminator` sends after its 2 s grace
+    /// never fires because the test's runtime is dropped first. The shell
+    /// outlived the test, reparented to the builder's exec conmon, and pinned
+    /// that `podman exec` session and its kernel session keyring. One leaked
+    /// per headless test run; macuahuitl reached 189 and the uid hit the
+    /// 200-key quota, so crun refused every exec ("join keyctl: Disk quota
+    /// exceeded") and 14 PRs were falsely evicted. The duplicate check needs
+    /// only a live first session, so the child execs a `sleep` (which SIGTERM
+    /// ends; the exec allowlist admits only `bash -l`/`-lc`), and the
+    /// test now asserts that the child is gone before the test returns.
     #[tokio::test]
     async fn duplicate_session_id_returns_error() {
         let (mut store, _rx) = store();
+        let child = || {
+            vec![
+                "/bin/bash".to_string(),
+                "-lc".to_string(),
+                "exec sleep 30".to_string(),
+            ]
+        };
         store
-            .open(
-                42,
-                24,
-                80,
-                vec!["/bin/bash".to_string(), "-l".to_string()],
-                vec![],
-                None,
-            )
+            .open(42, 24, 80, child(), vec![], None)
             .await
             .expect("first open succeeds");
+        let pid = store.sessions.get(&42).expect("session 42").child_pid;
         let err = store
-            .open(
-                42,
-                24,
-                80,
-                vec!["/bin/bash".to_string(), "-l".to_string()],
-                vec![],
-                None,
-            )
+            .open(42, 24, 80, child(), vec![], None)
             .await
             .expect_err("duplicate session id must error");
         matches!(err, PtyOpenError::DuplicateSession(42));
-        // Cleanup: shut down the first child.
         store.shutdown_all().await;
+        let gone = || match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
+            Err(_) => true,
+            Ok(s) => s.rsplit(") ").next().is_some_and(|r| r.starts_with('Z')),
+        };
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !gone() && std::time::Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        assert!(
+            gone(),
+            "child {pid} outlived shutdown_all: it would pin the caller's exec session"
+        );
     }
 
     /// Drains the child via the host-initiated SIGTERM+SIGKILL path and

@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: sweep-return-trap-fired-by-a-sourced-file
+    order: 2228-vt2z
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      Sweep scripts/*.sh for a function that sets trap '…' RETURN and then sources a file (. or source) before the function ends: the trap fires when the sourced file finishes, not only when the function returns.
+    context: |
+      Coordinator direction 2026-11-22, after 2227-rqgw: local-ci.sh's write_convergence_artifacts set trap 'rm -f <temp files>' RETURN and then sourced plan-binary-probe.sh, so its residual-reasons file was deleted mid-function and top_residual_reasons was always [] — silently, for months. The same shape anywhere else deletes or resets state early with no error. Each hit is either fixed (trap set after the source, or EXIT in a subshell, or explicit cleanup) or named as harmless with the reason.
+    exit_criteria:
+      - "a sweep record lists every function in scripts/ that sets a RETURN trap, whether it sources or calls a sourcing function after the trap, and the verdict for each"
+      - "every harmful hit is fixed with a red-first arm, or filed as its own row"
+    unscoreable: "unpinnable-until-the-guard-exists: the sweep record is the deliverable; a decider for the shape is a follow-up if hits are found."
+    next_action: "grep for RETURN traps, read each function body after the trap, record verdicts."
+    provenance: coordinator direction; filed by lenovinha.
+    related: [2227-rqgw]
+    events:
+      - {type: filed, ts: '2026-11-22T17:55:54Z', host: lenovinha, summary: RETURN-trap plus source sweep filed}

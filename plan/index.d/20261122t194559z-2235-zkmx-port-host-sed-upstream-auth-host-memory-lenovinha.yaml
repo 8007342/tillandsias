@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-host-sed-upstream-auth-host-memory-fixtures
+    order: 2235-zkmx
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      Three whole-file shell-to-Lua ports: test-preflight-declarations-host-sed.sh, test-mirror-upstream-auth-overwrite.sh and test-gate-host-memory-figure.sh become scripts/lua/*.lua.
+    context: |
+      Coordinator direction 2026-11-22: keep going with whole-file scripts/*.sh ports, mutant parity, no pause. Screened for background processes and sourcing. test-ssh-lane-refuses-when-unwired.sh was passed over this batch: it rewrites crates/tillandsias-headless/src/main.rs in the live tree and restores it from a bash trap, and a Lua port without a trap would leave the source mutated on a crash.
+    exit_criteria:
+      - "each .lua gives the same verdict as its .sh on the trunk tree, and the same red arm as the .sh under a mutant"
+      - "every caller runs the .lua; the three .sh files are deleted"
+    unscoreable: "unpinnable-until-the-guard-exists: the mutant parity is the deliverable."
+    next_action: "Port, mutant-parity each, rewire two litmus files and gate step 630, delete the .sh."
+    provenance: coordinator direction; filed by lenovinha.
+    related: [2234-gmmc]
+    events:
+      - {type: filed, ts: '2026-11-22T19:45:59Z', host: lenovinha, summary: three more whole-file ports filed}
