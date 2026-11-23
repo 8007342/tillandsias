@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: added-deciders-verify-an-env-base-as-a-commit
+    order: 2241-f8jg
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 3
+    title: |
+      `git rev-parse --verify <40-hex>` succeeds for an object that does not exist, so a diff-scoped decider handed the gate's frozen TILLANDSIAS_GATE_DIFF_BASE inside a scratch repo (or any checkout that lacks that commit) passes its base check and then judges an empty or failing diff as ok.
+    context: |
+      Found by calmecacpilli; coordinator direction 2026-11-22 (P1, ahead of 2240-bkdb). Measured on lenovinha: `rev-parse --verify <de*20>` rc=0; `rev-parse --verify --quiet <x>^{commit}` rc=1; `cat-file -e <x>` rc=1. Sites on trunk that verify an env-supplied base without ^{commit}: check-added-test-is-referenced.sh, check-arrival-routing.sh, check-issue-citation-convention.sh (base and head), check-sigpipe-verdict-pipelines-added.sh, preflight-fixtures-default-target.sh; lua/check-added-fragments-parse, check-declared-closures-added, check-exact-version-literal-added, check-fragment-closure-evidence-added, check-litmus-bindings, check-litmus-expression-pinning-added, check-packet-tier-declared, check-windows-tray-clippy. Four more (check-fragment-ts-skew.sh, check-refusal-affordance-added.sh, check-rust-source-pin-added.sh, check-unrunnable-platform-arms.sh) are being ported on open refs 2124-mwzr, 2221-rfaa, 2242-rspn and 2118-9mk4; their Lua twins need the same form, so this row is relayed to them rather than editing files they delete.
+    exit_criteria:
+      - "every listed site verifies the base as `<base>^{commit}` (or cat-file -e <base>^{commit})"
+      - "one arm per decider family (sh, lua): a missing 40-hex base is refused or named, never ok; red against today's code, green after"
+    unscoreable: "unpinnable-until-the-guard-exists: the missing-base arms are the deliverable."
+    next_action: "Swap each site to ^{commit}; add the missing-base arms in one Lua fixture."
+    provenance: calmecacpilli's find; coordinator direction (macuahuitl-fedora); filed by lenovinha.
+    related: [2240-bkdb]
+    events:
+      - {type: filed, ts: '2026-11-23T00:08:25Z', host: lenovinha, summary: added deciders verify an env base as a commit filed}
