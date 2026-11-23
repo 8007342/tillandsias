@@ -1,0 +1,10 @@
+# Gate step 2250-44uy — fleet-run.lua, the second-regime responder, takes a
+# step NUMBER and a REF and refuses every other shape before it runs anything.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the fleet-run responder takes only a step number and a ref (2250-44uy)"
+STEP_LUA="scripts/lua/test-fleet-run.lua"
+STEP_ERROR="fleet-run.lua accepted an argument shape other than <step-number> <ref> (2250-44uy) — see the FAIL lines above"
+STEP_OK="fleet-run responder argument shape pinned"
+STEP_READS="scripts/lua/fleet-run.lua scripts/lua/test-fleet-run.lua"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:fleet-run-shape:6 (and a real one-step run: regime:darwin:step=660:rc=0:...:verdict=ok:rank-refusal-hits:6 arms)"
