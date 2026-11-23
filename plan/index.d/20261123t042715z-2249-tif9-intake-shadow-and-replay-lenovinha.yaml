@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: intake-gate-shadow-run-and-eviction-replay
+    order: 2249-tif9
+    status: ready
+    kind: measurement
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 6
+    title: |
+      Bundle landing phase 0, measurement: shadow-run `--intake` after each land on macuahuitl and replay the ~67 heads evicted since 2026-11-20 through it, reporting intake recall on real evictions, median intake time and the residual per-change failure rate p. That number gates phase 2.
+    context: |
+      Operator-approved bundle-landing design (2026-11-22, relayed by macuahuitl-fedora). The intake gate (2248-zcqh) is only safe if what it defers is rarely what evicts: a member that passes intake and then reds the bundle gate costs the whole bundle a bisection. Shadow mode records intake's verdict and wall time on each landed PR's head without using it; the replay asks, for every head the full gate evicted since 2026-11-20, whether intake would have refused it too.
+    exit_criteria:
+      - "after each land on macuahuitl, --intake runs on the landed PR's head and appends {pr, head, verdict, deferred, heavy, ms} to a record that nothing gates on"
+      - "the ~67 evicted heads since 2026-11-20 are replayed through --intake; the report names, per head, the evicting step and whether intake caught it, deferred it, or passed it"
+      - "a plan/issues report states recall on real evictions, median intake time, and p (members that pass intake and fail the full gate, per change), with the head list it was computed from"
+    unscoreable: "measurement row: the report is the deliverable, and phase 2 is decided on it."
+    next_action: "Land 2248-zcqh, then wire the post-land shadow on macuahuitl and run the replay."
+    provenance: operator approval 2026-11-22 relayed by macuahuitl-fedora (coordinator); filed by lenovinha.
+    depends_on: [gate-changed-intake-mode-for-bundle-landing]
+    related: [2248-zcqh]
+    events:
+      - {type: filed, ts: '2026-11-23T04:27:15Z', host: lenovinha, summary: intake shadow run and eviction replay filed}
