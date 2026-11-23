@@ -33,7 +33,9 @@ doing local work. A host whose gh token went bad kept merging and porting for
    push, `gh pr ...`, `git fetch`/`ls-remote`, an API timeout), run the probe
    once:
    `tillandsias-plan script run scripts/lua/probe-remote-reachable.lua`
-2. `ok:remote-reachable` → continue.
+2. `ok:remote-reachable` → continue. Anything that is neither `ok:` nor
+   `blocked:remote-unreachable:` (a script error, a stale plan binary) judged
+   nothing: rebuild the plan binary and re-run it; never suspend on it.
 3. `blocked:remote-unreachable:<cause>` → **SUSPEND**: tell the user and the
    coordinator (by name, with the cause and the probe's why/remedy), push and
    claim nothing, start no further local work, and do not retry or back off.

@@ -586,13 +586,23 @@ for _, b in ipairs(backlogs) do
         local base_pop, head_pop = counter(MERGE_BASE, b), counter(HEAD, b)
         local head_set = {}
         for _, f in ipairs(head_pop) do head_set[f] = true end
-        local removed = nil
-        for _, f in ipairs(base_pop) do if not head_set[f] then removed = f; break end end
+        local removed_all = {}
+        for _, f in ipairs(base_pop) do if not head_set[f] then removed_all[#removed_all + 1] = f end end
+        local removed = removed_all[1]
         -- 1589-hm2r (measured by yoga): taken-by used to filter only the
         -- OFFER, so a port duplicating another open work ref read as paid.
         -- After the refresh, an item another open ref already deletes is not
         -- this change's to pay with, unless the change carries a waiver.
-        local paid_by = (#head_pop < #base_pop and removed) and taken_items()[removed] or nil
+        -- 2240-bkdb: EVERY removed item is judged, not only the first. #1379
+        -- removed three; the first was free, so it read as paid while a later
+        -- one duplicated #1376. The refusal and its waiver name the TAKEN item.
+        local paid_by = nil
+        if #head_pop < #base_pop and removed then
+            local taken = taken_items()
+            for _, f in ipairs(removed_all) do
+                if taken[f] then paid_by = taken[f]; removed = f; break end
+            end
+        end
         if paid_by and not waivers[name] then
             paid_taken = paid_taken or (paid_by .. ":" .. removed)
             log.raw("  " .. removed .. " is already deleted by another open work ref (" .. paid_by .. ", snapshot=" .. snapshot() ..

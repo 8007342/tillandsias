@@ -148,9 +148,9 @@ if [ "${TILLANDSIAS_SKIP_REMOTE_PROBE:-0}" != 1 ] && [ -z "${CI:-}" ] && [ -z "$
    && [ -f scripts/lua/probe-remote-reachable.lua ]; then
     _rr_bin="$(. scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null || true)"
     if [ -n "$_rr_bin" ]; then
-        _rr_out="$("$_rr_bin" script run scripts/lua/probe-remote-reachable.lua 2>&1)"; _rr_rc=$?
-        if [ "$_rr_rc" -ne 0 ]; then
-            printf '%s\n' "$_rr_out" >&2
+        _rr_rc=0; ( . scripts/plan-binary-probe.sh && . scripts/remote-probe-judge.sh && remote_probe_judge "$_rr_bin" ) || _rr_rc=$?
+        if [ "$_rr_rc" -ne 0 ] && [ "$_rr_rc" -ne 10 ]; then echo "could-not-run:remote-probe:judge-error:rc=$_rr_rc — the remote was not judged (2256-tt3v)" >&2; fi
+        if [ "$_rr_rc" -eq 10 ]; then
             echo "${RED:-}✗ pre-push: refused:pre-push:remote-unreachable — this host cannot reach the remote (2239-rmun)${RST:-}" >&2
             echo "  why: a push that cannot land must not spend the gate first, and a loop must not retry it" >&2
             echo "  remedy: a human restores this host's access (the probe's remedy is above); SUSPEND work on this host until \`tillandsias-plan script run scripts/lua/probe-remote-reachable.lua\` answers ok" >&2

@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-23T04:29:39Z (bundle-landing design phase 0, coordinator queue item 1).
+packets:
+  - packet_id: land-queue-status-read-only
+    order: "2248-jihs"
+    status: implemented
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [land-queue, observability]
+    estimated_hours: 2
+    owned_files:
+      - scripts/land-queue.sh
+      - scripts/test-land-queue.sh
+    title: "land-queue.sh --status: one read-only line saying what the lander is doing, published to refs/tillandsias/queue/status"
+    context: |
+      Nobody could tell whether the queue was gating, which phase, for how long, or how many PRs waited, without
+      reading a live log on the lander. --status takes no lock and prints
+      queue:gating:#N work/<ref> phase=<p> elapsed=<s> train=<members|-> waiting=<n> or queue:idle last-land=<sha> <age>s.
+      The running queue writes the line to $_RUNDIR/current at every phase start and publishes it (bounded, best-effort)
+      as a commit message on refs/tillandsias/queue/status; cleanup publishes idle.
+    exit_criteria:
+      - "scripts/test-land-queue.sh ARM 56 green: idle line, live phase with elapsed, no lock taken, no gate run, and a run's last word on refs/tillandsias/queue/status."
+    unscoreable: "fixture-scored: scripts/test-land-queue.sh ARM 56 is the pin; no litmus covers the land queue"
+    provenance: "coordinator macuahuitl-fedora queue 2026-11-23, bundle-landing design phase 0"
+    events:
+      - type: implemented
+        ts: "2026-11-23T04:29:39Z"
+        host: yoga
+        summary: "implemented on work/2248-jihs; test-land-queue 74/74"

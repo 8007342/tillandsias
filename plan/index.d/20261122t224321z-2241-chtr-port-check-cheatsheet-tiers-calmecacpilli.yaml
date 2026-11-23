@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: next smallest free counted check-*.sh, assigned by macuahuitl-fedora 2026-11-22.
+packets:
+  - packet_id: port-check-cheatsheet-tiers-to-lua
+    order: "2241-chtr"
+    status: implemented
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, cheatsheets]
+    estimated_hours: 1
+    title: "Port check-cheatsheet-tiers.sh to Lua, whole file, with mutant parity"
+    context: |
+      A thin driver: resolve cargo (PATH, $CARGO_HOME/bin, $HOME/.cargo/bin; 1005-m6rz), build tillandsias-policy,
+      resolve the first policy binary that RUNS (672-4nts, 1142-wn2k), and hand it the tree. The Lua does each step
+      in place with no bare-name tool spawns beyond git, cargo and the policy binary. Callers rebound: gate step 140,
+      the pre-commit hook (non-blocking, as before), local-ci.sh CHECK 7, litmus:cheatsheet-tier-discipline, two specs,
+      both TEMPLATE.md copies, the lib-cargo-sites.sh registry and test-cycle-preflight-cargo-resolution arms 7-8.
+    exit_criteria:
+      - "Clean tree: the .sh and the Lua both exit 0 with 'OK: all tier checks passed.'"
+      - "Mutant (a cheatsheet with tier: bogus-tier, in a --shared clone): both exit 1 with the same ERROR line."
+      - "No cargo on PATH or in ~/.cargo/bin: skip:cheatsheet-tiers:cargo-absent, exit 0."
+    unscoreable: "pinned-elsewhere: litmus:cheatsheet-tier-discipline and test-cycle-preflight-cargo-resolution arms 7-8."
+    next_action: "Land."
+    provenance: "macuahuitl-fedora 2026-11-22: next 3 smallest free counted check-*.sh, whole-file ports with mutant parity."
+    events:
+      - type: filed
+        ts: "2026-11-22T22:43:21Z"
+        host: calmecacpilli
+        summary: "filed implemented: parity clean and mutant; litmus and cargo-resolution fixture green"

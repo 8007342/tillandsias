@@ -434,7 +434,7 @@ say "(Provisioning runs in the background on first launch — no extra step need
 # (1377-hcnv) and needs no host step. "PENDING: none" is printed rather than
 # omitted, because silence and "nothing pending" produce the same bytes. A
 # future pending step appends its line to the call below. The marker lines are
-# what scripts/test-installers-print-pending-banner.sh cuts on; keep them.
+# what scripts/lua/test-installers-print-pending-banner.lua cuts on; keep them.
 # BEGIN-PENDING-BANNER
 pending_banner() {
     _rule="================================================================"

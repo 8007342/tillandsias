@@ -527,7 +527,6 @@ scripts scripts/test-a-claim-names-a-workstation.sh 5
 scripts scripts/test-agent-identity.sh 4
 scripts scripts/test-append-event-archived-refusal.sh 4
 scripts scripts/test-append-vs-origin-fold.sh 7
-scripts scripts/test-archiver-concurrent-check.sh 2
 scripts scripts/test-archiver-could-not-run-is-self-naming.sh 1
 scripts scripts/test-archiver-could-not-run-verdict.sh 2
 scripts scripts/test-archiver-ruby-could-not-run.sh 8
@@ -644,7 +643,6 @@ scripts scripts/test-hook-phase-instrumentation.sh 5
 scripts scripts/test-host-tools.sh 30
 scripts scripts/test-image-build-convergence.sh 2
 scripts scripts/test-image-usability-check.sh 1
-scripts scripts/test-inference-pull-failure-classification.sh 4
 scripts scripts/test-installer-probes-by-attempt-not-by-help.sh 2
 scripts scripts/test-installers-quiet-progress.sh 3
 scripts scripts/test-join-the-fleet-idempotent.sh 8
@@ -685,7 +683,6 @@ scripts scripts/test-loop-status-audit-reads-current-emitter.sh 2
 scripts scripts/test-lww-channel-alias.sh 3
 scripts scripts/test-lww-channel-consumers.sh 2
 scripts scripts/test-macos-model-share-writable.sh 1
-scripts scripts/test-macos-signing-seam.sh 1
 scripts scripts/test-macos-vz-orphan-diagnosis.sh 2
 scripts scripts/test-mcp-plan-resolver-pinning.sh 2
 scripts scripts/test-mcp-run-command-tool.sh 2
@@ -703,7 +700,6 @@ scripts scripts/test-must-ship-rows.sh 8
 scripts scripts/test-nix-cache-service.sh 1
 scripts scripts/test-nix-toolbox.sh 9
 scripts scripts/test-no-competing-gate.sh 2
-scripts scripts/test-no-fixture-writes-live-ledger.sh 3
 scripts scripts/test-no-stale-base-revert-pre-receive.sh 3
 scripts scripts/test-no-stale-base-revert.sh 4
 scripts scripts/test-nvidia-cdi-stale-hostpath.sh 1
@@ -800,7 +796,6 @@ scripts scripts/test-tracked-files-unwritten-guard.sh 2
 scripts scripts/test-tray-asset-placeholder-refused.sh 1
 scripts scripts/test-tray-surface-parity-gate.sh 1
 scripts scripts/test-unrunnable-platform-arms.sh 9
-scripts scripts/test-unstable-installer-defaults-to-unstable.sh 1
 scripts scripts/test-vault-shutdown-forwards-sigterm.sh 2
 scripts scripts/test-verify-closure.sh 1
 scripts scripts/test-windows-host-lane-refusal.sh 4
