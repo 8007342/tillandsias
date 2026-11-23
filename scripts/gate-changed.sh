@@ -413,7 +413,8 @@ if [ "$PKG_N" -gt 0 ]; then
     _s="$(_now)"
     _nx=""
     if [ "$INTAKE" = 1 ] && [ "${TILLANDSIAS_GATE_NEXTEST:-auto}" != 0 ]; then
-        _nx="$(cargo nextest --version 2>/dev/null | head -n 1)" || _nx=""
+        _nx="$(cargo nextest --version 2>/dev/null)" || _nx=""
+        _nx="${_nx%%$'\n'*}"
     fi
     if [ -n "$_nx" ]; then
         # The crates that CHANGED, each with its reverse-dep closure, as one

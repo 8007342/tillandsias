@@ -5421,6 +5421,12 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "--changed input-selection fixture passed"
     # ORDER 2248-zcqh — the bundle intake gate: deferral, HEAVY, legacy
     # unchanged, and a crate graph held to cargo metadata.
+    _step "Checking --changed's derived crate graph equals cargo metadata (2248-zcqh)..."
+    if ! _run_lua_decider "scripts/lua/check-gate-changed-crate-graph.lua" 2>&1; then
+        _error "scripts/gate-changed.sh derives a crate graph cargo does not resolve — intake would skip a dependent crate; see MISSING/EXTRA above (2248-zcqh)"
+        exit 1
+    fi
+    _info "Crate-graph lint passed"
     _step "Checking --changed --intake defers, marks HEAVY, and matches cargo's crate graph (2248-zcqh)..."
     if ! _run_lua_decider "scripts/lua/test-gate-changed-intake.lua" 2>&1; then
         _error "--changed --intake no longer defers whole-tree/slow fixtures by name, marks an unscopable change HEAVY, or derives the crate graph cargo resolves (2248-zcqh)"
