@@ -8,7 +8,7 @@
 # `[ -x ./target/release/tillandsias-plan ]`, first match wins — and all three
 # failed the same way on a shared Windows/WSL checkout, where a WSL build leaves
 # a **Linux ELF** at exactly that path beside the usable `.exe`. Two of them
-# (check-stranded-in-progress.sh, check-fragment-closure-evidence-added.sh) were
+# (check-stranded-in-progress.sh, check-fragment-closure-evidence-added.sh, since ported to scripts/lua) were
 # fixed in place under 702-68zj; select-work-batch.sh then arrived from another
 # host carrying a fresh copy of the same bug, which is the signal that fixing
 # instances is not enough.
@@ -184,15 +184,30 @@ resolve_plan_binary() {
 # Never blocks: a canonical copy that stays PUT is the safe outcome, and the
 # caller's contract is that a failed refresh is a report, not a refusal to start.
 #
+# ORDER 2217-ab8h: TRUNK ONLY, when the caller names its checkout ($3). The
+# copy is the HOST's PATH binary, and fixtures that cannot find one in their
+# scratch tree fall through to it. Installing a WORK-BRANCH build there turned
+# a trunk fixture red on one host only (lenovinha 2026-11-22: a 2213-ag5u build
+# whose validator surface differed from trunk's, so the pre-push lane refused
+# it as STALE inside test-pre-push-plan-lane-fails-closed-without-binary).
+# With $3 the copy is refreshed only when that checkout's HEAD is contained in
+# ${TILLANDSIAS_PLAN_COPY_TRUNK_REF:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}; otherwise it is left
+# as it is and the answer says why. Without $3 the old contract holds.
+#
 # Prints exactly one token: absent | current | refreshed |
-# refresh-refused-not-runnable | refresh-failed
+# refresh-refused-not-runnable | refresh-failed | refresh-skipped-off-trunk
 refresh_plan_binary_copy() {
-    local src="$1" dest="$2"
+    local src="$1" dest="$2" root="${3:-}"
     [ -e "$dest" ] || { printf 'absent
 '; return 0; }
     if cmp -s "$src" "$dest"; then
         printf 'current
 '
+        return 0
+    fi
+    if [ -n "$root" ] && ! git -C "$root" merge-base --is-ancestor HEAD \
+            "${TILLANDSIAS_PLAN_COPY_TRUNK_REF:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}" 2>/dev/null; then
+        printf '%s\n' refresh-skipped-off-trunk
         return 0
     fi
     if ! "$src" capabilities >/dev/null 2>&1; then
@@ -268,9 +283,46 @@ plan_binary_is_stale() {   # $1 = binary path; true when any source FILE is newe
     [ -n "$(find crates/tillandsias-plan Cargo.lock -type f -newer "$1" -print -quit 2>/dev/null)" ]
 }
 
+# 2187-sdtz: on Windows the stale binary is often the image RUNNING the caller
+# (a Lua runner's script sourcing this probe). Windows refuses to delete or
+# overwrite a running image (cargo: "failed to remove file ... Access is denied
+# (os error 5)"), but it does allow RENAMING one. So move the old .exe aside
+# before cargo links, put it back if the build produced nothing, and sweep
+# earlier set-aside copies whose process has since exited. A no-op off Windows:
+# only a .exe artifact is set aside.
+_PBP_EXE="target/release/tillandsias-plan.exe"
+_pbp_cargo_build() {
+    local _pbp_aside="" _pbp_rc _pbp_old
+    for _pbp_old in "$_PBP_EXE".old-*; do
+        [ -e "$_pbp_old" ] && rm -f "$_pbp_old" 2>/dev/null
+    done
+    if [ -f "$_PBP_EXE" ]; then
+        _pbp_aside="$_PBP_EXE.old-$$"
+        # Rename the (possibly running) image aside, then put a COPY back under
+        # the real name: the copy is not running, so cargo may delete it, and a
+        # build killed at any point still leaves a runnable binary where every
+        # resolver looks (measured: a memory reap mid-build left only .old-<pid>).
+        if mv -f "$_PBP_EXE" "$_pbp_aside" 2>/dev/null; then
+            cp -p "$_pbp_aside" "$_PBP_EXE" 2>/dev/null || true
+        else
+            _pbp_aside=""
+        fi
+    fi
+    _pbp_cargo_build_inner
+    _pbp_rc=$?
+    if [ -n "$_pbp_aside" ]; then
+        if [ -f "$_PBP_EXE" ]; then
+            rm -f "$_pbp_aside" 2>/dev/null   # still running: the next build sweeps it
+        else
+            mv -f "$_pbp_aside" "$_PBP_EXE" 2>/dev/null
+        fi
+    fi
+    return $_pbp_rc
+}
+
 # 1804-sccl: build the plan binary; a failing ambient compiler wrapper (sccache)
 # must never become "no fresh tillandsias-plan". Retry once without the wrapper.
-_pbp_cargo_build() {
+_pbp_cargo_build_inner() {
     local _pbp_log
     _pbp_log="$(mktemp "${TMPDIR:-/tmp}/pbp-build.XXXXXX" 2>/dev/null || echo /dev/null)"
     if cargo build --release -p tillandsias-plan >"$_pbp_log" 2>&1; then rm -f "$_pbp_log"; return 0; fi

@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-door-leaves-34-to-58-guards-unjudged-on-mid-tier-hosts
+    order: 2275-fcpy
+    status: ready
+    kind: debt
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 4
+    title: |
+      The preflight door deadline-skips 34-58 guards per run on mid-tier floor hosts, so those guards are never judged before a push; cheapening the always-skipped ones buys coverage.
+    context: |
+      Coordinator ruling 2026-11-23 on 2272-cuxh, option (b), filed separately. Measured: lenovinha 36 floor-regime doors today, 35-58 deadline-skips each; yoga 34 per door (#1432); yolanda's WSL locus 31-50; macuahuitl 0 (a fast host). A deadline-skipped guard was never judged: the gate still runs it, but a push it would have refused goes out and is evicted later at the cost of a gate.
+      Skipped in ALL 36 of lenovinha's doors (5 s door deadline, or the decider deadline): test-worktree-add-cleanup.lua test-scorable-closure-quoting test-provider-limit-relay.lua test-project-info-grep-code-recall test-preflight-wall-clock-deadline.lua test-preflight-door-many-guards.lua test-pending-capability-row-does-not-wedge test-must-ship-rows test-metrics-log-path-agreement test-litmus-self-match.lua test-land-queue test-keyring-fixtures-use-a-private-bus test-gate-step-private-metrics-fallback.lua test-flaky-installs-background.lua test-door-serial-lua-declaration.lua test-door-index-lock-sweep.lua test-door-fixture-scratch-sweep.lua test-door-declared-artifact-sweep.lua test-closure-guards-name-the-way-out test-claims-across-branches test-awk-float-lc-numeric test-a-claim-names-a-workstation check-mo-full-attestations check-fragment-events-land.lua check-archiver-ready-set.lua check-append-vs-origin-fold 
+      84 distinct guards were deadline-skipped at least once.
+    exit_criteria:
+      - "for each always-skipped guard: cheapened under the door's deadline, or declared gate-only (a named declared skip, not a deadline skip) with a reason"
+      - "a mid-tier floor host's door deadline-skips at most a handful of guards, measured over several runs"
+    unscoreable: "a measurement-led cleanup; the per-host skip counts before and after are the evidence."
+    next_action: "Start with the fixtures whose real cost is known and large (claims-across-branches, land-queue, scorable-closure-quoting): decide gate-only vs cheapen."
+    provenance: coordinator ruling (macuahuitl-fedora, 2026-11-23); data from lenovinha, yoga, yolanda; filed by lenovinha.
+    related: [2272-cuxh, 1631-6w8z, 1636-6k6k, 1616-njfd]
+    events:
+      - {type: filed, ts: '2026-11-23T18:45:20Z', host: lenovinha, summary: door leaves 34-58 guards unjudged on mid-tier hosts filed}

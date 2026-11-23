@@ -63,18 +63,32 @@ pub struct WindowSummary {
     pub headless: bool,
 }
 
+/// @trace spec:browser-window-timeout
+/// Order 1911-3gqy: the idle limit is agent-scale. It was 24 h, and since
+/// nothing recorded activity, "idle" meant "since creation": a window an agent
+/// opened and forgot held its forwarder, network and a /24 for a day. Activity
+/// is now recorded on every tool call that names the window (server.rs).
+pub const IDLE_TIMEOUT_SECS: u64 = 60 * 60;
+
+/// @trace spec:browser-window-timeout
+/// The absolute lifetime of any window, active or not.
+pub const MAX_LIFETIME_SECS: u64 = 48 * 60 * 60;
+
+/// Order 1911-3gqy: at most this many windows per registry (one lane). Opening
+/// one more closes the OLDEST, so a loop that opens windows cannot exhaust the
+/// podman network pool (each window takes a /24 and an enclave IP).
+pub const MAX_WINDOWS_PER_LANE: usize = 6;
+
 impl WindowEntry {
     /// @trace spec:browser-window-timeout
-    /// Check if window has exceeded idle timeout (24 hours).
+    /// Check if window has exceeded the idle timeout (IDLE_TIMEOUT_SECS).
     pub fn is_idle_timeout(&self) -> bool {
-        const IDLE_TIMEOUT_SECS: u64 = 24 * 60 * 60; // 24 hours
         self.last_activity.elapsed().as_secs() > IDLE_TIMEOUT_SECS
     }
 
     /// @trace spec:browser-window-timeout
     /// Check if window has exceeded absolute lifetime (48 hours).
     pub fn is_lifetime_exceeded(&self) -> bool {
-        const MAX_LIFETIME_SECS: u64 = 48 * 60 * 60; // 48 hours
         self.created_at.elapsed().as_secs() > MAX_LIFETIME_SECS
     }
 
@@ -87,7 +101,6 @@ impl WindowEntry {
     /// @trace spec:browser-window-timeout
     /// Get time until idle timeout in seconds. Returns 0 if already timed out.
     pub fn seconds_until_idle_timeout(&self) -> u64 {
-        const IDLE_TIMEOUT_SECS: u64 = 24 * 60 * 60;
         let elapsed = self.last_activity.elapsed().as_secs();
         IDLE_TIMEOUT_SECS.saturating_sub(elapsed)
     }
@@ -212,6 +225,26 @@ impl WindowRegistry {
             false
         }
     }
+
+    /// Order 1911-3gqy: the windows beyond `cap`, OLDEST first (by creation),
+    /// never `keep` (the window just opened). Empty while at or under the cap.
+    pub fn beyond_cap(&self, cap: usize, keep: &str) -> Vec<WindowId> {
+        let windows = self.windows.lock();
+        if windows.len() <= cap {
+            return Vec::new();
+        }
+        let mut others: Vec<(&WindowId, Instant)> = windows
+            .iter()
+            .filter(|(id, _)| id.as_str() != keep)
+            .map(|(id, e)| (id, e.created_at))
+            .collect();
+        others.sort_by_key(|(_, created)| *created);
+        others
+            .into_iter()
+            .take(windows.len() - cap)
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
 }
 
 impl DebounceTable {
@@ -256,6 +289,20 @@ pub fn close_window(
     Some(entry)
 }
 
+/// Order 1911-3gqy (spec:browser-window-timeout): close every window past its
+/// idle or absolute limit, through the same path as browser.close. Returns the
+/// ids it closed. find_timed_out_windows had only test callers, so a forgotten
+/// window lived until its container died.
+pub fn sweep_timed_out(registry: &WindowRegistry, debounce: &DebounceTable) -> Vec<WindowId> {
+    let mut closed = Vec::new();
+    for (window_id, _project) in registry.find_timed_out_windows() {
+        if close_window(registry, debounce, &window_id).is_some() {
+            info!(window_id = %window_id, "window_closed_idle");
+            closed.push(window_id);
+        }
+    }
+    closed
+}
 pub fn close_all(registry: &WindowRegistry, debounce: &DebounceTable) -> Vec<WindowEntry> {
     let mut entries = registry.drain_all();
     // @trace spec:browser-window-lifecycle
@@ -271,4 +318,70 @@ pub fn close_all(registry: &WindowRegistry, debounce: &DebounceTable) -> Vec<Win
         debounce.remove_window(&entry.window_id);
     }
     entries
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    pub(crate) fn entry(id: &str, age: Duration, idle: Duration) -> WindowEntry {
+        let now = Instant::now();
+        WindowEntry {
+            window_id: id.into(),
+            pid: 0,
+            project_label: "acme".into(),
+            user_data_dir: PathBuf::from("/tmp/x"),
+            opened_url: "https://acme.localhost/".into(),
+            title: String::new(),
+            owning_lane: "acme/0".into(),
+            dev: false,
+            engine: crate::launcher::Engine::Chromium,
+            headless: true,
+            notice: None,
+            cdp: None,
+            container: None,
+            created_at: now.checked_sub(age).unwrap_or(now),
+            last_activity: now.checked_sub(idle).unwrap_or(now),
+        }
+    }
+
+    /// Order 1911-3gqy, red first: find_timed_out_windows had only test
+    /// callers and the idle limit was 24 h, so a window an agent forgot lived
+    /// a day. The sweep closes exactly the windows past the idle limit, and a
+    /// recorded touch keeps an old window alive.
+    #[test]
+    fn the_idle_sweep_closes_only_windows_past_the_idle_limit() {
+        let registry = WindowRegistry::default();
+        let debounce = DebounceTable::default();
+        let hour = Duration::from_secs(IDLE_TIMEOUT_SECS);
+        registry.insert(entry("forgotten", hour * 2, hour + Duration::from_secs(60)));
+        registry.insert(entry("busy", hour * 2, Duration::from_secs(5)));
+        registry.insert(entry("touched", hour * 2, hour + Duration::from_secs(60)));
+        assert!(registry.touch_window_activity("touched"));
+        let closed = sweep_timed_out(&registry, &debounce);
+        assert_eq!(closed, vec!["forgotten".to_string()]);
+        assert!(!registry.contains("forgotten"));
+        assert!(registry.contains("busy") && registry.contains("touched"));
+    }
+
+    /// Order 1911-3gqy: over the cap, the OLDEST windows are named, never the
+    /// one just opened; at or under the cap, none.
+    #[test]
+    fn beyond_cap_names_the_oldest_and_never_the_new_window() {
+        let registry = WindowRegistry::default();
+        for i in 0..MAX_WINDOWS_PER_LANE {
+            registry.insert(entry(
+                &format!("w{i}"),
+                Duration::from_secs(100 - i as u64),
+                Duration::ZERO,
+            ));
+        }
+        assert!(registry.beyond_cap(MAX_WINDOWS_PER_LANE, "w0").is_empty());
+        registry.insert(entry("new", Duration::ZERO, Duration::ZERO));
+        assert_eq!(
+            registry.beyond_cap(MAX_WINDOWS_PER_LANE, "new"),
+            vec!["w0".to_string()]
+        );
+    }
 }

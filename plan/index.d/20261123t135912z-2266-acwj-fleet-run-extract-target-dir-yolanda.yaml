@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: fleet-run-extract-has-a-target-dir-so-the-scratch-door-admits-it
+    order: 2266-acwj
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [gate-steps, second-regime, msys, fleet]
+    estimated_hours: 1
+    title: "fleet-run creates target/ in its extract: scratch.declare refuses target/plan-scratch when the base does not exist"
+    context: |
+      MEASURED by yolanda on msys, fleet-run 926 at b8eed6526: rc=1 result=refused, script-error, scratch.declare refused
+      target/plan-scratch as not under an allowed base. The same fixture run directly in the checkout is 3 arms green.
+      scratch_root.rs allowed_bases canonicalizes repo/target and drops it when absent; a fresh extract has none.
+    exit_criteria:
+      - "a fixture whose first act is T:scratch() is green through fleet-run on msys; without the fix the new arm is red"
+    unscoreable: "unpinnable-until-the-responder-runs-there: the closure is a regime line answered on msys."
+    next_action: "mkdir the extract's target after the clean-tree assert; add an arm to test-fleet-run.lua."
+    provenance: found running lenovinha's 926 request; filed by yolanda.
+    related: [2259-fk3m, 2250-44uy]
+    events:
+      - {type: filed, ts: '2026-11-23T13:59:12Z', host: yolanda, summary: fleet-run extract has no target dir; filed and claimed}

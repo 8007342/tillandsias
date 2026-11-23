@@ -12,3 +12,10 @@ STEP_SCRIPT="scripts/test-script-run-verb.sh"
 STEP_ERROR="tillandsias-plan script run no longer preserves its Lua verdict, timeout, gate-step, timing, or classifier contracts (1384-bqhy); see which arm failed above"
 STEP_OK="tillandsias-plan script run preserves its Lua verdict and classifier contracts"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-08 darwin script-run-verb: 7 passed, 0 failed"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target"
+STEP_LANES="cargo"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/gate-steps.d/** scripts/lua/** scripts/plan-binary-probe.sh scripts/test-script-run-verb.sh"

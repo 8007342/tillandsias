@@ -9,4 +9,8 @@ STEP_DESC="Checking the read-only push-guard verdict (1255-s4im)"
 STEP_LUA="scripts/lua/test-hooks-armed.lua"
 STEP_ERROR="check-hooks-armed.lua no longer answers what its fixture constructs, or it installed something (1255-s4im) — see the FAIL lines above"
 STEP_OK="Read-only push-guard verdict fixture passed"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-16 darwin ok:hooks-armed-fixture:7 arms"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:hooks-armed-fixture:9 arms at 3318a46e6"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/ensure-hooks.sh scripts/install-hooks.sh scripts/lua/check-hooks-armed.lua scripts/lua/test-hooks-armed.lua"

@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: release-preflight-latest-read-bound-from-measurement
+    order: "2278-zhqb"
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [ci-release, fixtures, timing]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/test-release-preflight-latest-read-bounded.lua
+    title: "release-preflight-latest-read-bounded arm 1's 40 s bound is inside its own idle-host spread"
+    context: |
+      yoga 2026-11-23: red in relay-preflight's ci-release tier on 32edf1f75 (rc=124 at 40 s) while other builds ran, then
+      alone with no other gate: red at 40 s, then ok at 34 s. Three samples on one host, so this shows the bound is
+      marginal there and nothing about the fleet. The arm proves a locked keyring cannot stall the read, which took
+      about 120 s before the fix, so the bound has room below that. Its time includes the rest of release-preflight.sh,
+      not only the stubbed read. The coordinator waived this arm for relay preflights until this row is done.
+    exit_criteria:
+      - "The arm's idle time is measured on at least two hosts, ten runs each, with the raw times recorded in the row before a bound is chosen."
+      - "The bound is stated as the measured maximum plus a named margin and is still far enough below 120 s that the pre-fix gh path reds the arm."
+      - "The pre-fix shape (a hung gh that is called) still reds the arm under the new bound."
+    unscoreable: "fixture-scored: litmus release-preflight-latest-read-bounded runs the arm; the bound is a measurement"
+    next_action: "Run the fixture ten times on an idle yoga and ten on a second host; record the arm 1 times here."
+    provenance: "coordinator macuahuitl-fedora 2026-11-23, from yoga's 2276-fnhy preflight"
+    related: [1523-rxt6, 2182-flrp]
+    events:
+      - {type: filed, ts: "2026-11-23T21:26:06Z", host: yoga, summary: "filed on the coordinator's request"}

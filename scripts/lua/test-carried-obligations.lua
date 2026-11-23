@@ -45,6 +45,8 @@
 --  19-21 FORGE-HELPER-SHELL (2049-74tx) the second backlog: its counter
 --                counts helper shell-outs, a port pays it, and an advisory due
 --                change still lands.
+--  RETIRED   (2219-crmv) deleting an uncounted top-level scripts/*.sh pays
+--  RENAMED   (2219-crmv) renaming one pays nothing: silent at landing
 --  17 PAID-BUT-TAKEN (1589-hm2r, measured by yoga) a port duplicating another
 --                open work ref: pre-snapshot prints paid; the fixed guard refuses
 --                refused:carried:paid-but-taken-by:work/<ref>:<item> on every push
@@ -439,11 +441,21 @@ local rl = run({ PLAN, "script", "run", GUARD, "--", "--landing" }, { cwd = R, e
 check("PAID-BUT-TAKEN at landing: refused, exit 1",
     rl.status == "exited" and rl.code == 1 and text.contains(rl.stdout or "", "paid-but-taken-by:work/9996-dup:scripts/check-w.sh"),
     "rc=" .. tostring(rl.code) .. " out=[" .. (rl.stdout or "") .. "]")
--- The remedy: a conflict: waiver trailer turns the refusal into waived, exit 0.
-G({ "commit", "-q", "--allow-empty", "-m", "duplicate of 9996-dup", "-m", "Carried-Waiver: shell-to-lua conflict:scripts/check-w.sh (#9996)" })
+-- The remedy, COPIED (2152-t5p9): land-queue's eviction hint is the guard's first
+-- column-0 `Carried-Waiver:` line. It must name the BACKLOG, and pasting it
+-- verbatim as a trailer must be admitted. Before 2152-t5p9 there was no such line,
+-- and the queue told people to write `Carried-Waiver: paid-but-taken-by ...`.
+local hint = nil
+for l in (rl.stderr or ""):gmatch("[^\n]+") do
+    if l:match("^Carried%-Waiver: ") then hint = l; break end
+end
+check("PAID-BUT-TAKEN hint: the guard prints a column-0 waiver line keyed by the backlog",
+    hint ~= nil and text.starts_with(hint, "Carried-Waiver: shell-to-lua conflict:scripts/check-w.sh"),
+    "hint=[" .. tostring(hint) .. "] err=[" .. (rl.stderr or "") .. "]")
+G({ "commit", "-q", "--allow-empty", "-m", "duplicate of 9996-dup", "-m", hint or "Carried-Waiver: paid-but-taken-by <reason>" })
 rc, o, e = judge_with(GUARD)
-check("PAID-BUT-TAKEN remedy: a Carried-Waiver conflict: trailer clears the refusal (waived, exit 0)",
-    rc == 0 and has_line(o, "carried:shell-to-lua:waived:conflict:scripts/check-w.sh (#9996)"),
+check("PAID-BUT-TAKEN remedy: the copied hint, pasted verbatim as a trailer, is admitted (waived, exit 0)",
+    rc == 0 and has_line(o, "carried:shell-to-lua:waived:conflict:scripts/check-w.sh (#<pr>)"),
     "rc=" .. rc .. " out=[" .. o .. "] err=[" .. e .. "]")
 
 -- 18. STACKED (2044-kx7e, measured: #1002 evicted 2026-11-08). A change ports
@@ -505,6 +517,32 @@ check("STACKED-AFTER-MERGE: a ref stacked on the change, both merged with newer 
         and not text.contains(o, "paid-but-taken-by:work/1007-stack"),
     "rc=" .. rc .. " out=[" .. o .. "] err=[" .. e .. "]")
 G({ "push", "-q", "origin", "--delete", "work/1006-own", "work/1007-stack" })
+
+-- 18c. SECOND ITEM TAKEN (2240-bkdb, measured: #1379 deleted three .sh files,
+-- the first free, and printed paid while a later one duplicated #1376). The
+-- guard judged only the FIRST removed item. Another ref deletes test-z.sh; our
+-- change ports check-x.sh (free, first in population order) AND test-z.sh.
+GL({ "checkout", "-q", "base" }); GL({ "checkout", "-q", "-b", "work/9995-scnd" })
+GL({ "rm", "-q", "scripts/test-z.sh" }); GL({ "commit", "-qm", "another host ports test-z" })
+GL({ "push", "-q", "origin", "work/9995-scnd" })
+change("work/1010-two")
+G({ "rm", "-q", "scripts/check-x.sh", "scripts/test-z.sh" })
+fs.mkdir(REL .. "/scripts/lua")
+write("scripts/lua/check-x.lua", "verdict.emit('ok:x', 0)\n")
+write("scripts/lua/test-z.lua", "verdict.emit('ok:z', 0)\n")
+G({ "add", "-A" }); G({ "commit", "-qm", "port check-x and test-z; test-z duplicates 9995-scnd" })
+rc, o, e = judge_with(GUARD)
+local hint2 = nil
+for l in (e or ""):gmatch("[^\n]+") do if l:match("^Carried%-Waiver: ") then hint2 = l; break end end
+check("SECOND-TAKEN: a change whose SECOND removed item another open ref deletes is refused, naming that item",
+    rc == 1 and has_line(o, "refused:carried:paid-but-taken-by:work/9995-scnd:scripts/test-z.sh")
+        and hint2 ~= nil and text.starts_with(hint2, "Carried-Waiver: shell-to-lua conflict:scripts/test-z.sh"),
+    "rc=" .. rc .. " out=[" .. o .. "] hint=[" .. tostring(hint2) .. "]")
+GL({ "push", "-q", "origin", "--delete", "work/9995-scnd" })
+rc, o, e = judge_with(GUARD)
+check("SECOND-TAKEN (control): with neither removed item taken, the same change is paid",
+    rc == 0 and grep(o, [[^carried:shell-to-lua:paid:scripts/(check-x|test-z)\.sh$]]) ~= nil and not text.contains(o, "paid-but-taken-by"),
+    "rc=" .. rc .. " out=[" .. o .. "] err=[" .. e .. "]")
 G({ "checkout", "-q", "base" }); G({ "reset", "-q", "--hard", base_before })
 G({ "checkout", "-q", "base" })
 G({ "remote", "remove", "origin" })
@@ -513,6 +551,28 @@ G({ "remote", "remove", "origin" })
 -- second backlog counted by the same guard. Items are the external commands at
 -- command positions in images/default/lib-*.sh; a comment and an `echo grep`
 -- argument are not items.
+-- RETIRED / RENAMED (2219-crmv): deleting a top-level scripts/*.sh OUTSIDE
+-- the population (a wrapper or tombstone) pays; a rename does not.
+G({ "checkout", "-q", "base" }); G({ "checkout", "-q", "-B", "retirebase", "base" })
+write("scripts/tool-old.sh", "#!/usr/bin/env bash\necho retired >&2\nexit 0\n")
+G({ "add", "-A" }); G({ "commit", "-qm", "an uncounted script" })
+G({ "checkout", "-q", "-B", "work/1008-rtrd", "retirebase" })
+G({ "rm", "-q", "scripts/tool-old.sh" })
+write("scripts/check-x.sh", n_lines("x", 10) .. "echo r\n") -- its caller, in the area: the change is due
+G({ "add", "-A" }); G({ "commit", "-qm", "retire an uncounted script" })
+rc, o = judge(true, "retirebase")
+check("RETIRED: deleting an uncounted scripts/*.sh pays at landing with no waiver (2219-crmv)",
+    rc == 0 and has_line(o, "carried:shell-to-lua:paid:retired-uncounted:scripts/tool-old.sh"),
+    "rc=" .. rc .. " out=[" .. o .. "]")
+G({ "checkout", "-q", "-B", "work/1009-rnmd", "retirebase" })
+G({ "mv", "scripts/tool-old.sh", "scripts/tool-new.sh" })
+write("scripts/check-x.sh", n_lines("x", 10) .. "echo r\n")
+G({ "add", "-A" }); G({ "commit", "-qm", "rename an uncounted script" })
+rc, o = judge(true, "retirebase")
+check("RENAMED: a rename of an uncounted scripts/*.sh pays nothing and is refused at landing as silent",
+    rc == 1 and has_line(o, "violation:carried:shell-to-lua:silent") and not o:find(":paid:", 1, true),
+    "rc=" .. rc .. " out=[" .. o .. "]")
+
 G({ "checkout", "-q", "base" }); G({ "checkout", "-q", "-B", "helperbase", "base" })
 fs.mkdir(REL .. "/images"); fs.mkdir(REL .. "/images/default")
 write("methodology/convergence.yaml", fs.read(REL .. "/methodology/convergence.yaml") .. table.concat({

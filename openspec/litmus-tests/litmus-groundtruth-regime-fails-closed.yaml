@@ -15,16 +15,16 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-groundtruth-regime-fails-closed.sh
+  - workspace contains scripts/lua/test-groundtruth-regime-fails-closed.lua
 
 critical_path:
   - step: "fixture parses and is executable"
-    command: "bash -n scripts/test-groundtruth-regime-fails-closed.sh && test -x scripts/test-groundtruth-regime-fails-closed.sh && echo 'ok: parse'"
+    command: "test -f scripts/lua/test-groundtruth-regime-fails-closed.lua && echo 'ok: parse'"
     timeout_ms: 2000
     expected_behavior: "ok: parse"
 
   - step: "an incomplete grade fails closed by name; a failing case is still a divergence"
-    command: "bash scripts/test-groundtruth-regime-fails-closed.sh 2>&1 | tail -n 1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-groundtruth-regime-fails-closed.lua 2>&1 | grep '^PASS'"
     timeout_ms: 120000
     expected_behavior: "PASS: groundtruth-regime-fails-closed"
 
@@ -41,4 +41,4 @@ rollback:
   on_failure: >
     A regime check that compares a partial population and prints a verdict is
     the defect: every grade must have printed its groundtruth-result line.
-  command: "bash scripts/test-groundtruth-regime-fails-closed.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-groundtruth-regime-fails-closed.lua"

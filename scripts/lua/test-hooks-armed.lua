@@ -11,6 +11,7 @@
 --   branch copies ensure-hooks.sh's, which test-ensure-hooks.sh covers, 1442-wyf9.)
 --   6 NOREPO   not a checkout: blocked, exit 2
 --   7 READONLY the ABSENT run installed nothing: still no pre-push after it
+--   9/10 DRIVER the floor merge driver shipped but unconfigured is due; configured ok
 --   8 LIVE     this checkout answers in the grammar
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-hooks-armed.lua
@@ -38,7 +39,7 @@ local function arm(name, cond, got)
     end
 end
 
-local WANT = "tillandsias-pre-push-v8"
+local WANT = "tillandsias-pre-push-v9"
 -- A scratch checkout with an installer naming WANT, and an optional hook body.
 local function repo(name, hook)
     local d = REL .. "/" .. name
@@ -71,6 +72,16 @@ arm("3 STALE an older marker is due", rc == 1 and o == "degraded:hooks:stale:til
 rc, o = check(repo("foreign", "#!/bin/bash\nexit 0\n"))
 arm("4 FOREIGN a hook with no marker is refused", rc == 3 and o:find("^refused:hooks:foreign%-pre%-push:") ~= nil, rc .. " " .. o)
 
+-- 9: 2118-asur. A tree that ships the merge driver needs it configured.
+local md = repo("driver", "#!/bin/bash\n# " .. WANT .. "\n")
+fs.write(REL .. "/driver/scripts/merge-floor-driver.sh", "#!/bin/bash\n")
+rc, o, e = check(md)
+arm("9 DRIVER an unconfigured merge driver is due, with the remedy",
+    rc == 1 and o == "degraded:hooks:merge-driver-unarmed" and e:find("bash scripts/ensure-hooks.sh", 1, true) ~= nil, rc .. " " .. o)
+proc.run({ argv = { "git", "config", "merge.tillandsias-floor.driver", "bash scripts/merge-floor-driver.sh %O %A %B %P %X %Y" }, cwd = md, timeout_ms = 30000 })
+rc, o = check(md)
+arm("10 DRIVER configured is ok", rc == 0 and o == "ok:hooks-armed:" .. WANT, rc .. " " .. o)
+
 fs.mkdir(REL .. "/norepo")
 local nr = proc.run({ argv = { "mktemp", "-d", "/tmp/hooks-armed-norepo.XXXXXX" }, timeout_ms = 10000 })
 local nrd = text.trim(nr.stdout or "")
@@ -87,4 +98,4 @@ proc.run({ argv = { "rm", "-rf", ROOT .. "/" .. REL }, timeout_ms = 30000 })
 if #failed > 0 then
     verdict.emit("violation:hooks-armed-fixture:" .. #failed .. "-failed", 1)
 end
-verdict.ok("hooks-armed-fixture", "7 arms")
+verdict.ok("hooks-armed-fixture", "9 arms")

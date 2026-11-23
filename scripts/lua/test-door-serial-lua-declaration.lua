@@ -205,7 +205,7 @@ arm("7 OVERLAP the same roster without the declaration runs them side by side",
 
 -- ── 8 the runner the door hands down (1635-ma2f) ───────────────────────────
 -- The stale-plan-binary block is cut out of build.sh between its exact-once
--- markers (as test-preflight-stale-plan-binary.sh does) and run with
+-- markers (as test-preflight-stale-plan-binary.lua does) and run with
 -- SCRIPT_DIR at a scratch root holding the real probe and a stub binary at
 -- ./target/release/tillandsias-plan, the resolver's own relative answer.
 local lb, le, blines = nil, nil, {}

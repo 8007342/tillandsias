@@ -634,7 +634,7 @@ multi_host_development:
         --reason "claimed by <agent_id>"`, commit ONLY that fragment, push it:
         `git push origin HEAD:linux-next` (the plan-only lane admits a
         fragment-only commit with no gate stamp). Then
-        `bash scripts/check-claim-confirmed.sh <order>` MUST print a win; a
+        `tillandsias-plan script run scripts/lua/check-claim-confirmed.lua -- <order> --host <host>` MUST print a win; a
         `refused:claim-lost:` means another agent holds it — append a note
         that you yielded and pick another packet.
       3_work: >
@@ -921,7 +921,7 @@ multi_host_development:
         (643-64bx, methodology/versioning.yaml monotonic_build_bump). Two guards enforce this: the pre-push VERSION
         guard treats a platform VERSION == origin/linux-next as a legitimate
         integration-branch CATCH-UP (643-64bx), and
-        scripts/check-version-bump-isolation.sh (wired into ./build.sh --check,
+        scripts/lua/check-version-bump-isolation.lua (wired into ./build.sh --check,
         702-eusw criterion 3) refuses any non-merge commit that changes VERSION
         alongside non-companion files, so a bump cannot be swept in by git add -A.
 
@@ -1418,6 +1418,21 @@ multi_host_development:
       wrapped gate locally (35s) AND leave the packet's live criteria to the
       owning host — partial local evidence plus an honest residual note
       beats both silence and false completion.
+
+  # ── OPERATOR RULINGS 2026-11-20: the landing queue (order 2143-z5uj) ────────
+  landing_queue:
+    provenance: "operator 2026-11-20, relayed by the coordinator (macuahuitl-fedora); the operator called one-PR-per-full-gate in strict number order an unacceptable bottleneck"
+    rulings:
+      - "A batch or class train gates the LANDED UNION TREE once; a scoped batch follows the 2026-09-20 scoped-tier conditions (scoped stamps only, a full run under 24 h old or the selector refuses, main always full). Implementation: the P7 batch-train packet."
+      - "--floor replaces the worker-side --preflight requirement for work/* refs. Until build.sh --floor exists, the worker-side door stays ./build.sh --preflight."
+      - "A plan-ledger-only PR (every merge-delta path classifies plan-ledger) lands through the plan-lane checks (tillandsias-plan check: fragment parse and ledger validation) with NO build-check. scripts/land-queue.sh: TILLANDSIAS_LAND_QUEUE_PLAN_ONLY_LANE, default 1."
+    mechanics:
+      reread: "scripts/land-queue.sh re-reads gh pr list before EVERY candidate, so a label or close made mid-run takes effect at the next candidate."
+      order: "label land:priority first, then PR number."
+      hold: "label land:hold keeps a PR out of the queue and is named every run; it replaces draft-as-hold (a draft is still skipped, never landed)."
+      host_state: "a host-state failure (could-not-run:host:<reason>, e.g. plan-binary-stale) skips that candidate and the run continues; nothing is evicted for it."
+      flaky_rerun: "a gate red whose failing lines name only tests the candidate's diff does not touch is re-run ONCE on the identical tree: green prints flaky:<test> and lands, red prints evicted:<test>. A red naming no test, or a touched test, is judged on the first run."
+    vocabulary: "one stdout line per candidate or batch, <class>:<scope>:<detail>; precedence could-not-run:host:<reason> > hold:<trunk-red|native-lint>:... > evicted:<test> > flaky:<test>; cleared:stale-head:host resets stale-head. Agreed fleet-wide 2026-11-20 (yoga, lenovinha, coordinator). evicted is the ONLY class that removes a PR."
 
 # ── OPERATOR DIRECTIVE 2026-08-31: loop cadence and stagger ────────────────────
 loop_cadence:

@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: assigned by macuahuitl-fedora 2026-11-22.
+packets:
+  - packet_id: issue-citation-convention-stays-shell
+    order: "2222-icbs"
+    status: implemented
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, bootstrap]
+    estimated_hours: 0.5
+    owned_files:
+      - scripts/portability/bootstrap-shell-allowlist.txt
+      - plan/issues/scripting-runtime-lua-no-pipes-design-2026-09-26.md
+      - scripts/test-decider-retirement.sh
+    title: "check-issue-citation-convention.sh is a bootstrap decider: listed in bootstrap-shell-allowlist.txt and the §6.5 table"
+    context: |
+      The pre-push hook's plan-only lane validates an issues-only push with this checker (881-29me), and
+      test-pre-push-plan-lane-fails-closed-without-binary.sh ARM 3 pins that such a push is accepted with no plan binary.
+      A Lua port, or a shim that execs one, would either refuse that push or keep the shell logic as a fallback, which
+      is no port. So it joins §6.5 row 2 beside check-yaml-reader-availability.sh, in the allowlist, the design table and
+      test-decider-retirement arm 4's table together.
+    exit_criteria:
+      - "test-decider-retirement arm 4 shows no drift for check-issue-citation-convention.sh. The one remaining drift on 2026-11-22, check-gate-memory-floor.sh, predates this change and is fixed by #1332 (2220-gmfr)."
+    unscoreable: "a classification: scored by test-decider-retirement arm 4."
+    next_action: "Land after or with #1332."
+    provenance: "macuahuitl-fedora 2026-11-22: add it to bootstrap-shell-allowlist.txt AND the §6.5 table, reason citing 881-29me + ARM 3."
+    events:
+      - type: filed
+        ts: "2026-11-22T13:46:53Z"
+        host: calmecacpilli
+        summary: "filed and implemented on work/2222-icbs"

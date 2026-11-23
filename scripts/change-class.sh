@@ -115,7 +115,10 @@ _cc_say() { printf '%s\n' "$*"; }
 # gate. Untracked especially: a new .rs nobody has added yet is invisible to
 # every committed-only view and compiles all the same.
 change_class_paths() {
-    local base="${1:-$CHANGE_CLASS_REMOTE/$CHANGE_CLASS_TRUNK}" mb
+# ORDER 2174-dail: TILLANDSIAS_CLASS_BASE (a commit) replaces the trunk ref as the
+# base, so a land gate diffs against the commit its DAILY FULL RUN proved, not the
+# trunk tip: what changed since the proof is what the proof does not vouch for.
+    local base="${1:-${TILLANDSIAS_CLASS_BASE:-$CHANGE_CLASS_REMOTE/$CHANGE_CLASS_TRUNK}}" mb
     mb="$(git -C "$CHANGE_CLASS_ROOT" merge-base HEAD "$base" 2>/dev/null)" || return 1
     [ -n "$mb" ] || return 1
     {
@@ -131,7 +134,7 @@ change_class_paths() {
 # FULL rather than as "nothing changed". Those two look identical otherwise,
 # and that is the silent-empty false negative this fleet keeps finding.
 change_class_set() {
-    local base="${1:-$CHANGE_CLASS_REMOTE/$CHANGE_CLASS_TRUNK}" paths
+    local base="${1:-${TILLANDSIAS_CLASS_BASE:-$CHANGE_CLASS_REMOTE/$CHANGE_CLASS_TRUNK}}" paths
     paths="$(change_class_paths "$base")" || return 1
     [ -n "$paths" ] || { printf '\n'; return 0; }
     printf '%s\n' "$paths" | bash "$CHANGE_CLASS_ROOT/scripts/gate-stamp.sh" classify
@@ -322,3 +325,17 @@ change_class_may_skip() {
     done
     return 0
 }
+
+# ORDER 2118-tnut: executed rather than sourced, ask the real rule one question.
+#   scripts/change-class.sh may-skip <guard> <declared-inputs...>  -> prints skip | run
+# The keep-unconditional list is build.sh's data and is not consulted here;
+# the fixture (scripts/lua/test-gate-step-inputs.lua) drives the rule itself.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    case "${1:-}" in
+        may-skip)
+            shift; _g="$1"; shift
+            if change_class_may_skip "$_g" "" "$@"; then echo skip; else echo run; fi
+            exit 0 ;;
+        *) echo "usage: scripts/change-class.sh may-skip <guard> <inputs...>  (or source it)" >&2; exit 2 ;;
+    esac
+fi

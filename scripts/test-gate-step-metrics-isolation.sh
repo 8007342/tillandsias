@@ -34,14 +34,22 @@
 set -uo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-# 1966-ubsw: a gate exports a PRIVATE fallback dir. This fixture pins the
-# DEFAULT (/tmp) fallback: arm 3's negative control must split into /tmp, and
-# with the private dir set its runner wrote into the gate's own fallback log,
-# which build.sh then counted as a leak from this step.
-unset TILLANDSIAS_METRICS_FALLBACK_DIR
+# 2244-ge9s: THIS FIXTURE NEVER TOUCHES THE HOST'S SHARED LOG. Arm 3's
+# negative control must split, and it used to split into the real
+# /tmp/tillandsias-timing.jsonl carrying the gate's inherited run id; step 380
+# runs in the litmus lane BESIDE the checkout lane (2156-glan), so the step
+# being watched there was evicted as "leaked … ours=1" (#1369, #1349), and
+# arms 2-3 rm -f'd the shared file a concurrent step's check was reading. The
+# split now goes to a fixture-private fallback dir (the same knob a gate uses,
+# 1966-ubsw), and the arms run with no run id: no record this fixture
+# provokes can be attributed to a gate.
+# (1966-ubsw: never the GATE'S private dir either; this one is our own.)
+unset TILLANDSIAS_TIMING_RUN_ID TILLANDSIAS_TIMING_LOG
 cd "$ROOT" || exit 3
+FB="$(mktemp -d "${TMPDIR:-/tmp}/metrics-isolation-fb.XXXXXX")" || exit 3
+export TILLANDSIAS_METRICS_FALLBACK_DIR="$FB"
 
-SHARED=/tmp/tillandsias-timing.jsonl
+SHARED="$FB/tillandsias-timing.jsonl"
 SUBJECT="scripts/test-litmus-budget-tally.sh"
 
 pass=0; fail=0
@@ -50,19 +58,8 @@ bad() { fail=$((fail + 1)); echo "  FAIL  $1"; }
 
 [ -f "$ROOT/$SUBJECT" ] || { echo "skip:step-metrics-isolation:$SUBJECT absent"; exit 3; }
 
-# NEVER DESTROY A HOST'S RECORDS. If the shared path already exists this host is
-# mid-split; preserve it, restore it, and say so rather than deleting evidence.
-PRESERVED=""
-if [ -f "$SHARED" ]; then
-    PRESERVED="$(mktemp)"
-    cp "$SHARED" "$PRESERVED"
-    echo "note: $SHARED already exists ($(wc -l < "$SHARED") records) — preserved and restored at exit"
-fi
-restore() {
-    if [ -n "$PRESERVED" ]; then cp "$PRESERVED" "$SHARED"; rm -f "$PRESERVED";
-    else rm -f "$SHARED"; fi
-}
-trap restore EXIT
+# The fallback dir is ours alone, so removing it destroys no host record.
+trap 'rm -rf "$FB"' EXIT
 
 echo "arm 1 — the gate's step loop carries the isolation check"
 if grep -q '1204-3s2s' "$ROOT/build.sh" \
@@ -150,8 +147,9 @@ echo "arm 4 — CONTROL: the guard keys on GROWTH, not on the file existing"
 # every subsequent step fail. The gate compares before/after, so a pre-existing
 # file that no step adds to is not an offence.
 # 1916-tsel: the baseline line count is handed to the attribution helper,
-# which reads only the records appended after it.
-if grep -qF '"$_metrics_shared" "${_metrics_shared_before:-0}"' "$ROOT/build.sh"; then
+# which reads only the records appended after it. 2238-3skn: the window past
+# that baseline is now cut ONCE into the snapshot the helper reads.
+if grep -qF 'tail -n "+$(( ${_metrics_shared_before:-0} + 1 ))" "$_metrics_shared" > "$_metrics_snap"' "$ROOT/build.sh"; then
     ok "the comparison is before-vs-after, so a pre-existing file alone does not refuse"
 else
     bad "the guard does not compare against a baseline — a pre-existing file would fail every step"

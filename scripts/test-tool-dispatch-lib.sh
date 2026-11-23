@@ -124,6 +124,9 @@ ok "curl-piped installer and toolbox bootstrap wrappers stay self-contained"
 # string in nested awk/shell quoting, reported 0 hits on a tree where I had
 # just REINTRODUCED the bug on purpose, and would have shipped as a green arm
 # that could never go red. Pass the needle in as an awk variable instead.
+# A CENSUS OF THE REAL CHECKOUT, ON PURPOSE (2197-hgit audit): this arm asks
+# whether any committed script bakes the toolbox jq into a heredoc, so it must
+# read this tree's scripts; a branch that adds one SHOULD red here.
 _hd_hits=""
 for f in $(git -C "$ROOT" ls-files 'scripts/*.sh'); do
     _h="$(awk -v needle='"$JQ"' -v fname="$f" '

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: port-check-readme-discipline-sh-to-lua-and-repoint-the-forge-agent-prompts-and-cheatsheets-that-name-it
+    field: status
+    value: ready
+    ts: "2026-11-21T01:51:18Z"
+    host: lenovinha
+
+events:
+  - packet_id: port-check-readme-discipline-sh-to-lua-and-repoint-the-forge-agent-prompts-and-cheatsheets-that-name-it
+    event:
+      type: note
+      ts: "2026-11-21T01:51:18Z"
+      host: lenovinha
+      summary: |-
+        released at coordinator direction: PR #1235 (head eac952bc9) carries the guard item and lands without the claim; left: the forge-run exit item, after the RC install

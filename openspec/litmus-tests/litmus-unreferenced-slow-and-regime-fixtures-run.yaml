@@ -5,11 +5,12 @@ description: >
   ORDER 2099-f982 (family A of 2096-pq2g, part 4). The fixtures from the
   never-run family that are either slow (a whole-corpus census, a musl sidecar
   build, a cargo test run) or regime-dependent (macOS-only arms, a live nix
-  cache). Three were red for host reasons and are fixed here: the toolbox
-  refusal's PATH contained /usr/bin/toolbox on Fedora, the plan-field-get CWD
-  arm doubled an absolute binary path, and the signing seam needed PlistBuddy
-  and GNU mktemp. A regime-dependent fixture ends in a NAMED skip, never a
-  silent pass.
+  cache). The plan-field-get CWD arm doubled an absolute binary path and is fixed
+  here; the toolbox-refusal and signing-seam fixtures were ported to Lua with their
+  own gate steps (2262-7t6f, 2111-inst) and are not repeated.
+  A regime-dependent fixture ends in a NAMED skip, never a
+  silent pass. The cargo-test fixture goes through with-tillandsias-builder.sh: an
+  immutable host has no linker, and 0/10 rounds there says nothing about the lock.
 severity: high
 size: long
 phase: pre-build
@@ -17,7 +18,7 @@ preconditions:
   - workspace contains scripts/check-added-test-is-referenced.sh
 critical_path:
   - step: "the sigpipe census empty-tree mode discriminates"
-    command: "bash scripts/test-census-sigpipe-verdict-pipelines.sh 2>&1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-census-sigpipe-verdict-pipelines.lua 2>&1"
     expected_behavior: "ok:census-sigpipe-verdict-fixture:[0-9]+"
     assert_exit: 0
     assert_output_matches: "ok:census-sigpipe-verdict-fixture:[0-9]+"
@@ -29,31 +30,19 @@ critical_path:
     assert_output_matches: "ok:sidecar-ignores-rustc-wrapper:"
     timeout_ms: 900000
   - step: "one crate-wide ENV_LOCK in tillandsias-headless"
-    command: "bash scripts/test-headless-env-lock-is-single.sh 2>&1"
+    command: "bash scripts/with-tillandsias-builder.sh bash scripts/test-headless-env-lock-is-single.sh 2>&1"
     expected_behavior: "ok:headless-env-lock:[0-9]+"
     assert_exit: 0
     assert_output_matches: "ok:headless-env-lock:[0-9]+"
     timeout_ms: 600000
-  - step: "toolbox refusal exempts WSL2 and still refuses bare Linux"
-    command: "bash scripts/test-toolbox-refusal-wsl-exception.sh 2>&1"
-    expected_behavior: "ok:toolbox-refusal-wsl-exception:[0-9]+"
-    assert_exit: 0
-    assert_output_matches: "ok:toolbox-refusal-wsl-exception:[0-9]+"
-    timeout_ms: 120000
   - step: "field-get ternary and CWD ledger resolution"
     command: "bash scripts/test-plan-field-get.sh 2>&1"
     expected_behavior: "ok:plan-field-get:[0-9]+|skip:field-get:"
     assert_exit: 0
     assert_output_matches: "ok:plan-field-get:[0-9]+|skip:field-get:"
     timeout_ms: 120000
-  - step: "the macOS signing seam in both modes"
-    command: "bash scripts/test-macos-signing-seam.sh 2>&1"
-    expected_behavior: "ok:macos-signing-seam:[0-9]+"
-    assert_exit: 0
-    assert_output_matches: "ok:macos-signing-seam:[0-9]+"
-    timeout_ms: 120000
   - step: "the macOS model share is writable two levels deep"
-    command: "bash scripts/test-macos-model-share-writable.sh 2>&1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-macos-model-share-writable.lua 2>&1"
     expected_behavior: "(ok|skip):macos-model-share-writable:"
     assert_exit: 0
     assert_output_matches: "(ok|skip):macos-model-share-writable:"

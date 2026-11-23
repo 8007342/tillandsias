@@ -15,3 +15,7 @@ STEP_SCRIPT="scripts/test-spec-script-paths.sh"
 STEP_ERROR="a spec names a script the tree does not have, or the spec-path check stopped refusing one (815-yace); see which arm failed above"
 STEP_OK="every script path the specs name resolves, is baselined, or is marked absent on purpose"
 STEP_SECOND_REGIME="yolanda 2026-09-30 msys PASS: spec-script-paths 6/6 (rc=0, 113s, relayed by the coordinator)"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="openspec/specs/project-summarizers/spec.md scripts/check-spec-script-paths.sh scripts/test-spec-script-paths.sh"
