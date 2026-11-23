@@ -1599,8 +1599,8 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # ============================================================================
 
     log_section "Cheatsheet Tier Discipline"
-    if [[ -f "scripts/check-cheatsheet-tiers.sh" ]]; then
-        if bash scripts/check-cheatsheet-tiers.sh --strict 2>&1 | tee /tmp/cheatsheet-tiers.log; then
+    if [[ -f "scripts/lua/check-cheatsheet-tiers.lua" ]]; then
+        if "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" script run scripts/lua/check-cheatsheet-tiers.lua -- --strict 2>&1 | tee /tmp/cheatsheet-tiers.log; then
             log_pass "Cheatsheet tier validation passed"
             archive_check_log "cheatsheet-tiers" "pass" /tmp/cheatsheet-tiers.log
         else
@@ -1609,7 +1609,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "cheatsheet-tiers" "fail" /tmp/cheatsheet-tiers.log
         fi
     else
-        log_fail_missing_guard "cheatsheet-tiers" "scripts/check-cheatsheet-tiers.sh"
+        log_fail_missing_guard "cheatsheet-tiers" "scripts/lua/check-cheatsheet-tiers.lua"
         archive_check_log "cheatsheet-tiers" "skipped"
     fi
 

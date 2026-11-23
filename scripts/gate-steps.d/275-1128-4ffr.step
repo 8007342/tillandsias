@@ -10,6 +10,18 @@ STEP_DESC="Checking a pending capability row does not wedge the host that publis
 STEP_SCRIPT="scripts/test-pending-capability-row-does-not-wedge.sh"
 STEP_ERROR="publishing the capability row the guard asks for wedges that host's pushes again, or the pending-row allowance widened and now launders a malformed fragment (1128-4ffr) — see the verdict line above"
 STEP_OK="Pending capability row check passed"
+# ORDER 2251-iyiu — A COULD-NOT-RUN IS NOT A CODE RED. Arms 7-8 start a child
+# run and wait for it to reach its hold before signalling it; under load the
+# child can miss the 30 s window, and the fixture says so honestly
+# ("8 passed, 0 failed, 1 could-not-run", exit 3). With no declaration the
+# gate read exit 3 as a failure and evicted #1249 (5e60118f5) for it. Declared
+# load-sensitive: the gate settles and runs it once more, and a second
+# could-not-run is named flaky:<step>:<v1>,<v2> for the queue to re-queue,
+# never violation:. The 30 s window (TILLANDSIAS_1320_HOLD_WAIT_DS=300) is
+# KEPT: widening it would slow every healthy gate to cover a loaded one,
+# and the retry already absorbs the loaded case. Pinned by
+# scripts/lua/test-capability-row-could-not-run-is-not-a-code-red.lua.
+STEP_HOST_STATE="load"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   the tree is restored to ok:release-preflight"
 
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never

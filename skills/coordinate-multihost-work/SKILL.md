@@ -26,7 +26,9 @@ doing local work. A host whose gh token went bad kept merging and porting for
    push, `gh pr ...`, `git fetch`/`ls-remote`, an API timeout), run the probe
    once:
    `tillandsias-plan script run scripts/lua/probe-remote-reachable.lua`
-2. `ok:remote-reachable` → continue.
+2. `ok:remote-reachable` → continue. Anything that is neither `ok:` nor
+   `blocked:remote-unreachable:` (a script error, a stale plan binary) judged
+   nothing: rebuild the plan binary and re-run it; never suspend on it.
 3. `blocked:remote-unreachable:<cause>` → **SUSPEND**: tell the user and the
    coordinator (by name, with the cause and the probe's why/remedy), push and
    claim nothing, start no further local work, and do not retry or back off.
@@ -557,7 +559,9 @@ The relay lane's preflight is ONE command (1437-664a, landed):
 cycle-preflight, the full decider list, `cargo fmt --check`, touched
 fixtures, touched crates' tests, and the SCOPED covering litmus from
 `litmus-covering-specs.sh --relay-scope origin/linux-next`, 1437-yfuh),
-printing one verdict line; `--plan` prints the selection without running
+printing one verdict line and leaving your branch checked out again
+(2252-2mnf: a green run keeps `relay/<utc>` as a branch, named on stderr;
+check it out to land it); `--plan` prints the selection without running
 and must be byte-identical across two runs. Running every covering spec is
 the `--all-covering` opt-in, not the default: declared matches and
 instant/quick command matches run per relay; long, e2e, non-pre-build and
