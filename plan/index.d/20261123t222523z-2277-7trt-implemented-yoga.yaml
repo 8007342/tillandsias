@@ -1,11 +1,16 @@
 # Ledger fragment — append-only, IMMUTABLE once written.
-packets:
+status:
   - packet_id: land-queue-rerun-skips-red-twice
-    status: implemented
+    field: status
+    value: implemented
+    ts: "2026-11-23T22:25:23Z"
+    host: yoga
+
 events:
   - packet_id: land-queue-rerun-skips-red-twice
     event:
       type: implemented
       ts: "2026-11-23T22:25:23Z"
       host: yoga
-      summary: "implemented on work/2277-7trt (stacked on 2276-fnhy); test-land-queue 78/78, ARM 32e-g, three mutants red"
+      summary: |-
+        implemented on work/2277-7trt (stacked on 2276-fnhy); test-land-queue 78/78, ARM 32e-g, three mutants red
