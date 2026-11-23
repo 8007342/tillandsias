@@ -25,7 +25,9 @@
 -- Verdict: ok:script-run-ignores-inherited-project-root:3 arms
 --        | violation:script-run-ignores-inherited-project-root:<n> failed
 
-local root = text.trim(proc.run{ argv = { "pwd", "-P" } }.stdout or "")
+local fixture = require "common.fixture"
+local SH = fixture.posix_shell()
+local root = fixture.repo_root()
 local failn = 0
 local function ok(m) out.line("ok:   " .. m) end
 local function bad(m) out.line("FAIL: " .. m); failn = failn + 1 end
@@ -38,7 +40,7 @@ local function cleanup() proc.run{ argv = { "find", W, "-delete" }, timeout_ms =
 
 if RUNNER == "" then
     fs.write(rel .. "/resolve.sh", ". scripts/plan-binary-probe.sh && resolve_plan_binary\n")
-    RUNNER = text.trim(proc.run{ argv = { "bash", W .. "/resolve.sh" } }.stdout or "")
+    RUNNER = text.trim(proc.run{ argv = { SH, W .. "/resolve.sh" } }.stdout or "")
     if RUNNER:sub(1, 2) == "./" then RUNNER = root .. "/" .. RUNNER:sub(3) end
 end
 if RUNNER == "" then cleanup(); verdict.could_not_run("script-run-ignores-inherited-project-root:no-runner") end
@@ -47,7 +49,7 @@ if RUNNER == "" then cleanup(); verdict.could_not_run("script-run-ignores-inheri
 -- GIT_DIR cannot point this init at the real repository.
 local GITENV = { GIT_DIR = "", GIT_WORK_TREE = "", GIT_INDEX_FILE = "" }
 fs.write(rel .. "/init.sh", "unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; git init -q \"$1\"\n")
-proc.run{ argv = { "bash", W .. "/init.sh", W .. "/scratch" }, env = GITENV, timeout_ms = 60000 }
+proc.run{ argv = { SH, W .. "/init.sh", W .. "/scratch" }, env = GITENV, timeout_ms = 60000 }
 
 local PROBE = "out.line('root=' .. text.trim(proc.run{ argv = { 'pwd', '-P' } }.stdout or ''))\n"
     .. "verdict.ok('probe')\n"
