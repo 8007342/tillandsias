@@ -105,21 +105,21 @@ echo "arm 1 — a LEDGER-filed blocker, on a host that is alive and committing, 
 D="$(scaffold ledger "42-abcd")"
 add_ledger_block "$D" "some-packet" "42-abcd" "kind:linux"
 OUT="$(run_hb "$D")"
-if printf '%s' "$OUT" | grep -q 'BLOCKED, alive and failing'; then
+if grep -q 'BLOCKED, alive and failing' <<<"$OUT"; then
     ok "named BLOCKED and still shown as alive and failing"
-elif printf '%s' "$OUT" | grep -q 'WEDGED'; then
+elif grep -q 'WEDGED' <<<"$OUT"; then
     bad "still WEDGED — the wedged branch is answering before the blocker is consulted (1196-5hva defect 2)"
 else
     bad "unexpected classification: $(printf '%s' "$OUT" | grep probe)"
 fi
-if printf '%s' "$OUT" | grep -q '42-abcd'; then
+if grep -q '42-abcd' <<<"$OUT"; then
     ok "the line names the packet, so the reader gets the blocker instead of a hunt"
 else
     bad "the blocker is not named in the host's line"
 fi
 
 echo "arm 2 — the verdict line counts it in the blocked bucket, not wedged"
-if printf '%s' "$OUT" | grep -qE '^ok:fleet-heartbeat:[0-9]+/0/1/'; then
+if grep -qE '^ok:fleet-heartbeat:[0-9]+/0/1/' <<<"$OUT"; then
     ok "ok:fleet-heartbeat:*/0/1/* — zero wedged, one blocked"
 else
     bad "bucket counts wrong: $(printf '%s' "$OUT" | grep '^ok:fleet-heartbeat:')"
@@ -132,7 +132,7 @@ echo "arm 3 — NEGATIVE CONTROL: a block the fold has since lifted must NOT res
 D="$(scaffold stale "")"          # stub reports an EMPTY blocked set
 add_ledger_block "$D" "some-packet" "42-abcd" "kind:linux"
 OUT3="$(run_hb "$D")"
-if printf '%s' "$OUT3" | grep -q 'WEDGED'; then
+if grep -q 'WEDGED' <<<"$OUT3"; then
     ok "not blocked — the folded set is the authority, the fragment only attributes"
 else
     bad "a lifted block came back from an immutable fragment: $(printf '%s' "$OUT3" | grep probe)"
@@ -141,7 +141,7 @@ fi
 echo "arm 4 — NEGATIVE CONTROL: a host with NO blocker anywhere still reads WEDGED"
 D="$(scaffold nothing "")"
 OUT4="$(run_hb "$D")"
-if printf '%s' "$OUT4" | grep -q 'WEDGED, alive and failing'; then
+if grep -q 'WEDGED, alive and failing' <<<"$OUT4"; then
     ok "silence is still an unexplained wedge — the fix did not turn every host blocked"
 else
     bad "a host with no blocker was reclassified: $(printf '%s' "$OUT4" | grep probe)"
@@ -151,7 +151,7 @@ echo "arm 5 — the plan/issues markdown source still works (864-w7rc is not rem
 D="$(scaffold markdown "")"
 printf -- '- Status: blocked\n' > "$D/plan/issues/probe-wedge.md"
 OUT5="$(run_hb "$D")"
-if printf '%s' "$OUT5" | grep -q 'BLOCKED'; then
+if grep -q 'BLOCKED' <<<"$OUT5"; then
     ok "the markdown record is still honoured beside the ledger"
 else
     bad "the original blocked source regressed: $(printf '%s' "$OUT5" | grep probe)"
@@ -163,7 +163,7 @@ echo "arm 6 — NEGATIVE CONTROL: with NO plan binary, the ledger source is OFF"
 D="$(scaffold nobinary "")"
 add_ledger_block "$D" "some-packet" "42-abcd" "kind:linux"
 OUT6="$(run_hb "$D" no)"
-if printf '%s' "$OUT6" | grep -q 'BLOCKED'; then
+if grep -q 'BLOCKED' <<<"$OUT6"; then
     bad "invented a blocker with no way to fold the ledger — unverifiable fragments must not be believed"
 else
     ok "ledger source disabled without a plan binary; markdown source stands alone"
@@ -177,7 +177,7 @@ echo "arm 7 — a HOST NAME in blocked_by also matches (operator: use both, CRDT
 D="$(scaffold hostname_tok "42-abcd")"
 add_ledger_block "$D" "some-packet" "42-abcd" "probe"
 OUT7="$(run_hb "$D")"
-if printf '%s' "$OUT7" | grep -q 'BLOCKED'; then
+if grep -q 'BLOCKED' <<<"$OUT7"; then
     ok "a bare host token matched, beside the capability tokens"
 else
     bad "a host-identity token did not match: $(printf '%s' "$OUT7" | grep probe)"
@@ -188,7 +188,7 @@ echo "arm 7b — NEGATIVE CONTROL: ANOTHER host's name still matches nothing her
 D="$(scaffold otherhost "42-abcd")"
 add_ledger_block "$D" "some-packet" "42-abcd" "some-other-box"
 OUT7B="$(run_hb "$D")"
-if printf '%s' "$OUT7B" | grep -q 'BLOCKED'; then
+if grep -q 'BLOCKED' <<<"$OUT7B"; then
     bad "another machine's name explained this host's silence"
 else
     ok "a different host's token does not match this host"
@@ -201,9 +201,9 @@ echo "arm 8 — a capability NO host answers yet matches nothing, and is not an 
 D="$(scaffold future "42-abcd")"
 add_ledger_block "$D" "some-packet" "42-abcd" "schedulable:qpu"
 OUT8="$(run_hb "$D")"
-if printf '%s' "$OUT8" | grep -q 'BLOCKED'; then
+if grep -q 'BLOCKED' <<<"$OUT8"; then
     bad "an unmatched capability was attributed to a host that does not answer it"
-elif printf '%s' "$OUT8" | grep -q 'WEDGED'; then
+elif grep -q 'WEDGED' <<<"$OUT8"; then
     ok "unmatched capability matches nothing and classification continues normally"
 else
     bad "unexpected: $(printf '%s' "$OUT8" | grep probe)"
@@ -213,7 +213,7 @@ echo "arm 9 — a capability token OTHER than kind: also matches (vocabulary is 
 D="$(scaffold sched "42-abcd")"
 add_ledger_block "$D" "some-packet" "42-abcd" "schedulable:cpu"
 OUT9="$(run_hb "$D")"
-if printf '%s' "$OUT9" | grep -q 'BLOCKED'; then
+if grep -q 'BLOCKED' <<<"$OUT9"; then
     ok "schedulable: matched — the matcher reads whatever vocabulary the matrix publishes"
 else
     bad "only kind: matched, so the vocabulary is effectively hardcoded: $(printf '%s' "$OUT9" | grep probe)"
