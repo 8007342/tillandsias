@@ -39,7 +39,7 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: relay-preflight-parses"
 
-  - step: "eleven arms, exit 0"
-    command: "out=$(TILLANDSIAS_RELAY_PREFLIGHT_STUB=1 bash scripts/test-relay-preflight.sh); rc=$?; case \"$out\" in (*'ok:relay-preflight:11/11'*) [ \"$rc\" = 0 ] && echo 'ok: relay-preflight 11/11' ;; (*) printf '%s\\n' \"$out\"; exit 1 ;; esac"
+  - step: "fourteen arms, exit 0"
+    command: "out=$(TILLANDSIAS_RELAY_PREFLIGHT_STUB=1 bash scripts/test-relay-preflight.sh); rc=$?; case \"$out\" in (*'ok:relay-preflight:14/14'*) [ \"$rc\" = 0 ] && echo 'ok: relay-preflight 14/14' ;; (*) printf '%s\\n' \"$out\"; exit 1 ;; esac"
     timeout_ms: 90000
-    expected_behavior: "ok: relay-preflight 11/11"
+    expected_behavior: "ok: relay-preflight 14/14"
