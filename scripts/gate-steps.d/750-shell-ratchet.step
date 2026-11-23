@@ -1,0 +1,14 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 3, 2266: the slowest blocks first,
+# measured one at a time on lenovinha). As a .step it is no build.sh edit, so it
+# never makes intake HEAVY; it runs in the pool (it writes only its own scratch).
+#
+# Its fixture (1580-8hra, the Lua port of the orphaned test-shell-ratchet.sh
+# that nothing ran): the ratchet's verdicts in scratch repos — counts, a new
+# decider refused, a piped litmus refused once steps: exists, floors only
+# descend, an empty population could-not-run, fixtures and pipes warned.
+STEP_DESC="Checking the shell ratchet's fixture (1580-8hra)"
+STEP_LUA="scripts/lua/test-shell-ratchet.lua"
+STEP_ERROR="the shell ratchet no longer refuses or counts what its fixture constructs — see the FAIL lines above (1580-8hra)"
+STEP_OK="Shell-ratchet fixture passed"
+STEP_READS="scripts/lua/test-shell-ratchet.lua"

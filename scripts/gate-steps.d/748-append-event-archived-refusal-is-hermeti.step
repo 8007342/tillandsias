@@ -1,0 +1,15 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 3, 2266: the slowest blocks first,
+# measured one at a time on lenovinha). As a .step it is no build.sh edit, so it
+# never makes intake HEAVY; it runs in the pool (it writes only its own scratch).
+#
+# The fixture above must not be able to dirty THIS checkout however it dies
+# (1564-lk9f): a SIGKILL after its live-accept arm left a host: fixture
+# fragment in macuahuitl's plan/index.d on 2026-10-09 and land-queue refused
+# the dirty tree. Arm 1 SIGKILLs it in a scratch repo; arm 2 is the negative
+# control that keeps 699-usxc asserted.
+STEP_DESC="Checking the append-event archived-refusal fixture is hermetic (1564-lk9f)"
+STEP_SCRIPT="scripts/test-append-event-archived-refusal-is-hermetic.sh"
+STEP_ERROR="the append-event archived-refusal fixture can leave a write in the checkout it runs from, or no longer asserts that a fragment-only packet accepts events"
+STEP_OK="append-event archived-refusal hermetic fixture passed"
+STEP_READS="scripts/test-append-event-archived-refusal-is-hermetic.sh"

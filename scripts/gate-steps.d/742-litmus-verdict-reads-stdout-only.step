@@ -1,0 +1,17 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 3, 2266: the slowest blocks first,
+# measured one at a time on lenovinha). As a .step it is no build.sh edit, so it
+# never makes intake HEAVY; it runs SERIAL on its lane, beside the other lanes.
+#
+# ORDER 1268-fx87. A litmus step's verdict is read from STDOUT only; its
+# stderr is kept and named on failure. The fixture runs the REAL runner over
+# a throwaway corpus with a manufactured stderr contaminant, plus a mutant
+# runner with the merged capture restored, so the control cannot pass
+# vacuously on a host whose build writes nothing to stderr.
+STEP_DESC="Checking a litmus verdict is read from stdout only (1268-fx87)"
+STEP_LUA="scripts/lua/test-litmus-verdict-reads-stdout-only.lua"
+STEP_ERROR="a litmus step's verdict again reads stderr, or a failing step no longer names its stderr log — see the FAIL lines above (1268-fx87)"
+STEP_OK="Litmus stdout-verdict fixture passed"
+STEP_SERIAL="runs the real litmus runner (a scratch corpus, but the runner still writes the shared timing log)"
+STEP_LANES="litmus"
+STEP_READS="scripts/lua/test-litmus-verdict-reads-stdout-only.lua"
