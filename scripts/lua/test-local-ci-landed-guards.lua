@@ -20,7 +20,9 @@
 --
 -- Verdict: ok:local-ci-landed-guards:5 arms | violation:local-ci-landed-guards:<n> failed
 
-local root = text.trim(proc.run{ argv = { "pwd", "-P" } }.stdout or "")
+local fixture = require "common.fixture"
+local SH = fixture.posix_shell()
+local root = fixture.repo_root()
 local failn = 0
 local function ok(m) out.line("ok:   " .. m) end
 local function bad(m) out.line("FAIL: " .. m); failn = failn + 1 end
@@ -33,7 +35,7 @@ local function cleanup() proc.run{ argv = { "find", W, "-delete" }, timeout_ms =
 local RUNNER = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN") or ""
 if RUNNER == "" then
     fs.write(rel .. "/resolve.sh", ". scripts/plan-binary-probe.sh && resolve_plan_binary\n")
-    RUNNER = text.trim(proc.run{ argv = { "bash", W .. "/resolve.sh" } }.stdout or "")
+    RUNNER = text.trim(proc.run{ argv = { SH, W .. "/resolve.sh" } }.stdout or "")
     if RUNNER:sub(1, 2) == "./" then RUNNER = root .. "/" .. RUNNER:sub(3) end
 end
 if RUNNER == "" then cleanup(); verdict.could_not_run("local-ci-landed-guards:no-runner") end
@@ -105,7 +107,7 @@ exit 0
 ]==])
 
 local function run(sc)
-    local x = proc.run{ argv = { "bash", W .. "/harness.sh", W .. "/" .. sc, root, RUNNER, sc }, timeout_ms = 120000 }
+    local x = proc.run{ argv = { SH, W .. "/harness.sh", W .. "/" .. sc, root, RUNNER, sc }, timeout_ms = 120000 }
     local lit = (W .. "/" .. sc):gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")
     return (x.stdout or ""):gsub(lit, "W"), x.stderr or ""
 end
