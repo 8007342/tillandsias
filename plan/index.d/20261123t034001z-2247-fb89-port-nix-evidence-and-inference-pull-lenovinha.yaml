@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-nix-capability-evidence-and-inference-pull-classification-fixtures
+    order: 2247-fb89
+    status: ready
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      Port scripts/test-probe-nix-capability-evidence.sh (917-zkge) and scripts/test-inference-pull-failure-classification.sh (525) whole to Lua, on common.fixture's repo_root()/posix_shell(), with mutant parity.
+    context: |
+      Tech-debt session (bash to lua), coordinator direction 2026-11-23: whole-file ports with mutant parity, written against the 2246-fkea helper; this ref is stacked on work/2246-fkea (#1389) and stays draft until it lands. Both items are untaken by any open work ref and are called only from their build.sh blocks.
+    exit_criteria:
+      - "both Lua fixtures pass with the same arms/count as the .sh they replace"
+      - "every subject mutant reds under both or greens under both (parity), recorded in the commit"
+      - "build.sh runs the Lua; both .sh deleted and their floor lines removed"
+    unscoreable: "whole-file port of two build.sh fixtures; the Lua fixtures and their mutant record are the deliverable."
+    next_action: "Land after #1389."
+    provenance: coordinator direction (macuahuitl-fedora, 2026-11-23); filed by lenovinha.
+    related: [917-zkge, 525, 2246-fkea]
+    events:
+      - {type: filed, ts: '2026-11-23T03:40:01Z', host: lenovinha, summary: port nix-capability evidence and inference pull-classification fixtures filed}

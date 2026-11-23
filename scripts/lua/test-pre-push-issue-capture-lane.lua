@@ -48,7 +48,9 @@ proc.run{ argv = { "mkdir", "-p", W } }
 local function cleanup() proc.run{ argv = { "find", W, "-delete" }, timeout_ms = 60000 } end
 
 local CTD = env.get("CARGO_TARGET_DIR")
-local HENV = { GIT_TERMINAL_PROMPT = "0" }
+-- 2242-u39b: the scratch checkout is tested, never the caller's frozen diff base
+-- (TILLANDSIAS_* names pass proc.run's scrub, so both are passed empty).
+local HENV = { GIT_TERMINAL_PROMPT = "0", TILLANDSIAS_GATE_DIFF_BASE = "", TILLANDSIAS_GATE_DIFF_BASE_ROOT = "" }
 if CTD and CTD ~= "" then HENV.CARGO_TARGET_DIR = CTD end
 
 local function G(args)
