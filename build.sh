@@ -395,7 +395,7 @@ _CLASS_SET_MEMO=""      # computed once per run; empty until first asked
 # by scripts/lua/scan-cargo-test-repo-roots.lua --list (headless + its path-dep
 # closure), and gate step 954 runs that scanner's --check so a new embedded or
 # read path cannot be missed here. Every uncertainty in the scan WIDENS this.
-_CARGO_FEATURE_TEST_INPUTS="rust path:Cargo.toml path:Cargo.lock path:rust-toolchain.toml path:.cargo/** path:.claude/CLAUDE.md path:.claude/CLAUDE.md/** path:.codex path:.codex/** path:.config path:.config/** path:.gemini/GEMINI.md path:.gemini/GEMINI.md/** path:.tillandsias path:.tillandsias/** path:assets path:assets/** path:cloud path:cloud/** path:docs/cheatsheets/github-credential-tools.md path:images path:images/** path:lib/chart.umd.js path:lib/chart.umd.js/** path:lib/highlight.min.css path:lib/highlight.min.css/** path:lib/highlight.min.js path:lib/highlight.min.js/** path:licences/acknowledgements/adefossez-htdemucs.yaml path:licences/acknowledgements/cc-by-4-0--google-deepmind-representations4d.yaml path:licences/acknowledgements/corridor-key-licence-2-0--nikopueringer-corridorkey2-0.yaml path:licences/acknowledgements/mit--ruicheng-moge-2-vitb-normal.yaml path:licences/acknowledgements/nvidia-open-model-license--nvidia-c-radiov4-so400m.yaml path:locales path:locales/** path:observatorium path:observatorium/** path:openspec/changes/studio-asset-pipeline/contract/examples/gatekeeper-v3.character-frames.json path:research path:research/** path:scripts path:scripts/** path:skills path:skills/** path:tests/fixtures/recipe-basic/Recipefile path:tests/fixtures/recipe-basic/Recipefile/** path:tests/fixtures/recipe-basic/manifest.toml path:tests/fixtures/recipe-basic/manifest.toml/** path:tools path:tools/**"
+_CARGO_FEATURE_TEST_INPUTS="rust path:Cargo.toml path:Cargo.lock path:rust-toolchain.toml path:.cargo/** path:.claude/CLAUDE.md path:.claude/CLAUDE.md/** path:.codex path:.codex/** path:.config path:.config/** path:.gemini/GEMINI.md path:.gemini/GEMINI.md/** path:.tillandsias path:.tillandsias/** path:assets path:assets/** path:cloud path:cloud/** path:docs/cheatsheets/github-credential-tools.md path:images path:images/** path:lib/chart.umd.js path:lib/chart.umd.js/** path:lib/highlight.min.css path:lib/highlight.min.css/** path:lib/highlight.min.js path:lib/highlight.min.js/** path:licences/acknowledgements/adefossez-htdemucs.yaml path:licences/acknowledgements/cc-by-4-0--google-deepmind-representations4d.yaml path:licences/acknowledgements/corridor-key-licence-2-0--nikopueringer-corridorkey2-0.yaml path:licences/acknowledgements/mit--ruicheng-moge-2-vitb-normal.yaml path:licences/acknowledgements/nvidia-open-model-license--nvidia-c-radiov4-so400m.yaml path:locales path:locales/** path:observatorium path:observatorium/** path:openspec/changes/studio-asset-pipeline/contract/examples/gatekeeper-v3.character-frames.json path:research path:research/** path:scripts/build-image.sh path:scripts/build-macos-tray.sh path:scripts/check-credential-channel.sh path:scripts/forge-swap/50-tillandsias-swap.rules path:scripts/forge-swap/swap.conf path:scripts/forge-swap/tillandsias-swap path:scripts/forge-swap/tillandsias-swap-gc.service path:scripts/forge-swap/tillandsias-swap-gc.timer path:scripts/forge-swap/tillandsias-swap@.service path:scripts/generate-repo-key.sh path:scripts/manage-cache.sh path:scripts/materialize-macos-tar-to-img.sh path:scripts/nix-cache-service.sh path:scripts/provider-limit-relay.sh path:scripts/run-observatorium.sh path:scripts/test-cloudflare-login.sh path:scripts/test-cloudflare-oauth-core.sh path:scripts/test-cloudflare-token-rotation.sh path:scripts/test-support/podman-mock.sh path:scripts/test-support/secret-tool-fake.sh path:skills path:skills/** path:tests/fixtures/recipe-basic/Recipefile path:tests/fixtures/recipe-basic/Recipefile/** path:tests/fixtures/recipe-basic/manifest.toml path:tests/fixtures/recipe-basic/manifest.toml/** path:tools path:tools/**"
 
 _class_set_once() {
     [ -n "$_CLASS_SET_MEMO" ] && return 0
@@ -3060,12 +3060,25 @@ _gs_one() {
     # a record carrying THIS gate's run id still refuses here.
     _metrics_ours=0
     _metrics_leak=""
+    # ORDER 2238-3skn: ONE SNAPSHOT. Attribution, the printed lines and the kept
+    # copy all come from one copy of the log taken here, before anything reads
+    # it. They used to be three reads of the live file (attribute, tail, cp), and
+    # a concurrent step that rotated or truncated it between them left a refusal
+    # that printed an empty block and kept nothing (#1349, macuahuitl
+    # 2026-11-22). TILLANDSIAS_GATE_METRICS_ATTRIBUTION is the fixture's seam.
+    _metrics_attr_bin="${TILLANDSIAS_GATE_METRICS_ATTRIBUTION:-$SCRIPT_DIR/scripts/gate-step-metrics-attribution.sh}"
+    _metrics_snap="${TMPDIR:-/tmp}/gate-leak-$$-${_step_path##*/}.jsonl"
+    _metrics_snap_why=""
     if [ -f "$_metrics_shared" ]; then
-        _metrics_attr="$(bash "$SCRIPT_DIR/scripts/gate-step-metrics-attribution.sh" "$_metrics_shared" "${_metrics_shared_before:-0}" "${TILLANDSIAS_TIMING_RUN_ID:-none}" "$$")" || _metrics_attr="verdict=refuse could-not-attribute"
+        # The step's WINDOW only (lines past the count taken before it ran): the
+        # shared log can be large, and this runs after every step.
+        tail -n "+$(( ${_metrics_shared_before:-0} + 1 ))" "$_metrics_shared" > "$_metrics_snap" 2>/dev/null \
+            || { : > "$_metrics_snap" 2>/dev/null; _metrics_snap_why="copy-failed"; }
+        _metrics_attr="$(bash "$_metrics_attr_bin" "$_metrics_snap" 0 "${TILLANDSIAS_TIMING_RUN_ID:-none}" "$$")" || _metrics_attr="verdict=refuse could-not-attribute"
         case "$_metrics_attr" in
             ours=0\ *verdict=refuse*)
                 _warn "the shared timing log gained id-less record(s) during ${_step_path##*/} ($_metrics_attr); this gate's own fallback is private (1966-ubsw), so they were written outside it and this step is not refused. The line(s):"
-                tail -n "+$(( ${_metrics_shared_before:-0} + 1 ))" "$_metrics_shared" 2>/dev/null | head -n 5 | sed 's/^/    /' >&2
+                head -n 5 "$_metrics_snap" 2>/dev/null | sed 's/^/    /' >&2
                 _metrics_attr="${_metrics_attr%verdict=refuse*}verdict=warn" ;;
             *verdict=warn*) _warn "the shared timing log gained record(s) with no run id during ${_step_path##*/} while another gate is live ($_metrics_attr); they may be that gate's, so this step is not refused (1916-tsel)" ;;
         esac
@@ -3074,21 +3087,25 @@ _gs_one() {
     if [ -z "$_metrics_leak" ] && [ -n "${TILLANDSIAS_METRICS_FALLBACK_DIR:-}" ] && [ -f "$_metrics_private" ] \
        && [ "$(wc -l < "$_metrics_private" 2>/dev/null || echo 0)" -gt "${_metrics_private_before:-0}" ]; then
         _metrics_leak="$_metrics_private"
+        _metrics_snap_why=""
+        tail -n "+$(( ${_metrics_private_before:-0} + 1 ))" "$_metrics_private" > "$_metrics_snap" 2>/dev/null \
+            || { : > "$_metrics_snap" 2>/dev/null; _metrics_snap_why="copy-failed"; }
         _metrics_attr="private-fallback:+$(( $(wc -l < "$_metrics_private") - ${_metrics_private_before:-0} )) verdict=refuse"
         _metrics_shared_before="$_metrics_private_before"
     fi
     if [ -n "$_metrics_leak" ]; then
         if [ "${_metrics_attr#*verdict=refuse}" != "$_metrics_attr" ]; then
             _error "gate step ${_step_path##*/} leaked record(s) into $_metrics_leak — $_metrics_attr (1204-3s2s; 1966-ubsw: the gate's private fallback, or the shared path under this gate's run id)"
-            _error "  The leaked line(s), kept so the next one is diagnosable:"
-            tail -n "+$(( ${_metrics_shared_before:-0} + 1 ))" "$_metrics_leak" 2>/dev/null | head -n 5 | sed 's/^/    /' >&2
-            # ORDER 2189-lktp: and the WHOLE log, copied aside now. Under the pool or
-            # lanes a concurrent step can rotate or truncate the shared file before
-            # anyone reads it (yoga 2026-11-22: the lines above printed nothing and
-            # the file was gone), and the record's own fields name its real writer.
-            _leak_keep="${TMPDIR:-/tmp}/gate-leak-$$-${_step_path##*/}.jsonl"
-            if cp -p "$_metrics_leak" "$_leak_keep" 2>/dev/null; then
-                _error "  the whole log at refusal time is kept at $_leak_keep (line $(( ${_metrics_shared_before:-0} + 1 )) on is this step's window)"
+            # ORDER 2189-lktp + 2238-3skn: the lines and the kept copy are the
+            # SNAPSHOT the verdict was attributed from, so a log rotated or
+            # truncated since cannot empty them. An empty window says so by name.
+            _leak_window="$(head -n 5 "$_metrics_snap" 2>/dev/null)"
+            if [ -n "$_leak_window" ]; then
+                _error "  The leaked line(s), kept so the next one is diagnosable:"
+                printf '%s\n' "$_leak_window" | sed 's/^/    /' >&2
+                _error "  this step's window of the log (from line $(( ${_metrics_shared_before:-0} + 1 )), as attributed) is kept at $_metrics_snap"
+            else
+                _error "  could-not-keep:${_metrics_snap_why:-window-empty} — the snapshot taken before attribution holds no line past $(( ${_metrics_shared_before:-0} )) (2238-3skn); the verdict above is the attribution's own"
             fi
             _error "  That path is the NON-CHECKOUT FALLBACK and it shares production's basename, so those"
             _error "  records carry this host's real name and split the timing log. cycle-metrics.sh will then"
@@ -3100,6 +3117,8 @@ _gs_one() {
             return 1
         fi
     fi
+    # Not refused: the snapshot is kept only as a refusal's evidence.
+    rm -f "$_metrics_snap"
 
     if [ "$_step_rc" -ne 0 ] \
        && [ -n "$STEP_SKIP_EXIT" ] \
@@ -7242,8 +7261,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _step "Checking the probe-usage guard walks its whole population (1128-j9fc)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-probe-usage-population.sh" 2>&1; then
-        _error "scripts/test-plan-binary-probe-usage-population.sh failed — this fixture asserts that check-plan-binary-probe-usage.sh WALKS repo-root *.sh and scripts/gate-steps.d/*.step, not merely that it passes. An unwalked surface and a clean surface produce the same verdict, which is how that guard was found too narrow three times; read which arm failed rather than assuming the binding is at fault"
+    if ! _run_lua_decider "scripts/lua/test-plan-binary-probe-usage-population.lua" 2>&1; then
+        _error "scripts/lua/test-plan-binary-probe-usage-population.lua failed — this fixture asserts that check-plan-binary-probe-usage.sh WALKS repo-root *.sh and scripts/gate-steps.d/*.step, not merely that it passes. An unwalked surface and a clean surface produce the same verdict, which is how that guard was found too narrow three times; read which arm failed rather than assuming the binding is at fault"
         exit 1
     fi
     _step "Checking test-podman-sync-budgets (1063-nraf; 116ms)..."

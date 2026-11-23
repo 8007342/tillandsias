@@ -1,5 +1,5 @@
 -- @env PATH
--- @trace order:1966-ubsw, order:1204-3s2s, order:1916-tsel, spec:ci-release
+-- @trace order:1966-ubsw, order:1204-3s2s, order:1916-tsel, order:2238-3skn, spec:ci-release
 --
 -- test-gate-step-private-metrics-fallback.lua — a record some OTHER process
 -- writes into the host's shared timing fallback never evicts the gate step
@@ -26,6 +26,11 @@
 --   3 OURS       a record stamped with THIS gate's run id in the shared path
 --                still refuses (1916-tsel teeth)
 --   4 CLEAN      a step that writes nothing passes with no warning
+--   5 ROTATED    (2238-3skn) the shared log removed between attribution and
+--                report: the refusal still prints the line and keeps the window
+--                (pre-fix: an empty block, no copy kept)
+--   6 EMPTY      (2238-3skn) a refusal with an empty snapshot says
+--                could-not-keep:window-empty, never an empty block
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-gate-step-private-metrics-fallback.lua
 -- Verdict: ok:gate-step-private-metrics-fallback:<n> arms | violation:gate-step-private-metrics-fallback:<n>-failed
@@ -76,7 +81,7 @@ end
 -- gate reused the OUTER gate's dir and the LEAK arm's child wrote its record into
 -- the real gate's fallback, which then refused this step for a leak.
 local gates = 0
-local function gate(r)
+local function gate(r, extra)
     proc.run({ argv = { "rm", "-f", SHARED } })
     gates = gates + 1
     -- Named like build.sh's own (target/gate-fallback/gate-<id>): arm 2 asserts the
@@ -85,7 +90,8 @@ local function gate(r)
     fs.mkdir(REL .. "/gate-fallback/gate-fixture-" .. tostring(gates))
     local res = proc.run({ argv = { "./build.sh", "--gate-steps", r }, timeout_ms = 300000,
         env = { TILLANDSIAS_GATE_SHARED_TIMING_PATH = SHARED, TILLANDSIAS_TIMING_RUN_ID = "gate-fixture-1966",
-                TILLANDSIAS_METRICS_FALLBACK_DIR = fb } })
+                TILLANDSIAS_METRICS_FALLBACK_DIR = fb,
+                TILLANDSIAS_GATE_METRICS_ATTRIBUTION = extra and extra.attr or nil } })
     return res.code, (res.stdout or "") .. (res.stderr or "")
 end
 
@@ -126,6 +132,32 @@ arm("3 OURS a record carrying this gate's run id in the shared path still refuse
 rc, o = gate(root("clean", ":"))
 arm("4 CLEAN a step that writes nothing passes with no leak warning",
     rc == 0 and o:find("1966-ubsw", 1, true) == nil and o:find("leaked record", 1, true) == nil, "rc=" .. tostring(rc) .. "\n" .. o)
+
+-- 5 ROTATED (2238-3skn): the shared log is REMOVED between attribution and
+-- the report, as a concurrent step rotating it does. The seam runs the real
+-- helper, then deletes the shared file. The refusal must still print the
+-- leaked line and keep a copy: both come from the one snapshot.
+-- PRE-FIX (attribution, tail and cp each read the live file): the line block
+-- printed nothing and no copy was kept.
+fs.write(REL .. "/attr-then-rotate.sh", 'out="$(bash "' .. ROOT .. '/scripts/gate-step-metrics-attribution.sh" "$@")"; rc=$?\n'
+    .. 'rm -f "' .. SHARED .. '"\nprintf \'%s\\n\' "$out"; exit $rc\n')
+rc, o = gate(root("rotated", "printf '{\"step\":\"rotated-leak-2238\",\"duration_ms\":1,\"run_id\":\"%s\"}\\n' \"$TILLANDSIAS_TIMING_RUN_ID\" >> \"$TILLANDSIAS_GATE_SHARED_TIMING_PATH\""),
+    { attr = ABS .. "/attr-then-rotate.sh" })
+local kept = o:match("is kept at (%S+)")
+arm("5 ROTATED a log removed after attribution still prints the leaked line",
+    rc ~= 0 and o:find("leaked record", 1, true) ~= nil and o:find("rotated-leak-2238", 1, true) ~= nil, "rc=" .. tostring(rc) .. "\n" .. o)
+arm("5 ROTATED and keeps the window it was attributed from",
+    kept ~= nil and proc.run({ argv = { "grep", "-q", "rotated-leak-2238", kept } }).ok, "kept=[" .. tostring(kept) .. "]\n" .. o)
+if kept then proc.run({ argv = { "rm", "-f", kept } }) end
+
+-- 6 EMPTY (2238-3skn): a refusal whose snapshot holds no line says so by name
+-- instead of printing an empty block. The seam answers refuse for a step that
+-- wrote nothing.
+fs.write(REL .. "/attr-says-refuse.sh", 'echo "ours=1 foreign=0 unattributed=0 concurrent=0 verdict=refuse"\n')
+rc, o = gate(root("empty", ": > \"$TILLANDSIAS_GATE_SHARED_TIMING_PATH\""), { attr = ABS .. "/attr-says-refuse.sh" })
+arm("6 EMPTY an empty snapshot is named could-not-keep, not an empty block",
+    rc ~= 0 and o:find("could-not-keep:window-empty", 1, true) ~= nil
+        and o:find("The leaked line(s), kept", 1, true) == nil, "rc=" .. tostring(rc) .. "\n" .. o)
 
 proc.run({ argv = { "rm", "-rf", ABS } })
 if #failed > 0 then
