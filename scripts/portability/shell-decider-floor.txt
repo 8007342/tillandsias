@@ -343,7 +343,6 @@ scripts/test-packet-tier-fields.sh
 scripts/test-pending-capability-row-does-not-wedge.sh
 scripts/test-pilot-lua-ports.sh
 scripts/test-plan-binary-copy-refresh.sh
-scripts/test-plan-binary-locus-native.sh
 scripts/test-plan-binary-probe-release-over-debug.sh
 scripts/test-plan-binary-probe-usage-determinism.sh
 scripts/test-plan-binary-probe.sh
