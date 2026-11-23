@@ -34,7 +34,7 @@ local function cleanup() proc.run{ argv = { "find", W, "-delete" }, timeout_ms =
 
 -- The real plan binary, resolved as the .sh did (a script FILE, not a string).
 fs.write(rel .. "/resolve.sh", '. scripts/plan-binary-probe.sh && resolve_plan_binary\n')
-local r = proc.run{ argv = { "bash", W .. "/resolve.sh" } }
+local r = proc.run{ argv = { require("common.fixture").posix_shell(), W .. "/resolve.sh" } }
 local REAL = text.trim(r.stdout or "")
 if not r.ok or REAL == "" then
     cleanup()
@@ -92,7 +92,7 @@ local function run(extra)
     -- ORDER 2220-gtri: the check is Lua, run by the REAL binary; the fake is
     -- only the GRADER it names through TILLANDSIAS_PLAN_BIN. A .sh override
     -- (TILLANDSIAS_TEST_CHECK, for a mutant) still runs under bash.
-    local argv = { "bash", CHECK, "--strict" }
+    local argv = { require("common.fixture").posix_shell(), CHECK, "--strict" }
     if CHECK:match("%.lua$") then argv = { REAL, "script", "run", CHECK, "--", "--strict" } end
     local p = proc.run{ argv = argv, env = e, timeout_ms = 600000 }
     return text.trim(p.stdout or ""), p.code
