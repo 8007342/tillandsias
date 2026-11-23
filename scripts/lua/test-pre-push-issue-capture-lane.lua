@@ -1,4 +1,5 @@
 -- @trace order:889-twhe, order:881-29me, order:863-iicc, order:1507-e693, order:2212-2m8s
+-- inputs: scripts/hooks/pre-push-local-gate.sh scripts/plan-binary-probe.sh scripts/gate-stamp.sh scripts/common.sh scripts/check-issue-citation-convention.sh lib/lua/common/ crates/tillandsias-plan/ build.sh plan/inbox/codex.md plan/index.yaml plan/issues/README.md plan/issues/linux-next-work-queue-2026-05-25.md
 -- @env CARGO_TARGET_DIR
 --
 -- test-pre-push-issue-capture-lane.lua — PORTED from
