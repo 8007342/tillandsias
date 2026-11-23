@@ -1754,7 +1754,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
        && [ "${TILLANDSIAS_SKIP_REMOTE_PROBE:-0}" != 1 ]; then
         _rr_bin="$(. "$SCRIPT_DIR/scripts/plan-binary-probe.sh" && resolve_plan_binary 2>/dev/null || true)"
         if [ -n "$_rr_bin" ]; then
-            _rr_out="$( cd "$SCRIPT_DIR" && "$_rr_bin" script run scripts/lua/probe-remote-reachable.lua 2>&1 )"; _rr_rc=$?
+            _rr_rc=0; _rr_out="$( cd "$SCRIPT_DIR" && "$_rr_bin" script run scripts/lua/probe-remote-reachable.lua 2>&1 )" || _rr_rc=$?  # set -e-safe: a bare capture aborts SILENTLY on rc=1 (2239-rmun)
             if [ "$_rr_rc" -ne 0 ]; then
                 printf '%s\n' "$_rr_out" >&2
                 echo "refused:preflight:remote-unreachable"
