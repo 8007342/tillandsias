@@ -258,7 +258,6 @@ scripts/test-image-build-convergence.sh
 scripts/test-image-usability-check.sh
 scripts/test-inference-engine-pinned-and-npu-honest.sh
 scripts/test-inference-mkdir-fatal-1183-j9dk.sh
-scripts/test-inference-pull-failure-classification.sh
 scripts/test-initialize-bare-metal-host-idempotent.sh
 scripts/test-install-macos-announces-its-pin.sh
 scripts/test-install-path.sh
@@ -395,7 +394,6 @@ scripts/test-preflight-setsid-probe.sh
 scripts/test-preflight-stale-plan-binary.sh
 scripts/test-preflight-verdict-categories.sh
 scripts/test-pretooluse-command-policy.sh
-scripts/test-probe-nix-capability-evidence.sh
 scripts/test-probe-refuses-stale-candidate.sh
 scripts/test-project-discipline-skill.sh
 scripts/test-project-info-grep-code-recall.sh
