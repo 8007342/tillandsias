@@ -1344,6 +1344,10 @@ FLAG_INTAKE=false
 # scripts/gate-steps.d it reads). The fixture's way into the real loop over a
 # scratch tree; --check calls the same function over the checkout.
 GATE_STEPS_ROOT=""
+# ORDER 2250-44uy round 4 — with --gate-steps, run ONLY the step whose file is
+# <NNN>-*.step, over the INTACT tree (fleet-run; a fixture that reads
+# scripts/gate-steps.d/ must see every step). Without it nothing changes.
+GATE_STEP_ONLY=""
 FLAG_CLEAN=false
 FLAG_INSTALL=false
 FLAG_REMOVE=false
@@ -1379,6 +1383,12 @@ while [[ $# -gt 0 ]]; do
         --gate-steps)
             GATE_STEPS_ROOT="${2:-}"
             [ -n "$GATE_STEPS_ROOT" ] || { echo "error: --gate-steps needs a root directory" >&2; exit 2; }
+            shift 2
+            continue
+            ;;
+        --gate-step)
+            GATE_STEP_ONLY="${2:-}"
+            [[ "$GATE_STEP_ONLY" =~ ^[0-9]+$ ]] || { echo "error: --gate-step needs a step number" >&2; exit 2; }
             shift 2
             continue
             ;;
@@ -3319,9 +3329,26 @@ _gs_lanes() {
 }
 
 if [ -n "$GATE_STEPS_ROOT" ]; then
+    if [ -n "$GATE_STEP_ONLY" ]; then
+        _gs_root="$(cd "$GATE_STEPS_ROOT" && pwd)"
+        _gs_sel=()
+        for _gs_f in "$_gs_root"/scripts/gate-steps.d/"$GATE_STEP_ONLY"-*.step; do
+            [ -e "$_gs_f" ] && _gs_sel+=("$_gs_f")
+        done
+        if [ "${#_gs_sel[@]}" -ne 1 ]; then
+            echo "refused:gate-step:$GATE_STEP_ONLY:matches=${#_gs_sel[@]} (exactly one scripts/gate-steps.d/$GATE_STEP_ONLY-*.step)" >&2
+            exit 2
+        fi
+        _gs_plan="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _gs_plan=""
+        case "$_gs_plan" in ./*) _gs_plan="$SCRIPT_DIR/${_gs_plan#./}" ;; esac
+        _gate_fallback_begin
+        _gs_one "${_gs_sel[0]}"
+        exit $?
+    fi
     _run_gate_steps "$(cd "$GATE_STEPS_ROOT" && pwd)"
     exit $?
 fi
+if [ -n "$GATE_STEP_ONLY" ]; then echo "error: --gate-step needs --gate-steps <root>" >&2; exit 2; fi
 
 # ORDER 2243-urcy — WHICH TEST RUNNER THIS HOST USES, SAID ONCE, BY NAME.
 # nextest when `cargo nextest` answers (the builder toolbox installs it from a
