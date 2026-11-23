@@ -35,6 +35,32 @@ function M.repo_root()
     return ROOT
 end
 
+-- ORDER 2246-fkea (from 2218-x4s3). The POSIX shell a fixture spawns, by a
+-- name the native runner can run on every host. On native Windows a bare
+-- `bash` resolves to WSL's bash.exe (another filesystem, another git), and
+-- /bin/bash does not exist; Git for Windows ships its own, next to git:
+-- `git --exec-path` answers <env>/libexec/git-core (mingw64/ or ucrt64/, per
+-- Git build), and the shell is <env>/bin/bash.exe. Everywhere else, the
+-- caller's default: "bash" (PATH) unless it names one, e.g. "/bin/bash" for a
+-- site that must run the shell build.sh is written for (on macOS /bin/bash is
+-- 3.2 and PATH may find a newer one; the two are not interchangeable).
+-- Use it as argv[1] wherever a fixture would write "bash":
+--   proc.run{ argv = { fixture.posix_shell(), "-s" }, stdin = ... }
+-- check-lua-fixture-native-argv-added.lua refuses a bare "bash" in an added
+-- scripts/lua file, and a root taken from `pwd -P` (use repo_root()).
+local GIT_BASH -- false once probed and absent
+function M.posix_shell(default)
+    if GIT_BASH == nil then
+        GIT_BASH = false
+        local r = proc.run{ argv = { "git", "--exec-path" }, timeout_ms = 10000 }
+        local ep = text.trim(r.stdout or "")
+        if ep:find("^%a:/.*/libexec/git%-core$") then  -- mingw64/ or ucrt64/, per Git build
+            GIT_BASH = (ep:gsub("/[^/]+/libexec/git%-core$", "/bin/bash.exe"))
+        end
+    end
+    return GIT_BASH or default or "bash"
+end
+
 local SCRATCH = "target/plan-scratch"
 
 -- ORDER 2158-vrb7. scratch.mkdir returns a Windows verbatim path (\\?\C:\...).

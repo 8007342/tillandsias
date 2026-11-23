@@ -12,6 +12,7 @@
 --   7 T:scratch().abs is accepted by rm -rf
 --     (6, 7 pre-2158-vrb7 on msys: .abs was \\?\C:\..., refused by both)
 --   8 plain_path strips \\?\ and \\?\UNC\, leaves other paths unchanged
+--   9 posix_shell is Git's bash.exe on native Windows, else the caller's default ("bash" when none)
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-common-fixture.lua
 -- Verdict: ok:common-fixture:<n> arms | violation:common-fixture:<n>-failed
@@ -66,5 +67,17 @@ local d = T:scratch()
 fs.write(d.rel .. "/x", "y")
 T:cleanup()
 T:arm("5 cleanup removes every scratch dir", not fs.exists(d.rel) and not fs.exists(repo.rel), d.rel)
+
+-- 9 (2246-fkea). Native Windows: Git's own bash, whatever default is asked.
+-- Elsewhere: the default the caller names, "bash" when it names none.
+do
+    local ep = text.trim(proc.run{ argv = { "git", "--exec-path" }, timeout_ms = 10000 }.stdout or "")
+    local a, b = fixture.posix_shell(), fixture.posix_shell("/bin/bash")
+    local native_win = ep:find("^%a:/.*/libexec/git%-core$") ~= nil
+    T:arm("9 posix_shell is Git's bash on native Windows, else the caller's default",
+        native_win and (a == b and a:find("/bin/bash%.exe$") ~= nil)
+            or (not native_win and a == "bash" and b == "/bin/bash"),
+        "exec-path=" .. ep .. " posix_shell()=" .. a .. " posix_shell(\"/bin/bash\")=" .. b)
+end
 
 T:finish()
