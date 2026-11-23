@@ -97,7 +97,10 @@ local function no_linker(text_out) return text_out:find("error: linker `[^`]+` n
 
 -- ARM 5
 report(arm("arm5", [==[
-[ "$(shared_target_canon "$B")" = "$CANON" ] && [ "$(shared_target_canon "$A")" = "$CANON" ] \
+# git answers C:/... on native Windows where this shell says /c/...: compare places.
+phys() { [ -n "$1" ] && (cd "$1" && pwd -P); }
+want="$(phys "$CANON")"
+[ -n "$want" ] && [ "$(phys "$(shared_target_canon "$B")")" = "$want" ] && [ "$(phys "$(shared_target_canon "$A")")" = "$want" ] \
   && ok "arm5 worktree and main share one canonical dir" || bad "arm5 canonical dirs differ: $(shared_target_canon "$B")"
 ]==]))
 
@@ -197,17 +200,22 @@ end
 -- ARM 8 (1840-2p9v) NO FLOCK: a PATH without flock(1) turns the shared dir
 -- OFF (rc 0, CARGO_TARGET_DIR untouched); it must not refuse.
 report(arm("arm8", [==[
-NB="$W/noflock-bin"; mkdir -p "$NB"
-for t in bash git dirname cat sed head printf; do
-    tp="$(command -v "$t" 2>/dev/null)" && [ "${tp#/}" != "$tp" ] && ln -sf "$tp" "$NB/$t"
-done
+# A host with no flock IS the regime: use its own PATH and bash. Only a host that
+# has flock needs a PATH without it (a copied msys bash.exe has no msys DLL).
+NB="$PATH"; NBASH="$BASH"
+if command -v flock >/dev/null 2>&1; then
+    NB="$W/noflock-bin"; NBASH="$NB/bash"; mkdir -p "$NB"
+    for t in bash git dirname cat sed head printf; do
+        tp="$(command -v "$t" 2>/dev/null)" && [ "${tp#/}" != "$tp" ] && ln -sf "$tp" "$NB/$t"
+    done
+fi
 cat > "$W/enter-noflock.sh" <<EOF
 . '$ROOT/scripts/shared-target.sh'; shared_target_enter '$A'; echo rc=\$? ctd=\${CARGO_TARGET_DIR:-unset}
 EOF
-o8="$(env -u CARGO_TARGET_DIR -u TILLANDSIAS_SHARED_TARGET_HELD PATH="$NB" "$NB/bash" "$W/enter-noflock.sh" 2>&1)"
+o8="$(env -u CARGO_TARGET_DIR -u TILLANDSIAS_SHARED_TARGET_HELD PATH="$NB" "$NBASH" "$W/enter-noflock.sh" 2>&1)"; r8=$?
 case "$o8" in
     *"shared-target: off (no flock"*"rc=0 ctd=unset"*) ok "arm8 no flock on PATH turns the shared dir off without refusing" ;;
-    *) bad "arm8 no-flock host refused or exported a shared dir: $o8" ;;
+    *) bad "arm8 no-flock host refused or exported a shared dir (rc=$r8): $o8" ;;
 esac
 ]==]))
 
