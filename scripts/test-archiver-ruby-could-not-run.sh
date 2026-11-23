@@ -46,7 +46,7 @@ fi
 
 # 2. THE VERDICT MUST NOT ASSERT ANYTHING ABOUT THE LEDGER. This is the half
 #    that made the defect expensive: an agent went looking for ledger damage.
-if printf '%s' "$out" | grep -q 'would CHANGE THE READY SET'; then
+if grep -q 'would CHANGE THE READY SET' <<<"$out"; then
     fail=$((fail+1)); echo "FAIL: the run asserted a ready-set claim it never tested"
 else
     pass=$((pass+1))
@@ -56,8 +56,8 @@ fi
 #    swallowed. The ruby-dependent call site redirects stdout to /dev/null, so a
 #    refusal printed on stdout is invisible; that was the first version of this
 #    fix and this arm is why it was caught.
-if printf '%s' "$out" | grep -q 'no usable ruby in this locus' \
-   && printf '%s' "$out" | grep -q 'Remedy:'; then
+if grep -q 'no usable ruby in this locus' <<<"$out" \
+   && grep -q 'Remedy:' <<<"$out"; then
     pass=$((pass+1))
 else
     fail=$((fail+1)); echo "FAIL: refusal did not name the instrument and a remedy on stderr"
@@ -113,7 +113,7 @@ case "$out2" in
 esac
 if [ "$rc2" -eq 0 ]; then
     pass=$((pass+1))
-elif [ "$rc2" -eq 3 ] && printf '%s' "$out2" | grep -q 'no usable ruby'; then
+elif [ "$rc2" -eq 3 ] && grep -q 'no usable ruby' <<<"$out2"; then
     echo "SKIP: this host has no usable ruby in either lane, so the positive control cannot run here"
     pass=$((pass+1))
 else

@@ -77,7 +77,7 @@ elif grep -q 'UNATTRIBUTED BUCKET' <<<"$out"; then
 else
     bad "ARM 2: no bucket row in a window known to contain a shared-provider author"
 fi
-if printf '%s' "$out" | grep -E '^  [a-z]+ ' | grep -q 'gmail'; then
+if awk '/^  [a-z]+ / && /gmail/ {f = 1} END {exit !f}' <<<"$out"; then
     bad "ARM 3: a shared-provider address was rendered as a HOST row"
 else
     ok "ARM 3: no shared-provider address appears as a host row"
@@ -87,8 +87,8 @@ fi
 # THE REAL-WORLD ARM. macneo's address ends .local and names its host; the first
 # version of this script bucketed it. A hermetic repo would only have caught
 # this if its author had already thought of the case — which is the point.
-if printf '%s' "$out" | grep -q 'MacBook-Neo'; then
-    if printf '%s' "$out" | grep 'MacBook-Neo' | grep -q 'UNATTRIBUTED'; then
+if grep -q 'MacBook-Neo' <<<"$out"; then
+    if awk '/MacBook-Neo/ && /UNATTRIBUTED/ {f = 1} END {exit !f}' <<<"$out"; then
         bad "ARM 4: a .local address that names its host was bucketed (the defect this arm exists for)"
     else
         ok "ARM 4: a .local host address resolves to a HOST row, not a bucket"
