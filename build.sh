@@ -1995,7 +1995,12 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
         read -r _pf_rc _pf_el < "$_pf_dir/$_pf_i.rc"
         if [ "$_pf_pd" -eq 13 ] && [ -f "$_pf_dir/$_pf_i.lane-deadline" ]; then
             read -r _pf_gdl < "$_pf_dir/$_pf_i.lane-deadline"
-            echo "note:preflight:$_pf_label:own-deadline — ran beside the roster for ${_pf_el}s, deadlined at ${_pf_gdl}s of the door's budget (1631-6w8z)"
+            # 2250-44uy: a lane deadline of 0 is "no limit" (--full), not "0 s".
+            if [ "$_pf_gdl" = 0 ]; then
+                echo "note:preflight:$_pf_label:own-deadline — ran beside the roster for ${_pf_el}s, with no deadline (--full) (1631-6w8z)"
+            else
+                echo "note:preflight:$_pf_label:own-deadline — ran beside the roster for ${_pf_el}s, deadlined at ${_pf_gdl}s of the door's budget (1631-6w8z)"
+            fi
         fi
         if [ "$_pf_rc" = "not-launched" ]; then
             # The launcher and this pass disagreed (or the launcher died): run
