@@ -53,7 +53,7 @@ case "$CHANNEL" in
 esac
 
 # Guard: whatever we resolved must match the canonical grammar.
-if [ -n "${TAG:-}" ] && ! printf '%s' "$TAG" | grep -Eq "$TAG_RE"; then
+if [ -n "${TAG:-}" ] && ! grep -Eq "$TAG_RE" <<<"$TAG"; then
     echo "Resolved ${CHANNEL} tag '${TAG}' is malformed (expected v#.#.#.#); refusing." >&2
     echo "refused:no-release:${CHANNEL}"
     exit 1
