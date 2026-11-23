@@ -787,7 +787,6 @@ scripts scripts/test-token-instrument.sh 2
 scripts scripts/test-tool-dispatch-lib.sh 18
 scripts scripts/test-tool-materialize-litmus-surfaces-arm.sh 3
 scripts scripts/test-tool-materialize.sh 5
-scripts scripts/test-toolbox-refusal-wsl-exception.sh 3
 scripts scripts/test-trace-coverage.sh 4
 scripts scripts/test-tracked-files-unwritten-guard.sh 2
 scripts scripts/test-tray-asset-placeholder-refused.sh 1

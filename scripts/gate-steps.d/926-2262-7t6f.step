@@ -1,0 +1,12 @@
+# Gate step 2262-7t6f — the toolbox refusal in with-tillandsias-builder.sh keeps
+# BOTH arms: a WSL2 distro is exempt (the Windows lane), a bare Linux host with
+# no toolbox is still refused (the 2026-08-26 no-host-native-fallback ruling).
+# Ported from scripts/test-toolbox-refusal-wsl-exception.sh, which no gate ran.
+# Pool-safe: it writes only its own scratch and runs a copy of the script.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the toolbox refusal's WSL exemption and its negative control (922-curm)..."
+STEP_LUA="scripts/lua/test-toolbox-refusal-wsl-exception.lua"
+STEP_ERROR="the toolbox refusal lost an arm — either WSL2 is blocked again or a bare Linux host is no longer refused"
+STEP_OK="toolbox refusal WSL-exception fixture passed"
+STEP_READS="scripts/lua/test-toolbox-refusal-wsl-exception.lua scripts/with-tillandsias-builder.sh"
