@@ -16,8 +16,11 @@
 --              leaves the victim's origin and local config unchanged.
 --   2 DOOR     build.sh unsets GIT_DIR (and its siblings) before the toolbox
 --              re-exec, so no hook-launched guard or fixture inherits it.
---   3 MUTANT   the same run with the fixture's unset removed DOES rewrite the
---              victim (proves arm 1 can fail).
+--   3 MUTANT   with BOTH protections gone (the fixture's unset and the scratch_git
+--              guard, 2244-crgd) the victim IS rewritten (proves arm 1 can fail).
+--   4 GUARD    with only the unset gone, the guard alone leaves it untouched.
+-- There is no mutant without the guard and with the unset: its stray writes
+-- would land in the REAL checkout, not in a victim.
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-fixtures-ignore-inherited-git-dir.lua
 -- Verdict: ok:fixtures-ignore-inherited-git-dir:<n> | violation:fixtures-ignore-inherited-git-dir:<n>-failed
@@ -75,20 +78,48 @@ end
 if found then ok("2 DOOR build.sh clears GIT_DIR and its siblings before the toolbox re-exec")
 else bad("2 DOOR build.sh no longer clears GIT_DIR in its first 80 lines") end
 
--- 3: the mutant sits beside the fixture so its relative sources still resolve
+-- The mutants sit beside the fixture so its relative sources still resolve.
 local MUT = "scripts/.mutant-gitdir-2224.sh"
-local keep = {}
-for _, l in ipairs(text.lines(fs.read(FX) or "")) do
-    if not text.starts_with(l, UNSET) then keep[#keep + 1] = l end
+local BITES = "# ── 2244-crgd: THE GUARD BITES"
+local function mutant(name, drop_guard)
+    local p = victim(name)
+    local keep, unset_hit, guard_hit, cut = {}, false, false, false
+    for _, l in ipairs(text.lines(fs.read(FX) or "")) do
+        if text.starts_with(l, UNSET) then unset_hit = true
+        elseif drop_guard and text.starts_with(l, BITES) then
+            -- That block calls scratch_git on "" and on the REAL checkout.
+            cut = true
+            break
+        else
+            if drop_guard and text.starts_with(l, "D_ok() {") then
+                guard_hit = true
+                -- After the guard is defined or sourced (which may itself clear
+                -- GIT_DIR): put the victim back, and drop the guard.
+                keep[#keep + 1] = "export GIT_DIR='" .. p .. "/.git'"
+                keep[#keep + 1] = 'scratch_git() { local d="$1"; shift; git -C "$d" "$@"; }'
+            end
+            keep[#keep + 1] = l
+        end
+    end
+    if not unset_hit or (drop_guard and not (guard_hit and cut)) then
+        return nil, "the fixture no longer has the lines this mutant edits"
+    end
+    fs.write(MUT, table.concat(keep, "\n") .. "\n")
+    local b4 = state(p)
+    run({ "bash", root .. "/" .. MUT }, { GIT_DIR = p .. "/.git" }, 300000)
+    proc.run({ argv = { "rm", "-f", root .. "/" .. MUT }, timeout_ms = 10000 })
+    return b4, state(p)
 end
-fs.write(MUT, table.concat(keep, "\n") .. "\n")
-V = victim("three")
-before = state(V)
-run({ "bash", root .. "/" .. MUT }, { GIT_DIR = V .. "/.git" }, 300000)
-after = state(V)
-proc.run({ argv = { "rm", "-f", root .. "/" .. MUT }, timeout_ms = 10000 })
-if before ~= after then ok("3 MUTANT without the unset the victim IS rewritten (" .. after .. ") — arm 1 has teeth")
-else bad("3 MUTANT without the unset the victim was still untouched — arm 1 proves nothing") end
+
+-- 3
+before, after = mutant("three", true)
+if before and before ~= after then ok("3 MUTANT without the unset or the guard the victim IS rewritten (" .. after .. ") — arm 1 has teeth")
+else bad("3 MUTANT without either protection the victim was still untouched — arm 1 proves nothing [" .. tostring(after) .. "]") end
+
+-- 4
+before, after = mutant("four", false)
+if before and before == after then ok("4 GUARD with only the unset gone, scratch_git alone leaves the victim untouched")
+else bad("4 GUARD the victim changed: before=[" .. tostring(before) .. "] after=[" .. tostring(after) .. "]") end
 
 proc.run({ argv = { "rm", "-rf", W }, timeout_ms = 60000 })
 out.line("fixtures-ignore-inherited-git-dir: " .. pass .. " passed, " .. fail .. " failed")
