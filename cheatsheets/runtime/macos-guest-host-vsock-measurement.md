@@ -68,7 +68,7 @@ measurement:
    can be captured in one run.
 
 > **Do not leave a permanent fixture reporting through the model cache.** A file
-> there trips `scripts/test-macos-model-share-writable.sh`'s empty-cache
+> there trips `scripts/lua/test-macos-model-share-writable.lua`'s empty-cache
 > precondition. Fine for a one-off probe; clean up after.
 
 ## Require both sides to report

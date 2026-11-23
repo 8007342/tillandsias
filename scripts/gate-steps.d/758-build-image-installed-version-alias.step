@@ -1,0 +1,10 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 3, 2266: the slowest blocks first,
+# measured one at a time on lenovinha). As a .step it is no build.sh edit, so it
+# never makes intake HEAVY; it runs in the pool (it writes only its own scratch).
+STEP_DESC="Checking image rebuild keeps the installed binary's launch tag (747-knbp)"
+STEP_SCRIPT="scripts/test-build-image-installed-version-alias.sh"
+STEP_ERROR="an image rebuild can orphan the tag the installed binary launches by — every forge launch would be dead on arrival (747-knbp)"
+STEP_OK="Image-rebuild launch-tag gate passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin ok launch tag resolvable under version skew at 213905e79 (fleet-run)"
+STEP_READS="scripts/test-build-image-installed-version-alias.sh"

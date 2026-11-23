@@ -584,7 +584,9 @@ if [ "$DAILY_FULL" -eq 1 ]; then
     _dsha="$(git rev-parse "$REMOTE/$TRUNK")"
     git checkout -q --detach "$_dsha" || { say "could-not-run:host:daily-full:checkout-failed"; exit 3; }
     rm -f "$_RUNDIR/no-daily-proof"
-    ( _gate_clean_env; export TILLANDSIAS_CLASS_SELECTOR=off TILLANDSIAS_FULL_GATE_MARKER="$_RUNDIR/no-daily-proof"; eval "$GATE" ) \
+    ( _gate_clean_env; export TILLANDSIAS_CLASS_SELECTOR=off TILLANDSIAS_FULL_GATE_MARKER="$_RUNDIR/no-daily-proof"
+      # 2270-7gp6: the salvage-audit fixture's live 334-ref audit runs here, once a day.
+      export TILLANDSIAS_SALVAGE_AUDIT_LIVE=1; eval "$GATE" ) \
         < /dev/null > "$_RUNDIR/daily-full-gate.log" 2>&1
     _drc=$?
     _dns="$DAILY_NS"; [ "$_drc" -eq 0 ] || _dns="$DAILY_RED_NS"

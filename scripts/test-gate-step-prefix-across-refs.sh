@@ -15,6 +15,8 @@
 #   7  a collision on 085 is refused (pre-1629-xtfw: an octal error, then ok)
 #   8  a collision on 020 suggests 30, the base-10 next ten (pre-fix: 20)
 #   9  010 collides with a held 10: one prefix in base 10 (pre-fix: passed)
+#  10  no work refs fetched at all (a fleet-run extract) -> skip:no-work-refs,
+#      never ok: the cross-ref half judged nothing (pre-fix: ok:...:0 refs scanned)
 set -uo pipefail
 # 1592-idmu: this fixture builds its own repo, so the gate's frozen base (a SHA of
 # the gated checkout) is not its base; its scratch origin/linux-next is.
@@ -134,6 +136,13 @@ fi
 G checkout -q -B work/mine2 linux-next; step 010-m.step; G add -A; G commit -qm arm9
 out="$(run)"; rc=$?
 case "$rc:$out" in 1:refused:gate-step-prefix-across-refs:010-m.step:origin/work/octal:10-r.step) ok "arm 9: 010 collides with a held 10 (one prefix, base 10)";; *) bad "arm 9: rc=$rc [$out] err=[$(tr '\n' ' ' < "$W/err")]";; esac
+
+# 10: an empty work-ref namespace is not a clean scan (yolanda, 2026-11-23: step 730
+# through fleet-run read ok:...:0 refs scanned). A free prefix, so only the empty
+# namespace can make it anything but ok.
+G checkout -q -B work/mine2 linux-next; step 150-m.step; G add -A; G commit -qm arm10
+out="$(TILLANDSIAS_STEP_PREFIX_REFS=refs/remotes/nowhere/ run)"; rc=$?
+case "$rc:$out" in 0:skip:gate-step-prefix-across-refs:no-work-refs*) ok "arm 10: no work refs at all is a skip, not ok";; *) bad "arm 10: rc=$rc [$out]";; esac
 
 total=$((pass+fail))
 if [ "$fail" -eq 0 ]; then echo "ok:gate-step-prefix-across-refs-fixture:$pass/$total"; exit 0; fi

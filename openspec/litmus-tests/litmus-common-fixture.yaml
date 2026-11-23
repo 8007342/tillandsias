@@ -14,12 +14,12 @@ critical_path:
   - step: "eight arms of the fixture kit, including .abs as a git remote and as an rm -rf target"
     command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; \"$MFPLAN\" script run scripts/lua/test-common-fixture.lua"
     timeout_ms: 300000
-    expected_behavior: "ok:common-fixture:8 arms"
+    expected_behavior: "ok:common-fixture:12 arms"
 
 observability:
   traces:
     - "@trace order:2158-vrb7"
-  expected_log: "ok:common-fixture:8 arms"
+  expected_log: "ok:common-fixture:12 arms"
   log_fields:
     spec: "ci-release"
     test: "common-fixture"

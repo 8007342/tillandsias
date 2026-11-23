@@ -875,30 +875,11 @@ pub(crate) fn ensure_vault_tls_leaf(
         return Ok(());
     }
 
-    let lock_dir = certs_dir.join(".vault-tls-generation.lock");
-    let mut acquired_lock = false;
-    for _ in 0..50 {
-        match fs::create_dir(&lock_dir) {
-            Ok(()) => {
-                acquired_lock = true;
-                break;
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                std::thread::sleep(Duration::from_millis(100));
-            }
-            Err(e) => return Err(format!("acquire Vault TLS generation lock: {e}")),
-        }
-    }
-    if !acquired_lock {
-        return Err("timed out waiting for Vault TLS generation lock".to_string());
-    }
-    struct LockDir(PathBuf);
-    impl Drop for LockDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir(&self.0);
-        }
-    }
-    let _lock = LockDir(lock_dir);
+    // 2258-sr65: the CA mint's own wait; this copy had the same 5 s limit.
+    let _lock = crate::acquire_generation_lock(
+        &certs_dir.join(".vault-tls-generation.lock"),
+        "Vault TLS generation lock",
+    )?;
     if !vault_tls_leaf_needs_refresh(&ca_cert, &cert, &key) {
         return Ok(());
     }
