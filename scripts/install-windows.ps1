@@ -131,7 +131,7 @@ function SayWn { param([string]$msg) Write-Host "  $msg" -ForegroundColor Yellow
 # ...") already tells the user the install finished. With no items this returns
 # an empty list.
 # Format-PendingBanner is pure (items in, lines out) so the fixture
-# scripts/test-installers-print-pending-banner.sh runs it through PowerShell;
+# scripts/lua/test-installers-print-pending-banner.lua runs it through PowerShell;
 # the marker lines around it are what that fixture cuts on.
 $PendingActions = New-Object System.Collections.Generic.List[string]
 # BEGIN-PENDING-BANNER
