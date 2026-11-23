@@ -26546,7 +26546,10 @@ mod tests {
     /// A scratch Tillandsias checkout: VERSION, images/, and the prep script.
     fn fake_nix_cache_checkout(dir: &Path) {
         std::fs::create_dir_all(dir.join("images")).unwrap();
-        std::fs::create_dir_all(dir.join("scripts")).unwrap();
+        // ORDER 2239-5gb5: derived from the script path, never the bare top-level dir name as a
+        // literal — scan-cargo-test-repo-roots.lua reads that as "these tests
+        // read all of scripts/" and the feature-gated step could never skip.
+        std::fs::create_dir_all(dir.join(NIX_CACHE_SCRIPT).parent().unwrap()).unwrap();
         std::fs::write(dir.join("VERSION"), "0.0.0\n").unwrap();
         std::fs::write(dir.join(NIX_CACHE_SCRIPT), "#!/bin/sh\n").unwrap();
     }
