@@ -5409,6 +5409,14 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "--changed input-selection fixture passed"
     # ORDER 2248-zcqh — the bundle intake gate: deferral, HEAVY, legacy
     # unchanged, and a crate graph held to cargo metadata.
+    # ORDER 2261-8gx5 — a fixture that DECLARES its inputs is selected only by
+    # them, so a file it names but does not declare would never select it.
+    _step "Checking declared fixture inputs cover every path the fixture names (2261-8gx5)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/gate-changed.sh" --check-declared 2>&1; then
+        _error "a fixture's inputs: declaration misses a repo path it names; add it, or a directory prefix ending in / (2261-8gx5)"
+        exit 1
+    fi
+    _info "Declared fixture inputs check passed"
     _step "Checking --changed's derived crate graph equals cargo metadata (2248-zcqh)..."
     if ! _run_lua_decider "scripts/lua/check-gate-changed-crate-graph.lua" 2>&1; then
         _error "scripts/gate-changed.sh derives a crate graph cargo does not resolve — intake would skip a dependent crate; see MISSING/EXTRA above (2248-zcqh)"

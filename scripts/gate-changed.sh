@@ -60,6 +60,9 @@
 #   gate-changed.sh --run  [base]   run the selection (build.sh --changed)
 #   gate-changed.sh --map           print the derived input map
 #   --intake                        the bundle intake gate (see INTAKE above)
+#   --check-declared                the decider for declared inputs (2261-8gx5):
+#                                   every literal repo file a declaring fixture
+#                                   names must be covered by its declaration
 #   --crate-graph                   print the derived path-dependency edges
 #                                   (<crate dir> TAB <dep dir>) and exit; the
 #                                   metadata lint compares them to cargo's
@@ -79,13 +82,13 @@ BASE=""
 FILES_FROM=""
 while [ $# -gt 0 ]; do
     case "$1" in
-        --list|--run|--map|--crate-graph) MODE="$1" ;;
+        --list|--run|--map|--crate-graph|--check-declared) MODE="$1" ;;
         --intake) INTAKE=1 ;;
         --files) FILES_FROM="${2:-}"; shift ;;
         -h|--help) sed -n '2,75p' "${BASH_SOURCE[0]}"; exit 0 ;;
         -*) echo "refused:gate-changed:unknown-flag:$1" >&2
             echo "  why: an unknown flag would be read as the base ref and diff against nothing meaningful" >&2
-            echo "  remedy: use --list, --run, --map, --crate-graph, --intake or --files <file>, then an optional base ref (see --help)" >&2
+            echo "  remedy: use --list, --run, --map, --crate-graph, --check-declared, --intake or --files <file>, then an optional base ref (see --help)" >&2
             exit 2 ;;
         *) BASE="$1" ;;
     esac
@@ -202,6 +205,12 @@ function resolve(tok, from,   t, g, i) {
 FILENAME == W "/files" { F[$0] = 1; n = split($0, c, "/"); p = ""; for (i = 1; i < n; i++) { p = (p == "" ? c[i] : p "/" c[i]); D[p] = 1 } next }
 FILENAME == W "/tokens" {
     line = $0; f = line; sub(/:.*/, "", f); text = line; sub(/^[^:]*:[0-9]+:/, "", text)
+    # 2261-8gx5 (1): a shell `case` ARM is a pattern, not a read. Its text up to
+    # the arm-closing `)` — `scripts/*|build.sh|flake.nix)` — names paths only to
+    # classify one; gate-stamp.sh:174 made all 13 of its executors read the whole
+    # scripts/ directory. A function definition `name()` and a subshell `( … )`
+    # do not match: the arm text may not contain `(`.
+    if (text ~ /^[[:space:]]*[^[:space:];()#]+(\|[^[:space:];()]+)*\)/) sub(/^[[:space:]]*[^[:space:];()#]+(\|[^[:space:];()]+)*\)/, "", text)
     # An EXECUTED or SOURCED script is followed (its inputs become ours); any
     # other named path is a leaf the source reads. Following mere mentions
     # made every fixture reach build.sh and so every script (measured: 347 of
@@ -238,6 +247,49 @@ END {
 ' "$WORK/files" "$WORK/tokens"
 touch "$WORK/edges" "$WORK/allsrc"
 
+# ── 4b. Declared inputs (2261-8gx5 (4)) ─────────────────────────────────────
+# A fixture may DECLARE what it reads, in its first 40 lines:
+#     # inputs: scripts/foo.sh scripts/lua/bar.lua openspec/litmus-tests/
+#     -- inputs: …                         (a Lua fixture)
+# The selector then trusts the declaration over the derived closure. The
+# derived one is conservative on purpose: a dynamic path such as
+# "$ROOT/scripts/${name}.sh" stops at the `$` and reads the WHOLE scripts/
+# directory, which is why ~87 fixtures selected on any script change (measured
+# 2026-11-23). --check-declared holds a declaration honest: every literal repo
+# file the fixture names itself must be covered (exactly, or by a declared
+# directory prefix ending in /).
+: > "$WORK/decl"
+while IFS=$'\t' read -r _did _drun _dpath _drest; do
+    [ -f "$_dpath" ] || continue
+    _dl="$(awk 'NR > 40 { exit } /^(#|--) inputs:/ { sub(/^(#|--) inputs:[[:space:]]*/, ""); print; exit }' "$_dpath" 2>/dev/null)"
+    [ -n "$_dl" ] || continue
+    for _di in $_dl; do printf '%s\t%s\n' "$_dpath" "$_di"; done
+done < "$WORK/pop" >> "$WORK/decl"
+sort -u -o "$WORK/decl" "$WORK/decl"
+if [ "$MODE" = "--check-declared" ]; then
+    awk -F'\t' -v W="$WORK" '
+        FILENAME == W "/decl"  { D[$1] = D[$1] " " $2; next }
+        FILENAME == W "/edges" {
+            if (!($1 in D) || $2 ~ /\/$/ || $2 == "*" || $2 == $1) next
+            n = split(D[$1], d, " "); ok = 0
+            for (i = 1; i <= n; i++) if (d[i] != "" && ($2 == d[i] || (d[i] ~ /\/$/ && index($2, d[i]) == 1))) { ok = 1; break }
+            if (!ok) { print "undeclared:" $1 ":" $2; bad++ }
+            next
+        }
+        END { exit bad > 0 }' "$WORK/decl" "$WORK/edges" > "$WORK/undeclared"
+    _ud=$?
+    _nd="$(cut -f1 "$WORK/decl" | sort -u | grep -c .)"
+    if [ "$_ud" -ne 0 ]; then
+        cat "$WORK/undeclared"
+        echo "violation:gate-changed-declared-inputs:$(wc -l < "$WORK/undeclared" | tr -d ' ') declaring=$_nd"
+        echo "  why: a declared fixture is selected ONLY by its declaration, so a file it reads but does not declare would never select it" >&2
+        echo "  remedy: add each undeclared path (or a directory prefix ending in /) to the fixture's inputs: line" >&2
+        exit 1
+    fi
+    echo "ok:gate-changed-declared-inputs:$_nd declaring"
+    exit 0
+fi
+
 # ── 5. Close each fixture and each crate over its inputs ────────────────────
 # Output map lines: <unit> <TAB> <input>  where unit is fx:<path>[ args] or
 # crate:<dir>, and input is a file, a dir/ prefix, or "*".
@@ -261,7 +313,18 @@ function close_over(start, unit,   q, h, t, cur, n, parts, i, x) {
 }
 FILENAME == W "/edges"   { ADJ[$1] = ADJ[$1] "\t" $2; TY[$1 SUBSEP $2] = $3; next }
 FILENAME == W "/allsrc"  { ALLSRC[$1] = 1; next }
-FILENAME == W "/pop"     { u = "fx:" $3 ($4 == "" ? "" : " " $4); close_over($3, u); if ($7 != "") print u "\t" $7; next }
+FILENAME == W "/decl"    { DECL[$1] = DECL[$1] "\t" $2; next }
+FILENAME == W "/pop"     {
+    u = "fx:" $3 ($4 == "" ? "" : " " $4)
+    if ($3 in DECL) {
+        # 2261-8gx5: a declaring fixture reads itself, its declaration and its .step
+        print u "\t" $3
+        n = split(DECL[$3], parts, "\t")
+        for (i = 1; i <= n; i++) if (parts[i] != "") print u "\t" parts[i]
+    } else close_over($3, u)
+    if ($7 != "") print u "\t" $7
+    next
+}
 FILENAME == W "/crates"  {
     unit = "crate:" $1
     print unit "\t" $1 "/"
@@ -273,7 +336,7 @@ FILENAME == W "/crates"  {
     }
     next
 }
-' "$WORK/edges" "$WORK/allsrc" "$WORK/pop" "$WORK/crates" | sort -u > "$WORK/map"
+' "$WORK/edges" "$WORK/allsrc" "$WORK/decl" "$WORK/pop" "$WORK/crates" | sort -u > "$WORK/map"
 
 if [ "$MODE" = "--map" ]; then
     cat "$WORK/map"

@@ -35,6 +35,12 @@
 --                  by side (NEGATIVE CONTROL: arm 13 can tell)
 --  15 PLAN-LANE    a plan-only diff prints route:plan-lane and selects no
 --                  fixture
+--  17 CASE-ARM     (2261-8gx5 (1)) a helper's `case` arm (`scripts/*|x) …`)
+--                  is a pattern, not a read: its executor does not read scripts/
+--  18 DECLARED     (2261-8gx5 (4)) a fixture with a dynamic path that declares
+--                  `# inputs: scripts/a.sh` reads scripts/a.sh, not scripts/
+--  19 DECIDER      --check-declared refuses a declaration that misses a literal
+--                  path the fixture names, and accepts it once declared
 --  16 NO-DEADLOCK  (2256-mvmy) the same tree padded past the 64 KB pipe buffer
 --                  (as the real population is, ~80 KB): a serial row's `wait`
 --                  must not sit on the loop's own input. Before the fix the
@@ -304,5 +310,69 @@ T:arm("15 PLAN-LANE a plan-only diff routes to the plan lane and selects no fixt
     first(ro, "route:plan-lane") ~= nil and count(ro, "ok:gate-changed:fixture:") == 0
         and (first(ro, "ok:gate-changed:intake:plan-lane") ~= nil or first(ro, "fail:gate-changed:intake:plan-lane") ~= nil),
     "out=" .. ro:sub(1, 400))
+
+-- 17-19: tiny scratch trees, judged through --map and --check-declared.
+do
+    local function tree(tag, files)
+        local X = T:scratch(tag)
+        proc.run{ argv = { "mkdir", "-p", X.abs .. "/scripts/gate-steps.d" } }
+        fs.write(X.rel .. "/Cargo.toml", "[workspace]\nmembers = [\n]\n")
+        for rel, body in pairs(files) do fs.write(X.rel .. "/" .. rel, body) end
+        T:must{ "git", "init", "-q", X.abs }
+        T:must{ "git", "-C", X.abs, "add", "-A" }
+        T:must{ "git", "-C", X.abs, "-c", "user.email=f@f", "-c", "user.name=f", "-c", "commit.gpgsign=false", "commit", "-qm", "t" }
+        return X
+    end
+    local function run_in(X, args)
+        local argv = { SH, GC }
+        for _, a in ipairs(args) do argv[#argv + 1] = a end
+        local r = proc.run{ argv = argv, cwd = X.abs, timeout_ms = 120000, env = { TILLANDSIAS_GATE_CHANGED_ROOT = X.abs } }
+        return (r.status == "exited" and r.code or -1), (r.stdout or "")
+    end
+    local function reads(map, unit, input)
+        for _, l in ipairs(text.lines(map)) do if l == unit .. "\t" .. input then return true end end
+        return false
+    end
+    local BUILD = 'if [[ "$FLAG_CHECK" == true ]]; then\n'
+        .. '    _step "Fixture f..."\n    if ! _run bash "$SCRIPT_DIR/scripts/test-f.sh" 2>&1; then\n        _error "f"\n        exit 1\n    fi\n'
+        .. 'elif [[ "$FLAG_TEST$FLAG_CHECK" == x ]]; then\n    :\nfi\n'
+
+    -- 17
+    local X17 = tree("case-arm", {
+        ["build.sh"] = BUILD,
+        ["scripts/helper.sh"] = '#!/usr/bin/env bash\ncase "$1" in\n    scripts/*|flake.nix)  echo build-scripts ;;\nesac\n',
+        ["scripts/test-f.sh"] = '#!/usr/bin/env bash\nbash scripts/helper.sh x\n',
+        ["scripts/other.sh"] = "#!/usr/bin/env bash\n",
+    })
+    local _, m17 = run_in(X17, { "--map" })
+    T:arm("17 CASE-ARM a helper's case arm is not read as the whole scripts/ directory",
+        reads(m17, "fx:scripts/test-f.sh", "scripts/helper.sh") and not reads(m17, "fx:scripts/test-f.sh", "scripts/"),
+        "map=" .. m17:sub(1, 300))
+
+    -- 18
+    local DYN = '#!/usr/bin/env bash\n# inputs: scripts/a.sh\nn=a\nbash "$(dirname "$0")/../scripts/${n}.sh"\n'
+    local X18 = tree("declared", {
+        ["build.sh"] = BUILD, ["scripts/test-f.sh"] = DYN,
+        ["scripts/a.sh"] = "#!/usr/bin/env bash\n", ["scripts/b.sh"] = "#!/usr/bin/env bash\n",
+    })
+    local _, m18 = run_in(X18, { "--map" })
+    T:arm("18 DECLARED a declared fixture reads its declaration, not the whole scripts/ directory",
+        reads(m18, "fx:scripts/test-f.sh", "scripts/a.sh") and not reads(m18, "fx:scripts/test-f.sh", "scripts/"),
+        "map=" .. m18:sub(1, 300))
+
+    -- 19
+    local MISS = '#!/usr/bin/env bash\n# inputs: scripts/a.sh\ncat scripts/b.sh >/dev/null\n'
+    local X19 = tree("decider", {
+        ["build.sh"] = BUILD, ["scripts/test-f.sh"] = MISS,
+        ["scripts/a.sh"] = "#!/usr/bin/env bash\n", ["scripts/b.sh"] = "#!/usr/bin/env bash\n",
+    })
+    local rc19, o19 = run_in(X19, { "--check-declared" })
+    fs.write(X19.rel .. "/scripts/test-f.sh", '#!/usr/bin/env bash\n# inputs: scripts/a.sh scripts/b.sh\ncat scripts/b.sh >/dev/null\n')
+    local rc19b, o19b = run_in(X19, { "--check-declared" })
+    T:arm("19 DECIDER a declaration missing a literal path is refused, and accepted once it is declared",
+        rc19 == 1 and o19:find("undeclared:scripts/test-f.sh:scripts/b.sh", 1, true) ~= nil
+            and rc19b == 0 and o19b:find("ok:gate-changed-declared-inputs:1 declaring", 1, true) ~= nil,
+        "rc=" .. rc19 .. " out=" .. o19:sub(1, 160) .. " | after rc=" .. rc19b .. " out=" .. o19b:sub(1, 120))
+end
 
 T:finish()
