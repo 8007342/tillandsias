@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: intake-honours-check-serial-guarantees-doctests-plan-lane-and-phase-times
+    order: 2256-mvmy
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 6
+    title: |
+      The intake gate (`--changed --intake`, 2248-zcqh) reds landed-green changes: its pool runs fixtures in parallel that --check never runs together, and its nextest path drops the doctests the baseline reader needs. Fix both, route plan-only diffs to the plan lane, and print a per-phase wall-time breakdown.
+    context: |
+      Measured on lenovinha (2249-tif9 run-time samples, 2026-11-23): 10 landed merges through #1401's selector; every scoped run reported 7-13 fixture failures on merges the full gate passed. (1) gate-changed.sh's pool serialises only a fixture whose header declares `preflight: serial`, but --check runs every inline build.sh block serially by construction and every STEP_SERIAL step alone; the recurring reds were exactly those (plan-binary-freshness, plan-binary-remedy, gate-stamp-scope inline; land-queue, live-freeze, plan-lane-fails-closed STEP_SERIAL), each green standalone. (2) build.sh's nextest path appends `cargo test --doc` after the converted log, and those lines are what check-test-baseline counts; intake's path did not, so 1926 passed read as no-test-results. Coordinator direction 2026-11-23: also route plan-only diffs to the plan lane (operator-approved 2026-11-20: plan-lane checks, no build-check) — #1384's plan follow-up took 247 s / 91 fixtures at intake — and break the wall time down so phase 2 can be judged against the design's 160 s target (scoped median was ~336 s before this fix).
+    exit_criteria:
+      - "intake runs inline-block fixtures and STEP_SERIAL steps one at a time, a STEP_LANES group never beside itself, and only undeclared .step fixtures in the parallel pool; an arm with two planted serial fixtures proves they never overlap"
+      - "intake's nextest path adds `cargo test --doc -p <selected>` so the baseline reader sees results; an arm or a recorded run shows a green nextest selection reads green"
+      - "a plan-only diff prints `route:plan-lane` and runs the plan-lane checks instead of the fixture selection"
+      - "intake prints one `phase:<name> ms=<n>` line each for cargo build, nextest/cargo test, doctests, serial fixtures and the pool"
+      - "the 10-merge measurement re-run with the breakdown, recorded in a plan/issues report: no landed-green merge reds at intake"
+    unscoreable: "unpinnable-until-the-guard-exists: the serial-overlap arm, the re-measure and its breakdown are the deliverable."
+    next_action: "Mark population rows by origin (inline / step serial / step lanes / step pool); serialise in the pool loop; add doctests; plan-only route; phase timers."
+    provenance: lenovinha's measurement; coordinator direction (macuahuitl-fedora, 2026-11-23).
+    related: [2248-zcqh, 2249-tif9, 2250-gwfy, 2243-urcy, 1931-steb, 2155-gpar, 2156-glan]
+    events:
+      - {type: filed, ts: '2026-11-23T06:38:34Z', host: lenovinha, summary: intake honours check serial guarantees, doctests, plan lane and phase times filed}

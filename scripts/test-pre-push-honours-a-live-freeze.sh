@@ -32,6 +32,7 @@
 #      marker push the remote refuses names git's own refusal, not a bare
 #      "could not push".
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GUARD="$ROOT/scripts/hooks/pre-push-local-gate.sh"
 FREEZE="$ROOT/scripts/release-freeze.sh"
@@ -50,7 +51,7 @@ done
 
 _tmpbase="$ROOT/target/plan-scratch"; mkdir -p "$_tmpbase" 2>/dev/null || _tmpbase="${TMPDIR:-/tmp}"
 W="$(mktemp -d "$_tmpbase/live-freeze.XXXXXX")"
-trap 'rm -rf "$W"' EXIT INT TERM
+scratch_trap 'rm -rf "$W"'
 export GIT_TERMINAL_PROMPT=0
 G() { git -c user.email=t@t -c user.name=t "$@"; }
 
@@ -286,7 +287,7 @@ printf '#!/bin/sh\nwhile read o n r; do case "$r" in refs/tillandsias/*) echo "f
 chmod +x "$W/bare.git/hooks/pre-receive"
 # Pin the scratch remote to its OWN hooks: a global core.hooksPath (a forge sets
 # one) would otherwise make the bare repo ignore hooks/ and the push succeed.
-git -C "$W/bare.git" config core.hooksPath "$W/bare.git/hooks"
+scratch_git "$W/bare.git" config core.hooksPath "$W/bare.git/hooks"
 out="$(freeze set linux-next 2>/dev/null | tail -1)"
 case "$out" in
     "refused:freeze:unreachable:could not push the marker to origin:"*"fixture-hook: markers refused here"*)
@@ -294,7 +295,7 @@ case "$out" in
     *) bad "ARM 7b: the refusal does not carry git's reason: '$out'" ;;
 esac
 rm -f "$W/bare.git/hooks/pre-receive"
-git -C "$W/bare.git" config --unset core.hooksPath
+scratch_git "$W/bare.git" config --unset core.hooksPath
 
 total=$((pass+fail))
 [ "$skipped" -gt 0 ] && echo "note: $skipped arm(s) skipped by name — see the skip: lines above"
