@@ -1775,9 +1775,9 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
        && [ "${TILLANDSIAS_SKIP_REMOTE_PROBE:-0}" != 1 ]; then
         _rr_bin="$(. "$SCRIPT_DIR/scripts/plan-binary-probe.sh" && resolve_plan_binary 2>/dev/null || true)"
         if [ -n "$_rr_bin" ]; then
-            _rr_rc=0; _rr_out="$( cd "$SCRIPT_DIR" && "$_rr_bin" script run scripts/lua/probe-remote-reachable.lua 2>&1 )" || _rr_rc=$?  # set -e-safe: a bare capture aborts SILENTLY on rc=1 (2239-rmun)
-            if [ "$_rr_rc" -ne 0 ]; then
-                printf '%s\n' "$_rr_out" >&2
+            _rr_rc=0; ( cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh && . scripts/remote-probe-judge.sh && remote_probe_judge "$_rr_bin" ) || _rr_rc=$?
+            if [ "$_rr_rc" -ne 0 ] && [ "$_rr_rc" -ne 10 ]; then echo "could-not-run:remote-probe:judge-error:rc=$_rr_rc — the remote was not judged (2256-tt3v)" >&2; fi
+            if [ "$_rr_rc" -eq 10 ]; then
                 echo "refused:preflight:remote-unreachable"
                 echo "  why: this host cannot reach the remote, so nothing this gate vouches for can be pushed (2239-rmun)" >&2
                 echo "  remedy: a human restores this host's access (see the probe's remedy above); until then SUSPEND work here — no retries, no backoff" >&2

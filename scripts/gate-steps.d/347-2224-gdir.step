@@ -8,7 +8,5 @@ STEP_ERROR="a fixture run under an inherited GIT_DIR wrote that repository, or b
 STEP_OK="Fixtures ignore an inherited GIT_DIR"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY.
 STEP_READS="scripts/lua/test-fixtures-ignore-inherited-git-dir.lua scripts/test-check-credential-channel.sh build.sh"
-# The second-regime record below was taken on the .sh predecessor; the Lua port
-# (2238-vsra) reproduces its three arms and verdict line exactly.
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:fixtures-ignore-inherited-git-dir:3"
-# msys: yolanda 2026-11-22 msys ok:fixtures-ignore-inherited-git-dir:3 (native .exe under Git Bash; real .git/config hash unchanged)
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:fixtures-ignore-inherited-git-dir:4"
+# msys: yolanda 2026-11-23 msys ok:fixtures-ignore-inherited-git-dir:4 at 49352d5ea
