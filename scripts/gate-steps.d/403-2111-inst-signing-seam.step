@@ -1,0 +1,14 @@
+# Gate step 2111-inst — data, not code (order 1072-b7eq).
+#
+# The macOS signing seam (order 935-6fzk): ad-hoc by default, hardened runtime
+# in both arms, get-task-allow stripped for release (notarization rejects it),
+# the DMG container signed and hashed after signing. Its shell fixture was bound
+# to nothing; the Lua port (2111-inst) is bound here. PlistBuddy arms are a
+# named skip off macOS. STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the macOS signing seam (935-6fzk)"
+STEP_LUA="scripts/lua/test-macos-signing-seam.lua"
+STEP_ERROR="the macOS signing seam changed shape: a release could carry get-task-allow (notarization rejects it), lose the hardened runtime, or publish a hash of an unsigned DMG (935-6fzk); see the FAIL lines above"
+STEP_OK="macOS signing seam fixture passed"
+STEP_READS="scripts/lua/test-macos-signing-seam.lua scripts/build-macos-dmg.sh scripts/build-macos-tray.sh"
+STEP_SECOND_REGIME="yolanda 2026-11-23 msys ok:macos-signing-seam:9 arms (at 6675c6d1a; 4b-4c named skip, no PlistBuddy)"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin ok:macos-signing-seam:11 arms (at 4e98ecc22)"

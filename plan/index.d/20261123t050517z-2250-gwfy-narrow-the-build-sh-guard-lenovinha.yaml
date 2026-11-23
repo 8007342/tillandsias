@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: narrow-the-build-sh-guard-for-intake
+    order: 2250-gwfy
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 8
+    title: |
+      Bundle landing phase 2's lever: a change to build.sh makes the intake gate HEAVY (run everything) whatever the edit, and build.sh is half of all HEAVY verdicts. Split build.sh's guard by section, or move its inline --check sections to .step files, so an edit that adds one wired block is scoped like any other change.
+    context: |
+      The intake replay (2249-tif9, plan/issues/intake-replay-on-evictions-2026-11-23.md) found HEAVY on 26 of 57 evicted heads (46%). Every one came from a guard file and none from an unmapped path; build.sh was 11 of 22 distinct heads. Most of those build.sh edits add or change ONE `_step … _run_lua_decider|_run bash …` block inside the --check section, which gate-changed.sh already parses into its fixture population. Recall was 13/13 with today's guard, so the narrowing must keep that: an edit to build.sh's shared machinery (flag parsing, _run/_run_lua_decider, the gate-step loop, the preamble) stays a guard.
+    exit_criteria:
+      - "a build.sh diff confined to wired fixture blocks of the --check section selects exactly those blocks' fixtures (and their inputs' closures), not everything"
+      - "a build.sh diff touching anything else (preamble, flag parsing, helpers, the step loop, lane/pool code) is still heavy:guard:build.sh"
+      - "re-run the 2249-tif9 replay: recall stays 13/13 and the HEAVY share falls; both numbers are recorded"
+      - "the choice between section-scoped guarding and moving blocks to scripts/gate-steps.d/*.step is recorded with its reason"
+    unscoreable: "unpinnable-until-the-guard-exists: the section classifier and the replay re-run are the deliverable."
+    next_action: "Classify each build.sh hunk of the 11 HEAVY heads (fixture-block only vs shared machinery) to size the win before choosing the design."
+    provenance: coordinator direction (macuahuitl-fedora, 2026-11-23) on the 2249-tif9 replay; filed by lenovinha.
+    related: [2248-zcqh, 2249-tif9]
+    events:
+      - {type: filed, ts: '2026-11-23T05:05:17Z', host: lenovinha, summary: narrow the build.sh guard for intake filed}

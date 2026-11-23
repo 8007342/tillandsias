@@ -8,6 +8,6 @@ STEP_DESC="Checking the remote-unreachable probe stops a host that cannot push (
 STEP_LUA="scripts/lua/test-probe-remote-reachable.lua"
 STEP_ERROR="the remote-unreachable probe misnamed a cause, retried, overran its timeout, or ran gh auth login/refresh (2239-rmun) — see the FAIL lines above"
 STEP_OK="Remote-unreachable probe stops a host that cannot push"
-STEP_READS="scripts/lua/test-probe-remote-reachable.lua scripts/lua/probe-remote-reachable.lua"
-# msys record: yolanda 2026-11-22 msys ok:probe-remote-reachable:7 at 87c9278a8 (hung-tool arms 2216 ms ls-remote, 2135 ms gh)
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:probe-remote-reachable:7"
+STEP_READS="scripts/lua/test-probe-remote-reachable.lua scripts/lua/probe-remote-reachable.lua scripts/remote-probe-judge.sh"
+# msys record: yolanda 2026-11-23 msys ok:probe-remote-reachable:13 at 1b1974ad8
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:probe-remote-reachable:13"
