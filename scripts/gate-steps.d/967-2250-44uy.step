@@ -9,4 +9,4 @@ STEP_OK="fleet-run responder argument shape pinned"
 STEP_READS="scripts/lua/fleet-run.lua scripts/lua/test-fleet-run.lua"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin ok:fleet-run-shape:13 at 06f15f90c (fleet-run 967: result=ok base=6819e1ad sha 075aae2a)"
 # Linux, for the record: lenovinha 2026-11-23 ok:fleet-run-shape:11 at d74dd5a52 (fleet-run 967, sha d0fbc4bb, 506 s first run)
-STEP_SECOND_REGIME="yolanda 2026-11-23 msys ok:fleet-run-shape:11 (2259-fk3m; mutants no-could-not-run, red-reads-ok, no-cleanup each red their arm)"
+STEP_SECOND_REGIME="yolanda 2026-11-23 msys ok:fleet-run-shape:13 at 111ec104d (fleet-run 967: result=ok base=04cdd10a sha 00130643)"
