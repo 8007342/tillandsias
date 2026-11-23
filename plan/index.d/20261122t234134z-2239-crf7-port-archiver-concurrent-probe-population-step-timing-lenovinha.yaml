@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-archiver-concurrent-probe-population-step-timing-fixtures
+    order: 2239-crf7
+    status: in_progress
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 3
+    title: |
+      Port three whole-file shell fixtures to Lua: test-archiver-concurrent-check.sh (the carried obligation's due item), test-plan-binary-probe-usage-population.sh and test-litmus-step-timing.sh; delete each .sh and repoint its callers.
+    context: |
+      Coordinator direction for the tech-debt session: whole-file scripts/*.sh ports, 3-5 of the smallest free ones with no open ref, each with mutant parity. Screened out: check-macos-only-sources-verified.sh (a wrapper sized as the 450-line windows script it execs), check-gate-memory-floor.sh and check-yaml-reader-availability.sh (bootstrap allowlist), test-installer-reset-probe.sh (skips on Linux, no parity provable here), test-credential-verdict-script.sh (private-bus step 350, under the P0 fix #1375).
+    exit_criteria:
+      - "each of the three .sh files is deleted and a scripts/lua/ twin carries every arm"
+      - "mutant parity: a planted defect each old arm caught reds the new arm too"
+      - "every caller (local-ci.sh, build.sh, litmus bindings, divergence declarations, floors) points at the Lua"
+    unscoreable: "unpinnable-until-the-port-lands: the deleted files are the deliverable."
+    next_action: "Port, run mutant parity against the .sh, repoint callers."
+    provenance: coordinator direction; filed by lenovinha.
+    related: [2235-zkmx]
+    events:
+      - {type: filed, ts: '2026-11-22T23:41:34Z', host: lenovinha, summary: port archiver-concurrent probe-population step-timing fixtures filed and claimed}
