@@ -72,7 +72,9 @@ if not PLATFORM then
 end
 if not PLATFORM:match("^[a-z]+$") then refuse("bad-platform:" .. PLATFORM) end
 
-local DIR = O.dir:sub(1, 1) == "/" and O.dir or (ROOT .. "/" .. O.dir)
+-- Absolute on POSIX ("/...") or Windows ("C:/...", "C:\\..."; msys, yolanda 2026-11-22).
+local function absolute(p) return p:sub(1, 1) == "/" or p:match("^%a:[/\\]") ~= nil end
+local DIR = absolute(O.dir) and O.dir or (ROOT .. "/" .. O.dir)
 if run({ "test", "-f", DIR .. "/00-run-start.txt" }) ~= 0 then refuse("no-run-start:" .. O.dir) end
 -- Evidence older than this run's start is a previous run's.
 local _, stale = run({ "find", DIR, "-type", "f", "!", "-newer", DIR .. "/00-run-start.txt", "!", "-name", "00-run-start.txt" })
