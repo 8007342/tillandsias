@@ -270,6 +270,29 @@ _toolbox_initialized() {
 # forward is the environment, so the shim re-exports the project's control
 # namespaces explicitly — the same boundary lesson the re-exec below already
 # records for toolbox run.
+# ORDER 2262-iyyu: shims are installed during init, and init runs only when a TOOL is
+# missing, so an edit to the shim below never reached an initialised toolbox. The
+# stamp is the digest of the shim text last installed in THIS toolbox; a different
+# or absent one re-installs the shims alone, never the dnf init. It is written
+# only after every install succeeded.
+SHIM_STAMP="$HOME/.cache/tillandsias/host-escape-shim.$TOOLBOX_NAME.stamp"
+_host_escape_shim_digest() {
+    local d
+    d="$(sed -n "/<<'SHIM'\$/,/^SHIM\$/p" "${BASH_SOURCE[0]}" | sha256sum)" || return 1
+    printf '%s' "${d%% *}"
+}
+_ensure_host_escape_shims() {
+    local want
+    want="$(_host_escape_shim_digest)" || return 0
+    [[ "$(cat "$SHIM_STAMP" 2>/dev/null)" == "$want" ]] && return 0
+    echo "[tillandsias-builder] Installing the host-escape shims in '$TOOLBOX_NAME' (new or changed)..."
+    if _install_host_escape_shims; then
+        printf '%s\n' "$want" > "$SHIM_STAMP"
+    else
+        echo "  [shims] warn: the host-escape shims could not be installed; the previous ones stay and the next run tries again" >&2
+    fi
+    return 0
+}
 _install_host_escape_shims() {
     local shim_src="$HOME/.cache/tillandsias/host-escape-shim.sh"
     mkdir -p "$(dirname "$shim_src")"
@@ -297,14 +320,15 @@ for _v in $(compgen -e); do
 done
 exec flatpak-spawn --host "${_fs_args[@]}" TOOL_NAME "$@"
 SHIM
-    local tool
+    local tool rc=0
     for tool in podman nix; do
         sed "s/TOOL_NAME/$tool/g" "$shim_src" > "$shim_src.$tool"
         toolbox run --container "$TOOLBOX_NAME" \
-            sudo install -m 0755 "$shim_src.$tool" "/usr/local/bin/$tool"
+            sudo install -m 0755 "$shim_src.$tool" "/usr/local/bin/$tool" || rc=1
         rm -f "$shim_src.$tool"
     done
     rm -f "$shim_src"
+    return "$rc"
 }
 
 # ── Helper: cargo-nextest for the gate (order 2243-urcy) ──────────────────
@@ -317,36 +341,66 @@ SHIM
 # Instead an absent binary is ensured here, at most once a day after a failure
 # (the stamp), and the gate then says test-runner:cargo-test:nextest-absent and
 # runs cargo test exactly as before.
+#
+# ORDER 2262-iyyu: "present" is not "the pin". An early return on any executable meant a
+# pin bump never reached a host that had one. NEXTEST_STAMP holds the sha of the
+# asset WE installed: a copy we installed follows the pin. An unstamped copy is
+# adopted when it answers the pinned version, and otherwise left alone and named:
+# ~/.cargo/bin is the user's, and it may be their own. A failed refresh keeps the
+# working copy. The failure stamp names the sha, so a new pin is tried at once.
+NEXTEST_STAMP="$HOME/.cache/tillandsias/cargo-nextest.installed"
 NEXTEST_FAIL_STAMP="$HOME/.cache/tillandsias/cargo-nextest-ensure-failed"
 _ensure_nextest() {
-    [[ -x "$HOME/.cargo/bin/cargo-nextest" ]] && return 0
-    if [[ -n "$(find "$NEXTEST_FAIL_STAMP" -mmin -1440 2>/dev/null)" ]]; then
-        return 0
-    fi
+    local _nx_ver _nx_arch _nx_sha _nx_tgz _nx_got _nx_bin _nx_tmp _nx_has
+    _nx_bin="$HOME/.cargo/bin/cargo-nextest"
     _nx_ver=0.9.152
     case "$(uname -m)" in
         x86_64)  _nx_arch=x86_64;  _nx_sha=d039b43c3e0958441b6ad0a39c8884d018b3d2e8fb9928f209074b1100b5e17a ;;
         aarch64) _nx_arch=aarch64; _nx_sha=ca1f81a5b86533eb45ab97e0064aa88e925e53aab9a698ca6331a7cad1f85f07 ;;
-        *)       _nx_arch="" ;;
+        *)       return 0 ;;
     esac
-    if [[ -n "$_nx_arch" ]]; then
-        _nx_tgz="$HOME/.cache/tillandsias/cargo-nextest-$_nx_ver-$_nx_arch.tar.gz"
-        mkdir -p "$(dirname "$_nx_tgz")" "$HOME/.cargo/bin"
-        if [[ ! -f "$_nx_tgz" ]]; then
-            curl --proto '=https' --tlsv1.2 -fsSL -o "$_nx_tgz.part" \
-                "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-$_nx_ver/cargo-nextest-$_nx_ver-$_nx_arch-unknown-linux-gnu.tar.gz" \
-                && mv -f "$_nx_tgz.part" "$_nx_tgz"
+    if [[ -x "$_nx_bin" ]]; then
+        _nx_has="$(cat "$NEXTEST_STAMP" 2>/dev/null)" || _nx_has=""
+        [[ "$_nx_has" == "$_nx_sha" ]] && return 0
+        if [[ -z "$_nx_has" ]]; then
+            _nx_has="$("$_nx_bin" --version 2>/dev/null)" || _nx_has=""
+            if [[ "$_nx_has" == "cargo-nextest $_nx_ver"* ]]; then
+                mkdir -p "${NEXTEST_STAMP%/*}" && printf '%s\n' "$_nx_sha" > "$NEXTEST_STAMP"
+            else
+                _nx_has="${_nx_has%%$'\n'*}"
+                echo "  [nextest] note: $_nx_bin was not installed by this wrapper (${_nx_has:-no version}; the pin is $_nx_ver); left as it is — remove it to get the pin" >&2
+            fi
+            return 0
         fi
-        _nx_got="$(sha256sum "$_nx_tgz" 2>/dev/null)" || _nx_got=""
-        if [[ "${_nx_got%% *}" == "$_nx_sha" ]]; then
-            tar -xzf "$_nx_tgz" -C "$HOME/.cargo/bin" cargo-nextest \
-                && echo "  [nextest] cargo-nextest $_nx_ver installed (sha256 verified)"
+    fi
+    if [[ -n "$(find "$NEXTEST_FAIL_STAMP" -mmin -1440 2>/dev/null)" ]] \
+       && [[ "$(cat "$NEXTEST_FAIL_STAMP" 2>/dev/null)" == "$_nx_sha" ]]; then
+        return 0
+    fi
+    _nx_tgz="$HOME/.cache/tillandsias/cargo-nextest-$_nx_ver-$_nx_arch.tar.gz"
+    mkdir -p "${_nx_tgz%/*}" "$HOME/.cargo/bin"
+    if [[ ! -f "$_nx_tgz" ]]; then
+        curl --proto '=https' --tlsv1.2 -fsSL -o "$_nx_tgz.part" \
+            "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-$_nx_ver/cargo-nextest-$_nx_ver-$_nx_arch-unknown-linux-gnu.tar.gz" \
+            && mv -f "$_nx_tgz.part" "$_nx_tgz"
+    fi
+    _nx_got="$(sha256sum "$_nx_tgz" 2>/dev/null)" || _nx_got=""
+    _nx_tmp="$_nx_bin.new-$$"
+    if [[ "${_nx_got%% *}" == "$_nx_sha" ]] \
+       && tar -xzOf "$_nx_tgz" cargo-nextest > "$_nx_tmp" && chmod 0755 "$_nx_tmp" && mv -f "$_nx_tmp" "$_nx_bin"; then
+        printf '%s\n' "$_nx_sha" > "$NEXTEST_STAMP"
+        rm -f "$NEXTEST_FAIL_STAMP"
+        echo "  [nextest] cargo-nextest $_nx_ver installed (sha256 verified)"
+    else
+        rm -f "$_nx_tgz" "$_nx_tgz.part" "$_nx_tmp"
+        printf '%s\n' "$_nx_sha" > "$NEXTEST_FAIL_STAMP" 2>/dev/null || true
+        if [[ -x "$_nx_bin" ]]; then
+            echo "  [nextest] refused: cargo-nextest $_nx_ver asset sha256 mismatch or download failed; the copy already installed stays" >&2
         else
-            rm -f "$_nx_tgz" "$_nx_tgz.part"
-            touch "$NEXTEST_FAIL_STAMP" 2>/dev/null || true
             echo "  [nextest] refused: cargo-nextest $_nx_ver asset sha256 mismatch or download failed; the gate will run cargo test (test-runner:cargo-test:nextest-absent)" >&2
         fi
     fi
+    return 0
 }
 
 # ── Ensure toolbox exists and is initialized ──────────────────────────────
@@ -418,13 +472,15 @@ if ! _toolbox_initialized; then
         bash -l -c "rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl x86_64-pc-windows-gnu" \
         2>&1 | while IFS= read -r line; do printf '  [rustup] %s\n' "$line"; done
 
-    _install_host_escape_shims
+    rm -f "$SHIM_STAMP"   # a (re)initialised toolbox has none of them
+    _ensure_host_escape_shims
 
     toolbox run --container "$TOOLBOX_NAME" \
         bash -c "mkdir -p '$(dirname "$MARKER_FILE")' && touch '$MARKER_FILE'"
 
     echo "[tillandsias-builder] Initialization complete."
 fi
+_ensure_host_escape_shims
 _ensure_nextest
 
 # ── Re-exec inside the toolbox ────────────────────────────────────────────
