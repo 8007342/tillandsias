@@ -79,3 +79,40 @@ intake is p50 ~166 s and p90 ~200 s.
   - 2261-8gx5, narrower derived inputs. A 5-file scripts change selects ~175
     fixtures because 129 fixtures read the whole `scripts/` directory, mostly
     through dynamic paths (`"$ROOT/scripts/${name}.sh"`).
+
+## Phase 2: handling HEAVY members (34% of PRs)
+
+Inputs:
+- 100 PRs/day, 34% HEAVY.
+- A HEAVY member carries the raw per-change failure rate p, because intake
+  cannot screen it. The replay saw ~57 gate evictions in ~300 attempts, about
+  0.19 including flakes; the model uses p = 0.15 and tests 0.05-0.25.
+- A light member carries intake's residual: 0 misses in the replay, so at most
+  ~1.2% by the rule of three.
+- A red bundle of k costs ~log2(k) extra full gates to bisect, plus a re-gate.
+
+All costs are in full-gate-equivalents (FGE) per day, and include light
+bundles of 16 at 7.7 FGE (red at most 18%).
+
+| option | p=0.05 | p=0.15 | p=0.25 | what a red costs |
+|---|---|---|---|---|
+| (a) each HEAVY gated solo between bundles | 43.4 | 46.8 | 50.2 | only that change |
+| (b) separate HEAVY bundles, k=4 | ~22 | ~28 | ~32 | only the HEAVY bundle; red ~19/48/68% |
+| (c) HEAVY in mixed bundles of 16, heavies bisected first | 14.6 | 22.2 | 26.6 | the bundle; red 33/64/82%, ~11 light members stalled each time |
+
+Cheapest-k for (b) is k=8, but its bundles are red 73-90% of the time; k=4 is
+the latency-sane point.
+
+All three fit macuahuitl's capacity: at 631 s per full gate it runs ~137 FGE a
+day, so (b) at ~28 FGE is ~4.9 h. The choice is about latency, not capacity.
+
+**Recommendation: (b), separate HEAVY bundles with k adaptive in 2-6** (shrink
+when the observed HEAVY red rate rises, grow when it falls). It keeps light
+members in bundles that intake has screened, which are red at most ~18% of the
+time and stall no one. It costs ~40% less than (a). It gives up ~6 FGE/day
+against (c), because (c) turns most main bundles red, and bundling exists to
+avoid that.
+
+The cheapest further lever is shrinking HEAVY itself. Of its guards, build.sh
+is narrowed by 2250-gwfy. tillandsias-plan stays wide on purpose. The builder
+script and the shared libs are the remaining candidates.
