@@ -53,7 +53,9 @@ if real == "" then
 end
 
 local WC = W .. "/wc"
-local GENV = { GIT_TERMINAL_PROMPT = "0" }
+-- 2242-u39b: the scratch checkout is tested, never the caller's frozen diff base
+-- (TILLANDSIAS_* names pass proc.run's scrub, so both are passed empty).
+local GENV = { GIT_TERMINAL_PROMPT = "0", TILLANDSIAS_GATE_DIFF_BASE = "", TILLANDSIAS_GATE_DIFF_BASE_ROOT = "" }
 local function git(args, opts)
     local a = { "git", "-c", "user.email=t@t", "-c", "user.name=t" }
     for _, x in ipairs(args) do a[#a + 1] = x end
@@ -83,7 +85,7 @@ local function run_guard(planbin)
     local head = text.trim(git({ "rev-parse", "HEAD" }).stdout or "")
     local r = proc.run{ argv = { "bash", "scripts/hooks/pre-push-local-gate.sh" }, cwd = WC,
         stdin = "refs/heads/linux-next " .. head .. " refs/heads/linux-next " .. rsha .. "\n",
-        env = { GIT_TERMINAL_PROMPT = "0", TILLANDSIAS_PLAN_BIN = planbin }, timeout_ms = 600000 }
+        env = { GIT_TERMINAL_PROMPT = "0", TILLANDSIAS_PLAN_BIN = planbin, TILLANDSIAS_GATE_DIFF_BASE = "", TILLANDSIAS_GATE_DIFF_BASE_ROOT = "" }, timeout_ms = 600000 }
     return (r.stdout or "") .. (r.stderr or "")
 end
 
