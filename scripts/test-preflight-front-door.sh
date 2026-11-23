@@ -92,7 +92,10 @@ bad() { fail=$((fail+1)); printf '  [FAIL] %s\n' "$1"; }
 # that no longer works that way.
 _roster_fn="$(awk '/^_preflight_roster\(\) \{/,/^\}/' build.sh)"
 for r in 'FAST REFUSALS' 'gate-steps.d' 'scripts/hooks'; do
-    if printf '%s' "$_roster_fn" | grep -q "$r"; then
+    # 2272-cuxh: grep -q on a here-string, never a pipe: under pipefail its early
+    # exit SIGPIPEs the writer, and a FOUND match reads as absent (yoga: red in
+    # the suite, ok alone).
+    if grep -q "$r" <<<"$_roster_fn"; then
         ok "the roster scans $r"
     else
         bad "the roster does not scan $r"
@@ -100,7 +103,7 @@ for r in 'FAST REFUSALS' 'gate-steps.d' 'scripts/hooks'; do
 done
 # And it must scan, not curate: no list variable may stand between the tier and
 # the door.
-if printf '%s' "$_roster_fn" | grep -q '_fast_refusal_checks'; then
+if grep -q '_fast_refusal_checks' <<<"$_roster_fn"; then
     bad "the roster reads a list variable — the tier's bindings would be invisible to name-based scans (1063-nraf)"
 else
     ok "the roster scans literal bindings, with no list variable to drift from"
@@ -151,10 +154,11 @@ printf 'STEP_DESC="planted"\nSTEP_SCRIPT="scripts/check-zz-1305-planted.sh"\nSTE
 cleanup() { rm -f "$PLANT" "$STEP"; }
 trap cleanup EXIT; _exit_on_signal
 out="$(TILLANDSIAS_PREFLIGHT_TIMEOUT=5 ./build.sh --preflight 2>&1)"; rc=$?
-if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'zz-1305-planted'; then
+if [ "$rc" -ne 0 ] && grep -q 'zz-1305-planted' <<<"$out"; then
     ok "a guard wired into gate-steps.d is picked up and refuses (no silent third state)"
 else
-    bad "a newly wired guard was invisible to the front door (rc=$rc)"
+    # Never enumerated, deadline-skipped and could-not-start read alike without this.
+    bad "a newly wired guard was invisible to the front door (rc=$rc, ${#out} bytes): $(grep -aE 'zz-1305|:preflight:ran=' <<<"$out" | tail -n 4 | tr '\n' '|')"
 fi
 # ── ARM 2b (1515-iwb3, 1247-amcu criterion 5): THE REFUSAL'S REMEDY RUNS ─────
 # The per-guard refusal must say why and name the command that reruns that
@@ -204,7 +208,7 @@ out="$(TILLANDSIAS_PREFLIGHT_TIMEOUT=5 ./build.sh --preflight 2>&1)"; rc=$?
 if [ "$rc" -ne 0 ] && grep -q 'zz-1499-planted' <<< "$out"; then
     ok "a guard build.sh runs inline is picked up and refuses (1499-m9fj)"
 else
-    bad "a guard the gate runs inline was invisible to the front door (rc=$rc)"
+    bad "a guard the gate runs inline was invisible to the front door (rc=$rc, ${#out} bytes): $(grep -aE 'zz-1499|:preflight:ran=' <<<"$out" | tail -n 4 | tr '\n' '|')"
 fi
 if grep -q '^refused:preflight:check-zz-1499-args\[zzmode second\]$' <<< "$out" \
     && grep -q 'violation:planted-mode-guard' <<< "$out"; then
