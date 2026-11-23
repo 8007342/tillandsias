@@ -119,7 +119,7 @@ local DEFAULT_BASE = "origin/linux-next"
 local base = env.get("TILLANDSIAS_PIN_ENFORCE_BASE") or ""
 if base == "" then base = env.get("TILLANDSIAS_GATE_DIFF_BASE") or "" end
 if base == "" then base = DEFAULT_BASE end
-if not git({ "rev-parse", "--verify", "--quiet", base }).ok then
+if not git({ "rev-parse", "--verify", "--quiet", base .. "^{commit}" }).ok then
     verdict.emit("skip:" .. NAME .. ":no-base-ref", 0,
         "base ref '" .. base .. "' unavailable: no added steps could be examined")
 end

@@ -6527,6 +6527,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Frozen diff-base fixture passed"
 
+    # ORDER 2241-f8jg — `rev-parse --verify <40-hex>` answers 0 for a missing
+    # object, so a frozen base absent from a checkout read as valid and the
+    # diff-scoped guards judged nothing. Each must take its named
+    # unavailable-base path instead.
+    _step "Checking the diff-scoped guards name a missing base (2241-f8jg)..."
+    if ! _run_lua_decider "scripts/lua/test-added-deciders-refuse-a-missing-base.lua" 2>&1; then
+        _error "a diff-scoped guard verified a base that names no commit and judged past it — verify the base as <base>^{commit}; see the FAIL lines above (2241-f8jg)"
+        exit 1
+    fi
+    _info "Missing diff-base fixture passed"
+
     # ORDER 1581-d9ig — no fixture prunes or gcs the operator's checkout. Two
     # fixtures' teardown ran `git -C "$ROOT" worktree prune`, which inside the
     # WSL guest deletes every Windows worktree whose C:/ path the guest cannot
