@@ -2036,7 +2036,7 @@ fi
 # fixture population is heavy by gate-changed's rule, so 2).
 _p57="$TMP/heavy57.sh"
 cat > "$_p57" <<'PROBE'
-if git diff --name-only "$1" | grep -q heavy; then echo "heavy:guard:x"; else echo "select:intake fixtures=1/9"; fi
+if grep -q heavy <<<"$(git diff --name-only "$1")"; then echo "heavy:guard:x"; else echo "select:intake fixtures=1/9"; fi
 PROBE
 arm57() { # <name> <gate rc on the first gate> <probe> <out var for the line(s)>
     scaffold "$1"
