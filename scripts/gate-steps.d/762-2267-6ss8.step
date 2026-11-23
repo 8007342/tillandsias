@@ -8,4 +8,5 @@ STEP_DESC="Checking no fixture runs both inline in build.sh and as a gate step (
 STEP_LUA="scripts/lua/check-gate-step-not-also-inline.lua"
 STEP_ERROR="a script runs both inline in build.sh and as a gate step, so every gate runs it twice — delete the inline block"
 STEP_OK="no fixture runs twice per gate"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin ok:gate-step-not-also-inline at 9749cc94e (fleet-run)"
 STEP_READS="scripts/lua/check-gate-step-not-also-inline.lua build.sh scripts/gate-steps.d/**"
