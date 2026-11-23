@@ -117,7 +117,6 @@ scripts/test-host-slug-resolution.sh 2
 scripts/test-image-build-convergence.sh 1
 scripts/test-inference-mkdir-fatal-1183-j9dk.sh 1
 scripts/test-inference-pull-failure-classification.sh 1
-scripts/test-inference.sh 1
 scripts/test-install-path.sh 3
 scripts/test-installer-probes-by-attempt-not-by-help.sh 2
 scripts/test-installer-provisions-once.sh 1
