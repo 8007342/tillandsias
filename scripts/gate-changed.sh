@@ -38,10 +38,31 @@
 #   * a changed path no fixture and no crate maps (an UNMAPPED input);
 #   * a population of zero fixtures (the extractor broke, not the tree).
 #
+# INTAKE (2248-zcqh, bundle landing). `--intake` with --list/--run is the
+# light gate a work ref passes to be ACCEPTED onto a lander-owned bundle; the
+# bundle's own full gate is the authority that promotes it to linux-next.
+# Under --intake:
+#   * Rust: the selected crates and their reverse-dep closure run as ONE
+#     `cargo nextest run -E 'rdeps(a) | rdeps(b)'` where nextest answers
+#     (cargo test -p ... otherwise; the regime is named on a runner: line).
+#   * Shell/Lua: fixtures whose derived inputs intersect the diff run in the
+#     same pool, EXCEPT whole-tree readers (inputs "*") and fixtures whose
+#     header declares `preflight: gate-only — <reason>` (the door's slow list,
+#     one declaration for both). Those are DEFERRED to the bundle gate and
+#     named on one `deferred:` line, never silently dropped.
+#   * a change that cannot be scoped (exit 10 below) prints `heavy:<reason>`
+#     and runs nothing: the lander marks the member HEAVY rather than
+#     running everything at intake.
+# Without --intake every line and exit code is exactly today's.
+#
 # Usage:
 #   gate-changed.sh --list [base]   print the selection, run nothing
 #   gate-changed.sh --run  [base]   run the selection (build.sh --changed)
 #   gate-changed.sh --map           print the derived input map
+#   --intake                        the bundle intake gate (see INTAKE above)
+#   --crate-graph                   print the derived path-dependency edges
+#                                   (<crate dir> TAB <dep dir>) and exit; the
+#                                   metadata lint compares them to cargo's
 #   --files <file>                  take the changed paths from a file instead
 #                                   of git (used by the replay measurement)
 # base defaults to the merge-base of HEAD and origin/linux-next. Changed paths
@@ -53,16 +74,18 @@ set -uo pipefail
 
 ROOT="${TILLANDSIAS_GATE_CHANGED_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 MODE="--list"
+INTAKE=0
 BASE=""
 FILES_FROM=""
 while [ $# -gt 0 ]; do
     case "$1" in
-        --list|--run|--map) MODE="$1" ;;
+        --list|--run|--map|--crate-graph) MODE="$1" ;;
+        --intake) INTAKE=1 ;;
         --files) FILES_FROM="${2:-}"; shift ;;
-        -h|--help) sed -n '2,52p' "${BASH_SOURCE[0]}"; exit 0 ;;
+        -h|--help) sed -n '2,75p' "${BASH_SOURCE[0]}"; exit 0 ;;
         -*) echo "refused:gate-changed:unknown-flag:$1" >&2
             echo "  why: an unknown flag would be read as the base ref and diff against nothing meaningful" >&2
-            echo "  remedy: use --list, --run, --map or --files <file>, then an optional base ref (see --help)" >&2
+            echo "  remedy: use --list, --run, --map, --crate-graph, --intake or --files <file>, then an optional base ref (see --help)" >&2
             exit 2 ;;
         *) BASE="$1" ;;
     esac
@@ -120,10 +143,28 @@ while IFS= read -r _m; do
     [ -f "$_m/Cargo.toml" ] || continue
     _n="$(awk '/^\[package\]/ { p = 1; next } /^\[/ { p = 0 } p && /^name *=/ { gsub(/.*= *"|".*/, ""); print; exit }' "$_m/Cargo.toml")"
     printf '%s\t%s\n' "$_m" "$_n" >> "$WORK/crates"
-    # every `path = "../x"` dependency, whatever the table (normal/dev/build)
-    grep -oE 'path *= *"\.\./[^"]+"' "$_m/Cargo.toml" | sed -E 's/.*"\.\.\/([^"]+)"/\1/' |
+    # every `path = "../x"` dependency, whatever the table (normal/dev/build).
+    # A commented-out line is not a dependency (2248-zcqh: host-shell's
+    # `# tillandsias-vault-client = { path = ... }` read as one).
+    grep -vE '^[[:space:]]*#' "$_m/Cargo.toml" | grep -oE 'path *= *"\.\./[^"]+"' | sed -E 's/.*"\.\.\/([^"]+)"/\1/' |
         while IFS= read -r _d; do printf '%s\tcrates/%s\n' "$_m" "${_d%/}"; done >> "$WORK/deps"
+    # 2248-zcqh: `name = { workspace = true }` / `name.workspace = true`
+    # resolves through the root [workspace.dependencies] table. The awk above
+    # never saw these: 13 of cargo's edges were missing, so a change to
+    # tillandsias-core never selected podman, scanner, browser-mcp or vm-layer.
+    grep -vE '^[[:space:]]*#' "$_m/Cargo.toml" |
+        sed -nE 's/^[[:space:]]*([A-Za-z0-9_-]+)[[:space:]]*=[[:space:]]*\{[^}]*workspace[[:space:]]*=[[:space:]]*true.*/\1/p; s/^[[:space:]]*([A-Za-z0-9_-]+)\.workspace[[:space:]]*=[[:space:]]*true.*/\1/p' |
+        while IFS= read -r _wn; do
+            _wp="$(awk -v n="$_wn" '/^\[workspace\.dependencies\]/ { p = 1; next } /^\[/ { p = 0 }
+                p && $1 == n && /path *= *"/ { sub(/.*path *= *"/, ""); sub(/".*/, ""); print; exit }' Cargo.toml)"
+            [ -n "$_wp" ] && printf '%s\t%s\n' "$_m" "${_wp%/}"
+        done >> "$WORK/deps"
 done < "$WORK/members"
+sort -u -o "$WORK/deps" "$WORK/deps"
+if [ "$MODE" = "--crate-graph" ]; then
+    sort -u "$WORK/deps"
+    exit 0
+fi
 
 # ── 4. Declared inputs: tokens from every script and every crate source ─────
 # One grep pass. Token = a run of path characters containing a slash, or a
@@ -312,14 +353,49 @@ PKG_N="$(wc -l < "$WORK/pkg-sel" | tr -d ' ')"
 CRATE_TOTAL="$(wc -l < "$WORK/crates" | tr -d ' ')"
 
 if [ -n "$_why_all" ]; then
+    if [ "$INTAKE" = 1 ]; then
+        # Intake never runs everything: the member goes to the bundle HEAVY.
+        echo "heavy:$_why_all fixtures=$POP_N crates=$CRATE_TOTAL changed=$CHANGED_N"
+        [ "$MODE" = "--run" ] && exit 10
+        exit 0
+    fi
     echo "select:all reason=$_why_all fixtures=$POP_N/$POP_N crates=$CRATE_TOTAL/$CRATE_TOTAL changed=$CHANGED_N"
     [ "$MODE" = "--run" ] && exit 10
     exit 0
 fi
 
-echo "select:scoped fixtures=$FX_N/$POP_N crates=$PKG_N/$CRATE_TOTAL changed=$CHANGED_N base=${BASE:-files}"
+# INTAKE: defer whole-tree readers and declared-slow fixtures to the bundle.
+: > "$WORK/fx-deferred"
+if [ "$INTAKE" = 1 ]; then
+    : > "$WORK/fx-keep"
+    while IFS=$'\t' read -r _u _why; do
+        _fp="${_u%% *}"
+        if [ "$_why" = "*" ]; then
+            printf '%s\twhole-tree\n' "$_u" >> "$WORK/fx-deferred"
+        elif [ -n "$(sed -n '1,40{/preflight: gate-only-decider/d;/^\(#\|--\) preflight: gate-only/p;}' "$_fp" 2>/dev/null | head -n 1)" ]; then
+            printf '%s\tslow\n' "$_u" >> "$WORK/fx-deferred"
+        else
+            printf '%s\t%s\n' "$_u" "$_why" >> "$WORK/fx-keep"
+        fi
+    done < "$WORK/fx-sel"
+    mv "$WORK/fx-keep" "$WORK/fx-sel"
+    FX_N="$(wc -l < "$WORK/fx-sel" | tr -d ' ')"
+fi
+DEF_N="$(wc -l < "$WORK/fx-deferred" | tr -d ' ')"
+
+if [ "$INTAKE" = 1 ]; then
+    echo "select:intake fixtures=$FX_N/$POP_N deferred=$DEF_N crates=$PKG_N/$CRATE_TOTAL changed=$CHANGED_N base=${BASE:-files}"
+else
+    echo "select:scoped fixtures=$FX_N/$POP_N crates=$PKG_N/$CRATE_TOTAL changed=$CHANGED_N base=${BASE:-files}"
+fi
 while IFS=$'\t' read -r _u _why; do printf 'select:fixture:%s because=%s\n' "$_u" "$_why"; done < "$WORK/fx-sel"
 while IFS= read -r _p; do printf 'select:crate:%s\n' "$_p"; done < "$WORK/pkg-sel"
+if [ "$INTAKE" = 1 ]; then
+    # ONE line naming everything the bundle gate owes this member.
+    printf 'deferred: n=%s' "$DEF_N"
+    while IFS=$'\t' read -r _u _k; do printf ' %s(%s)' "$_u" "$_k"; done < "$WORK/fx-deferred"
+    printf '\n'
+fi
 [ "$MODE" = "--run" ] || exit 0
 
 # ── 9. Run the selection ────────────────────────────────────────────────────
@@ -335,8 +411,37 @@ if [ "$PKG_N" -gt 0 ]; then
     _pk=(); while IFS= read -r _p; do _pk+=(-p "$_p"); done < "$WORK/pkg-sel"
     _tr="$ROOT/target/test-transcript-changed.log"; mkdir -p "$ROOT/target"
     _s="$(_now)"
-    cargo test --no-fail-fast "${_pk[@]}" --manifest-path "$ROOT/Cargo.toml" > "$_tr" 2>&1
-    _crc=$?
+    _nx=""
+    if [ "$INTAKE" = 1 ] && [ "${TILLANDSIAS_GATE_NEXTEST:-auto}" != 0 ]; then
+        _nx="$(cargo nextest --version 2>/dev/null)" || _nx=""
+        _nx="${_nx%%$'\n'*}"
+    fi
+    if [ -n "$_nx" ]; then
+        # The crates that CHANGED, each with its reverse-dep closure, as one
+        # filterset: rdeps(x) is x and everything that depends on it.
+        _fs=""
+        while IFS= read -r _d; do
+            _n="$(awk -F'\t' -v d="$_d" '$1 == d { print $2 }' "$WORK/crates")"
+            [ -n "$_n" ] && _fs="${_fs:+$_fs | }rdeps($_n)"
+        done < "$WORK/crate-hit"
+        echo "runner:nextest:${_nx#cargo-nextest } filter=$_fs"
+        cargo nextest run --workspace --no-fail-fast -E "$_fs" --manifest-path "$ROOT/Cargo.toml" > "$WORK/nextest.log" 2>&1
+        _crc=$?
+        # The baseline check reads cargo test's transcript shape.
+        if [ -n "$_plan" ]; then
+            ( cd "$ROOT" && "$_plan" script run --helper scripts/lua/nextest-to-libtest.lua -- "$WORK/nextest.log" ) > "$_tr" 2>/dev/null \
+                || cp "$WORK/nextest.log" "$_tr"
+        else
+            cp "$WORK/nextest.log" "$_tr"
+        fi
+    else
+        if [ "$INTAKE" = 1 ]; then
+            if [ "${TILLANDSIAS_GATE_NEXTEST:-auto}" = 0 ]; then echo "runner:cargo-test:forced-by-TILLANDSIAS_GATE_NEXTEST=0"
+            else echo "runner:cargo-test:nextest-absent"; fi
+        fi
+        cargo test --no-fail-fast "${_pk[@]}" --manifest-path "$ROOT/Cargo.toml" > "$_tr" 2>&1
+        _crc=$?
+    fi
     if ! _v="$(bash scripts/check-test-baseline.sh --from "$_tr")"; then
         tail -n 40 "$_tr"; echo "$_v"; echo "fail:gate-changed:cargo-test rc=$_crc transcript=$_tr"; _fail=$((_fail + 1))
     else
@@ -430,6 +535,10 @@ fi
 if [ "$_fail" -gt 0 ]; then
     echo "fail:gate-changed:$_fail-failed fixtures=$_ran crates=$PKG_N ms=$_total"
     exit 1
+fi
+if [ "$INTAKE" = 1 ]; then
+    echo "ok:gate-changed:intake fixtures=$_ran deferred=$DEF_N crates=$PKG_N ms=$_total"
+    exit 0
 fi
 echo "ok:gate-changed fixtures=$_ran crates=$PKG_N ms=$_total"
 exit 0
