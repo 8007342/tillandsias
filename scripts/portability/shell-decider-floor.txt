@@ -1,7 +1,6 @@
 # The .sh deciders allowed to exist (1384-bxhk). May only SHRINK.
 scripts/check-added-test-is-referenced.sh
 scripts/check-append-vs-origin-fold.sh
-scripts/check-approved-ux-strings.sh
 scripts/check-archive-answerability.sh
 scripts/check-arrival-routing.sh
 scripts/check-base-ledger-status-loss.sh
