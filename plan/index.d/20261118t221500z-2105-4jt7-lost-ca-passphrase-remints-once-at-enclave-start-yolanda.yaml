@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yolanda 2026-11-18 at the coordinator's direction (option 2), after the local 56.11.18.1 tray
+# with 2096-e3te measured the remaining cause of the sign-in failure.
+packets:
+  - packet_id: a-lost-ca-passphrase-with-a-persisted-key-re-mints-once-at-enclave-start-and-never-during-a-session
+    order: 2105-4jt7
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [enclave, ca, vault, proxy, vm]
+    estimated_hours: 4
+    size: S
+    implementer_tier: sonnet
+    owned_files:
+      - crates/tillandsias-headless/src/ca_key_store.rs
+      - crates/tillandsias-headless/src/main.rs
+    title: "When the CA passphrase is lost (tmpfs /run/user/0 recreated) but the encrypted key persists, the key is discarded and the CA re-minted exactly once at enclave start, before any session; during a live session the re-mint is queued for the boundary"
+    context: |
+      MEASURED 2026-11-18 on yolanda (local tray 56.11.18.1, 067696fb4, with 2096-e3te): the passphrase lives in
+      tmpfs (/run/user/0/tillandsias/ca-key-pass) while the encrypted key persists in
+      /root/.local/state/tillandsias/ca. /run/user/0 was recreated at 13:56:30 between service restarts during the
+      install, the next process wrote a fresh passphrase, and the persisted key (13:56:23) no longer decrypted.
+      2096-e3te kept the key (warn:ca-key-pass-mismatch) and the ready gate held forever (ca-key-unavailable); a VM
+      restart does NOT clear it because the key survives. Cleared by hand: CA dir moved aside to
+      ca.stale-e3te-20261118, one clean mint at 14:00:39, Vault unsealed 14:01:11, proxy listening 14:01:49.
+      COORDINATOR RULING: do not persist the passphrase beside the key (that is a plaintext credential at rest;
+      lost credentials beat unencrypted ones). A lost passphrase with a persisted key means the key is unopenable:
+      discard and re-mint once at enclave start (reset is the baseline); if a session is live, queue for the
+      boundary (2104-7t7p).
+    exit_criteria:
+      - "Delete the pass file, keep the key, start the enclave: exactly one re-mint happens before the first session holds the enclave, and none during it. Pre-fix result: FAILS (ready gate holds on ca-key-unavailable, zero mints)."
+      - "The refuse_mint_for_unavailable_key / ca-key-unavailable message no longer advises restarting the VM for this case (the key survives a restart)."
+      - "A passphrase mismatch while a session is live does not re-mint; it is deferred to the session boundary."
+    unscoreable: "unpinnable-until-the-guard-exists: openspec/litmus-tests/litmus-lost-ca-passphrase-remints-once-at-enclave-start.yaml lands in the same commit as the implementation (1136-n8sh)"
+    provenance: "yolanda journal 2026-11-18 13:56-14:01; coordinator ruling (option 2) relayed 2026-11-18."
+    events:
+      - type: filed
+        ts: "2026-11-18T22:15:00Z"
+        host: yolanda
+        summary: "filed at the coordinator's direction (option 2)"

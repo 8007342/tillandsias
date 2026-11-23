@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: slice-a-the-shared-litmus-decider-library-with-the-cargo-test-and-file-grep-families-and-envelope-citability-step-20-as-the-first-adopter-with-a-red-first-fixture
+    event:
+      type: completed
+      ts: "2026-11-19T23:18:38Z"
+      agent_id: linux-calmecacpilli-claude-20261119t231838z
+      host: calmecacpilli
+      summary: |
+        Tech-debt triage (calmecacpilli, 2026-11-19). CLOSED. Landed with PR #585 (merge 9f7d73c7cc, ancestor of origin/linux-next). C1: scripts/lua/test-litmus-decide.lua -> ok:litmus-decide-fixture:arms=10. C2: litmus-plan-answer-envelope-citability.yaml step command runs scripts/lua/litmus-decide.lua -- cargo-test with no pipe; pipe-site-floor.txt line reads 15. C3: scripts/lua/census-litmus-pipes.lua -> ok:litmus-pipe-census:piped=904. Parent epic 1800-nvsc stays open (piped=904, not 0).

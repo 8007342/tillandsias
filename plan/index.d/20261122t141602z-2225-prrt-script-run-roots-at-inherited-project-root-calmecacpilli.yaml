@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: the open mechanism behind 2223-afpl's litmus step 3, asked for by macuahuitl-fedora 2026-11-22.
+packets:
+  - packet_id: script-run-roots-at-inherited-project-root
+    order: "2225-prrt"
+    status: ready
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, runtime, litmus, hermetic]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/lua_predicate.rs
+      - scripts/run-litmus-test.sh
+    title: "script run roots at an inherited PROJECT_ROOT ahead of the caller's cwd, so under litmus every Lua decider judges the real checkout"
+    context: |
+      MEASURED on calmecacpilli 2026-11-22 by instrumenting the 2223-afpl shim and Lua inside
+      litmus:added-fragment-parse-gate-shape step 3, with the shim's TILLANDSIAS_REPO_ROOT pin removed:
+        shim:  pwd=/tmp/tmp.9fq1wgZgzC (the step's git-init'd scratch repo) repo_root=<unset>
+               project_root=/var/home/calmecac/claudia/tillandsias
+        Lua:   cwd=/var/home/calmecac/claudia/tillandsias toplevel=/var/home/calmecac/claudia/tillandsias
+      So the decider judged the real checkout (123 fragments) and passed the scratch repo's bare timestamp.
+      Cause: locate_repo_root() in crates/tillandsias-plan/src/lua_predicate.rs takes TILLANDSIAS_REPO_ROOT, then
+      PROJECT_ROOT, then a .git / plan/index.yaml walk up from the cwd, then the binary's path, and the runner works from
+      that root. scripts/run-litmus-test.sh:84 exports PROJECT_ROOT (1268-m2ir, so children write metrics logs to the
+      right checkout). Every Lua port that a litmus step runs inside a scratch repo therefore judges the real tree instead;
+      a refusal arm passes for the wrong reason. No script exports TILLANDSIAS_REPO_ROOT globally; the inherited name is
+      PROJECT_ROOT. Stopgap in place: 2223-afpl's shim and 2221-rfaa's fixture pin TILLANDSIAS_REPO_ROOT, which wins.
+      Fix at the source, one of: (a) locate_repo_root prefers the cwd's own repository over PROJECT_ROOT (PROJECT_ROOT is
+      a generic name many tools set), keeping TILLANDSIAS_REPO_ROOT as the explicit override; or (b) run-litmus-test.sh
+      exports a TILLANDSIAS_-scoped name for 1268-m2ir's metrics purpose instead of PROJECT_ROOT. Coordinate with #1325
+      (2213-ag5u), which already changes this function's fallback order.
+    exit_criteria:
+      - "Under the litmus runner, a Lua decider started inside a git-init'd scratch repo with no TILLANDSIAS_REPO_ROOT roots at that scratch repo (a probe printing pwd -P and git rev-parse --show-toplevel shows the scratch path)."
+      - "1268-m2ir still holds: cycle-metrics.sh --emit-timing run from a litmus step writes its timing log under the checkout, not /tmp."
+    unscoreable: "unpinnable-until-the-guard-exists: the implementer adds the probe arm above as a crate test or litmus step."
+    next_action: "Pick up; coordinate with #1325."
+    provenance: "macuahuitl-fedora 2026-11-22: find where the root comes from so the fix moves to the source rather than per-fixture pins; mechanism suggested by lenovinha-silverblue (the runner's root order), confirmed by instrumentation."
+    events:
+      - type: filed
+        ts: "2026-11-22T14:16:02Z"
+        host: calmecacpilli
+        summary: "filed"

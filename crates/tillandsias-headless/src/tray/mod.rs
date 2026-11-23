@@ -4072,6 +4072,9 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
     // run if it died without its graceful exit — before anything launches.
     let run_id = crate::dead_run::mint_run_id();
     reap_previous_run_if_dead(&run_id);
+    // 1911-3gqy: forwarders and networks whose browser window is gone (a
+    // killed tray never ran their exit watcher). Live windows are spared.
+    crate::browser_open::sweep_orphan_windows(debug);
     ensure_desktop_icon();
     let version = super::VERSION.trim().to_string();
     let root = super::resolve_runtime_asset_root(&version, debug)?;
@@ -4320,6 +4323,8 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
         // @trace spec:graceful-shutdown, spec:app-lifecycle
         // 1988-trkp: a plain exit keeps forges and hands their lanes on;
         // only `tillandsias --stop-all` stops everything.
+        // 1911-3gqy: on Quit, reap leftovers of windows already gone.
+        crate::browser_open::sweep_orphan_windows(debug);
         let plan = crate::shutdown_plan(crate::take_stop_all_request());
         if plan.mark_lanes_for_adoption {
             let lanes = crate::mcp_socket::mark_served_lanes_for_adoption();
@@ -5074,8 +5079,9 @@ mod tests {
             // 1966-47vt: + cloud.usage when the store is built in.
             // 2003-stbf: + tillandsias.lane_version; 2002-stjb: + queue_workflow, job_status;
             // 2055-grzz: + audio.transform, audio.detect_glitches; 2068-eeti: + audio.separate.
-            if cfg!(feature = "vault") { 52 } else { 51 },
-            "5 preview.* + toolchain.prepare + image.generate + 10 studio.* (1969-cfyt: + studio.start, studio.status; 1986-snpx: + studio.models; 1987-smnt: + studio.restart; 2002-stjb: + studio.queue_workflow, studio.job_status) + 13 browser.* + 4 webstudio.* + tillandsias.index + tillandsias.lane_version (2003-stbf) + audio.transform + audio.detect_glitches (2055-grzz) + audio.separate (2068-eeti) + 10 deprecated aliases (1969-7qm7) + gpu.status + gpu.unload_model (1957-emar) + cloud.usage under vault (1966-47vt), nothing else"
+            // 2094-ay52 / 2095-kgdj: + queue.submit, queue.status, queue.cancel, queue.list, watch.wait.
+            if cfg!(feature = "vault") { 57 } else { 56 },
+            "5 preview.* + toolchain.prepare + image.generate + 10 studio.* (1969-cfyt: + studio.start, studio.status; 1986-snpx: + studio.models; 1987-smnt: + studio.restart; 2002-stjb: + studio.queue_workflow, studio.job_status) + 13 browser.* + 4 webstudio.* + tillandsias.index + tillandsias.lane_version (2003-stbf) + audio.transform + audio.detect_glitches (2055-grzz) + audio.separate (2068-eeti) + 10 deprecated aliases (1969-7qm7) + gpu.status + gpu.unload_model (1957-emar) + 4 queue.* and watch.wait (2094-ay52) + cloud.usage under vault (1966-47vt), nothing else"
         );
 
         let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
@@ -5149,7 +5155,8 @@ mod tests {
                 // 2003-stbf: + tillandsias.lane_version; 2002-stjb: + queue_workflow, job_status;
                 // 2055-grzz: + audio.transform, audio.detect_glitches; 2068-eeti: + audio.separate.
                 // 2002-stjb: + studio.queue_workflow, studio.job_status.
-                if cfg!(feature = "vault") { 52 } else { 51 },
+                // 2094-ay52 / 2095-kgdj: + queue.submit, queue.status, queue.cancel, queue.list, watch.wait.
+                if cfg!(feature = "vault") { 57 } else { 56 },
                 "over the transport (beside the 1772-irs3 cloudflare family): 5 preview.*, toolchain.prepare, image.generate, 8 studio.* (1969-cfyt: + studio.start, studio.status; 1986-snpx: + studio.models; 1987-smnt: + studio.restart), 13 browser.*, 4 webstudio.*, tillandsias.index, audio.transform + audio.detect_glitches (2055-grzz), audio.separate (2068-eeti), the 10 deprecated flat aliases (1969-7qm7), gpu.status + gpu.unload_model (1957-emar), cloud.usage under vault (1966-47vt), got {tools:?}"
             );
             assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
@@ -5587,7 +5594,14 @@ mod tests {
         use std::io::{BufRead, BufReader, Write};
         use std::os::unix::net::UnixStream;
 
-        struct Slow;
+        // ORDER 2239-3kh4: the slow call is held on a GATE the test opens only
+        // after the fast answer arrived, not on a 3 s sleep (3.2 s of the
+        // tray,listen-vsock suite). Ordering then holds by construction: if the
+        // connection serialised calls, id 2 could not arrive while the gate is
+        // shut, and the bounded wait turns that into a failed ordering
+        // assertion instead of a hang.
+        type Gate = std::sync::Arc<(std::sync::Mutex<bool>, std::sync::Condvar)>;
+        struct Slow(Gate);
         impl crate::imagegen_tool::Engine for Slow {
             fn generate(
                 &self,
@@ -5596,7 +5610,11 @@ mod tests {
                 names: &[String],
                 _p: &mut dyn FnMut(crate::imagegen_tool::Progress),
             ) -> Result<crate::imagegen_tool::EngineOut, String> {
-                std::thread::sleep(std::time::Duration::from_secs(3));
+                let (open, cv) = &*self.0;
+                let guard = open.lock().unwrap_or_else(|e| e.into_inner());
+                let _ = cv
+                    .wait_timeout_while(guard, std::time::Duration::from_secs(10), |o| !*o)
+                    .unwrap_or_else(|e| e.into_inner());
                 for n in names {
                     image::RgbImage::new(job.width, job.height)
                         .save(out_dir.join(n))
@@ -5609,17 +5627,20 @@ mod tests {
                 })
             }
         }
+        let gate: Gate =
+            std::sync::Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
         let _g = crate::imagegen_tool::SEAM_TEST_LOCK
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         let scratch =
             tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
         crate::imagegen_tool::install_seam(Some(crate::imagegen_tool::Seam {
-            engine: std::sync::Arc::new(Slow),
+            engine: std::sync::Arc::new(Slow(std::sync::Arc::clone(&gate))),
             scratch_root: scratch.path().to_path_buf(),
             ceiling: "I0".into(),
             present: Some(vec!["I0".into()]),
         }));
+        let release = std::sync::Arc::clone(&gate);
         let order = with_known_demo_project(|| {
             let (server_side, client_side) = UnixStream::pair().expect("pair");
             let identity = LaneIdentity::new("demo", "default");
@@ -5640,6 +5661,11 @@ mod tests {
                     serde_json::from_str(&lines.next().unwrap().unwrap()).unwrap();
                 if let Some(id) = v.get("id").and_then(|i| i.as_u64()) {
                     order.push((id, t0.elapsed()));
+                    if id == 2 {
+                        // the fast answer is in: release the slow call
+                        *release.0.lock().unwrap_or_else(|e| e.into_inner()) = true;
+                        release.1.notify_all();
+                    }
                 }
             }
             drop(w);
@@ -5724,7 +5750,8 @@ mod tests {
                 // 2003-stbf: + tillandsias.lane_version; 2002-stjb: + queue_workflow, job_status;
                 // 2055-grzz: + audio.transform, audio.detect_glitches; 2068-eeti: + audio.separate.
                 // 2002-stjb: + studio.queue_workflow, studio.job_status.
-                if cfg!(feature = "vault") { 52 } else { 51 },
+                // 2094-ay52 / 2095-kgdj: + queue.submit, queue.status, queue.cancel, queue.list, watch.wait.
+                if cfg!(feature = "vault") { 57 } else { 56 },
                 "1969-7qm7: + webstudio.* canonical names, tillandsias.index, 10 deprecated aliases; 2055-grzz: + audio.transform, audio.detect_glitches; 2068-eeti: + audio.separate; 1957-emar: + gpu.status, gpu.unload_model; 1966-47vt: + cloud.usage under vault"
             );
 

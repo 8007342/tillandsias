@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: local-ci-to-lua-slice-4-convergence-artifacts
+    order: 2224-x32n
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 3
+    title: |
+      local-ci.sh to Lua, slice 4: write_convergence_artifacts (the centicolon signature record, the delta and the evidence bundle) becomes scripts/lua/local-ci-convergence-artifacts.lua.
+    context: |
+      Coordinator direction 2026-11-22, with rulings. (1) The Lua json encoder sorts keys, so the records change key order; accepted and named as an interface change, because no reader recomputes or chains signature_hash across lines (signature_hash is a whole-file hash; update-convergence-dashboard.sh reads by key; tillandsias-headless matches file names only). (2) Port bug-for-bug: the max-residual reason indexing (row 2226) is fixed in its own PR stacked on this one.
+    exit_criteria:
+      - "for fixture runs (all pass, one failure, several failures, an existing jsonl), the three artifacts hold the same values as the bash writer, parsed as JSON; a mutant reds it"
+      - "write_convergence_artifacts calls the Lua; its jq body is gone"
+    unscoreable: "unpinnable-until-the-guard-exists: the parity fixture is the deliverable."
+    next_action: "Port, parity-test against the bash writer, rewire, open a draft PR stacked on #1345."
+    provenance: coordinator direction; filed by lenovinha.
+    depends_on: [local-ci-to-lua-slice-3-check-catalog]
+    related: [2223-bzsn]
+    events:
+      - {type: filed, ts: '2026-11-22T17:39:02Z', host: lenovinha, summary: local-ci.sh slice 4 filed}

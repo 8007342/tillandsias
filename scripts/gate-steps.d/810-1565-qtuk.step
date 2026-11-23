@@ -19,3 +19,7 @@ STEP_SCRIPT="scripts/test-installer-provisions-once.sh"
 STEP_ERROR="install-windows.ps1 again provisions the guest more than once per install, skips the SOFT reset, or Dies on a tray that predates --reset-state (1565-qtuk); see which arm failed above"
 STEP_OK="one install, one provisioning, and it is the SOFT reset"
 STEP_SECOND_REGIME="yolanda-windows 2026-10-09 msys ok:provisions-once-fixture:3"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/install-windows.ps1 scripts/test-installer-provisions-once.sh"

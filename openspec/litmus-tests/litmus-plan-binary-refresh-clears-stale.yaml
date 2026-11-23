@@ -1,0 +1,47 @@
+# @trace spec:ci-release, order:2068-9789
+name: litmus:plan-binary-refresh-clears-stale
+spec: ci-release
+phase: pre-build
+size: instant
+severity: high
+description: >
+  ORDER 2068-9789. The plan-only lane refused a stale plan binary, and the remedy
+  it named, scripts/check-plan-binary-current.sh, was said to "rebuild and refresh
+  the installed copy". The script runs no build. Worse, it read only STDOUT from
+  `validator-surface-hash --check`, while the binary prints its stale: answer on
+  STDERR. So a stale binary looked like one that could not answer, the behaviour
+  arms then printed ok:, and in the yolanda forge it said ok twice over the binary
+  the lane kept refusing.
+
+  The script now hears both streams and refuses on stale:, naming the build that
+  clears it. The remedies stop claiming that it rebuilds. The lane's ORPHANED hint
+  needs the resolved copy to be OUTSIDE the redirected CARGO_TARGET_DIR.
+preconditions:
+  - workspace contains scripts/check-plan-binary-current.sh
+  - workspace contains scripts/plan-binary-probe.sh
+
+critical_path:
+  # The stub answers stale: on stderr (exit 3), exactly as the real binary does,
+  # and hands every other subcommand to the real binary, so the behaviour arms
+  # pass. Before the fix this printed ok:plan-binary-write-is-opt-in+role-satisfies
+  # ... arms=16/0 and exited 0 (measured on calmecacpilli 2026-11-21).
+  - step: "MUTATION: a binary that answers stale:validator-surface is refused, never reported ok"
+    command: "PB=$(. scripts/plan-binary-probe.sh && resolve_plan_binary); case \"$PB\" in ./*) PB=\"$PWD/${PB#./}\" ;; esac; D=$(mktemp -d); printf '#!/usr/bin/env bash\\nif [ \"$1\" = validator-surface-hash ]; then echo \"stale:validator-surface built-from=0000 checkout=ffff\" >&2; exit 3; fi\\nexec \"%s\" \"$@\"\\n' \"$PB\" > \"$D/tillandsias-plan\"; chmod +x \"$D/tillandsias-plan\"; out=$(TILLANDSIAS_PLAN_BIN=\"$D/tillandsias-plan\" bash scripts/check-plan-binary-current.sh 2>/dev/null); rc=$?; rm -rf \"$D\"; case \"$rc:$out\" in 1:stale:plan-binary-validator-surface:*) echo 'ok: a stale binary is refused by name' ;; *) echo \"observed=rc=$rc $out\"; echo 'fail: a stale binary was not refused' ;; esac"
+    timeout_ms: 60000
+    expected_behavior: "ok: a stale binary is refused by name"
+
+  # MUTATION CONTROL: without it, a script that refuses every binary scores the
+  # arm above. The current binary must still be accepted.
+  - step: "MUTATION CONTROL: the current binary is still accepted"
+    command: "PB=$(. scripts/plan-binary-probe.sh && resolve_plan_binary); case \"$PB\" in ./*) PB=\"$PWD/${PB#./}\" ;; esac; out=$(TILLANDSIAS_PLAN_BIN=\"$PB\" bash scripts/check-plan-binary-current.sh 2>/dev/null); rc=$?; case \"$rc:$out\" in 0:ok:plan-binary-write-is-opt-in*) echo 'ok: the current binary is accepted' ;; *) echo \"observed=rc=$rc $out\"; echo 'fail: the current binary was refused' ;; esac"
+    timeout_ms: 60000
+    expected_behavior: "ok: the current binary is accepted"
+
+  - step: "SOURCE PIN: no remedy claims check-plan-binary-current.sh rebuilds"
+    command: "if grep -rn 'rebuilds and refreshes' crates/tillandsias-plan/src scripts/hooks/pre-push-local-gate.sh >/dev/null; then echo 'fail: a remedy still says the check rebuilds'; else echo 'ok: no remedy claims a rebuild'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: no remedy claims a rebuild"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"

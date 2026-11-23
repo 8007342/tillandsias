@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Shell-to-Lua backlog (coordinator direction, 2026-11-21).
+packets:
+  - packet_id: the-vsock-handshake-and-pre-receive-date-fixtures-are-lua-and-both-sh-are-deleted
+    order: 2172-7n62
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua]
+    estimated_hours: 2
+    title: |
+      Port scripts/test-vsock-handshake-wire-v2.sh (61 lines) and scripts/test-pre-receive-yaml-gate-date.sh (63 lines) to scripts/lua/, repoint their litmus tests, and delete both .sh files.
+    context: |
+      Next shell-to-lua candidates. No open work ref touches either file (checked).
+    exit_criteria:
+      - 'each Lua fixture reaches the same outcome as its .sh on this host (the git image is present), and a mutation fails it; both litmus tests run the Lua; both .sh files and their floor lines are gone'
+    unscoreable: 'unpinnable-until-the-guard-exists: the parity run is recorded in the PR.'
+    next_action: 'Port, prove parity, open the PR.'
+    provenance: shell-to-lua backlog; filed by lenovinha.
+    depends_on: []
+    related: [1354-uv4e, 1492-fswq, 1863-mqiw]
+    events:
+      - {type: filed, ts: '2026-11-21T21:40:07Z', host: lenovinha, summary: filed the vsock and pre-receive-date ports}

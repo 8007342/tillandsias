@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: affordance-slice-windows-installer-fatal-messages-say-what-the-user-can-do-next
+    event:
+      type: completed
+      ts: "2026-11-19T23:18:38Z"
+      agent_id: linux-calmecacpilli-claude-20261119t231838z
+      host: calmecacpilli
+      summary: |
+        Tech-debt triage (calmecacpilli, 2026-11-19). CLOSED. PR #677 merge 6f3fb9f20a is an ancestor of origin/linux-next (git merge-base --is-ancestor). C1+C3: tillandsias-plan script run scripts/lua/test-installer-fatal-messages-carry-a-next-step.lua -> ok:installer-fatal-next-step:9 arms on trunk; against install-windows.ps1 from pre-fix 20960e4c2 -> refused:installer-fatal-next-step:1 of 9 arms (negative control holds). C2: scripts/lua/check-installer-end-user-output.lua -> ok:installer-end-user-output.

@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl on work/2094-ay52. Code is cited by symbol, never by line.
+events:
+  - packet_id: queue-submit-starts-a-declared-job-only-when-the-host-has-room-and-lanes-take-turns
+    event:
+      type: progress
+      ts: "2026-11-17T20:15:11Z"
+      host: macuahuitl
+      summary: "Built on work/2094-ay52: job_queue (JobQueue, admission, round-robin, the 3-skip reserve rule, event-only evaluation), classes as data in job_classes.toml, queue.submit/status/cancel/list on the lane socket, the queue.* index row. Tests: job_queue::tests::three_simultaneous_builds_are_admitted_one_at_a_time, a_lane_cannot_starve_another_by_submitting_more (FIFO control arm admits lane B eleventh), a_heavy_job_skipped_three_times_blocks_light_ones, an_idle_queue_never_evaluates, refusals_have_one_shape_and_create_no_ticket; mcp_socket::job_queue_lane_fixtures::a_lane_sees_only_its_own_tickets, every_refusal_has_one_shape_and_creates_no_ticket, the_queue_tools_and_their_index_row_are_listed. The lane-socket arms FAILED on the pre-fix tree (Unknown tool: queue.submit). Left: an admitted job is not yet registered as a watch, because 2081-v7qx's watch registry does not exist; it runs by podman exec in its forge and its exit is the event. queue.cancel does not stop a running job (that stop path belongs to 2094-mzap)."
+  - packet_id: every-restriction-of-the-queue-and-watch-tools-is-in-their-descriptions-schemas-and-responses-and-a-job-declares-whether-it-is-idempotent
+    event:
+      type: progress
+      ts: "2026-11-17T20:15:11Z"
+      host: macuahuitl
+      summary: "Built on work/2094-ay52: the required idempotent field (no default), the run-once rule (JobQueue::may_restart, on_critical stops idempotent jobs first and ends a non-idempotent one failed/stopped-memory), the one refusal shape (Refusal), this host's class figures in the queue.submit schema, watch.wait for queue tickets (timeout_minutes maximum 9), and the guidance edits in forge-agent-guidance.md and skills/forge-quick-intro. Tests: mcp_socket::job_queue_lane_fixtures::every_restriction_is_stated_in_the_affordances (names each missing restriction), job_queue::tests::a_non_idempotent_job_is_never_rerun (control arm with the rule off runs it twice), at_critical_the_idempotent_job_is_stopped_first, the_class_figures_in_the_schema_are_this_hosts, host_tools::queue_guidance_tests::the_forge_guidance_and_quick_intro_name_the_queue; all FAILED on the pre-fix tree. Left: the affordance arms for watch.register and watch.status (they wait on 2081-v7qx), and arm 5, the agent bundle-splitting run three times, which was not run."

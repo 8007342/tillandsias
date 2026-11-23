@@ -16,10 +16,10 @@ description: >
   negative control (an undeclared guard still runs) keeps a broken harness from
   passing as a fixed parser. Pre-fix on darwin it fails 4 of 5 arms.
 preconditions:
-  - workspace contains scripts/test-preflight-declarations-host-sed.sh
+  - workspace contains scripts/lua/test-preflight-declarations-host-sed.lua
   - build.sh defines _pf_predecide
 critical_path:
   - step: "the door reads gate-only, gate-only-decider and serial under the host sed"
-    command: "bash scripts/test-preflight-declarations-host-sed.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-preflight-declarations-host-sed.lua 2>&1"
     timeout_ms: 30000
-    expected_behavior: "ok:preflight-declarations-host-sed:5"
+    expected_behavior: "ok:preflight-declarations-host-sed:6"

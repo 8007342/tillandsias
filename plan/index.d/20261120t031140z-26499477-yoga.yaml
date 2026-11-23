@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: land-on-platform-branch-probes-the-branch-discipline-before-it-fetches-or-gates-refuses-the-protected-default-branch-with-the-seeded-message-picks-the-integration-branch-from-the-seed-and-compares-the-mirror-published-digest-to-the-checkouts-seed
+    field: status
+    value: completed
+    ts: "2026-11-20T03:11:40Z"
+    host: yoga
+
+events:
+  - packet_id: land-on-platform-branch-probes-the-branch-discipline-before-it-fetches-or-gates-refuses-the-protected-default-branch-with-the-seeded-message-picks-the-integration-branch-from-the-seed-and-compares-the-mirror-published-digest-to-the-checkouts-seed
+    event:
+      type: completed
+      ts: "2026-11-20T03:11:40Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 3506fab7f
+  - packet_id: land-on-platform-branch-probes-the-branch-discipline-before-it-fetches-or-gates-refuses-the-protected-default-branch-with-the-seeded-message-picks-the-integration-branch-from-the-seed-and-compares-the-mirror-published-digest-to-the-checkouts-seed
+    event:
+      type: note
+      ts: "2026-11-20T03:11:40Z"
+      host: yoga
+      summary: |-
+        verify batch (yoga, builder toolbox) at linux-next 3506fab7f - cargo test -p tillandsias-exec --test capture_bound - 4 passed; -p tillandsias-plan --test lua_proc - 77 passed. Candidate landing commit - f3a93b7a2.

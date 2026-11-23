@@ -21,7 +21,7 @@ critical_path:
   - step: "a foreign id-less record warns, a falling-back child refuses through the private fallback, a run-id record still refuses"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-gate-step-private-metrics-fallback.lua 2>&1"
     timeout_ms: 600000
-    expected_behavior: "ok:gate-step-private-metrics-fallback:6 arms"
+    expected_behavior: "ok:gate-step-private-metrics-fallback:9 arms"
 
 observability:
   traces:

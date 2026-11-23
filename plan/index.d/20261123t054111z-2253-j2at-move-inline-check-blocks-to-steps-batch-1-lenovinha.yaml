@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: move-inline-check-blocks-to-gate-step-files-batch-1
+    order: 2253-j2at
+    status: ready
+    kind: debt
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 3
+    title: |
+      Move inline --check fixture blocks out of build.sh into scripts/gate-steps.d/*.step files, batch 1 of a series: seven blocks whose fixtures lenovinha wrote (2240-bkdb's carried-obligations pair, 2242-u39b, 2246-fkea's native-argv pair, 2248-zcqh's crate-graph lint and intake fixture).
+    context: |
+      The structural lever from 2250-gwfy (plan/issues/intake-build-sh-block-rule-2026-11-23.md): every inline block that moves into a .step file stops being a build.sh edit at all, so it stops making intake HEAVY, shrinks build.sh, and can run in the gate-steps pool. Coordinator direction 2026-11-23: one PR per 5-10 blocks, mechanical, same verdicts, prefixes kept free by scripts/allocate-gate-step-prefix.sh. build.sh currently carries 139 single-shape blocks (comment, _step, one `if ! _run…`, _error, exit 1, fi, _info). yoga's --keep-going (coordinated 2026-11-23) leaves inline blocks alone and changes only _step(), _error(), flag parsing, the phase report and the _run_gate_steps return. Batch 1 is blocks whose isolation the author knows, so each pool/serial choice is informed rather than defaulted.
+    exit_criteria:
+      - "each moved block becomes one .step with the same STEP_DESC/STEP_ERROR/STEP_OK text and the same fixture; the inline block is deleted"
+      - "each step declares STEP_SERIAL with its reason where it touches shared state; the rest run in the pool"
+      - "each step carries STEP_READS, and a darwin or msys STEP_SECOND_REGIME record before the PR leaves draft"
+      - "gate-changed.sh's population still contains every moved fixture once (moved, not lost or doubled)"
+    unscoreable: "mechanical move; the per-step verdicts are the deliverable and are unchanged by construction."
+    next_action: "Write the seven .step files, delete the inline blocks, ask the Mac or yolanda for second-regime records."
+    provenance: coordinator direction (macuahuitl-fedora, 2026-11-23); filed by lenovinha.
+    related: [2250-gwfy, 2248-zcqh, 1072-b7eq, 1302-7j8p, 1162-qbrx]
+    events:
+      - {type: filed, ts: '2026-11-23T05:41:11Z', host: lenovinha, summary: move inline check blocks to gate-step files batch 1 filed}

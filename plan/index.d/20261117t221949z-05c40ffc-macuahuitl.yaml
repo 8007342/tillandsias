@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: script-run-helper-runs-a-lua-helper-with-no-verdict-refuses-verdict-and-adds-nothing-to-stdout
+    field: status
+    value: implemented
+    ts: "2026-11-17T22:19:49Z"
+    host: macuahuitl
+
+events:
+  - packet_id: script-run-helper-runs-a-lua-helper-with-no-verdict-refuses-verdict-and-adds-nothing-to-stdout
+    event:
+      type: note
+      ts: "2026-11-17T22:19:49Z"
+      host: macuahuitl
+      summary: |-
+        landed by ancestry, 2103-pxq4 reconciliation: work/2049-w2q6 commit 43ddbba33fdb (2049-w2q6 in its subject) reached linux-next at 6215d4a8a746. Status moves to implemented, not completed: the exit criteria were not re-run.

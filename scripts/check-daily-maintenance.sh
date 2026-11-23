@@ -34,7 +34,7 @@
 #
 # This answers "was the gate STAMPED today, and with what". It does not — and
 # from a marker file cannot — prove the stamped steps did what they claim; that
-# is the same limit `stamp` carries in check-windows-only-sources-verified.sh.
+# is the same limit `stamp` carries in scripts/lua/check-windows-only-sources-verified.lua.
 # What it removes is the unfalsifiable state: after this, "the gate ran" is a
 # claim with a date, a host, and a named step list attached, and its absence is
 # a verdict (`due:no-marker`) rather than silence. `--steps` is therefore

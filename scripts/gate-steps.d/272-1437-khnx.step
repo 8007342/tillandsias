@@ -10,3 +10,10 @@ STEP_SCRIPT="scripts/test-packet-tier-fields.sh"
 STEP_ERROR="size/implementer_tier stopped projecting, lost the notes fallback, began defaulting untagged rows, or began accepting unknown vocabulary (1437-khnx) — see the verdict line above"
 STEP_OK="Packet tier fields passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-27 darwin ok:packet-tier-fields:4/4"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target; binds a fixed local port"
+STEP_LANES="cargo port"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="plan/index.d/** plan/index.yaml scripts/plan-binary-probe.sh scripts/select-work-batch.sh scripts/test-packet-tier-fields.sh"

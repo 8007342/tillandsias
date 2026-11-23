@@ -1,43 +1,71 @@
 <!doctype html>
-<!-- @trace order:1861-nmpp — GrapesJS core editor, served from the vendored copy; no CDN. -->
+<!-- @trace order:1861-nmpp, order:2108-dptd — GrapesJS core editor, served from the vendored copy; no CDN. -->
 <html>
 <head>
 <meta charset="utf-8">
 <title>Web studio</title>
 <link rel="stylesheet" href="/vendor/dist/css/grapes.min.css">
-<style>html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }</style>
+<link rel="stylesheet" href="/vendor/font-awesome/css/font-awesome.min.css">
+<style>
+html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
+.gjs-pn-btn.studio-dirty { color: #ffca6f; text-shadow: 0 0 6px #ffca6f; }
+#studio-banner { position: fixed; z-index: 10; left: 0; right: 0; bottom: 0; padding: 6px 10px;
+  font: 13px system-ui, sans-serif; background: #7a2e00; color: #fff; }
+</style>
 <script src="/vendor/dist/grapes.min.js"></script>
+<script src="/studio-page.js"></script>
 </head>
 <body>
 <div id="gjs"></div>
 <script>
-const page = (html) =>
-  `<!doctype html>\n<html>\n<head>\n<meta charset="utf-8">\n<link rel="stylesheet" href="styles.css">\n</head>\n<body>\n${html}\n</body>\n</html>\n`;
 (async () => {
   const loaded = await (await fetch("/load")).json();
+  const banner = (text) => {
+    const el = document.createElement("div");
+    el.id = "studio-banner";
+    el.textContent = text;
+    document.body.appendChild(el);
+  };
+  // 2108-dptd: no page at the resolved root means nothing to edit; saving
+  // would invent one, so the studio stays read-only.
+  const readOnly = !loaded.exists;
+  // 2108-dptd: render the page as it looks, through GrapesJS's own canvas
+  // options (its <head> is a component that re-renders, so anything injected
+  // into it is wiped): the head's inline <style> as canvasCss and its local
+  // stylesheets as canvas.styles. The server serves the document root at "/"
+  // too (read-only), so relative and root-absolute asset URLs resolve. None of
+  // this enters the editor's components or CSS, so none of it is saved.
+  const look = StudioPage.canvasLook(loaded.doc, "/");
   const editor = grapesjs.init({
     container: "#gjs",
     fromElement: false,
-    components: loaded.projectData ? undefined : loaded.html || "",
-    projectData: loaded.projectData,
-    // The page or project data is passed in directly, so storage never loads;
-    // it only saves, through the studio endpoint, on every change (below).
+    // The vendored icon font, never cdnjs (the enclave cannot reach it).
+    cssIcons: "/vendor/font-awesome/css/font-awesome.min.css",
+    protectedCss: "",
+    // GrapesJS's frameStyle paints the canvas body white; a page that puts its
+    // background on :root (tlatoani.net) would show white. Cleared BEFORE the
+    // page's CSS, so a page that styles body itself still wins.
+    canvasCss: ["body{background-color:transparent}"].concat(look.styles).join("\n"),
+    canvas: { styles: look.links },
+    // v4: <script>/<noscript>/<template> stay out of the editor (GrapesJS
+    // drops scripts); a save puts their original bytes back.
+    components: StudioPage.protect(loaded.html || "").html,
     storageManager: { type: "studio", autoload: false, autosave: false },
     plugins: [
       (ed) =>
         ed.Storage.add("studio", {
           async load() {
-            return loaded.projectData || {};
+            return {};
           },
           // Every write goes through the studio front, one path per POST; the
-          // front guards each path and commits it (1860-auhm).
-          async store(projectData) {
-            const css = ed.getCss();
-            const files = [
-              ["index.html", page(ed.getHtml())],
-              ["styles.css", css.endsWith("\n") ? css : css + "\n"],
-              [".tillandsias/studio/grapesjs/project.json", JSON.stringify(projectData ?? {}, null, 2) + "\n"],
-            ];
+          // front guards each path and commits it (1860-auhm), never on the
+          // project's default branch (2108-dptd).
+          async store() {
+            if (readOnly) return;
+            const { css, files } = pageNow(ed);
+            // v4: a store that changes nothing (selecting a component triggers
+            // one) posts nothing.
+            if (files[0][1] === lastSaved && css === (cssSaved === null ? cssAtLoad : cssSaved)) return;
             for (const [path, content] of files) {
               const res = await fetch("/__studio/save", {
                 method: "POST",
@@ -45,23 +73,146 @@ const page = (html) =>
                 body: JSON.stringify({ path, content }),
               });
               if (!res.ok) throw new Error("save " + path + " failed: " + res.status);
+              if (path === loaded.page) lastSaved = content;
+              else cssSaved = css;
             }
           },
         }),
     ],
   });
   window.studioEditor = editor;
-  // Save on every change (debounced) through the editor's own storage. The
-  // built-in autosave counts changes it tracked itself, and with autoload off
-  // a change can go uncounted (measured: dirty count 0 after an edit).
-  let pending;
-  editor.on("update component:add component:remove component:update component:styleUpdate", () => {
-    document.documentElement.setAttribute("data-studio-save", "scheduled");
-    clearTimeout(pending);
-    pending = setTimeout(() => editor.store(), 300);
+  const cssPath = (loaded.root === "." ? "" : loaded.root + "/") + "studio.css";
+  const cssHref = "studio.css";
+  let cssAtLoad = "";
+  // v4: the editor's own serialisation at load; a save rewrites only the
+  // nodes whose serialisation moved away from it.
+  let baseline = null;
+  let lastSaved = loaded.doc;
+  let cssSaved = null; // null: as at load
+  const pageNow = (ed) => {
+    const css = ed.getCss();
+    const cssChanged = css !== cssAtLoad;
+    const files = [[loaded.page, StudioPage.rebuild(loaded.doc, ed.getHtml(), cssChanged ? cssHref : null, { baseline, css })]];
+    if (cssChanged) files.push([cssPath, css.endsWith("\n") ? css : css + "\n"]);
+    return { css, files };
+  };
+  // Dirty means a Save would write something: the rebuilt page or the CSS
+  // differs from what was last saved (selecting a component is not a change).
+  const realChange = () => {
+    const { css, files } = pageNow(editor);
+    return files[0][1] !== lastSaved || css !== (cssSaved === null ? cssAtLoad : cssSaved);
+  };
+  editor.onReady(() => { cssAtLoad = editor.getCss(); baseline = editor.getHtml(); });
+  // 2108-dptd: the <body> tag's classes and attributes on the canvas body,
+  // display only (idempotent; the wrapper may re-render, so re-applied on
+  // every body load). The saved page keeps its own <body> tag.
+  const dressBody = (frameDoc) => {
+    if (!frameDoc || !frameDoc.body) return;
+    for (const [k, v] of Object.entries(look.attrs)) {
+      if (k === "class") v.split(/s+/).filter(Boolean).forEach((c) => frameDoc.body.classList.add(c));
+      else if (!/^(on|id$)/i.test(k)) frameDoc.body.setAttribute(k, v);
+    }
+  };
+  editor.on("canvas:frame:load:body", ({ window: w }) => dressBody(w && w.document));
+  editor.onReady(() => dressBody(editor.Canvas.getDocument()));
+  if (readOnly) {
+    banner("Read-only: no page at " + (loaded.page || "index.html") + " (document root from " + loaded.root_from + "). Nothing you do here is saved.");
+  }
+  // Operator ruling (2108-dptd): an explicit Save, one commit per click; no
+  // autosave commits. The button lights while there are unsaved changes; a
+  // Save with no real change commits nothing (the store's no-op check).
+  // GrapesJS's own dirty count can miss a change with autoload off (measured:
+  // 0 after an edit), so the studio tracks its own flag.
+  let dirty = false;
+  const draftKey = "studio-draft:" + loaded.page;
+  const draftStore = {
+    get() { try { return JSON.parse(localStorage.getItem(draftKey) || "null"); } catch { return null; } },
+    set(v) { try { localStorage.setItem(draftKey, JSON.stringify(v)); } catch {} },
+    clear() { try { localStorage.removeItem(draftKey); } catch {} },
+  };
+  const setDirty = (v) => {
+    dirty = v;
+    document.documentElement.setAttribute("data-studio-dirty", String(v));
+    // Shown as a class, NEVER the button's "active" flag: setting active on a
+    // panel button RUNS its command, which saved every edit (measured live).
+    const btn = editor.Panels.getButton("options", "studio-save");
+    if (btn) btn.set("className", "fa fa-floppy-o" + (v ? " studio-dirty" : ""));
+  };
+  editor.Commands.add("studio-save", {
+    async run(ed) {
+      if (readOnly) return;
+      // Close the text editor first, so the typed text is in the model.
+      if (ed.getEditing()) ed.select(null);
+      try {
+        await ed.store();
+        setDirty(false);
+        draftStore.clear();
+        document.documentElement.setAttribute("data-studio-save", "saved");
+      } catch (e) {
+        document.documentElement.setAttribute("data-studio-save", "error");
+        alert("Not saved: " + (e && e.message ? e.message : e));
+      } finally {
+        ed.stopCommand("studio-save");
+      }
+    },
   });
-  // Fixture hook (scripts/test-studio-grapesjs.sh): one real edit, saved
-  // by the editor's own autosave, proves the browser path end to end.
+  editor.onReady(() => {
+    if (readOnly) return;
+    editor.Panels.addButton("options", {
+      id: "studio-save", className: "fa fa-floppy-o", togglable: false,
+      // A click is the only caller of the Save command.
+      command: (ed) => ed.runCommand("studio-save"),
+      attributes: { title: "Save (one commit)" },
+    });
+    // Typing in the text editor fires no editor event; the frame's input does.
+    const watchInput = (doc) => doc && doc.addEventListener("input", () => { if (!readOnly) setDirty(true); });
+    watchInput(editor.Canvas.getDocument());
+    editor.on("canvas:frame:load:body", ({ window: w }) => watchInput(w && w.document));
+    // A crash-recovery draft from this browser, for this same page, only.
+    const d = draftStore.get();
+    if (d && d.doc === loaded.doc && (d.html !== baseline || d.css !== cssAtLoad)
+        && confirm("Restore your unsaved studio changes from " + new Date(d.at).toLocaleString() + "?")) {
+      editor.setComponents(innerOfBody(d.html));
+      editor.setStyle(d.css);
+      setDirty(true);
+    } else if (d) {
+      draftStore.clear();
+    }
+  });
+  const innerOfBody = (h) => StudioPage.innerOf(h);
+  // Local draft only, never a commit: written after a pause, never while the
+  // text editor is active (a re-render there moves the caret).
+  let pending;
+  const draft = () => {
+    clearTimeout(pending);
+    pending = setTimeout(() => {
+      if (editor.getEditing()) return;
+      draftStore.set({ doc: loaded.doc, html: editor.getHtml(), css: editor.getCss(), at: Date.now() });
+    }, 1000);
+  };
+  editor.on("update component:add component:remove component:update component:styleUpdate", () => {
+    if (readOnly || baseline === null) return;
+    // While typing the model lags the text box; the check runs when it closes.
+    if (editor.getEditing()) return setDirty(true);
+    check();
+  });
+  let checking;
+  const check = () => {
+    clearTimeout(checking);
+    checking = setTimeout(() => {
+      if (editor.getEditing()) return;
+      setDirty(realChange());
+      if (dirty) draft(); else draftStore.clear();
+    }, 300);
+  };
+  editor.on("rte:disable", check);
+  window.addEventListener("beforeunload", (e) => {
+    if (!dirty) return;
+    e.preventDefault();
+    e.returnValue = "";
+  });
+  // Fixture hook (scripts/lua/test-studio-grapesjs.lua): one real edit, saved
+  // by the Save command, proves the browser path end to end.
   if (location.hash === "#selftest") {
     const mark = (k, v) => document.documentElement.setAttribute("data-selftest-" + k, String(v));
     editor.on("storage:start:store", () => mark("store", "started"));
@@ -69,7 +220,8 @@ const page = (html) =>
     editor.on("storage:error", (e) => mark("error", e && e.message ? e.message : e));
     editor.onReady(() => {
       editor.addComponents("<p>studio-selftest</p>");
-      mark("dirty", editor.getDirtyCount());
+      mark("dirty", realChange());
+      editor.runCommand("studio-save");
     });
   }
 })();

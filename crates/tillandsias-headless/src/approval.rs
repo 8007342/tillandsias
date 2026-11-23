@@ -345,12 +345,19 @@ pub fn has_hex_run(s: &str) -> bool {
     false
 }
 
-/// The broker's state: `TILLANDSIAS_APPROVAL_STATE_DIR`, or
-/// `<state dir>/approvals` (the directory allowed_signers lives in).
+/// The broker's state: `<state dir>/approvals` (the directory
+/// allowed_signers lives in).
+///
+/// Order 2083-nfne: no variable redirects it in a shipped build. An agent
+/// that can set a variable for its own `tillandsias approval` call could
+/// otherwise point the gate at an allowed_signers file and records it wrote
+/// itself. `TILLANDSIAS_APPROVAL_STATE_DIR` is honoured only by unit tests.
 pub fn state_dir() -> PathBuf {
-    std::env::var_os("TILLANDSIAS_APPROVAL_STATE_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| tillandsias_core::config::state_dir().join("approvals"))
+    #[cfg(test)]
+    if let Some(p) = std::env::var_os("TILLANDSIAS_APPROVAL_STATE_DIR") {
+        return PathBuf::from(p);
+    }
+    tillandsias_core::config::state_dir().join("approvals")
 }
 
 /// The note body, which is also the record file: the sentence, a blank line,

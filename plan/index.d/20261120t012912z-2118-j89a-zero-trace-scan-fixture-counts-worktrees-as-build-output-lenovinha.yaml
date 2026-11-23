@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha during the tech-debt session (2026-11-20).
+packets:
+  - packet_id: precommit-zero-trace-scan-scope-fixture-treats-worktrees-under-target-work-as-build-output
+    order: 2118-j89a
+    status: ready
+    kind: bug
+    priority: p2
+    pickup_role: linux
+    capability_tags: [fixture, gate, host-state, worktrees]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-precommit-zero-trace-scan-scope.sh
+    title: |
+      test-precommit-zero-trace-scan-scope (734-sjb3) fails the full gate on any host with old worktrees under target/work. It greps $ROOT with and without target/, and full checkouts at older commits still reference specs the trunk dropped (e.g. spec:windows-wsl-runtime), so "excluding build output changed the answer".
+    context: |
+      Measured on lenovinha 2026-11-20: ./build.sh --check on work/2112-2tbv from the main checkout ended rc=1 at this step, "only with build output included: windows-wsl-runtime", from about 40 worktrees target/work/wt-*/ (9 files each). After removing one clean, landed worktree the result was unchanged. The same tree gates cleanly from a fresh worktree whose target/ is empty. The verdict depends on host state, not on the tree.
+    exit_criteria:
+      - 'the fixture passes with a planted target/work/wt-x/ checkout that references a spec the tree does not; red today'
+      - 'it still fails when a spec is referenced ONLY from genuine build output (target/debug/... or target/release/...)'
+    verifiable_closure: |
+      scripts/test-precommit-zero-trace-scan-scope.sh with a planted target/work/wt-x/crates/a.rs containing spec:no-such-spec passes, and with the same token planted under target/debug/build/ it fails.
+    next_action: Exclude target/work (nested git checkouts) from the with-build-output sweep, or sweep only paths git ls-files does not track plus build dirs; plant both cases red then green.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20.
+    events:
+      - type: filed
+        ts: "2026-11-20T01:29:12Z"
+        host: lenovinha
+        summary: zero-trace scan-scope fixture reds on hosts with old worktrees under target/work.

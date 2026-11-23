@@ -17,7 +17,7 @@
 #   2. Zero-trace specs — specs with no @trace annotations in the codebase
 #   3. Stale changes — active changes older than 7 days
 #   4. Cheatsheet source binding — INDEX.json ↔ local: path ↔ file consistency
-#      (via scripts/check-cheatsheet-sources.sh --no-sha)
+#      (via scripts/lua/check-cheatsheet-sources.lua --no-sha)
 #      ERRORS from the binding check are printed as warnings.
 #
 # Usage:
@@ -312,12 +312,17 @@ staleness_check() {
 # @trace spec:cheatsheet-source-layer
 
 cheatsheet_source_check() {
-    local checker="${REPO_ROOT}/scripts/check-cheatsheet-sources.sh"
-    [[ -f "${checker}" ]] || return 0
+    local checker="scripts/lua/check-cheatsheet-sources.lua"
+    [[ -f "${REPO_ROOT}/${checker}" ]] || return 0
     [[ -f "${REPO_ROOT}/cheatsheet-sources/INDEX.json" ]] || return 0
 
+    local plan_bin=""
+    plan_bin="$(cd "${REPO_ROOT}" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || plan_bin=""
+    [[ -n "${plan_bin}" ]] || return 0   # no script runner: this check is non-blocking anyway
+    case "${plan_bin}" in ./*) plan_bin="${REPO_ROOT}/${plan_bin#./}" ;; esac
+
     local output exit_code
-    output="$(bash "${checker}" --no-sha 2>&1)" || exit_code=$?
+    output="$(cd "${REPO_ROOT}" && "${plan_bin}" script run "${checker}" -- --no-sha 2>&1)" || exit_code=$?
     exit_code="${exit_code:-0}"
 
     if [[ "${exit_code}" -ne 0 ]]; then
@@ -332,18 +337,21 @@ cheatsheet_source_check() {
 }
 
 # --- 4b. Cheatsheet tier-aware validator (cheatsheets-license-tiered) ------
-# Runs scripts/check-cheatsheet-tiers.sh in --quiet mode. ERRORs surface as
+# Runs scripts/lua/check-cheatsheet-tiers.lua in --quiet mode (ported, 2241-chtr). ERRORs surface as
 # non-blocking OpenSpec warnings (CRDT-convergence philosophy). The validator
 # itself is non-fatal: it exits 0 unless tier-conditional fields are missing
 # or CRDT override discipline is violated.
 # @trace spec:cheatsheets-license-tiered
 
 cheatsheet_tier_check() {
-    local checker="${REPO_ROOT}/scripts/check-cheatsheet-tiers.sh"
+    local checker="${REPO_ROOT}/scripts/lua/check-cheatsheet-tiers.lua" plan
     [[ -f "${checker}" ]] || return 0
+    # Non-blocking, like the rest of this check: no plan binary is no check.
+    plan="$(cd "${REPO_ROOT}" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || return 0
+    [[ -n "${plan}" ]] || return 0
 
     local output exit_code
-    output="$(bash "${checker}" --quiet 2>&1)" || exit_code=$?
+    output="$(cd "${REPO_ROOT}" && "${plan}" script run scripts/lua/check-cheatsheet-tiers.lua -- --quiet 2>&1)" || exit_code=$?
     exit_code="${exit_code:-0}"
 
     if [[ "${exit_code}" -ne 0 ]]; then

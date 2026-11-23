@@ -3,9 +3,14 @@
 # read. The fixture proves an executable's own objects are kept, a library's
 # loose objects are pruned, nothing else is touched, and a rerun prunes nothing.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf). Ported to Lua by 2106-scrt
+# (scratch.* reaches the fixture's target dir; the regime pin is the .sh run).
 STEP_DESC="Checking the darwin stale-object prune keeps what binaries read (1924-dobj)"
-STEP_SCRIPT="scripts/test-prune-darwin-stale-objects.sh"
+STEP_LUA="scripts/lua/test-prune-darwin-stale-objects.lua"
 STEP_ERROR="the darwin stale-object prune removed a linked executable's objects, kept a stale group, or touched a non-object file (1924-dobj) — see the FAIL lines above"
 STEP_OK="Darwin stale-object prune fixture passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-29 darwin ok:prune-darwin-stale-objects:7"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lua/prune-darwin-stale-objects.lua scripts/lua/test-prune-darwin-stale-objects.lua"

@@ -94,10 +94,29 @@ set +e
 # times each litmus phase; a timing failure must NEVER change local-ci's exit.
 . "$REPO_ROOT/scripts/timing-log.sh" 2>/dev/null || true
 command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
-# 1242-4x53: re-run a failed check's failures once, same regime, and record
-# whether they REPRODUCED. Best-effort like the timing side-channel above.
-. "$REPO_ROOT/scripts/lib-rerun-failed-rust-tests.sh" 2>/dev/null || true
-command -v rerun_failed_rust_tests >/dev/null 2>&1 || rerun_failed_rust_tests() { return 0; }
+# 1242-4x53 / 2215-beb5: the rust-tests check runs, and re-runs its failures
+# once in the SAME regime, through scripts/lua/run-rust-test-on-host.lua
+# (local-ci.sh to Lua, slice 1). Its pass-through env list is in its verdict.
+_rrt_plan=""
+run_rust_tests_lua() { # <run|rerun> [args...] -- <argv...>
+    if [[ -z "$_rrt_plan" ]]; then
+        _rrt_plan="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _rrt_plan=""
+        [[ "$_rrt_plan" == ./* ]] && _rrt_plan="$REPO_ROOT/${_rrt_plan#./}"
+    fi
+    if [[ -z "$_rrt_plan" ]]; then
+        echo "could-not-run:rust-test-on-host:no-plan-binary — no runnable tillandsias-plan to run scripts/lua/run-rust-test-on-host.lua (2215-beb5)"
+        return 3
+    fi
+    (cd "$REPO_ROOT" && "$_rrt_plan" script run scripts/lua/run-rust-test-on-host.lua -- "$@")
+}
+# reproduced=yes|no from the re-run's verdict line; empty when it gave none.
+rust_tests_reproduced() { # <rerun verdict output>
+    case "$1" in
+        *"reproduced=yes"*) echo yes ;;
+        *"reproduced=no"*) echo no ;;
+    esac
+    return 0
+}
 # 765-dfry: per-check duration anchor. Checks run sequentially and each ends
 # in archive_check_log, so "time since the previous archive (or section
 # start)" IS the check's own duration. Re-anchored by log_section and by
@@ -207,70 +226,22 @@ if [[ -n "$CI_IGNORE_SPEC_LIST" ]]; then
     export TILLANDSIAS_STRICT_IGNORE_SPECS="$CI_IGNORE_SPEC_LIST"
 fi
 
-normalize_spec_list() {
-    local raw="${1:-}"
-    raw="${raw//:/ }"
-    raw="${raw//,/ }"
-    for item in $raw; do
-        [[ -n "$item" ]] && printf '%s\n' "$item"
-    done | awk '!seen[$0]++'
-}
-
-spec_in_list() {
-    local needle="$1"
-    local raw_list="${2:-}"
-
-    [[ -z "$raw_list" ]] && return 1
-    while IFS= read -r item; do
-        [[ "$item" == "$needle" ]] && return 0
-    done < <(normalize_spec_list "$raw_list")
-    return 1
-}
-
-get_all_active_specs() {
-    # ORDER 746-htj9: the compiled reader + jq first — both exist in every
-    # environment the gates run in; yq and the awk parser stay as fallbacks
-    # for a fresh clone that has never built the binary.
-    local _bin=""
-    if [[ -f "$REPO_ROOT/scripts/plan-binary-probe.sh" ]]; then
-        # shellcheck source=scripts/plan-binary-probe.sh
-        . "$REPO_ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
-        command -v resolve_plan_binary &>/dev/null && _bin="$(resolve_plan_binary 2>/dev/null)" || _bin=""
-    fi
-    local v
-    if [[ -n "$_bin" ]] && command -v "$JQ" &>/dev/null \
-        && v="$("$_bin" yaml-json "$REPO_ROOT/openspec/litmus-bindings.yaml" 2>/dev/null | "$JQ" -r '.specs[] | select(.status=="active") | .spec_id' 2>/dev/null)"; then
-        [[ -n "$v" ]] && printf '%s\n' "$v"
-    elif command -v yq &>/dev/null; then
-        yq eval '.specs[] | select(.status=="active") | .spec_id' "$REPO_ROOT/openspec/litmus-bindings.yaml" 2>/dev/null || true
-    else
-        awk '
-            /^- spec_id: / {
-                gsub(/^- spec_id: /, "");
-                current_spec = $0
-                next
-            }
-            /^  status: / {
-                gsub(/^  status: /, "");
-                status = $0
-                if (status == "active" && current_spec != "") print current_spec
-            }
-        ' "$REPO_ROOT/openspec/litmus-bindings.yaml"
-    fi
-}
+# ORDER 2220-yj8f (local-ci.sh to Lua, slice 2): the --strict-all spec
+# selection is scripts/lua/local-ci-strict-specs.lua. It replaced
+# get_all_active_specs, spec_in_list and normalize_spec_list, and their
+# jq / yq / awk fallbacks: the plan binary that runs it parses the YAML.
 
 if [[ "$STRICT_ALL" == "1" ]]; then
-    STRICT_LIST="$(get_all_active_specs)"
-    if [[ -n "${CI_IGNORE_SPEC_LIST:-}" ]]; then
-        filtered_list=""
-        while IFS= read -r spec_id; do
-            [[ -z "$spec_id" ]] && continue
-            if ! spec_in_list "$spec_id" "$CI_IGNORE_SPEC_LIST"; then
-                filtered_list+="${spec_id}"$'\n'
-            fi
-        done <<<"$STRICT_LIST"
-        STRICT_LIST="$(printf '%s' "$filtered_list" | awk 'NF')"
+    # Every active spec minus CI_IGNORE_SPEC_LIST (2220-yj8f). With no plan
+    # binary there is nothing to parse the bindings with, and an empty list
+    # would quietly turn --strict-all off, so it stops by name instead.
+    _ss_plan="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _ss_plan=""
+    [[ "$_ss_plan" == ./* ]] && _ss_plan="$REPO_ROOT/${_ss_plan#./}"
+    if [[ -z "$_ss_plan" ]]; then
+        echo "could-not-run:local-ci:strict-all-needs-a-plan-binary — --strict-all selects specs with scripts/lua/local-ci-strict-specs.lua; build one: cargo build --release -p tillandsias-plan (2220-yj8f)" >&2
+        exit 3
     fi
+    STRICT_LIST="$(cd "$REPO_ROOT" && "$_ss_plan" script run --helper scripts/lua/local-ci-strict-specs.lua -- --ignore "${CI_IGNORE_SPEC_LIST:-}")"
     if [[ -n "$STRICT_LIST" ]]; then
         CI_FILTER_SPEC_LIST="$STRICT_LIST"
         CI_STRICT_SPEC_LIST="$STRICT_LIST"
@@ -427,71 +398,57 @@ case "$CI_PHASE" in
         ;;
 esac
 
+# 2223-bzsn (local-ci.sh to Lua, slice 3): the check catalog — weight, spec
+# ref and failure reason per check id — is ONE table in
+# scripts/lua/local-ci-check-catalog.lua. It replaced three bash case tables
+# keyed by the same ids. load_check_catalog reads its rows once per shell;
+# the three lookups below keep their old names and answers. Without a plan
+# binary there is no catalog: every check then weighs 0 against spec:unknown,
+# and the warning names why.
+_CATALOG_LOADED=0
+_CATALOG_IDS=(); _CATALOG_WEIGHTS=(); _CATALOG_SPECS=(); _CATALOG_REASONS=()
+load_check_catalog() {
+    [[ "$_CATALOG_LOADED" == 1 ]] && return 0
+    _CATALOG_LOADED=1
+    local _cc_plan _cc_rows _cc_id _cc_w _cc_s _cc_r
+    _cc_plan="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _cc_plan=""
+    [[ "$_cc_plan" == ./* ]] && _cc_plan="$REPO_ROOT/${_cc_plan#./}"
+    if [[ -n "$_cc_plan" ]]; then
+        _cc_rows="$(cd "$REPO_ROOT" && "$_cc_plan" script run --helper scripts/lua/local-ci-check-catalog.lua)" || _cc_rows=""
+    else
+        _cc_rows=""
+    fi
+    if [[ -z "$_cc_rows" ]]; then
+        echo "warn:local-ci:check-catalog-unavailable — no runnable tillandsias-plan answered scripts/lua/local-ci-check-catalog.lua; convergence weights are 0 and spec refs unknown (2223-bzsn)" >&2
+        return 0
+    fi
+    while IFS=$'\t' read -r _cc_id _cc_w _cc_s _cc_r; do
+        [[ -n "$_cc_id" ]] || continue
+        _CATALOG_IDS+=("$_cc_id"); _CATALOG_WEIGHTS+=("$_cc_w")
+        _CATALOG_SPECS+=("$_cc_s"); _CATALOG_REASONS+=("$_cc_r")
+    done <<< "$_cc_rows"
+}
+# Index of <id> in the catalog, else of its default row `*`, else empty.
+_catalog_index() {
+    load_check_catalog
+    local i fallback=""
+    for i in "${!_CATALOG_IDS[@]}"; do
+        [[ "${_CATALOG_IDS[i]}" == "$1" ]] && { echo "$i"; return 0; }
+        [[ "${_CATALOG_IDS[i]}" == "*" ]] && fallback="$i"
+    done
+    echo "$fallback"
+}
 check_weight() {
-    case "$1" in
-        spec-cheatsheet-binding) echo 100 ;;
-        spec-code-drift) echo 120 ;;
-        spec-trace-coverage) echo 90 ;;
-        version-monotonicity) echo 40 ;;
-        rust-formatting) echo 40 ;;
-        rust-clippy) echo 60 ;;
-        rust-clippy-all-features) echo 180 ;;
-        rust-tests) echo 80 ;;
-        container-base-policy) echo 40 ;;
-        cheatsheet-tiers) echo 80 ;;
-        no-python-scripts) echo 30 ;;
-        no-base64-script-injection) echo 30 ;;
-        litmus-pre-build) echo 100 ;;
-        litmus-post-build) echo 120 ;;
-        litmus-runtime) echo 140 ;;
-        litmus-tests) echo 140 ;;
-        *) echo 0 ;;
-    esac
+    local i; i="$(_catalog_index "$1")"
+    if [[ -n "$i" ]]; then echo "${_CATALOG_WEIGHTS[i]}"; else echo 0; fi
 }
-
 check_spec_ref() {
-    case "$1" in
-        spec-cheatsheet-binding) echo "spec:spec-traceability" ;;
-        spec-code-drift) echo "spec:spec-traceability" ;;
-        spec-trace-coverage) echo "spec:methodology-accountability" ;;
-        version-monotonicity) echo "spec:versioning" ;;
-        rust-formatting) echo "spec:dev-build" ;;
-        rust-clippy) echo "spec:dev-build" ;;
-        rust-clippy-all-features) echo "spec:dev-build" ;;
-        rust-tests) echo "spec:testing" ;;
-        container-base-policy) echo "spec:default-image" ;;
-        cheatsheet-tiers) echo "spec:cheatsheet-source-layer" ;;
-        no-python-scripts) echo "methodology.yaml tlatoani_hard_no_python" ;;
-        no-base64-script-injection) echo "methodology.yaml base64_script_injection_ban" ;;
-        litmus-pre-build) echo "spec:podman-orchestration" ;;
-        litmus-post-build) echo "spec:dev-build" ;;
-        litmus-runtime) echo "spec:litmus-convergence" ;;
-        litmus-tests) echo "spec:litmus-convergence" ;;
-        *) echo "spec:unknown" ;;
-    esac
+    local i; i="$(_catalog_index "$1")"
+    if [[ -n "$i" ]]; then echo "${_CATALOG_SPECS[i]}"; else echo "spec:unknown"; fi
 }
-
 failed_reason_for_check() {
-    local check_name="$1"
-    case "$check_name" in
-        spec-cheatsheet-binding) echo "Spec-cheatsheet binding below 90% (see /tmp/binding-check.log)" ;;
-        spec-code-drift) echo "Spec-code drift detected: ghost traces or zero-trace specs found (see /tmp/drift-check.log)" ;;
-        spec-trace-coverage) echo "Spec trace coverage below 90% (see /tmp/trace-coverage.log)" ;;
-        version-monotonicity) echo "Version is not monotonically greater than last release (see /tmp/version-check.log)" ;;
-        rust-formatting) echo "Rust code not formatted: run 'cargo fmt --all' (see /tmp/fmt-check.log)" ;;
-        rust-clippy) echo "Clippy warnings found: run 'cargo clippy --workspace' to see details (see /tmp/clippy-check.log)" ;;
-        rust-clippy-all-features) echo "All-features clippy warnings: run 'cargo clippy --workspace --all-targets --all-features -- -D warnings' (see /tmp/clippy-all-features-check.log)" ;;
-        rust-tests) echo "Test failures detected: run 'cargo test --workspace --lib --no-fail-fast' to see details (see /tmp/test-check.log)" ;;
-        container-base-policy) echo "Container base-image policy drift found (see /tmp/container-bases.log)" ;;
-        cheatsheet-tiers) echo "Cheatsheet tier errors or strict warnings found (see /tmp/cheatsheet-tiers.log)" ;;
-        no-python-scripts) echo "Python scripts found in tracked files (see /tmp/no-python-check.log)" ;;
-        no-base64-script-injection) echo "Base64 script injection detected (see /tmp/no-base64-script-injection.log)" ;;
-        litmus-pre-build) echo "Pre-build litmus failures detected (see /tmp/litmus-pre-build.log)" ;;
-        litmus-post-build) echo "Post-build smoke failures detected (see /tmp/litmus-post-build.log)" ;;
-        litmus-runtime) echo "Runtime litmus failures detected (see /tmp/litmus-runtime.log)" ;;
-        litmus-tests) echo "Litmus test failures detected (see /tmp/litmus-check.log)" ;;
-        *) echo "Check failed: $check_name" ;;
-    esac
+    local i r; i="$(_catalog_index "$1")"
+    if [[ -n "$i" ]]; then r="${_CATALOG_REASONS[i]}"; echo "${r//%s/$1}"; else echo "Check failed: $1"; fi
 }
 
 litmus_args_for_phase() {
@@ -562,6 +519,7 @@ run_litmus_phase() {
 }
 
 write_convergence_artifacts() {
+    load_check_catalog
     mkdir -p "$SIGNATURE_DIR"
 
     local total_cc=0
@@ -1165,8 +1123,8 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # result is deterministic (6/6), so this is a real gate on the daily tier.
     # ============================================================================
     log_section "Archiver Concurrent Check (1132-r4mt)"
-    if [[ -f "scripts/test-archiver-concurrent-check.sh" ]]; then
-        if bash scripts/test-archiver-concurrent-check.sh 1 > /tmp/archiver-concurrent.log 2>&1; then
+    if [[ -f "scripts/lua/test-archiver-concurrent-check.lua" ]]; then
+        if "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" script run scripts/lua/test-archiver-concurrent-check.lua -- 1 > /tmp/archiver-concurrent.log 2>&1; then
             log_pass "Concurrent archiver --check runs share no scratch"
             archive_check_log "archiver-concurrent-check" "pass" /tmp/archiver-concurrent.log
         else
@@ -1175,7 +1133,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "archiver-concurrent-check" "fail" /tmp/archiver-concurrent.log
         fi
     else
-        log_fail_missing_guard "archiver-concurrent-check" "scripts/test-archiver-concurrent-check.sh"
+        log_fail_missing_guard "archiver-concurrent-check" "scripts/lua/test-archiver-concurrent-check.lua"
         archive_check_log "archiver-concurrent-check" "skipped"
     fi
 
@@ -1348,7 +1306,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # the headless target. The durable closure is the seam-writer guard
     # (scripts/lua/check-seam-writers-canonical.lua) going gating once 1250-92ty
     # lands; this seat removes the deterministic failure, not the race.
-    if run_rust_test_on_host env TILLANDSIAS_PODMAN_BIN=/bin/false cargo test --workspace --lib --no-fail-fast 2>&1 | tee /tmp/test-check.log; then
+    if run_rust_tests_lua run --regime rust-tests -- env TILLANDSIAS_PODMAN_BIN=/bin/false cargo test --workspace --lib --no-fail-fast 2>&1 | tee /tmp/test-check.log; then
         log_pass "All unit tests pass"
         archive_check_log "rust-tests" "pass" /tmp/test-check.log
     else
@@ -1356,8 +1314,11 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         [[ "$VERBOSE" == "1" ]] && cat /tmp/test-check.log >&2
         # 1242-4x53: did it fail AGAIN, same env and seat? Two reds in one
         # release tier passed on re-run, and until now the record could not say.
-        _rust_reproduced="$(rerun_failed_rust_tests /tmp/test-check.log \
-            run_rust_test_on_host env TILLANDSIAS_PODMAN_BIN=/bin/false cargo test --workspace --lib --no-fail-fast)"
+        # The re-run refuses by name if the regime differs from the first run.
+        _rust_rerun="$(run_rust_tests_lua rerun --regime rust-tests /tmp/test-check.log \
+            -- env TILLANDSIAS_PODMAN_BIN=/bin/false cargo test --workspace --lib --no-fail-fast 2>/dev/null)"
+        _rust_reproduced="$(rust_tests_reproduced "$_rust_rerun")"
+        [[ "$_rust_rerun" == *regime-differs* ]] && log_info "rust-tests re-run refused, the regime differs from the first run (2215-beb5): $_rust_rerun"
         [[ -n "$_rust_reproduced" ]] && log_info "rust-tests failure reproduced on a same-regime re-run: $_rust_reproduced (1242-4x53)"
         archive_check_log "rust-tests" "fail" /tmp/test-check.log "rust-tests.log" "$_rust_reproduced"
     fi
@@ -1516,378 +1477,58 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # right: a name assembled at runtime is invisible to `grep` for a human
     # reader too, and "who calls this guard?" must stay answerable by search.
     log_section "Recently Landed Guards"
-    # 792-77bt (windows lane). A REPORT, not a pass/fail gate: it prints the
-    # tray string-corpus drift ratio and exits 0 whatever the ratio is, so it
-    # is wired to surface the number, not to fail on it. Wired here because
-    # the activation audit correctly flagged it as an orphan the moment it
-    # landed — an unwired guard is inert, and inert is the 599-4wzr class.
-    # The packet is windows-owned; if they give it a fail threshold, this
-    # block should move to the tracked-failure shape the others use.
-    if [[ -f "scripts/check-tray-string-corpus-drift.sh" ]]; then
-        bash scripts/check-tray-string-corpus-drift.sh 2>&1 | tee /tmp/tray-string-corpus-drift.log || true
-        log_pass "Tray string-corpus drift reported (792-77bt, informational)"
-        archive_check_log "tray-string-corpus-drift" "pass" /tmp/tray-string-corpus-drift.log
-    else
-        log_fail_missing_guard "tray-string-corpus-drift" "scripts/check-tray-string-corpus-drift.sh"
-        archive_check_log "tray-string-corpus-drift" "skipped"
-    fi
-
-    # 829-dkuc: the de-slop sweep's own ritual detector. A REPORT, not a gate:
-    # it reads plan/deslop-sweeps.d/*.md and prints ok:/unknown:/red: with the
-    # rules it could and could not evaluate, exiting 0 either way (the sweep
-    # protocol, criteria 4+, is what may later turn red: into a refusal).
-    # Wired here because it shipped on 2026-09-06 (3b16c92b6) invoked by
-    # nothing and the activation audit flagged it on the 2026-09-11 release
-    # gate — an unwired guard is inert, the 599-4wzr class.
-    if [[ -f "scripts/check-deslop-sweep-health.sh" ]]; then
-        bash scripts/check-deslop-sweep-health.sh 2>&1 | tee /tmp/deslop-sweep-health.log || true
-        log_pass "De-slop sweep health reported (829-dkuc, informational)"
-        archive_check_log "deslop-sweep-health" "pass" /tmp/deslop-sweep-health.log
-    else
-        log_fail_missing_guard "deslop-sweep-health" "scripts/check-deslop-sweep-health.sh"
-        archive_check_log "deslop-sweep-health" "skipped"
-    fi
-
-    # 1572-nqx5: ported to Lua. No runnable plan binary is a missing guard, not a pass.
-    _cf_plan="$( . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null )" || _cf_plan=""
-    if [[ -f "scripts/lua/check-cheatsheet-frontmatter.lua" && -n "$_cf_plan" ]]; then
-        _rc=0
-        "$_cf_plan" script run scripts/lua/check-cheatsheet-frontmatter.lua > /tmp/cheatsheet-frontmatter.log 2>&1 || _rc=$?
-        cat /tmp/cheatsheet-frontmatter.log
-        if [ "$_rc" -eq 0 ]; then
-            log_pass "Cheatsheet frontmatter valid"
-            archive_check_log "cheatsheet-frontmatter" "pass" /tmp/cheatsheet-frontmatter.log
-        else
-            log_fail_tracked "cheatsheet-frontmatter" "Cheatsheet frontmatter violations (see /tmp/cheatsheet-frontmatter.log)"
-            archive_check_log "cheatsheet-frontmatter" "fail" /tmp/cheatsheet-frontmatter.log
-        fi
-    else
-        log_fail_missing_guard "cheatsheet-frontmatter" "scripts/lua/check-cheatsheet-frontmatter.lua (or no runnable tillandsias-plan)"
-        archive_check_log "cheatsheet-frontmatter" "skipped"
-    fi
-
-    if [[ -f "scripts/lua/source-agreements.lua" ]]; then
-        _sa_plan="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _sa_plan=""
-        case "$_sa_plan" in ./*) _sa_plan="$REPO_ROOT/${_sa_plan#./}" ;; esac
-        if [[ -z "$_sa_plan" ]] || ! grep -qx script <<<"$("$_sa_plan" capabilities 2>/dev/null)"; then
-            echo "could-not-run:dev-embed-model-agreement:no-script-runner — rebuild tillandsias-plan with script run" > /tmp/dev-embed-model-agreement.log
-            log_fail_tracked "dev-embed-model-agreement" "No typed Lua runner (see /tmp/dev-embed-model-agreement.log)"
-            archive_check_log "dev-embed-model-agreement" "fail" /tmp/dev-embed-model-agreement.log
-        elif (cd "$REPO_ROOT" && "$_sa_plan" script run scripts/lua/source-agreements.lua -- dev_embed_model_agreement images/default/config-overlay/mcp/lib-dev-env.sh scripts/dev-inference-ensure.sh) 2>&1 | tee /tmp/dev-embed-model-agreement.log; then
-            log_pass "Dev embed model agrees across surfaces"
-            archive_check_log "dev-embed-model-agreement" "pass" /tmp/dev-embed-model-agreement.log
-        else
-            log_fail_tracked "dev-embed-model-agreement" "Dev embed model disagreement (see /tmp/dev-embed-model-agreement.log)"
-            archive_check_log "dev-embed-model-agreement" "fail" /tmp/dev-embed-model-agreement.log
-        fi
-    else
-        log_fail_missing_guard "dev-embed-model-agreement" "scripts/lua/source-agreements.lua"
-        archive_check_log "dev-embed-model-agreement" "skipped"
-    fi
-
-    # Order 801-a2by. Sibling of the check above and for the same reason: the
-    # spec-index PRODUCER and its two READERS resolve the durable root
-    # independently, in two runtimes that cannot share a file. A disagreement is
-    # silent by construction — the index gets built where nobody looks and the
-    # system reports a missing index rather than a misconfigured one, which is
-    # the shape that hid the whole embedding step for weeks (552).
-    if [[ -f "scripts/check-spec-index-resolution-agreement.sh" ]]; then
-        if bash scripts/check-spec-index-resolution-agreement.sh 2>&1 | tee /tmp/spec-index-resolution-agreement.log; then
-            log_pass "Spec-index resolution agrees across producer and readers"
-            archive_check_log "spec-index-resolution-agreement" "pass" /tmp/spec-index-resolution-agreement.log
-        else
-            log_fail_tracked "spec-index-resolution-agreement" "Spec-index resolution drift (see /tmp/spec-index-resolution-agreement.log)"
-            archive_check_log "spec-index-resolution-agreement" "fail" /tmp/spec-index-resolution-agreement.log
-        fi
-    else
-        log_fail_missing_guard "spec-index-resolution-agreement" "scripts/check-spec-index-resolution-agreement.sh"
-        archive_check_log "spec-index-resolution-agreement" "skipped"
-    fi
-
-    # Order 931-p26p. The guard above proves the three carriers AGREE; it cannot
-    # prove they agree on the RIGHT thing. Rung 4 (repo-relative) was added so
-    # two userlands on one Windows host stop resolving two roots from one $HOME
-    # rule — and the risk it carries is the mirror image of the bug: capturing
-    # resolution on Linux and macOS hosts whose podman-volume rung is correct
-    # today, silently relocating a working index fleet-wide. Three of this
-    # fixture's arms are negative controls asserting an earlier rung still wins,
-    # and one is a control proving the divergence it fixes was real. Wired here
-    # rather than trusted to review, because "no host moved" is a claim about
-    # every host, made from one.
-    if [[ -f "scripts/test-spec-index-repo-relative-rung.sh" ]]; then
-        if bash scripts/test-spec-index-repo-relative-rung.sh 2>&1 | tee /tmp/spec-index-repo-relative-rung.log; then
-            log_pass "Spec-index repo-relative rung fixes Windows without moving other hosts"
-            archive_check_log "spec-index-repo-relative-rung" "pass" /tmp/spec-index-repo-relative-rung.log
-        else
-            log_fail_tracked "spec-index-repo-relative-rung" "Spec-index repo-relative rung regression (see /tmp/spec-index-repo-relative-rung.log)"
-            archive_check_log "spec-index-repo-relative-rung" "fail" /tmp/spec-index-repo-relative-rung.log
-        fi
-    else
-        log_fail_missing_guard "spec-index-repo-relative-rung" "scripts/test-spec-index-repo-relative-rung.sh"
-        archive_check_log "spec-index-repo-relative-rung" "skipped"
-    fi
-
-    # Order 1003-v3dc. The durable tier's LIVENESS test and the rung it falls
-    # back to. Wired beside the two guards above because it fails in the same
-    # invisible way they do: rung 3 used `[ -d ]` on a podman mountpoint, which
-    # under rootless podman fails with EACCES on a volume that exists, so
-    # "not permitted" was read as "absent" and the index silently demoted to
-    # rung 4 — which was `target/`, which `cargo clean` removes wholesale.
-    # Measured on lenovinha 2026-09-04: 23,154 embeddings in a GC target with
-    # `--where` reporting serving-exists=yes the whole time. The fixture drives
-    # the block EXTRACTED from the real carrier under a stub podman, and its
-    # EACCES arm uses a genuinely unreadable directory rather than a missing
-    # one, because a missing one cannot tell the two failures apart — which was
-    # the entire defect.
-    if [[ -f "scripts/test-spec-index-durable-tier-demotion.sh" ]]; then
-        if bash scripts/test-spec-index-durable-tier-demotion.sh 2>&1 | tee /tmp/spec-index-durable-tier-demotion.log; then
-            log_pass "Spec-index durable tier: not-permitted is distinguishable from absent, and rung 4 is not target/"
-            archive_check_log "spec-index-durable-tier-demotion" "pass" /tmp/spec-index-durable-tier-demotion.log
-        else
-            log_fail_tracked "spec-index-durable-tier-demotion" "Spec-index durable-tier demotion regression (see /tmp/spec-index-durable-tier-demotion.log)"
-            archive_check_log "spec-index-durable-tier-demotion" "fail" /tmp/spec-index-durable-tier-demotion.log
-        fi
-    else
-        log_fail_missing_guard "spec-index-durable-tier-demotion" "scripts/test-spec-index-durable-tier-demotion.sh"
-        archive_check_log "spec-index-durable-tier-demotion" "skipped"
-    fi
-
-    # Order 901-jtvi. A litmus step matched a tab-separated projection with
-    # `grep -qE '^hardware\t...'`. GNU grep's ERE does not define \t: it warns
-    # "stray \ before t" to stderr — which a -q step discards — and matches the
-    # bare letter, so the pattern could never match. It failed in the runner and
-    # passed every hand-check, because an interactive shell resolves a `grep`
-    # FUNCTION (ugrep) that DOES interpret \t, on three of three Linux hosts.
-    # Shell functions are not exported, so `bash -c` honestly disagrees with the
-    # author's next command. Three of us then spent an afternoon measuring pipe
-    # buffers for a SIGPIPE that never happened.
+    # 2231-zmzd (local-ci.sh to Lua, slice 5): the guards of this section are
+    # one roster in scripts/lua/local-ci-landed-guards.lua, with the order each
+    # one pins and why it is wired here. This loop runs them in roster order.
+    # The logs stay under /tmp and the gates still stream through tee, which is
+    # why the loop is bash and the table is Lua.
     #
-    # Wired here rather than trusted to review for the reason the two sibling
-    # spec-index guards are: the failure is invisible at the surface everyone
-    # checks. The allowlist is measured against /usr/bin/grep, not recalled —
-    # \s and \w ARE GNU extensions and refusing them would red-flag ten
-    # committed lines, which is how a guard gets switched off.
-    if [[ -f "scripts/test-litmus-grep-escapes.sh" ]]; then
-        if bash scripts/test-litmus-grep-escapes.sh 2>&1 | tee /tmp/litmus-grep-escapes.log; then
-            log_pass "Litmus grep patterns use escapes GNU grep actually defines"
-            archive_check_log "litmus-grep-escapes" "pass" /tmp/litmus-grep-escapes.log
-        else
-            log_fail_tracked "litmus-grep-escapes" "Litmus grep-escape regression (see /tmp/litmus-grep-escapes.log)"
-            archive_check_log "litmus-grep-escapes" "fail" /tmp/litmus-grep-escapes.log
-        fi
-    else
-        log_fail_missing_guard "litmus-grep-escapes" "scripts/test-litmus-grep-escapes.sh"
-        archive_check_log "litmus-grep-escapes" "skipped"
+    # ONE runner resolution (it used to be three variants, one per guard):
+    # TILLANDSIAS_SCRIPT_RUNNER_BIN, else plan-binary-probe from REPO_ROOT; it
+    # must be executable and list `script` among its capabilities. It reads
+    # the roster too, so with no runner the whole section is ONE tracked
+    # failure (landed-guards) instead of five Lua guards failing one by one and
+    # eleven bash guards running: local-ci without a plan binary already
+    # refuses at its score (977-j6qu), so such a run was never green.
+    _lg_bin="${TILLANDSIAS_SCRIPT_RUNNER_BIN:-}"
+    [[ -n "$_lg_bin" ]] || _lg_bin="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _lg_bin=""
+    case "$_lg_bin" in ./*) _lg_bin="$REPO_ROOT/${_lg_bin#./}" ;; esac
+    if [[ -z "$_lg_bin" || ! -x "$_lg_bin" ]] || ! grep -qx script <<<"$("$_lg_bin" capabilities 2>/dev/null)"; then
+        _lg_bin=""
     fi
-
-    # Order 1018-5f5a. Every [FAIL] the litmus runner prints must carry the
-    # step's exit status. On 2026-09-04 a step that returned 1 was reported
-    # across three hosts as a SIGPIPE 141, because a reader with no number
-    # supplies one — and the nearest plausible mechanism was in a comment block
-    # they had just read. Three hosts measured pipe buffers for an afternoon
-    # against a failure that never involved a pipe. The same day it hid two of
-    # the release gate's eight causes.
-    #
-    # Wired here rather than trusted to review because the regression is a NEW
-    # [FAIL] site added without rc, which no reviewer reliably notices. Sites
-    # where no step exit exists carry an inline `# rc-exempt: <reason>` marker,
-    # so a new site must be classified deliberately instead of defaulting to
-    # silence.
-    if [[ -f "scripts/test-litmus-runner-reports-rc.sh" ]]; then
-        if bash scripts/test-litmus-runner-reports-rc.sh 2>&1 | tee /tmp/litmus-runner-rc.log; then
-            log_pass "Litmus runner reports the step exit status on every [FAIL]"
-            archive_check_log "litmus-runner-reports-rc" "pass" /tmp/litmus-runner-rc.log
-        else
-            log_fail_tracked "litmus-runner-reports-rc" "Litmus runner rc-reporting regression (see /tmp/litmus-runner-rc.log)"
-            archive_check_log "litmus-runner-reports-rc" "fail" /tmp/litmus-runner-rc.log
-        fi
-    else
-        log_fail_missing_guard "litmus-runner-reports-rc" "scripts/test-litmus-runner-reports-rc.sh"
-        archive_check_log "litmus-runner-reports-rc" "skipped"
+    _lg_rows=""
+    [[ -z "$_lg_bin" ]] || _lg_rows="$(cd "$REPO_ROOT" && "$_lg_bin" script run --helper scripts/lua/local-ci-landed-guards.lua)" || _lg_rows=""
+    if [[ -z "$_lg_rows" ]]; then
+        log_fail_missing_guard "landed-guards" "a runnable tillandsias-plan to read scripts/lua/local-ci-landed-guards.lua (2231-zmzd)"
+        archive_check_log "landed-guards" "skipped"
     fi
-
-    # ORDER 1187-iij8 arm (a), BOUND HERE because it was an orphan (1205-aipn).
-    # Its closure cited a 7/7 hand-run, which is true as a statement about that
-    # run and false as protection: nothing executed it on any gate, so the
-    # fail-open mutation it exists to catch could have landed unnoticed.
-    #
-    # Bound beside the rc-reporting fixture deliberately — both assert that the
-    # runner's VERDICT and its TALLY keep saying different things, and 820-c8q8
-    # is the ruling both defend: a step killed at its budget still FAILS, so
-    # BUDGET is a reporting dimension and never an exemption. Measured 2.1s on
-    # yoga; it drives the runner in throwaway roots and touches no real corpus.
-    if [[ -f "scripts/test-litmus-budget-tally.sh" ]]; then
-        if bash scripts/test-litmus-budget-tally.sh 2>&1 | tee /tmp/litmus-budget-tally.log; then
-            log_pass "Litmus runner tallies a budget kill apart from a failed assertion"
-            archive_check_log "litmus-budget-tally" "pass" /tmp/litmus-budget-tally.log
-        else
-            log_fail_tracked "litmus-budget-tally" "Litmus BUDGET tally regression (see /tmp/litmus-budget-tally.log)"
-            archive_check_log "litmus-budget-tally" "fail" /tmp/litmus-budget-tally.log
+    while IFS=$'\x1f' read -r _lg_id _lg_kind _lg_rt _lg_path _lg_args _lg_log _lg_pass _lg_fail _lg_missing; do
+        [[ -n "$_lg_id" ]] || continue
+        _lg_argv=()
+        [[ "$_lg_args" == "-" ]] || read -r -a _lg_argv <<<"$_lg_args"
+        if [[ ! -f "$REPO_ROOT/$_lg_path" ]]; then
+            log_fail_missing_guard "$_lg_id" "$_lg_missing"
+            archive_check_log "$_lg_id" "skipped"
+            continue
         fi
-    else
-        log_fail_missing_guard "litmus-budget-tally" "scripts/test-litmus-budget-tally.sh"
-        archive_check_log "litmus-budget-tally" "skipped"
-    fi
-
-    # Order 1194-davi. The advisory it falsifies is invoked from the LAND path,
-    # not from this gate, because a land that adopts a valid stamp skips the
-    # gate entirely (1174-u5wp) and an advisory inside the gate would be silent
-    # on exactly those lands. Its FIXTURE belongs here, where fixtures run.
-    if [[ -f "scripts/test-unrunnable-platform-arms.sh" ]]; then
-        if bash scripts/test-unrunnable-platform-arms.sh 2>&1 | tee /tmp/unrunnable-platform-arms.log; then
-            log_pass "Cross-platform gate-arm advisory names arms this host cannot run"
-            archive_check_log "unrunnable-platform-arms" "pass" /tmp/unrunnable-platform-arms.log
-        else
-            log_fail_tracked "unrunnable-platform-arms" "Cross-platform arm advisory regression (see /tmp/unrunnable-platform-arms.log)"
-            archive_check_log "unrunnable-platform-arms" "fail" /tmp/unrunnable-platform-arms.log
-        fi
-    else
-        log_fail_missing_guard "unrunnable-platform-arms" "scripts/test-unrunnable-platform-arms.sh"
-        archive_check_log "unrunnable-platform-arms" "skipped"
-    fi
-
-    # Order 1218-25z3, sibling of the above: advisory invoked from the release
-    # path, fixture run here.
-    if [[ -f "scripts/test-must-ship-rows.sh" ]]; then
-        if bash scripts/test-must-ship-rows.sh 2>&1 | tee /tmp/must-ship-rows.log; then
-            log_pass "Must-ship-next release advisory names rows absent from the cut"
-            archive_check_log "must-ship-rows" "pass" /tmp/must-ship-rows.log
-        else
-            log_fail_tracked "must-ship-rows" "Must-ship advisory regression (see /tmp/must-ship-rows.log)"
-            archive_check_log "must-ship-rows" "fail" /tmp/must-ship-rows.log
-        fi
-    else
-        log_fail_missing_guard "must-ship-rows" "scripts/test-must-ship-rows.sh"
-        archive_check_log "must-ship-rows" "skipped"
-    fi
-
-    # Order 1369-sjbc: the copy the release jobs upload to `unstable` defaults
-    # its installers to unstable; the versioned (later stable) copy does not.
-    # Wired in build.sh --check as well; hermetic, a few seconds.
-    if [[ -f "scripts/test-unstable-installer-defaults-to-unstable.sh" ]]; then
-        if bash scripts/test-unstable-installer-defaults-to-unstable.sh 2>&1 | tee /tmp/unstable-installer-default.log; then
-            log_pass "Unstable-channel installers default to unstable; stable copies do not"
-            archive_check_log "unstable-installer-default" "pass" /tmp/unstable-installer-default.log
-        else
-            log_fail_tracked "unstable-installer-default" "Unstable installer default regression (see /tmp/unstable-installer-default.log)"
-            archive_check_log "unstable-installer-default" "fail" /tmp/unstable-installer-default.log
-        fi
-    else
-        log_fail_missing_guard "unstable-installer-default" "scripts/test-unstable-installer-defaults-to-unstable.sh"
-        archive_check_log "unstable-installer-default" "skipped"
-    fi
-
-    # Order 1380-zmpi: every installer ends with a PENDING ACTIONS banner.
-    # Wired in build.sh --check as well; hermetic, a few seconds.
-    if [[ -f "scripts/test-installers-print-pending-banner.sh" ]]; then
-        if bash scripts/test-installers-print-pending-banner.sh 2>&1 | tee /tmp/pending-banner.log; then
-            log_pass "Installers end with a PENDING ACTIONS banner"
-            archive_check_log "pending-banner" "pass" /tmp/pending-banner.log
-        else
-            log_fail_tracked "pending-banner" "Pending-actions banner regression (see /tmp/pending-banner.log)"
-            archive_check_log "pending-banner" "fail" /tmp/pending-banner.log
-        fi
-    else
-        log_fail_missing_guard "pending-banner" "scripts/test-installers-print-pending-banner.sh"
-        archive_check_log "pending-banner" "skipped"
-    fi
-
-    # Order 970-7fqk, sibling of the above.
-    if [[ -f "scripts/test-gate-stamp-names-content-movers.sh" ]]; then
-        if bash scripts/test-gate-stamp-names-content-movers.sh 2>&1 | tee /tmp/gate-stamp-movers.log; then
-            log_pass "Stale-stamp refusal names content movers, not mtime movers"
-            archive_check_log "gate-stamp-movers" "pass" /tmp/gate-stamp-movers.log
-        else
-            log_fail_tracked "gate-stamp-movers" "Stale-stamp content-mover regression (see /tmp/gate-stamp-movers.log)"
-            archive_check_log "gate-stamp-movers" "fail" /tmp/gate-stamp-movers.log
-        fi
-    else
-        log_fail_missing_guard "gate-stamp-movers" "scripts/test-gate-stamp-names-content-movers.sh"
-        archive_check_log "gate-stamp-movers" "skipped"
-    fi
-
-    # Order 1004-inkc. `--expect none` disables the absent detection, which is
-    # that order's entire subject: a production caller passing it restores a
-    # health check that cannot fail on a DELETED service. The escape hatch was
-    # needed (empty now means "use the default", and three legacy fixture arms
-    # model a vault without a proxy while testing something else), so it is
-    # confined to the fixture and the confinement is CHECKED — a rule only an
-    # attentive reader honours is a suggestion, which is what 994-8r3w's unmet
-    # criterion 3 recorded about its own single-caller declaration.
-    # PORTED to Lua (1616-njfd): the runner is resolved as the gate resolves it,
-    # TILLANDSIAS_SCRIPT_RUNNER_BIN first, then plan-binary-probe, never PATH;
-    # no runner is a could-not-run, never a pass.
-    if [[ -f "scripts/lua/check-enclave-expect-none-is-fixture-only.lua" ]]; then
-        _en_bin="${TILLANDSIAS_SCRIPT_RUNNER_BIN:-}"
-        [[ -n "$_en_bin" ]] || _en_bin="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _en_bin=""
-        case "$_en_bin" in ./*) _en_bin="$REPO_ROOT/${_en_bin#./}" ;; esac
-        # A runner that is named but not there cannot answer: could-not-run, not
-        # a "production caller" violation the lint never looked for.
-        [[ -n "$_en_bin" && -x "$_en_bin" ]] || _en_bin=""
-        if [[ -n "$_en_bin" ]]; then
-            if (cd "$REPO_ROOT" && "$_en_bin" script run scripts/lua/check-enclave-expect-none-is-fixture-only.lua) 2>&1 | tee /tmp/expect-none-fixture-only.log; then
-                log_pass "The enclave health check's absent-detection opt-out stays fixture-only"
-                archive_check_log "expect-none-fixture-only" "pass" /tmp/expect-none-fixture-only.log
+        _lg_rc=0
+        if [[ "$_lg_rt" == lua ]]; then
+            if [[ ${#_lg_argv[@]} -gt 0 ]]; then
+                (cd "$REPO_ROOT" && "$_lg_bin" script run "$_lg_path" -- "${_lg_argv[@]}") 2>&1 | tee "$_lg_log" || _lg_rc=$?
             else
-                log_fail_tracked "expect-none-fixture-only" "A production caller passes the expect-none opt-out (see /tmp/expect-none-fixture-only.log)"
-                archive_check_log "expect-none-fixture-only" "fail" /tmp/expect-none-fixture-only.log
+                (cd "$REPO_ROOT" && "$_lg_bin" script run "$_lg_path") 2>&1 | tee "$_lg_log" || _lg_rc=$?
             fi
         else
-            echo "could-not-run:expect-none-fixture-only:no-script-runner" > /tmp/expect-none-fixture-only.log
-            cat /tmp/expect-none-fixture-only.log >&2
-            log_fail_tracked "expect-none-fixture-only" "no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
-            archive_check_log "expect-none-fixture-only" "fail" /tmp/expect-none-fixture-only.log
+            (cd "$REPO_ROOT" && bash "$_lg_path" ${_lg_argv[@]+"${_lg_argv[@]}"}) 2>&1 | tee "$_lg_log" || _lg_rc=$?
         fi
-    else
-        log_fail_missing_guard "expect-none-fixture-only" "scripts/lua/check-enclave-expect-none-is-fixture-only.lua"
-        archive_check_log "expect-none-fixture-only" "skipped"
-    fi
-
-    # Order 1009-gccx. The gate's cheap deciders must stay AHEAD of its
-    # compiles. A fifth to a third of gate runs end red on defects decidable in
-    # milliseconds, and before this order they were discovered after clippy, the
-    # workspace suite and the litmus phases had already run — measured on this
-    # host, one planted exec-bit defect went from 222s to 2s to refusal.
-    # This fixture pins the ORDER, not the individual checks: asserting only
-    # "the gate refuses" would pass equally with the guard back at the end,
-    # which is the state the order exists to leave.
-    if [[ -f "scripts/test-gate-fast-refusals.sh" ]]; then
-        if bash scripts/test-gate-fast-refusals.sh 2>&1 | tee /tmp/gate-fast-refusals.log; then
-            log_pass "The gate's sub-second deciders run before its first compile"
-            archive_check_log "gate-fast-refusals" "pass" /tmp/gate-fast-refusals.log
+        if [[ "$_lg_kind" == report || "$_lg_rc" -eq 0 ]]; then
+            log_pass "$_lg_pass"
+            archive_check_log "$_lg_id" "pass" "$_lg_log"
         else
-            log_fail_tracked "gate-fast-refusals" "Gate fast-refusal ordering regression (see /tmp/gate-fast-refusals.log)"
-            archive_check_log "gate-fast-refusals" "fail" /tmp/gate-fast-refusals.log
+            log_fail_tracked "$_lg_id" "$_lg_fail"
+            archive_check_log "$_lg_id" "fail" "$_lg_log"
         fi
-    else
-        log_fail_missing_guard "gate-fast-refusals" "scripts/test-gate-fast-refusals.sh"
-        archive_check_log "gate-fast-refusals" "skipped"
-    fi
-
-    # Order 765-mza8. Wired here, literally, for the same reason as the two
-    # above. A dead `inputs:` glob is silent by construction: it cannot make a
-    # test run, only skip, so nothing else in this suite would ever go red for
-    # it. Verified passing before wiring: 51 glob(s) across 11 annotated test(s).
-    # Ported to Lua (1643-q3at): same runner resolution as the guard above.
-    if [[ -f "scripts/lua/check-litmus-dead-inputs.lua" ]]; then
-        _di_bin="${TILLANDSIAS_SCRIPT_RUNNER_BIN:-}"
-        [[ -n "$_di_bin" ]] || _di_bin="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _di_bin=""
-        case "$_di_bin" in ./*) _di_bin="$REPO_ROOT/${_di_bin#./}" ;; esac
-        [[ -n "$_di_bin" && -x "$_di_bin" ]] || _di_bin=""
-        if [[ -z "$_di_bin" ]]; then
-            log_fail_missing_guard "litmus-dead-inputs" "a runnable tillandsias-plan for scripts/lua/check-litmus-dead-inputs.lua"
-            archive_check_log "litmus-dead-inputs" "skipped"
-        elif (cd "$REPO_ROOT" && "$_di_bin" script run scripts/lua/check-litmus-dead-inputs.lua) 2>&1 | tee /tmp/litmus-dead-inputs.log; then
-            log_pass "Every litmus inputs: glob resolves to a tracked file"
-            archive_check_log "litmus-dead-inputs" "pass" /tmp/litmus-dead-inputs.log
-        else
-            log_fail_tracked "litmus-dead-inputs" "Dead litmus inputs glob (see /tmp/litmus-dead-inputs.log)"
-            archive_check_log "litmus-dead-inputs" "fail" /tmp/litmus-dead-inputs.log
-        fi
-    else
-        log_fail_missing_guard "litmus-dead-inputs" "scripts/lua/check-litmus-dead-inputs.lua"
-        archive_check_log "litmus-dead-inputs" "skipped"
-    fi
+    done <<<"$_lg_rows"
 
     # ============================================================================
     # Guard activation audit (order 599-4wzr) — a guard nobody can prove is
@@ -1945,8 +1586,8 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # ============================================================================
 
     log_section "Cheatsheet Tier Discipline"
-    if [[ -f "scripts/check-cheatsheet-tiers.sh" ]]; then
-        if bash scripts/check-cheatsheet-tiers.sh --strict 2>&1 | tee /tmp/cheatsheet-tiers.log; then
+    if [[ -f "scripts/lua/check-cheatsheet-tiers.lua" ]]; then
+        if "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" script run scripts/lua/check-cheatsheet-tiers.lua -- --strict 2>&1 | tee /tmp/cheatsheet-tiers.log; then
             log_pass "Cheatsheet tier validation passed"
             archive_check_log "cheatsheet-tiers" "pass" /tmp/cheatsheet-tiers.log
         else
@@ -1955,7 +1596,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "cheatsheet-tiers" "fail" /tmp/cheatsheet-tiers.log
         fi
     else
-        log_fail_missing_guard "cheatsheet-tiers" "scripts/check-cheatsheet-tiers.sh"
+        log_fail_missing_guard "cheatsheet-tiers" "scripts/lua/check-cheatsheet-tiers.lua"
         archive_check_log "cheatsheet-tiers" "skipped"
     fi
 
@@ -2002,8 +1643,8 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # repository, including files nobody has identified? ~66 s here, ~99 s on a
     # floor host, which is why it is daily and not per-land.
     # Declared in scripts/gate-divergence-declared.txt as `excluded`.
-    if [[ -f "scripts/test-plan-binary-probe-usage-determinism-corpus.sh" ]]; then
-        if bash scripts/test-plan-binary-probe-usage-determinism-corpus.sh 2>&1 | tee /tmp/probe-usage-determinism-corpus.log; then
+    if [[ -f "scripts/lua/test-plan-binary-probe-usage-determinism-corpus.lua" ]]; then
+        if "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" script run scripts/lua/test-plan-binary-probe-usage-determinism-corpus.lua 2>&1 | tee /tmp/probe-usage-determinism-corpus.log; then
             log_pass "Probe-usage guard deterministic over the full corpus"
             archive_check_log "probe-usage-determinism-corpus" "pass" /tmp/probe-usage-determinism-corpus.log
         else
@@ -2012,7 +1653,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "probe-usage-determinism-corpus" "fail" /tmp/probe-usage-determinism-corpus.log
         fi
     else
-        log_fail_missing_guard "probe-usage-determinism-corpus" "scripts/test-plan-binary-probe-usage-determinism-corpus.sh"
+        log_fail_missing_guard "probe-usage-determinism-corpus" "scripts/lua/test-plan-binary-probe-usage-determinism-corpus.lua"
         archive_check_log "probe-usage-determinism-corpus" "skipped"
     fi
 

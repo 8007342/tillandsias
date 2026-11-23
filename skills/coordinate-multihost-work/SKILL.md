@@ -14,6 +14,28 @@ description: Coordinate Tillandsias Linux, Windows, and macOS implementation age
 
 Run a short, durable coordination pass for the Tillandsias Linux, Windows, and macOS implementation agents. The goal is to keep agents unblocked, ensure their sibling `./plan` states cooperate, and strictly guarantee convergence on the specs in finite time.
 
+## Remote unreachable: STOP — check FIRST, and on the first GitHub failure (order 2239-rmun)
+
+The user's direction (2026-11-22): a host that cannot push code to the remote
+must stop work entirely, not retry with exponential backoff, and not keep
+doing local work. A host whose gh token went bad kept merging and porting for
+~25 minutes because every symptom ("Failed to connect to github.com:443",
+"graphql: i/o timeout") read as a flaky network.
+
+1. At the start of every loop, AND the moment any GitHub operation fails (a
+   push, `gh pr ...`, `git fetch`/`ls-remote`, an API timeout), run the probe
+   once:
+   `tillandsias-plan script run scripts/lua/probe-remote-reachable.lua`
+2. `ok:remote-reachable` → continue. Anything that is neither `ok:` nor
+   `blocked:remote-unreachable:` (a script error, a stale plan binary) judged
+   nothing: rebuild the plan binary and re-run it; never suspend on it.
+3. `blocked:remote-unreachable:<cause>` → **SUSPEND**: tell the user and the
+   coordinator (by name, with the cause and the probe's why/remedy), push and
+   claim nothing, start no further local work, and do not retry or back off.
+   Wait for a human to restore access, then run the probe again.
+4. Never run `gh auth login` or `gh auth refresh` yourself; restoring access
+   is the human's step on that host.
+
 ## Core Rule
 
 Do coordination, spec, plan, methodology, and cheatsheet work. Do not change implementation code unless the blocker is clearly a small coordination-side fix required to unblock agents. Respect dirty worktree changes you did not make.
@@ -276,6 +298,44 @@ burndown:<backlog>:count=<n>:stage=<s>:window=<k>:paid=<p>:waived=<v>:silent=<q>
 
 ---
 
+## Stale Drafts And PR-less Work Refs: List AND Act (order 2100-vkpg)
+
+The land queue lands non-draft PRs and nothing else. Every pass, before you
+shape work, list each draft PR and each `origin/work/*` ref with no PR that is
+more than 5 days old and holds commits not on `linux-next`. Check by ancestry,
+or by `git cherry` / patch-id.
+
+```bash
+gh pr list --state open --draft --limit 500 --json number,headRefName,updatedAt
+git for-each-ref --format='%(refname:short) %(committerdate:short)' refs/remotes/origin/work
+git cherry origin/linux-next origin/<ref>   # '+' lines are unlanded
+```
+
+Until the guard from 2101-b4pf exists, run the commands above. The queue's own
+`advisory:land-queue:ignored-draft:#N:<ref>` lines are the same list. Act on
+each item in the same pass:
+- A draft with an unexpired reason and expiry is held: move the hold to the
+  `land:hold` label (2143-z5uj) and un-draft it, so the hold is named every run.
+- A draft with no reason or a past expiry gets un-drafted (`gh pr ready N`),
+  or closed with a tombstone naming its replacement.
+- A landing-ready ref with no PR gets a PR you open yourself.
+- A ref whose content is on trunk by ancestry or patch-id gets deleted, and
+  its SHA goes in the pass record.
+- A ref more than ~200 commits behind is not rebased. Re-implement it fresh
+  on a new `work/<order>`, or file a packet that cites `refs/pull/N/head`.
+
+**Holding and prioritising (operator 2026-11-20, order 2143-z5uj).** Hold a PR
+with the `land:hold` label, not by drafting it: the queue names every held PR
+each run (`hold:land-queue:#N:<ref>`) and never gates it. Label `land:priority`
+to have a PR gated next; the queue re-reads the list before every candidate,
+so a label set mid-run takes effect at the next candidate. A plan-ledger-only
+PR lands on the plan-lane checks with no build-check. The verdict vocabulary
+(`could-not-run:host:` > `hold:` > `evicted:` > `flaky:`) is
+`methodology/multi-host-development.yaml` → `landing_queue`.
+Report the count as `stale-work:<drafts>/<prless>` in the status line (2102-9gyk).
+Why: 2026-11-17, 84 refs held about 80 agent-hours that never landed
+(plan/issues/abandoned-work-audit-2026-11-17.md).
+
 ## Stale Ready Rows: Surface, Never Close (order 1144-jfr5)
 
 Before shaping work, run the first-pass reconciliation and carry its
@@ -499,7 +559,9 @@ The relay lane's preflight is ONE command (1437-664a, landed):
 cycle-preflight, the full decider list, `cargo fmt --check`, touched
 fixtures, touched crates' tests, and the SCOPED covering litmus from
 `litmus-covering-specs.sh --relay-scope origin/linux-next`, 1437-yfuh),
-printing one verdict line; `--plan` prints the selection without running
+printing one verdict line and leaving your branch checked out again
+(2252-2mnf: a green run keeps `relay/<utc>` as a branch, named on stderr;
+check it out to land it); `--plan` prints the selection without running
 and must be byte-identical across two runs. Running every covering spec is
 the `--all-covering` opt-in, not the default: declared matches and
 instant/quick command matches run per relay; long, e2e, non-pre-build and

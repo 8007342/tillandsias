@@ -1,0 +1,39 @@
+# @trace spec:ci-release
+# @trace order:2118-tnut
+#
+# Operator 2026-11-20, landing-pipeline redesign P10 item (a): a gate step
+# may declare STEP_INPUTS (the 765-xpct selector grammar) and is skipped when
+# no changed path intersects them. Every declaration is a gate-integrity
+# decision, so every declared step is mutation-proven here through the real
+# rule: a change to each declared input, and to each implicit input build.sh
+# adds, makes the step run; with no recent FULL gate it runs whatever changed.
+# Red before 2118-tnut: no step could declare inputs and change-class.sh had
+# no may-skip entry point.
+name: litmus:gate-step-declared-inputs-are-mutation-proven
+spec: ci-release
+phase: pre-build
+description: Every gate step that declares STEP_INPUTS runs when any declared or implicit input changes and when no recent FULL gate exists; the docs+test tree verdict is printed per step
+severity: high
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary), bash and git; a scratch repo under target/plan-scratch; no network, no podman
+
+critical_path:
+  - step: "each declared and implicit input of each declared step makes it run; fail closed without a recent FULL gate; build.sh's implicit-input line is the one modelled"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-gate-step-inputs.lua 2>&1"
+    timeout_ms: 300000
+    success_pattern: "^ok:gate-step-inputs:[0-9]+ arms$"
+    expected_behavior: "ok:gate-step-inputs:<n> arms"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "per declared step: one run arm per input, a fail-closed arm, and a note line with the docs+test tree verdict"
+  log_fields:
+    spec: "ci-release"
+    test: "gate-step-declared-inputs-are-mutation-proven"
+
+rollback:
+  on_failure: "read the FAIL lines; the declarations are STEP_INPUTS lines in scripts/gate-steps.d/*.step, the rule is change_class_may_skip in scripts/change-class.sh, the loop is _run_gate_steps in build.sh"
+  command: "grep -n STEP_INPUTS scripts/gate-steps.d/*.step build.sh"

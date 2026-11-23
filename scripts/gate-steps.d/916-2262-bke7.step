@@ -1,0 +1,11 @@
+# Gate step 2262-bke7 — the release runbook must not prescribe pushing the tag before the
+# back-merge: with the hooks installed that order deadlocks the cut (898-zhf3).
+# Moved here from an inline build.sh step with the fixture's Lua port.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the release runbook's tag/back-merge order (898-zhf3)..."
+STEP_LUA="scripts/lua/test-release-runbook-tag-order.lua"
+STEP_ERROR="the release runbook prescribes an order the pre-push hook refuses — the next cut deadlocks at the tag push"
+STEP_OK="release runbook tag-order fixture passed"
+STEP_READS="scripts/lua/test-release-runbook-tag-order.lua skills/merge-to-main-and-release/SKILL.md"
+STEP_SECOND_REGIME="yolanda 2026-11-23 msys ok:release-runbook-tag-order:8 arms"

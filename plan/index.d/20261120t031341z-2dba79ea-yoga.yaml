@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tests-that-read-tillandsias-forge-instance-do-not-race-on-process-environment
+    field: status
+    value: completed
+    ts: "2026-11-20T03:13:41Z"
+    host: yoga
+
+events:
+  - packet_id: tests-that-read-tillandsias-forge-instance-do-not-race-on-process-environment
+    event:
+      type: completed
+      ts: "2026-11-20T03:13:41Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 3506fab7f
+  - packet_id: tests-that-read-tillandsias-forge-instance-do-not-race-on-process-environment
+    event:
+      type: note
+      ts: "2026-11-20T03:13:41Z"
+      host: yoga
+      summary: |-
+        verify batch at linux-next 3506fab7f, builder toolbox - cargo test -p tillandsias-headless --bin tillandsias x50. The forge-instance race tests a_second_launch_of_a_project_takes_the_next_instance and claiming_a_second_instance_exports_it passed 50/50; the only red in 50 runs was tray_presence::tests::the_enclave_owner_is_the_lock_holder, a separate flake filed as 2121-detz (coordinator ruling 2026-11-20)

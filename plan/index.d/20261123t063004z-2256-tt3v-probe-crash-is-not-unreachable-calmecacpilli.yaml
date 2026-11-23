@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: assigned by macuahuitl-fedora 2026-11-22 (found by yolanda-windows).
+packets:
+  - packet_id: remote-probe-crash-is-could-not-run-never-unreachable
+    order: "2256-tt3v"
+    status: claimed
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [preflight, pre-push, remote-probe]
+    estimated_hours: 2
+    title: "A remote probe that crashes is could-not-run:remote-probe:script-error, never remote-unreachable"
+    context: |
+      With a guest plan binary predating require, probe-remote-reachable.lua ended in refused:script-error and preflight
+      printed refused:preflight:remote-unreachable with SUSPEND, while the remote was fine. Both callers took any nonzero
+      rc for an outage. Only the probe's own blocked:remote-unreachable verdict may suspend a host.
+    exit_criteria:
+      - "test-probe-remote-reachable.lua arms 10-13 pass; the old build.sh and pre-push hook, given a crashing plan stub, say remote-unreachable and the new ones could-not-run:remote-probe."
+    unscoreable: "pinned-elsewhere: gate step 889 (test-probe-remote-reachable.lua)."
+    next_action: "Land the PR; refresh the darwin and msys records of step 889 (13 arms)."
+    provenance: "macuahuitl-fedora 2026-11-22, relaying yolanda-windows."
+    events:
+      - type: filed
+        ts: "2026-11-23T06:30:04Z"
+        host: calmecacpilli
+        summary: "filed and claimed; implemented in the same change"

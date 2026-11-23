@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Events for packets filed in 20261117t194746z-2094-65yz-job-admission-and-host-watch-macuahuitl.yaml.
+# The rulings were given by the operator in chat with the coordinator and relayed to the filing session; the filing session did not hear them first-hand.
+events:
+  - packet_id: jobs-wait-their-turn-host-sessions-get-the-watchdog-and-the-judge-runs-where-each-host-has-room
+    event:
+      type: decision
+      ts: "2026-11-17T19:59:39Z"
+      host: macuahuitl
+      summary: "OPERATOR RULINGS 2026-11-17 on the eight questions of design section 10, relayed by the coordinator on macuahuitl. (1) Pressure cadence: kernel pressure events in 10 s windows, only while stalling, and watch.wait blocking at most 9 minutes: approved. (2) The queue stops and requeues its own jobs without asking: approved. (3) Last resort with nothing queued left: freeze (cgroup freezer, not kill) the forge using the most memory and notify the operator: approved; filed as 2095-wq8z. (4) A sandboxed no-network judge as a host process on macOS and Windows: approved for later; start on CPU in the guest. (5) Heavy forge commands through the queue: voluntary first, mandatory once proven. (6) Job classes as proposed: approved. (7) The idle integrated GPU on two-GPU laptops may host the judge: approved. (8) FastFlowLM licence: undecided; AMD NPU hosts stay on CPU and integrated GPU. Also the same day: every restriction must be stated in the tool affordances and a job declares idempotent (filed as 2095-kgdj); the language order is Lua, then Rust, then Go; an embedded-script ratchet is filed as 2095-9igs. The change's proposal, design section 10 and 11, specs and tasks are amended to agree. Left on this row: nothing but the coordinator's acceptance; the children are released subject to their own dependencies. One point not ruled: whether a frozen forge is thawed only by the operator."
+  - packet_id: memory-pressure-reaches-the-queue-as-a-kernel-event-and-it-stops-and-requeues-only-a-job-it-started
+    event:
+      type: note
+      ts: "2026-11-17T19:59:39Z"
+      host: macuahuitl
+      summary: "Operator ruling 3 of 2026-11-17 changes the last step: with no queue-started job left, the tray freezes the heaviest forge and notifies, where this row's third exit criterion says it only notifies. That step is 2095-wq8z's. Read this row's third criterion as: a job the queue did not start receives no signal from the tray; the notification and freeze are proved on 2095-wq8z. Operator requirement of the same day: a job declared not idempotent is never requeued (2095-kgdj); this row's stop-and-requeue applies to idempotent jobs. The cadence this row waited on is approved (ruling 1)."
+  - packet_id: queue-submit-starts-a-declared-job-only-when-the-host-has-room-and-lanes-take-turns
+    event:
+      type: note
+      ts: "2026-11-17T19:59:39Z"
+      host: macuahuitl
+      summary: "Operator rulings of 2026-11-17: the three job classes are approved as proposed (ruling 6); queueing is voluntary first and mandatory once proven (ruling 5), so the claimer records what measure would show the queue proven. queue.submit also requires an idempotent field (2095-kgdj); build the ticket with it from the start."
+  - packet_id: the-judge-runs-on-the-integrated-gpu-of-a-two-gpu-laptop-and-never-touches-the-discrete-card
+    event:
+      type: note
+      ts: "2026-11-17T19:59:39Z"
+      host: macuahuitl
+      summary: "Question 7 is ruled 2026-11-17: the idle integrated GPU on a two-GPU laptop may host the judge. This row no longer waits on it; it waits on 2094-s3ub's table and 2081-bgh8's judge lane only."
+  - packet_id: the-judge-is-measured-on-a-windows-host-whose-npu-and-integrated-gpu-are-invisible-to-the-guest
+    event:
+      type: note
+      ts: "2026-11-17T19:59:39Z"
+      host: macuahuitl
+      summary: "Question 4 is ruled 2026-11-17: a host-process judge is approved for later; start on CPU in the guest. Question 8: the FastFlowLM licence is undecided, so the NPU row is not taken. This row's first and third criteria stand; its second records the host-judge rows as later, not attempted now."
+  - packet_id: the-judge-is-measured-on-apple-silicon-in-the-guest-and-on-metal-only-behind-an-offline-proof
+    event:
+      type: note
+      ts: "2026-11-17T19:59:39Z"
+      host: macuahuitl
+      summary: "Question 4 is ruled 2026-11-17: a host-process judge on Metal is approved for later; start on CPU in the guest. This row's first criterion stands; its second records the Metal row as later, not attempted now."
+  - packet_id: the-judge-is-measured-on-a-linux-laptop-with-an-xdna2-npu-and-an-integrated-gpu-and-the-npu-row-stays-blocked-on-its-licence
+    event:
+      type: note
+      ts: "2026-11-17T19:59:39Z"
+      host: macuahuitl
+      summary: "Question 8 is ruled 2026-11-17: the FastFlowLM licence is undecided; AMD NPU hosts stay on CPU and the integrated GPU. The NPU row stays not taken, as this row already says."

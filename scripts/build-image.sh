@@ -96,6 +96,24 @@ _warn()  { echo -e "${YELLOW}[build-image]${NC} $*"; }
 _error() { echo -e "${RED}[build-image]${NC} $*" >&2; }
 _step()  { echo -e "${CYAN}[build-image]${NC} $*"; }
 
+# 1073-dqtx: is <tag> usable, not merely present? The one implementation is
+# scripts/lua/verify-image-usable.lua (ported from verify-image-usable.sh,
+# 2006-me5t), run on the plan binary resolved by execution. A host where no
+# plan binary runs falls back to the single command that Lua wraps, so the
+# check is never weaker than it was: `podman image inspect` is what touches
+# the layers. Returns the verifier's exit code; with-nix-builder.sh calls it.
+_verify_image_usable() {
+    local _tag="$1" _plan=""
+    _plan="$(cd "$ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _plan=""
+    case "$_plan" in ./*) _plan="$ROOT/${_plan#./}" ;; esac
+    if [[ -n "$_plan" ]]; then
+        (cd "$ROOT" && "$_plan" script run scripts/lua/verify-image-usable.lua -- "$_tag")
+        return $?
+    fi
+    # shellcheck disable=SC2086
+    "${TILLANDSIAS_PODMAN:-podman}" ${TILLANDSIAS_PODMAN_ARGS:-} image inspect "$_tag" >/dev/null
+}
+
 _verbose_enabled() {
     [[ "${TILLANDSIAS_BUILD_VERBOSE:-0}" == "1" ]]
 }
@@ -532,7 +550,27 @@ BUILD_ARGS+=(--squash --label "${IMAGE_LAYER_POLICY_LABEL}=${IMAGE_LAYER_POLICY}
 BUILD_LOG="$ROOT/build-${IMAGE_NAME}.log"
 BUILD_PROGRESS_LOG="$ROOT/build-${IMAGE_NAME}-progress.jsonl"
 rm -f "$BUILD_LOG" "$BUILD_PROGRESS_LOG"
-if [[ "$IMAGE_NAME" == "forge" ]]; then
+# ORDER 2172-stgc (build speed): RESTAGE ONLY WHEN SOMETHING DIFFERS. The
+# unconditional rm -rf + cp below recreated four directories under
+# images/default on every forge build — including the hermetic fixture
+# test-build-image-installed-version-alias.sh, which drives this script against
+# the REAL checkout. Recreating a directory bumps images/default's mtime, and
+# tillandsias-embed's build script watches images/ recursively, so every gate
+# that ran the fixture made the NEXT gate recompile embed, headless and their
+# dependants (measured on yoga: a docs-only commit still compiled 7 units).
+# The copies are plain (cp -rp, stage-image-cheatsheets.sh's dest is a copy of
+# cheatsheets/), so `diff -rq` against each source is the exact currency test.
+_forge_context_current() {
+    local _d
+    for _d in cheatsheets cheatsheet-sources skills research; do
+        [ -d "$IMAGE_DIR/$_d" ] || return 1
+        diff -rq "$ROOT/$_d" "$IMAGE_DIR/$_d" >/dev/null 2>&1 || return 1
+    done
+    return 0
+}
+if [[ "$IMAGE_NAME" == "forge" ]] && _forge_context_current; then
+    _info "cheatsheets, skills and research in the build context are current; not restaged (2172-stgc)"
+elif [[ "$IMAGE_NAME" == "forge" ]]; then
     _step "Refreshing cheatsheets and skills in build context..."
     rm -rf "$IMAGE_DIR/cheatsheets" "$IMAGE_DIR/cheatsheet-sources" "$IMAGE_DIR/skills" "$IMAGE_DIR/research"
     # Cheatsheet staging lives in ONE place so the tree litmus:
@@ -707,10 +745,11 @@ _remove_stale_image_tags
     # The summary block below ALREADY ran `image inspect` — for the size, under
     # `2>/dev/null || echo ""` — so the one command that would have caught this
     # was being discarded into a cosmetic field. Delegated to
-    # verify-image-usable.sh so build-image, its fixture and any other caller
-    # read the same implementation rather than three drifting copies.
+    # scripts/lua/verify-image-usable.lua (via _verify_image_usable) so
+    # build-image, its fixture and any other caller read the same
+    # implementation rather than three drifting copies.
     # Exit captured into a variable rather than tested with `if !` (795-imz3).
-    "$SCRIPT_DIR/verify-image-usable.sh" "$IMAGE_TAG" >/dev/null
+    _verify_image_usable "$IMAGE_TAG" >/dev/null
     _usable_rc=$?
     if [[ $_usable_rc -ne 0 ]]; then
         _error "Image ${IMAGE_TAG} was built and EXISTS, but is not usable (1073-dqtx)."

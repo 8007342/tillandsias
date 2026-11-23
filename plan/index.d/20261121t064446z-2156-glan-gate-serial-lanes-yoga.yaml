@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-21: build-speed queue item 5.
+packets:
+  - packet_id: gate-serial-steps-run-in-concurrent-resource-lanes
+    order: "2156-glan"
+    status: in_progress
+    kind: perf
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, gate]
+    estimated_hours: 3
+    owned_files:
+      - build.sh
+    title: "The gate's serial steps run in concurrent resource lanes (STEP_LANES)"
+    context: |
+      Each serial step declares STEP_LANES (cargo, podman, litmus, port, host, checkout, timing). Lanes run
+      side by side, each lane one step at a time; a step naming several lanes runs alone after them. Measured
+      on yoga, ./build.sh --gate-steps ., JOBS=6: 234.3 s green, 209 steps (pool 480.8 s, serial 844.8 s).
+    exit_criteria:
+      - "JOBS=6 gate-steps green, every step run once, under 300 s on yoga."
+    unscoreable: "wall time on a host is the measure"
+    provenance: "coordinator build-speed queue item 5, 2026-11-21."
+    events:
+      - type: filed
+        ts: "2026-11-21T06:44:46Z"
+        host: yoga
+        summary: "filed and claimed"

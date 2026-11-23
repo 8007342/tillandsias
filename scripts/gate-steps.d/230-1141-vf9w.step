@@ -34,3 +34,10 @@ STEP_SKIP_EXIT=2
 # exactly the conclusion 1145-iigx's note tells the claimer not to draw.
 STEP_SKIP_DESC="the 2 substrate-refusal arms RAN and passed; the 9 reaper arms could not run — no /proc and/or no setsid on this host (1141-vf9w)"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin skip:dispatch-reap:no-proc-no-setsid"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="drives podman"
+STEP_LANES="podman"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lib-dispatch-reap.sh scripts/plan-binary-probe.sh scripts/test-dispatch-reap.sh"

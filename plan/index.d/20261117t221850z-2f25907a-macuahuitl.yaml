@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-image-ensure-failure-marker-survives-the-macos-installer-soft-reset-and-macos-has-no-retry-so-one-transient-build-failure-refuses-every-forge-launch-until-the-next-release
+    field: status
+    value: implemented
+    ts: "2026-11-17T22:18:50Z"
+    host: macuahuitl
+
+events:
+  - packet_id: an-image-ensure-failure-marker-survives-the-macos-installer-soft-reset-and-macos-has-no-retry-so-one-transient-build-failure-refuses-every-forge-launch-until-the-next-release
+    event:
+      type: note
+      ts: "2026-11-17T22:18:50Z"
+      host: macuahuitl
+      summary: |-
+        landed by ancestry, 2103-pxq4 reconciliation: work/1793-wggq commit 71ac65af117b (1793-wggq in its subject) reached linux-next at 19a299e0c256. Status moves to implemented, not completed: the exit criteria were not re-run.

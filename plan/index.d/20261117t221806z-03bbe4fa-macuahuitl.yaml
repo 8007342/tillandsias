@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-windows-tray-ships-one-hand-rasterized-outline-icon-that-never-changes-while-the-events-and-the-rendered-lifecycle-pngs-it-needs-already-arrive
+    field: status
+    value: implemented
+    ts: "2026-11-17T22:18:06Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-windows-tray-ships-one-hand-rasterized-outline-icon-that-never-changes-while-the-events-and-the-rendered-lifecycle-pngs-it-needs-already-arrive
+    event:
+      type: note
+      ts: "2026-11-17T22:18:06Z"
+      host: macuahuitl
+      summary: |-
+        landed by ancestry, 2103-pxq4 reconciliation: work/1335-jz8c commit a0bfcd99d9f4 (1335-jz8c in its subject) reached linux-next at 22134dbcd02f. Status moves to implemented, not completed: the exit criteria were not re-run.

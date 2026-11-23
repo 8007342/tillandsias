@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 699-usxc).
+#
+# gate-changed-narrows-directory-wide-derived-inputs.status was ALREADY 'blocked', so no field changed — but the caller
+# supplied a note, and discarding it silently is what this packet is about.
+events:
+  - packet_id: gate-changed-narrows-directory-wide-derived-inputs
+    event:
+      type: note
+      ts: "2026-11-23T11:42:05Z"
+      host: lenovinha
+      summary: |-
+        PR #1424 ships as is (mechanism + 10 declarations); out of draft when #1406 lands; on-touch model continues in 2263-6xsp

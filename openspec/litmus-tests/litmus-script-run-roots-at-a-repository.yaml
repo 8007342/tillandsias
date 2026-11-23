@@ -1,0 +1,35 @@
+# @trace spec:ci-release
+# @trace order:2213-ag5u
+#
+# MEASURED on lenovinha 2026-11-22 (2212-2m8s): a Lua port run inside an
+# un-`git init`-ed scratch dir rooted at the RUNNER's own checkout (a
+# current_exe walk), so the fixture measured the real tree (27/27) where a
+# dead ELF should have made it skip. Red before 2213-ag5u: arms 1 and 4, with
+# the pre-fix runner handed in as TILLANDSIAS_SCRIPT_RUNNER_BIN (the MUTANT).
+name: litmus:script-run-roots-at-a-repository
+spec: ci-release
+phase: pre-build
+description: script run roots a script at the cwd's repository, else the script's, else refuses with could-not-run; never at the runner binary's own checkout
+severity: high
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary), git, mktemp under $TMPDIR outside any repository; no network, no podman
+
+critical_path:
+  - step: "a decider outside any repository refuses by name; a --helper still runs; git init makes the dir the root; a checkout script from a foreign cwd roots at the checkout"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-script-run-roots-at-a-repository.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:script-run-roots-at-a-repository:4 arms"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "four arms: refusal, helper, git-init root, script's repository"
+  log_fields:
+    spec: "ci-release"
+    test: "script-run-roots-at-a-repository"
+
+rollback:
+  on_failure: "read the FAIL lines; the resolver is locate_repo_root_from in crates/tillandsias-plan/src/lua_predicate.rs and the refusal is in script_run.rs cli_run"
+  command: "grep -n '2213-ag5u' crates/tillandsias-plan/src/lua_predicate.rs crates/tillandsias-plan/src/script_run.rs"

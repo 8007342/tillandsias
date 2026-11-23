@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: port-check-order-citations-resolve-sh-to-lua-and-repoint-build-sh-its-fixture-and-the-floors
+    field: next_action
+    value: |-
+      Re-list the callers, write the parity fixture red, port, delete the .sh, repoint build.sh and the fixture, and lower the floors.
+
+
+      [2026-11-19T23:46:29Z calmecacpilli] STALE PATH (triage 2026-11-19): scripts/check-order-citations-resolve.sh is now scripts/lua/check-order-citations-resolve.lua (4a733c893). Re-read the criterion against the new path before claiming.
+    ts: "2026-11-19T23:46:29Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: port-check-order-citations-resolve-sh-to-lua-and-repoint-build-sh-its-fixture-and-the-floors
+    event:
+      type: note
+      ts: "2026-11-19T23:46:29Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli): cited file deleted on trunk

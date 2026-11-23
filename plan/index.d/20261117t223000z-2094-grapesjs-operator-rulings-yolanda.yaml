@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator rulings 2026-11-17 (Tlatoāni, in the yolanda session, verbatim intent recorded below) on the
+# questions PR #1145 raised for 2094 GrapesJS live authoring on Windows, plus one packet they created.
+packets:
+  - packet_id: live-authoring-autocommits-locally-on-a-studio-work-branch-and-squashes-on-merge-so-the-remote-never-carries-micro-commits-or-temp-assets
+    order: 2095-6cwr
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [studio, git-service, pr-flow, autosave]
+    estimated_hours: 8
+    size: L
+    implementer_tier: opus
+    depends_on:
+      - grapesjs-edits-on-windows-save-into-the-forge-checkout-and-the-preview-reloads-live
+    title: "Live authoring autosaves AND autocommits every change locally on a studio work branch (grapesjs/<spec-id>-work/<slug>), and a user-approved merge squashes them, so neither main nor the remote ever carries the thousands of micro-commits or temporary assets"
+    context: |
+      OPERATOR RULING 2026-11-17: users and agents author together in real time, producing thousands of tiny
+      autosaved, autocommitted changes with lots of live previews. Those commits are LOCAL. When the user agrees a
+      change is good it is merged into an integration branch with the micro-commits squashed; the merge to main
+      (which auto-deploys) is a GitHub pull request, and "a URL to a PR into main is the sweetest of user gates".
+      Temporary assets (image blobs etc.) must never pollute the remote. Whether the work branch is ever pushed
+      (e.g. to the local git mirror only) is OPEN: "maybe auto-pushed to the mirror? We'll figure that one out,
+      if that's needed or useful at all". Finding where local autocommit -> squash-on-merge needs its push
+      methodology (a multi-stage, multi-branch commit-and-push) is part of this packet.
+    exit_criteria:
+      - "Each studio save produces a local commit on grapesjs/<spec-id>-work/<slug>; 200 saves produce 200 local commits and zero pushes to GitHub. Pre-fix result: FAILS, saves only write files (1861-nmpp)."
+      - "Accepting the change squashes the work branch into ONE commit on the integration branch; the commit carries no file outside write_allowlist and no blob the final tree does not reference."
+      - "Publishing opens (or updates) a GitHub PR from the integration branch into main and hands the user its URL; no work-branch ref and no temporary asset ever reaches GitHub."
+      - "A short design note settles where the work branch lives between saves and merge (forge checkout only, or also the host git mirror), with the reason."
+    unscoreable: "unpinnable-until-the-guard-exists: openspec/litmus-tests/litmus-studio-autocommit-squash-on-merge.yaml lands in the same commit as the implementation (1136-n8sh)"
+    provenance: "Operator, yolanda session 2026-11-17, answering PR #1145."
+    events:
+      - type: filed
+        ts: "2026-11-17T22:30:00Z"
+        host: yolanda
+        summary: "filed from the operator's live-authoring branch/commit/merge ruling"
+events:
+  - packet_id: windows-tray-launches-a-web-studio-in-a-forge-and-opens-it-in-a-native-windows-browser-window
+    event:
+      type: note
+      ts: "2026-11-17T22:30:00Z"
+      host: yolanda
+      summary: "OPERATOR RULING (decision 1): on Windows the studio opens in the same containerised chromium-framework window the dev-browser uses, NOT the host's default browser, and it MUST be a dev browser so agents can drive the authoring tool too. This replaces the 'native Windows browser window' wording and dissolves the host-CA-trust question (the dev browser already trusts the enclave CA inside its container)."
+  - packet_id: the-windows-tray-opens-an-existing-static-site-repo-such-as-tlatoani-net-in-a-studio
+    event:
+      type: note
+      ts: "2026-11-17T22:30:00Z"
+      host: yolanda
+      summary: "OPERATOR RULING (decision 2): tlatoani.net is a tiny minimalist HTML site (or will be made one), so it is in GrapesJS's scope; no build-step studio is needed for it."
+  - packet_id: studio-edits-on-windows-commit-and-push-through-the-forges-work-ref-and-pr-flow-with-no-token-in-the-forge
+    event:
+      type: note
+      ts: "2026-11-17T22:30:00Z"
+      host: yolanda
+      summary: "OPERATOR RULING (decision 3): merge to main (auto-deploys) is ALWAYS a GitHub PR whose URL is the user gate; merges to integration branches are fine without one; live-authoring micro-commits stay local and are squashed on merge. The branch/autocommit/squash mechanics are 2095-6cwr; this packet keeps the no-token push of the integration branch and the PR."

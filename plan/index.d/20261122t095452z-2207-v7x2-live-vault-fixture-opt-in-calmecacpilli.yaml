@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: row from yoga's report, assigned by macuahuitl-fedora 2026-11-22.
+packets:
+  - packet_id: live-vault-fixture-opt-in
+    order: "2207-v7x2"
+    status: implemented
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [gate, fixture, vault, hermetic]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-vault-shutdown-forwards-sigterm.sh
+      - scripts/preflight-fixtures-default-target.sh
+      - scripts/test-live-vault-fixture-is-opt-in.sh
+      - scripts/gate-steps.d/366-2207-v7x2.step
+    title: "The live vault-shutdown fixture runs only on an explicit opt-in, and the changed-fixture guard skips it by name"
+    context: |
+      scripts/test-vault-shutdown-forwards-sigterm.sh stops the host's live tillandsias-vault. On 2026-11-21 it left yoga's
+      vault down ("could not restart"; recovered with tillandsias --ensure-enclave). The gate does not wire it (1140-i6ct,
+      build.sh), but preflight-fixtures-default-target.sh runs every added or changed fixture, and #1313's first cut touched
+      it. It now refuses unless TILLANDSIAS_LIVE_VAULT_FIXTURE=1: a named skip, exit 3, no podman call. It carries
+      "# @live-fixture TILLANDSIAS_LIVE_VAULT_FIXTURE", and the guard skips any fixture carrying that marker.
+    exit_criteria:
+      - "Step 366-2207-v7x2: without the opt-in, skip:vault-shutdown:live-fixture-not-opted-in, rc 3, zero podman calls; the live vault's id and state are unchanged; with the opt-in the fixture reaches (stubbed) podman; the guard skips the marker."
+      - "Mutant: with the opt-in check disabled, arm 1 fails (the fixture calls podman; measured 2026-11-22)."
+    unscoreable: "fixture-safety change: scored by the step's four arms and the mutant above."
+    next_action: "Land; record a second regime for step 366."
+    provenance: "macuahuitl-fedora 2026-11-22, from yoga's report of the vault stopped by a land gate."
+    events:
+      - type: filed
+        ts: "2026-11-22T09:54:52Z"
+        host: calmecacpilli
+        summary: "filed and implemented on work/2207-v7x2"

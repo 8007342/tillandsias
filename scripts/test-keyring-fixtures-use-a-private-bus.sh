@@ -26,9 +26,16 @@
 #   2  each fixture: zero connections reached the sentinel.
 #   3  static: each fixture sources private-session-bus.sh (the cheap form
 #      that also holds on a host with no dbus-daemon).
+#   4  ORDER 2118-9kqp (priority:build-speed): each fixture's OWN verdict.
+#      These eight used to be gate steps of their own AND run again here, so
+#      ~36 s per gate was paid twice. The gate now runs them ONLY here, under
+#      the stricter regime (the sentinel bus), so this step judges each one's
+#      rc: 0 passes; a fixture's declared could-not-run code (skip_rc_of) is a
+#      named skip; anything else fails, naming the fixture with its output tail.
+#      On a host with no dbus-daemon (macOS) the fixtures still run and are
+#      judged; only arm 1-2 (the bus) is a named skip.
 #
-# Exit 0 pass, 1 fail, 3 could-not-run (no dbus-daemon/dbus-monitor, e.g.
-# macOS; arms 0 and 3 still run there and a failure in them is still exit 1).
+# Exit 0 pass (the bus arm may be a named skip), 1 fail.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -42,6 +49,14 @@ FIXTURES=(
     scripts/test-clear-vault-credentials-partial-is-nonzero.sh
     scripts/test-credential-verdict-script.sh
 )
+
+# A fixture's declared could-not-run exit, carried from its old step file.
+skip_rc_of() {
+    case "$1" in
+        scripts/test-credential-channel-names-a-locked-keyring.sh) echo 3 ;;
+        *) echo none ;;
+    esac
+}
 
 pass=0 fail=0
 ok()  { pass=$((pass + 1)); printf 'ok   %s\n' "$1"; }
@@ -64,12 +79,31 @@ for f in "${FIXTURES[@]}"; do
     fi
 done
 
+# ── 4. a fixture's own verdict (2118-9kqp): <fixture> <rc> <output file>
+judge() {
+    local _skip; _skip="$(skip_rc_of "$1")"
+    if [ "$2" -eq 0 ]; then
+        ok "verdict: $1 passed"
+    elif [ "$_skip" != none ] && [ "$2" -eq "$_skip" ]; then
+        ok "verdict: $1 could-not-run (its declared exit $2): $(tail -n 1 "$3" 2>/dev/null)"
+    else
+        bad "verdict: $1 FAILED (rc=$2); its last lines:" "$(tail -n 15 "$3" 2>/dev/null | sed 's/^/       /')"
+    fi
+}
+
 if ! command -v dbus-daemon >/dev/null 2>&1 || ! command -v dbus-monitor >/dev/null 2>&1 \
    || ! command -v busctl >/dev/null 2>&1; then
+    _nb="$(mktemp "${TMPDIR:-/tmp}/kfpb-nobus.XXXXXX")"
+    for f in "${FIXTURES[@]}"; do
+        [ -f "$ROOT/$f" ] || continue
+        frc=0; ( cd "$ROOT" && bash "$ROOT/$f" ) >"$_nb" 2>&1 </dev/null || frc=$?
+        judge "$f" "$frc" "$_nb"
+    done
+    rm -f "$_nb"
     printf 'pass=%d fail=%d\n' "$pass" "$fail"
     if [ "$fail" -gt 0 ]; then echo "violation:keyring-fixtures-use-a-private-bus"; exit 1; fi
-    echo "skip:keyring-fixtures-use-a-private-bus:no-dbus-daemon (static arms passed)"
-    exit 3
+    echo "skip:keyring-fixtures-use-a-private-bus:bus-arm:no-dbus-daemon (static arms and all ${#FIXTURES[@]} fixture verdicts passed)"
+    exit 0
 fi
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/kfpb.XXXXXX")"
@@ -123,10 +157,11 @@ for f in "${FIXTURES[@]}"; do
     [ -f "$ROOT/$f" ] || continue
     ( cd "$ROOT" && DBUS_SESSION_BUS_ADDRESS="$SENTINEL" bash "$ROOT/$f" ) >"$W/out" 2>&1 </dev/null
     frc=$?
+    judge "$f" "$frc" "$W/out"
     settle
     now="$(conns)"
     if [ "$now" -eq "$base" ]; then
-        ok "bus: $f made 0 bus events on the bus it inherited (its own rc=$frc; its gate step judges that)"
+        ok "bus: $f made 0 bus events on the bus it inherited"
     else
         bad "bus: $f caused $((now - base)) NameOwnerChanged event(s) on the bus it inherited (a client connects and leaves = 2)" \
             "on an operator host that is the real session bus and gnome-keyring-daemon (1265-8qr6)"

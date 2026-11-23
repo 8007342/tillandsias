@@ -11,7 +11,7 @@ name: litmus:ipv6-probe-per-router-shape
 spec: init-command
 phase: pre-build
 description: >
-  Run scripts/test-ipv6-probe.sh: the probe address list parses; a stub table
+  Run scripts/lua/test-ipv6-probe.lua: the probe address list parses; a stub table
   of two routers with one black-holing reports egress=1/2 and is NOT
   functional; both working reports 2/2 and is functional; no router is not
   functional.
@@ -21,18 +21,18 @@ backend: fake
 
 preconditions:
   - cargo is available in PATH
-  - workspace contains scripts/test-ipv6-probe.sh
+  - workspace contains scripts/lua/test-ipv6-probe.lua
 
 critical_path:
-  - step: "fixture parses and is executable"
-    command: "bash -n scripts/test-ipv6-probe.sh && test -x scripts/test-ipv6-probe.sh && echo 'ok: fixture-defined'"
+  - step: "fixture is present"
+    command: "test -f scripts/lua/test-ipv6-probe.lua && echo 'ok: fixture-defined'"
     timeout_ms: 5000
     expected_behavior: "ok: fixture-defined"
 
   - step: "all six named arms pass (parse, one-blackhole, both-ok, no-router, flowlabel, unmeasured)"
-    command: "scripts/test-ipv6-probe.sh >/dev/null 2>&1 && echo 'ok: ipv6-probe-arms-pass' || { scripts/test-ipv6-probe.sh; exit 1; }"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-ipv6-probe.lua 2>&1"
     timeout_ms: 600000
-    expected_behavior: "ok: ipv6-probe-arms-pass"
+    success_pattern: "ok:ipv6-probe:6 arms|skip:ipv6-probe:linux-only-unit-tests:"
 
 observability:
   traces:
@@ -42,11 +42,11 @@ observability:
   log_fields:
     spec: "init-command"
     test: "ipv6-probe-per-router-shape"
-    artifact: "scripts/test-ipv6-probe.sh + crates/tillandsias-headless/src/main.rs"
+    artifact: "scripts/lua/test-ipv6-probe.lua + crates/tillandsias-headless/src/main.rs"
 
 rollback:
   on_failure: >
     Restore bracketed [addr]:port probe addresses in
     crates/tillandsias-headless/src/main.rs and keep is_ipv6_functional
     requiring every default router to carry traffic.
-  command: "scripts/test-ipv6-probe.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-ipv6-probe.lua 2>&1"

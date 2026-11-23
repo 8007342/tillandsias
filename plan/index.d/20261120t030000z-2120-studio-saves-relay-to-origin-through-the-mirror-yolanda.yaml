@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed and taken by yolanda 2026-11-20 at macuahuitl-fedora's direction (p1, right after #1158; a user is waiting).
+packets:
+  - packet_id: studio-save-commits-reach-origin-through-the-git-mirror-and-webstudio-changes-reports-them
+    order: 2120-sv7m
+    status: claimed
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [studio, grapesjs, puck, git, mirror]
+    estimated_hours: 6
+    title: "Studio Save commits (GrapesJS and Puck) push credential-free through the project's git mirror lane to origin as grapesjs/<...> / puck/<...>, and webstudio.changes reads and reports that ref (with its PR URL once one exists)"
+    context: |
+      MEASURED 2026-11-20 by tlatoani.net-forge and yolanda: the 2108-dptd Save proofs produced 17713128a and
+      2665b8ee1 on grapesjs/tlatoani-net-work/20261119, but that branch exists ONLY in forge-2's checkout
+      (/home/forge/src/tlatoani.net). It is not on origin, not in the project lane's checkout, and webstudio.changes
+      does not show it: an operator's studio edits have no path to review or merge.
+      Coordinator ruling (operator: anything merging to main goes through a GitHub PR, the user gate): the studio
+      work branch pushes through the git mirror lane forges already push by; the mirror relays to origin; the
+      studio never holds a GitHub token. Whether opening the PR is an explicit studio action or left to the
+      operator is to be PROPOSED by the implementer.
+    exit_criteria:
+      - "One GrapesJS Save on tlatoani.net is visible as grapesjs/<...> on origin within the relay interval. Pre-fix: FAILS (ref only in forge-2)."
+      - "webstudio.changes lists that commit, and the ref's PR URL once a PR exists. Pre-fix: FAILS."
+      - "The same holds for a Puck Save (puck/<...>). Pre-fix: FAILS."
+      - "No GitHub credential is present in the studio container. Pre-fix: holds; must keep holding."
+    unscoreable: "unpinnable-until-the-guard-exists: the arms land as litmus-studio-saves-reach-origin.yaml in the same commit as the relay (1136-n8sh)"
+    provenance: "tlatoani.net-forge finding and macuahuitl-fedora routing 2026-11-20; yolanda git log --stat in forge-2."
+    events:
+      - type: filed
+        ts: "2026-11-20T03:00:00Z"
+        host: yolanda
+        summary: "filed at the coordinator's direction"
+      - type: claimed
+        ts: "2026-11-20T03:00:00Z"
+        host: yolanda
+        summary: "claimed by yolanda at p1 after 2108-dptd; coordinator-routed"

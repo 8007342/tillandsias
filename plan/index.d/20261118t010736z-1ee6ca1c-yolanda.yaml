@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: squid-survives-a-transient-resolver-failure-and-the-in-vm-github-login-survives-a-proxy-restart
+    event:
+      type: note
+      ts: "2026-11-18T01:07:36Z"
+      agent_id: windows-yolanda-claude-20261118t010202z
+      host: yolanda
+      summary: |-
+        WRITER NAMED (yolanda 2026-11-17 17:15, measured): the CA is re-minted by a ping-pong between two holders of DIFFERENT at-rest passphrases. ca_key_store::at_rest::materialize deletes the persisted CA key whenever it is encrypted, a pass is available, and decrypt FAILS (Materialized::Gone); ensure_ca_bundle then sees no key and mints a fresh CA under the CALLER's pass. Holder 1 is the guest daemon /usr/local/bin/tillandsias-headless pid 187, running since 08:57 and carrying a pass in its process CACHE (at_rest::CACHE). Holder 2 is each new process (login helper path, git-service starts) reading /run/user/0/tillandsias/ca-key-pass, which was (re)written at 16:22:55, the first login. Evidence: the CA key minted 16:59:53 does NOT decrypt with the only pass file on the VM (/run/user/0/tillandsias/ca-key-pass; find over /run and /tmp shows no other), and pid 187 has the same XDG_RUNTIME_DIR=/run/user/0, so the minting process used a pass it held only in memory: pid 187. Each side deletes the other's key, so every login or git-service start replaces the CA, then the proxy ("proxy CA is stale"), then the vault (new volume), mid-session. Open: why the pass file and pid 187's cache diverged before 16:22:55 (the file is younger than the daemon). Fix direction: (1) never delete a key that fails to decrypt; refuse by name instead (a wrong pass is not a corrupt key); (2) one pass per VM boot, read-through with no per-process cache that can outlive the file; (3) enclave replacement deferred to a session boundary and queued via the #1131 job-queue rules, with a tray status line (coordinator); (4) a test: start a login, run a concurrent ensure_ca_bundle, and require the CA unchanged and the vault not replaced (fails today).

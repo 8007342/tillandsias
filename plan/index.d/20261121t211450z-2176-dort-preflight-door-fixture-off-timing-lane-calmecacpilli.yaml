@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: build-speed row from yoga's gate profile, assigned by macuahuitl-fedora 2026-11-21.
+packets:
+  - packet_id: preflight-door-many-guards-off-timing-lane
+    order: "2176-dort"
+    status: implemented
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, gate, fixture]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-preflight-door-many-guards.lua
+      - scripts/gate-steps.d/885-1753-p925.step
+      - build.sh
+    title: "Gate step 885-1753-p925 pins its nested door's logs to scratch, so it drops lane=timing and joins the gate pool"
+    context: |
+      Yoga's gate profile has step 885-1753-p925 running serially on lane=timing, for 24 s. The nested ./build.sh --preflight
+      now gets TILLANDSIAS_TIMING_LOG, TILLANDSIAS_EXPERT_USAGE_LOG and LITMUS_STEP_TIMING_LOG inside the run's own scratch
+      dir. Measured on calmecacpilli, the door's one checkout write was `git fetch origin` (.git/FETCH_HEAD and the remote
+      refs). A replaced roster (TILLANDSIAS_PREFLIGHT_ROSTER_FILE, which only this fixture uses) runs none of the -added
+      guards that need that fetch, so build.sh skips it in that case; the real roster always fetches. With STEP_SERIAL and
+      STEP_LANES gone, the step runs in the pool.
+    exit_criteria:
+      - "A run leaves .cache/metrics/tillandsias-timing.jsonl, litmus-step-timing.jsonl, forge-expert-usage.jsonl and .git unchanged; the runner's own command-policy-audit.jsonl, which every Lua step writes, is the only checkout write (measured 2026-11-21)."
+      - "It still fails on a sabotaged decider: a door that drops a guard fails arm 1 (ran=299); a _pf_* process substitution fails arm 2; the control passes."
+    unscoreable: "a fixture change: scored by the fixture's own arms and the two mutants above."
+    next_action: "Land."
+    provenance: "macuahuitl-fedora 2026-11-21: pin the step's timing log to scratch so it can leave lane=timing."
+    events:
+      - type: filed
+        ts: "2026-11-21T21:14:50Z"
+        host: calmecacpilli
+        summary: "filed and implemented on work/2176-dort"

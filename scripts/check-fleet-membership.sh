@@ -213,8 +213,9 @@ case "$REGIME" in
     linux-*)
         if [ "$PROBES" != "1" ]; then
             _skip "substrate:probes-disabled"
-        elif [ -x "$ROOT/scripts/check-bare-metal-host-initialized.sh" ]; then
-            out="$(bash "$ROOT/scripts/check-bare-metal-host-initialized.sh" 2>&1)"; rc=$?
+        elif [ -n "$PB" ] && [ -f "$ROOT/scripts/lua/check-bare-metal-host-initialized.lua" ]; then
+            # 2170-ji2b: the checker is Lua on the one runner (PB, section 4).
+            out="$("$PB" script run "$ROOT/scripts/lua/check-bare-metal-host-initialized.lua" 2>&1)"; rc=$?
             last="$(printf '%s\n' "$out" | tail -1)"
             case "$last" in
                 skip:*) _skip "substrate:${last}" ;;

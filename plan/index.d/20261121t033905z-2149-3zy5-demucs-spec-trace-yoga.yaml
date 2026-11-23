@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-21: RC attempt 3 (v56.11.21.1) blocker (coordinator).
+packets:
+  - packet_id: the-demucs-weights-licence-spec-has-no-trace-in-the-code-that-uses-the-weights
+    order: "2149-3zy5"
+    status: in_progress
+    kind: bug
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [openspec, trace, release-blocker]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-headless/src/audio_separate.rs
+    title: "The Demucs weights licence spec has no @trace in the code that uses the weights"
+    context: |
+      RC attempt 3 failed only on spec-code-drift: zero-trace spec third-party-licence-demucs-weights-unstated (filed by
+      78156ccae, req-ids cd0051dbc). The weights ARE used: audio_separate.rs MODELS offers htdemucs and htdemucs_6s, so the
+      right fix is a trace there, not an exemption.
+    exit_criteria:
+      - "scripts/hooks/pre-commit-openspec.sh --ci-mode reports no zero-trace spec for third-party-licence-demucs-weights-unstated; at trunk it does."
+    unscoreable: "the drift scan is the measure"
+    provenance: "RC attempt 3 2026-11-21; coordinator asked for the trace."
+    events:
+      - type: filed
+        ts: "2026-11-21T03:39:05Z"
+        host: yoga
+        summary: "filed and claimed (RC 3 blocker)"

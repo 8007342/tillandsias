@@ -41,8 +41,6 @@ litmus_framework:
           Intercept podman CLI calls at the process boundary.
           Record args, stdin, environment. Replicate system behavior (exit codes, stdout, stderr).
         files:
-          - crates/tillandsias-litmus/src/mock/podman.rs
-          - crates/tillandsias-litmus/src/mock/env.rs
           - scripts/run-litmus-test.sh
           - scripts/test-support/podman-mock.sh
         trait: "MockPodmanRuntime"
@@ -56,9 +54,7 @@ litmus_framework:
         responsibility: >
           Validate a single observable condition. Requires: preconditions, assertion logic,
           failure reason with spec linkage. Smallest testable unit.
-        files:
-          - crates/tillandsias-litmus/src/signal/mod.rs
-          - crates/tillandsias-litmus/src/signal/registry.rs
+        files: []  # unbuilt design: crates/tillandsias-litmus was never a crate and was removed by 2080-8i25 (README at 0c89c730d)
         trait: "LitmusSignal"
         key_methods:
           - "preconditions_met(&self) → Result<()>"
@@ -72,9 +68,7 @@ litmus_framework:
         responsibility: >
           Combine atomic signals into tests that exercise a subsystem or feature.
           Example: --github-login test composes 3 signals (secret mount, git command, cleanup).
-        files:
-          - crates/tillandsias-litmus/src/test/mod.rs
-          - crates/tillandsias-litmus/src/test/graph.rs
+        files: []  # unbuilt design: crates/tillandsias-litmus was never a crate and was removed by 2080-8i25 (README at 0c89c730d)
         trait: "LitmusTest"
         key_methods:
           - "child_signals(&self) → Vec<&LitmusSignal>"
@@ -87,9 +81,7 @@ litmus_framework:
         responsibility: >
           Transform test results into CentiColon metrics and CI artifacts.
           Example: 1 passing test → earned 80cc, zero penalty = +80cc to project score.
-        files:
-          - crates/tillandsias-litmus/src/convergence/mod.rs
-          - crates/tillandsias-litmus/src/convergence/centicolon.rs
+        files: []  # unbuilt design: crates/tillandsias-litmus was never a crate and was removed by 2080-8i25 (README at 0c89c730d)
         data_flow: "LitmusResult → LitmusBinding → ConvergenceObligation → CentiColon"
         outputs:
           - "target/convergence/litmus-signature.jsonl (append-only)"

@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: handle-mcp-jsonrpc-consults-a-gate-table-and-returns-awaiting-approval-for-every-cost-bearing-tool-without-contacting-the-cloud
+    field: context
+    value: |-
+      Design D6 of openspec/changes/os-verified-approval-gates. A static gate table in tillandsias-headless lists cost-bearing actions (workflow dispatch, integration-branch merge or PR, remote worker creation, any Cloudflare create/refresh including 1853-qr4h's ensure_github_cloudflare_worker). handle_mcp_jsonrpc checks it before dispatch and returns state awaiting_approval with approval_id and retry_after_s; agent-supplied approval arguments are ignored. Host scripts and skills that run `gh workflow run` call `tillandsias approval request` first.
+
+      [2026-10-25T22:11:43Z macuahuitl] AMENDED by operator rulings 2026-10-25 (design R5): budgeted routine runs (daily build, a few optional extra builds per day, daily promotion to stable) are NOT gated; only out-of-band (over-budget) releases and cloud actions outside the policy are. The gate consults the budget counters of 1890-wvs7 and the grants of 1890-yc53, and honours the host mode of 1890-ri3y.
+
+      [2026-11-17T05:48:35Z macbookair] [2026-11-17 macbookair] Reusable macOS primitives for the tray caller exist on work/2022-89hm at 0862843bb (do not delete that ref): tla_approval_window in crates/tillandsias-macos-tray/swift/approval_signer.swift (one native window, approve disabled until the text is scrolled to the end, cancel or close returns 0) and tla_se_sign_batch (one LAContext evaluation, then N Secure Enclave signatures; a cancel signs nothing). Rust wrappers approval_window and sign_batch are in src/approval_signer.rs. They come from closed PR #1107.
+    ts: "2026-11-17T05:48:35Z"
+    host: macbookair
+
+events:
+  - packet_id: handle-mcp-jsonrpc-consults-a-gate-table-and-returns-awaiting-approval-for-every-cost-bearing-tool-without-contacting-the-cloud
+    event:
+      type: note
+      ts: "2026-11-17T05:48:35Z"
+      host: macbookair
+      summary: |-
+        point the macOS caller at the existing primitives
