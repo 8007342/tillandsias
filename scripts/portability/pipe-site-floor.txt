@@ -679,7 +679,6 @@ scripts scripts/test-loop-status-append-input.sh 6
 scripts scripts/test-loop-status-audit-reads-current-emitter.sh 2
 scripts scripts/test-lww-channel-alias.sh 3
 scripts scripts/test-lww-channel-consumers.sh 2
-scripts scripts/test-macos-model-share-writable.sh 1
 scripts scripts/test-macos-vz-orphan-diagnosis.sh 2
 scripts scripts/test-mcp-plan-resolver-pinning.sh 2
 scripts scripts/test-mcp-run-command-tool.sh 2
