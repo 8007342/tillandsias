@@ -48,7 +48,7 @@ case "$_pb" in ./*) _pb="$ROOT/${_pb#./}" ;; esac
 # The deciders relay-preflight.sh shells out to, by their OWN relative
 # location — copied into every scratch repo's scripts/ dir so they judge the
 # SCRATCH tree, never this checkout's.
-DECIDER_FILES="timing-log.sh plan-binary-probe.sh check-sigpipe-verdict-pipelines-added.sh check-plan-binary-probe-usage.sh check-litmus-pin-claims.sh check-script-exec-bits.sh check-added-fragments-parse.sh check-scorable-obligation-added.sh check-gate-step-regimes.sh check-added-test-is-referenced.sh check-refusal-affordance-added.sh check-rust-source-pin-added.sh check-jq-callsite-ratchet.sh preflight-fixtures-default-target.sh check-issue-citation-convention.sh trace-coverage.sh litmus-covering-specs.sh"
+DECIDER_FILES="timing-log.sh plan-binary-probe.sh check-sigpipe-verdict-pipelines-added.sh check-plan-binary-probe-usage.sh check-litmus-pin-claims.sh check-script-exec-bits.sh check-added-fragments-parse.sh check-scorable-obligation-added.sh check-gate-step-regimes.sh check-added-test-is-referenced.sh check-refusal-affordance-added.sh check-jq-callsite-ratchet.sh preflight-fixtures-default-target.sh check-issue-citation-convention.sh trace-coverage.sh litmus-covering-specs.sh"
 
 # _seed <dir>: a fresh repo at <dir> with relay-preflight.sh and every decider
 # it calls, one base commit, branch "linux-next".
@@ -80,6 +80,10 @@ _seed() {
     cp "$ROOT/scripts/lua/check-carried-obligations.lua" "$d/scripts/lua/"
     # 1630-dwab: check-no-python-scripts is a Lua decider since its port.
     cp "$ROOT/scripts/lua/check-no-python-scripts.lua" "$d/scripts/lua/"
+    # 2223-afpl: check-added-fragments-parse.sh is a shim over its Lua port.
+    cp "$ROOT/scripts/lua/check-added-fragments-parse.lua" "$d/scripts/lua/"
+    # 2242-rspn: check-rust-source-pin-added is a Lua decider since its port.
+    cp "$ROOT/scripts/lua/check-rust-source-pin-added.lua" "$d/scripts/lua/"
     mkdir -p "$d/methodology"
     cp "$ROOT/methodology/convergence.yaml" "$d/methodology/"
     # The runner's command-policy audit writes .cache/metrics/ under the repo

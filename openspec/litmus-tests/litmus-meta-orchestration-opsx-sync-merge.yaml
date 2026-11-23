@@ -15,7 +15,7 @@ severity: critical
 size: instant
 
 preconditions:
-  - workspace contains scripts/check-opsx-generated-dirt.sh
+  - workspace contains scripts/lua/check-opsx-generated-dirt.lua
   - workspace contains scripts/test-check-opsx-generated-dirt.sh
   - workspace contains scripts/test-meta-orchestration-opsx-sync-merge.sh
   - workspace contains scripts/meta-orchestration-worktree-guard.sh
@@ -23,12 +23,12 @@ preconditions:
 
 critical_path:
   - step: "opsx detector and its fixtures are executable"
-    command: "test -x scripts/check-opsx-generated-dirt.sh && test -x scripts/test-check-opsx-generated-dirt.sh && test -x scripts/test-meta-orchestration-opsx-sync-merge.sh && echo 'ok: executable'"
+    command: "test -f scripts/lua/check-opsx-generated-dirt.lua && test -x scripts/test-check-opsx-generated-dirt.sh && test -x scripts/test-meta-orchestration-opsx-sync-merge.sh && echo 'ok: executable'"
     timeout_ms: 1000
     expected_behavior: "ok: executable"
 
   - step: "scripts parse under bash"
-    command: "bash -n scripts/check-opsx-generated-dirt.sh scripts/test-check-opsx-generated-dirt.sh scripts/test-meta-orchestration-opsx-sync-merge.sh && echo 'ok: syntax'"
+    command: "bash -n scripts/test-check-opsx-generated-dirt.sh scripts/test-meta-orchestration-opsx-sync-merge.sh && echo 'ok: syntax'"
     timeout_ms: 1000
     expected_behavior: "ok: syntax"
 
@@ -61,7 +61,7 @@ observability:
   log_fields:
     spec: "meta-orchestration"
     test: "meta-orchestration-opsx-sync-merge"
-    artifact: "scripts/check-opsx-generated-dirt.sh refusal + skill wiring"
+    artifact: "scripts/lua/check-opsx-generated-dirt.lua refusal + skill wiring"
 
 rollback:
   on_failure: >

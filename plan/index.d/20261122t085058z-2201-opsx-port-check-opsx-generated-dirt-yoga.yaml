@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-22: shell-to-lua, coordinator policy (b) for the rc-4 clean-tree verdict.
+packets:
+  - packet_id: port-check-opsx-generated-dirt-to-lua-with-clean-tree-at-exit-zero
+    order: "2201-opsx"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/check-opsx-generated-dirt.lua
+      - scripts/test-check-opsx-generated-dirt.sh
+      - scripts/test-meta-orchestration-opsx-sync-merge.sh
+      - skills/meta-orchestration/SKILL.md
+      - openspec/litmus-tests/litmus-meta-orchestration-opsx-sync-merge.yaml
+    title: "Port check-opsx-generated-dirt to Lua, with ok:clean-tree at exit 0"
+    context: |
+      verdict.emit refuses ok: with exit 4, the .sh's clean-tree code. Two things read rc 4: the script's own
+      fixture (test-check-opsx-generated-dirt.sh:168) and meta-orchestration SKILL.md step 4. That is under the
+      coordinator's threshold of 3, so policy (b) applies: the line stays ok:clean-tree and the code becomes 0.
+      Both readers change in the same PR. Nothing else returns 0 since 1440-w8g8 retired ok:opsx-only.
+      check-resumable-claim-dirt.sh still prints ok:clean-tree with exit 4; its own port decides its code.
+      Known divergence: outside any git repo the .sh printed `2 non-opsx:not-a-git-repo`, but the Lua runtime
+      roots itself at a repo, so that branch is unreachable from a checkout (every caller runs inside one).
+    exit_criteria:
+      - "test-check-opsx-generated-dirt (rc 0 for clean), test-meta-orchestration-opsx-sync-merge and litmus:meta-orchestration-opsx-sync-merge pass; .sh vs .lua agree in a dirty checkout; the .sh is deleted."
+    unscoreable: "the shell-to-lua counter is the measure"
+    provenance: "coordinator 2026-11-22: count the rc-4 callers; at 3 or fewer, rename under (b)."
+    events:
+      - type: filed
+        ts: "2026-11-22T08:50:58Z"
+        host: yoga
+        summary: "filed and claimed"

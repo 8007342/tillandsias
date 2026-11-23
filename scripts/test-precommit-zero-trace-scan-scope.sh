@@ -17,7 +17,22 @@
 # spec referenced ONLY from build output would stop being seen as referenced and
 # would be reported as a zero-trace spec that is not one. That is a false
 # accusation produced by an optimisation, which is worse than the slowness. So
-# the invariant is asserted rather than assumed, on the real repository.
+# the invariant is asserted rather than assumed.
+#
+# ORDER 2185-inst: DETERMINISTIC ON EVERY HOST. This used to compare the sweep
+# with and without build output on the REAL checkout and demand equality, which
+# holds only where target/ happens to name no spec that source does not:
+# yolanda (msys, 2026-11-22) read windows-wsl-runtime and
+# structured-query-language only with its target/ included, a Windows host's
+# build output naming Windows specs. That measured host state. Now:
+#   arm 2 SCRATCH  a tree the fixture builds, with planted build output: the
+#                  exclusion drops exactly the build-only tokens and keeps every
+#                  token source also names;
+#   arm 3 SUBSET   on the real checkout, every spec token in git's own source
+#                  file set (tracked + untracked-not-ignored, read by git grep,
+#                  a DIFFERENT tool) is in the excluded sweep. That is the
+#                  false-zero-trace risk itself, and host-local build output
+#                  cannot move it.
 #
 # MEASUREMENT NOTE, because it nearly ruined the numbers above: an interactive
 # shell in this project has `grep` shadowed by a ugrep function, which reports
@@ -34,35 +49,51 @@ bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
 GREP=/usr/bin/grep
 [ -x "$GREP" ] || GREP=grep
 
-_sweep() { # $1 = extra args
+EXCL="--exclude-dir=target --exclude-dir=.git --exclude-dir=node_modules"
+_sweep() { # $1 = root, $2 = extra args
     # shellcheck disable=SC2086
     "$GREP" -rhoE 'spec:[a-zA-Z0-9._-]+' \
         --include='*.rs' --include='*.sh' --include='*.toml' --include='Containerfile*' \
-        $1 "$ROOT" 2>/dev/null | sed 's/^spec://' | LC_ALL=C sort -u
+        $2 "$1" 2>/dev/null | sed 's/^spec://' | LC_ALL=C sort -u
 }
 
-with_all="$(_sweep "")"
-with_excl="$(_sweep "--exclude-dir=target --exclude-dir=.git --exclude-dir=node_modules")"
+with_excl="$(_sweep "$ROOT" "$EXCL")"
 
-# NON-VACUITY FIRST. If the sweep returns nothing, the comparison below is
-# trivially equal and proves nothing — the shape that lets an optimisation pin
-# certify an empty answer.
-n_all="$(printf '%s\n' "$with_all" | grep -c . || true)"
-if [ "${n_all:-0}" -gt 20 ]; then
-    ok "the sweep finds a real corpus ($n_all spec tokens) — the comparison is not vacuous"
+# NON-VACUITY FIRST. If the sweep returns nothing, the comparisons below are
+# trivially satisfied and prove nothing — the shape that lets an optimisation
+# pin certify an empty answer.
+n_excl="$(printf '%s\n' "$with_excl" | "$GREP" -c . || true)"
+if [ "${n_excl:-0}" -gt 20 ]; then
+    ok "the sweep finds a real corpus ($n_excl spec tokens) — the comparison is not vacuous"
 else
-    bad "the sweep found only ${n_all:-0} tokens; the equality below would prove nothing"
+    bad "the sweep found only ${n_excl:-0} tokens; the comparisons below would prove nothing"
 fi
 
-# THE INVARIANT: excluding build output is answer-preserving.
-if [ "$with_all" = "$with_excl" ]; then
-    ok "excluding target/, .git/ and node_modules does not change the referenced set"
+# ARM 2 — SCRATCH: planted build output is dropped, shared tokens are kept.
+W="$(mktemp -d "${TMPDIR:-/tmp}/precommit-scan-scope.XXXXXX")"
+trap 'rm -rf "$W"' EXIT
+mkdir -p "$W/src" "$W/target/debug" "$W/node_modules/m" "$W/.git/hooks"
+printf '// spec:alpha-fixture\n// spec:shared-fixture\n' > "$W/src/a.rs"
+printf '// spec:shared-fixture\n// spec:buildonly-fixture\n' > "$W/target/debug/b.rs"
+printf '# spec:buildonly-fixture\n' > "$W/node_modules/m/c.sh"
+printf '# spec:gitonly-fixture\n' > "$W/.git/hooks/d.sh"
+got="$(_sweep "$W" "$EXCL" | tr '\n' ' ')"
+all="$(_sweep "$W" "" | tr '\n' ' ')"
+if [ "$got" = "alpha-fixture shared-fixture " ] && [ "$all" = "alpha-fixture buildonly-fixture gitonly-fixture shared-fixture " ]; then
+    ok "on a scratch tree the exclusion drops exactly the build-output-only tokens and keeps the shared one"
 else
-    bad "the exclusion CHANGED the answer — a spec referenced only from build output would become a false zero-trace"
-    echo "  only with build output included:" >&2
-    comm -23 <(printf '%s\n' "$with_all") <(printf '%s\n' "$with_excl") | sed 's/^/    /' | head -10 >&2
-    echo "  only with it excluded:" >&2
-    comm -13 <(printf '%s\n' "$with_all") <(printf '%s\n' "$with_excl") | sed 's/^/    /' | head -10 >&2
+    bad "scratch tree: excluded sweep [$got] (want [alpha-fixture shared-fixture ]), full sweep [$all]"
+fi
+
+# ARM 3 — SUBSET: no token named in source is lost to the exclusion.
+src="$(cd "$ROOT" && git grep -hoE --untracked 'spec:[a-zA-Z0-9._-]+' -- \
+        '*.rs' '*.sh' '*.toml' ':(glob)**/Containerfile*' 2>/dev/null | sed 's/^spec://' | LC_ALL=C sort -u)"
+lost="$(comm -23 <(printf '%s\n' "$src") <(printf '%s\n' "$with_excl") | "$GREP" . || true)"
+if [ -n "$src" ] && [ -z "$lost" ]; then
+    ok "every spec token in source ($(printf '%s\n' "$src" | "$GREP" -c .)) is in the excluded sweep"
+else
+    bad "the exclusion LOST a token that source names — it would become a false zero-trace"
+    printf '%s\n' "$lost" | sed 's/^/    /' | head -10 >&2
 fi
 
 # The hook must actually carry the exclusion; otherwise the invariant above is

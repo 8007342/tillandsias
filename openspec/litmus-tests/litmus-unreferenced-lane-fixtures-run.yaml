@@ -70,7 +70,7 @@ critical_path:
     assert_output_contains: "ok:repeat-model-flag:"
     timeout_ms: 120000
   - step: "shared target dir lock and freshness guard"
-    command: "bash scripts/test-shared-target.sh 2>&1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-shared-target.lua 2>&1"
     expected_behavior: "ok: arm8"
     assert_exit: 0
     assert_output_contains: "ok: arm8"

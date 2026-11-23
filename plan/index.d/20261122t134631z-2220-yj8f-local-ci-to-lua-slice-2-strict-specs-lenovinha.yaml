@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: local-ci-to-lua-slice-2-strict-spec-selection
+    order: 2220-yj8f
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      local-ci.sh to Lua, slice 2: the --strict-all spec selection (get_all_active_specs, spec_in_list, normalize_spec_list and its jq/yq/awk fallbacks) becomes scripts/lua/local-ci-strict-specs.lua.
+    context: |
+      Coordinator direction 2026-11-22: slices 2-4 of local-ci.sh to Lua, smallest self-contained first, each with mutant parity, stacked as drafts on #1327 (2215-beb5) until it lands. The selection runs once at startup: every active spec in openspec/litmus-bindings.yaml, minus CI_IGNORE_SPEC_LIST (separated by colons, commas or whitespace).
+    exit_criteria:
+      - "the Lua prints the same list as the three bash functions for the real bindings file and for fixture cases (inactive specs, ignore lists in every separator, duplicates, an empty result); a mutant reds it"
+      - "local-ci.sh's STRICT_ALL block calls it; the three functions and the fallbacks are gone"
+    unscoreable: "unpinnable-until-the-guard-exists: the parity fixture is the deliverable."
+    next_action: "Port, parity-test against the bash functions, rewire, open a draft PR stacked on #1327."
+    provenance: coordinator direction; filed by lenovinha.
+    depends_on: [local-ci-to-lua-slice-1-rust-test-runner-keeps-the-regime]
+    related: [2215-beb5]
+    events:
+      - {type: filed, ts: '2026-11-22T13:46:31Z', host: lenovinha, summary: local-ci.sh slice 2 filed}

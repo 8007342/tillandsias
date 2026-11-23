@@ -14,11 +14,12 @@
 #
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking a bare drain-queue run refuses and spends nothing (1404-4x3r)"
-STEP_SCRIPT="scripts/test-drain-queue-bare-refuses.sh"
+# PORTED to Lua (2207-vswc): run with STEP_LUA through the one runner.
+STEP_LUA="scripts/lua/test-drain-queue-bare-refuses.lua"
 STEP_ERROR="a bare scripts/drain-queue.sh would claim a packet and launch a paid agent (1404-4x3r); see which arm failed above"
 STEP_OK="drain-queue refuses a bare run and still drains on --drain"
 STEP_SECOND_REGIME="yolanda 2026-09-26 msys ok:drain-queue-bare-refuses:3"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/claim-ledger-node.sh scripts/drain-queue.sh scripts/test-drain-queue-bare-refuses.sh"
+STEP_READS="scripts/claim-ledger-node.sh scripts/drain-queue.sh scripts/lua/test-drain-queue-bare-refuses.lua"
