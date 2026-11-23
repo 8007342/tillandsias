@@ -106,4 +106,19 @@ do
             .. " why=" .. tostring(r.why or r.reason))
 end
 
+-- 12 ORDER 2257-qnt7: the PATH search needs no `which` binary (the WSL builder has none).
+do
+    local w = T:scratch()
+    fs.write(w.rel .. "/only-here-tool", "#!/bin/sh\nexit 0\n")
+    T:must{ "chmod", "+x", w.abs .. "/only-here-tool" }
+    local bash = fixture.which("bash")
+    local dir = text.trim(proc.run{ argv = { fixture.posix_shell(), "-s", "--", w.abs }, stdin = 'cd "$1" && pwd\n', timeout_ms = 10000 }.stdout or "")
+    local found = fixture.which("only-here-tool", dir)
+    T:arm("12 which finds a tool on PATH, nil when absent or only a builtin",
+        bash ~= nil and bash:find("bash", 1, true) ~= nil and fixture.which("no-such-tool-2246") == nil
+            and fixture.which("cd", dir) == nil and fixture.which("only-here-tool") == nil
+            and found == dir .. "/only-here-tool",
+        "bash=" .. tostring(bash) .. " found=" .. tostring(found))
+end
+
 T:finish()

@@ -148,7 +148,7 @@ end
 -- host's package list. A host that has podman is untouched.
 local path = env.get("PATH") or "/usr/bin:/bin"
 local function present(p) return proc.run{ argv = { "test", "-x", p } }.ok end
-if not proc.run{ argv = { "which", "podman" } }.ok
+if not require("common.fixture").which("podman")
     and not present("/usr/bin/podman") and not present("/bin/podman")
     and not present("/usr/local/bin/podman") then
     fs.mkdir(rel .. "/fakebin")
