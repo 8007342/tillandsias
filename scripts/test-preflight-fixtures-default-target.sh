@@ -200,7 +200,10 @@ git -C "$R" config user.email f@x.invalid; git -C "$R" config user.name f
 git -C "$R" add scripts/preflight-fixtures-default-target.sh scripts/plan-binary-probe.sh
 git -C "$R" commit -qm base
 git -C "$R" update-ref refs/remotes/origin/linux-next HEAD
-o6="$(cd "$R" && by_ctd)"; rc6=$?
+# The gate exports its frozen TILLANDSIAS_GATE_DIFF_BASE, a commit this scratch
+# repo does not hold (2241-f8jg: a missing base is now named, not judged), so
+# the arm names its own base.
+o6="$(cd "$R" && TILLANDSIAS_DEFAULT_TARGET_BASE= TILLANDSIAS_GATE_DIFF_BASE=refs/remotes/origin/linux-next by_ctd)"; rc6=$?
 if [ "$rc6" -eq 0 ] && [ "$(printf '%s' "$o6" | tail -1)" = "ok:fixture-default-target:1 checked" ]; then
     ok "ARM 6 a bare run finds the one added fixture and counts it"
 else
