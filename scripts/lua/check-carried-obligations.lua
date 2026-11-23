@@ -633,6 +633,8 @@ for _, b in ipairs(backlogs) do
                 log.raw("  candidates (smallest existing items at or under " .. ceiling .. " lines; the offered one is picked by the work ref's order) snapshot=" .. snapshot() .. ":")
                 for _, c in ipairs(top) do log.raw("    " .. c[1] .. " (" .. c[2] .. " lines)") end
                 log.raw("  pay it: port one to scripts/lua/ on `tillandsias-plan script run`, delete the .sh, lower both floors with check-shell-ratchet.lua --dump-floors;")
+                -- 2263-6xsp: every new port declares what it reads.
+                log.raw("  a ported test fixture declares its inputs: `-- inputs: <paths>` in its header (gate-changed.sh --check-declared holds it honest), unless it scans the live tree;")
                 log.raw("  or put this trailer on any commit in the change, in the message's LAST paragraph next to Co-Authored-By (git reads trailers only there); one line; reasons too-big:<item>:<lines>, blocked-by:<order>, no-item-in-reach, conflict:<work-ref>, uncounted-item:<path>:")
                 log.raw("Carried-Waiver: " .. name .. " <reason>")
             end
