@@ -91,7 +91,7 @@ local function git(args)
     for _, a in ipairs(args) do argv[#argv + 1] = a end
     return proc.run({ argv = argv, timeout_ms = 60000 })
 end
-local v = git({ "rev-parse", "--verify", BASE_REF })
+local v = git({ "rev-parse", "--verify", "--quiet", BASE_REF .. "^{commit}" })
 if not (v.status == "exited" and v.code == 0) then
     log.raw("  note: base ref '" .. BASE_REF .. "' unavailable — set TILLANDSIAS_UNRUNNABLE_BASE to scope the pass")
     say("skipped:unrunnable-platform-arms:no-diff-base", "skip:unrunnable-platform-arms:no-diff-base")
