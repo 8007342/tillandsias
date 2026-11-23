@@ -58,6 +58,10 @@
 #     path instead.
 set -uo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
+# 2242-u39b: the scratch repos below are their own diff world. A gate exports
+# its frozen base (a sha of the REAL repo) and maybe its root; inherited, the
+# lane's checks would diff against an object these repos do not hold.
+unset TILLANDSIAS_GATE_DIFF_BASE TILLANDSIAS_GATE_DIFF_BASE_ROOT
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GUARD="$ROOT/scripts/hooks/pre-push-local-gate.sh"
