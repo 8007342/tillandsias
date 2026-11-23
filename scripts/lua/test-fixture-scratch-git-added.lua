@@ -10,6 +10,12 @@
 --   4 MARKER   a line with `# scratch-git-ok: <why>` passes; an empty marker does not
 --   5 BASE     a bare site already in the base is not re-litigated (diff-scoped)
 --   6 SCOPE    the same line in a non-fixture script (scripts/tool.sh) is not judged
+-- and the runtime guard, scripts/test-support/scratch-git.sh, copied into a FAKE
+-- checkout (a miss rewrites the fake's origin, never this one's):
+--   7 REFUSES  a plain dir inside the checkout, a missing dir, the checkout, a
+--              SIBLING WORKTREE (shared config), and `init` under an inherited
+--              GIT_DIR: exit 2 each, the fake checkout's origin unmoved
+--   8 ADMITS   a scratch repo (outside, and nested in the checkout), a bare one
 --
 -- Verdict: ok:fixture-scratch-git-added-fixture:<n> or violation:...:<failed>.
 
@@ -92,6 +98,39 @@ if rc == 0 then ok("5: a bare site already in the base is not re-litigated") els
 r = repo(); put(r, "scripts/tool.sh", 'git -C "$D" remote set-url origin "$W/x.git"')
 o, rc = judge(r)
 if rc == 0 then ok("6: a non-fixture script is not judged") else bad("6: rc=" .. tostring(rc) .. " [" .. o .. "]") end
+
+fs.write(rel .. "/guard.sh", [==[
+w="$1"; c="$w/co"; mkdir -p "$c/scripts/test-support" "$c/plain"
+cp "$2" "$c/scripts/test-support/"
+git -C "$c" init -q
+git -C "$c" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
+git -C "$c" remote add origin https://example.invalid/real.git
+git -C "$c" worktree add -q "$w/sibling" -b sib
+. "$c/scripts/test-support/scratch-git.sh"
+cd "$c" || exit 9
+hit() { ( scratch_git "$@" ) >/dev/null 2>&1; echo "$?"; }
+echo "plain=$(hit "$c/plain" remote set-url origin x)"
+echo "missing=$(hit "$c/not-yet" remote set-url origin x)"
+echo "real=$(hit "$c" remote set-url origin x)"
+echo "sibling=$(hit "$w/sibling" remote set-url origin x)"
+echo "gitdir=$(GIT_DIR="$c/.git" hit "$c/plain" init -q)"
+echo "origin=$(git -C "$c" config remote.origin.url)"
+mkdir -p "$w/out" "$c/nested" "$w/bare"
+echo "init=$(hit "$w/out" init -q)$(hit "$c/nested" init -q)$(hit "$w/bare" init -q --bare)"
+echo "use=$(hit "$w/out" config a.b c)$(hit "$c/nested" config a.b c)$(hit "$w/bare" config a.b c)"
+]==])
+local g = proc.run{ argv = { BASH, rel .. "/guard.sh", ABS .. "/g", ROOT .. "/scripts/test-support/scratch-git.sh" }, timeout_ms = 60000 }
+local go = g.stdout or ""
+local refuses = true
+for _, k in ipairs({ "plain", "missing", "real", "sibling", "gitdir" }) do
+    if not go:find(k .. "=2\n", 1, true) then refuses = false end
+end
+if refuses and go:find("origin=https://example.invalid/real.git\n", 1, true) then
+    ok("7: plain dir, missing dir, checkout, sibling worktree and init under GIT_DIR are refused; origin unmoved")
+else bad("7: [" .. go .. "] err=[" .. (g.stderr or "") .. "]") end
+if go:find("init=000\n", 1, true) and go:find("use=000\n", 1, true) then
+    ok("8: a scratch repo outside, one nested in the checkout, and a bare one are admitted")
+else bad("8: [" .. go .. "] err=[" .. (g.stderr or "") .. "]") end
 
 fs.write(rel .. "/cleanup.sh", 'rm -rf -- "$1"\n')
 proc.run{ argv = { BASH, rel .. "/cleanup.sh", rel } }
