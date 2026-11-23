@@ -25,6 +25,7 @@ local fixture = require "common.fixture"
 local T = fixture.new("capability-row-could-not-run-is-not-a-code-red")
 local ROOT = fixture.repo_root()
 local STEP = "scripts/gate-steps.d/275-1128-4ffr.step"
+local SH = fixture.posix_shell()
 
 local uname = text.trim(proc.run{ argv = { "uname", "-s" } }.stdout or "")
 if uname ~= "Linux" and uname ~= "Darwin" then
@@ -38,7 +39,7 @@ local hs = (fs.read(STEP) or ""):match('\nSTEP_HOST_STATE="([^"]*)"')
 T:arm("1 DECLARED step 275 declares STEP_HOST_STATE", hs == "load", "STEP_HOST_STATE=" .. tostring(hs))
 
 -- 2
-local r = proc.run{ argv = { "bash", ROOT .. "/scripts/test-pending-capability-row-does-not-wedge.sh" },
+local r = proc.run{ argv = { SH, ROOT .. "/scripts/test-pending-capability-row-does-not-wedge.sh" },
     cwd = ROOT, timeout_ms = 900000, env = { TILLANDSIAS_1320_HOLD_WAIT_DS = "0" } }
 local summary = ""
 for _, l in ipairs(text.lines(r.stdout or "")) do
@@ -67,7 +68,7 @@ local function gate(tag, host_state)
     }
     if host_state then step[#step + 1] = 'STEP_HOST_STATE="' .. host_state .. '"' end
     fs.write(d.rel .. "/scripts/gate-steps.d/500-stub.step", table.concat(step, "\n") .. "\n")
-    local g = proc.run{ argv = { "bash", ROOT .. "/build.sh", "--gate-steps", d.abs }, cwd = ROOT,
+    local g = proc.run{ argv = { SH, ROOT .. "/build.sh", "--gate-steps", d.abs }, cwd = ROOT,
         timeout_ms = 600000, env = { TILLANDSIAS_GATE_HOST_STATE_SETTLE_S = "0" } }
     local o = (g.stdout or "") .. (g.stderr or "")
     local runs = #text.lines(text.trim(fs.read(d.rel .. "/runs.log") or ""))
