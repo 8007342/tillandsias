@@ -458,7 +458,6 @@ scripts/test-tool-dispatch-lib.sh
 scripts/test-tool-dispatch-rejects-unusable-host-tool.sh
 scripts/test-tool-materialize-litmus-surfaces-arm.sh
 scripts/test-tool-materialize.sh
-scripts/test-toolbox-refusal-wsl-exception.sh
 scripts/test-trace-coverage.sh
 scripts/test-tracked-files-unwritten-guard.sh
 scripts/test-tray-asset-placeholder-refused.sh

@@ -182,7 +182,7 @@ fi
 # THIS DELIBERATELY DOES NOT WIDEN THE RULING. The refusal below is what an
 # owned Linux fleet gets, and a bare-metal Linux builder without toolbox still
 # fails exactly as hard — pinned by the negative control in
-# scripts/test-toolbox-refusal-wsl-exception.sh, not by review. What changes is
+# scripts/lua/test-toolbox-refusal-wsl-exception.lua, not by review. What changes is
 # only that a WSL2 distro stops being mistaken for one: it is not a host
 # escaping its container, it is the container the Windows lane sanctions, and
 # scripts/with-wsl2-builder.sh is the thing that put us inside it.
