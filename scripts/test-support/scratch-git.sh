@@ -18,6 +18,10 @@
 #
 # The real git dir is the checkout this helper sits in, found from its own path.
 
+# A git hook exports GIT_DIR (and from a linked worktree it names the real one),
+# which overrides every -C below: drop it for the whole fixture (2224-gdir).
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_PREFIX
+
 # _sg_dir <dir> <rev-parse flag>: that answer as a physical path, or nothing.
 # (`cd ""` succeeds in place, so an empty answer is dropped, never cd'd into.)
 _sg_dir() {

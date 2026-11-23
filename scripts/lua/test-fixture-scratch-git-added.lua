@@ -15,6 +15,8 @@
 --   7 REFUSES  a plain dir inside the checkout, a missing dir, the checkout, a
 --              SIBLING WORKTREE (shared config), and `init` under an inherited
 --              GIT_DIR: exit 2 each, the fake checkout's origin unmoved
+--   9 HOOK     sourced under a hook's exported GIT_DIR, scratch work lands in the
+--              scratch repo (the variable is dropped, not obeyed and not fatal)
 --   8 ADMITS   a scratch repo (outside, and nested in the checkout), a bare one
 --
 -- Verdict: ok:fixture-scratch-git-added-fixture:<n> or violation:...:<failed>.
@@ -106,6 +108,9 @@ git -C "$c" init -q
 git -C "$c" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
 git -C "$c" remote add origin https://example.invalid/real.git
 git -C "$c" worktree add -q "$w/sibling" -b sib
+mkdir -p "$w/hook"
+( export GIT_DIR="$c/.git" GIT_WORK_TREE="$c"; . "$c/scripts/test-support/scratch-git.sh"
+  scratch_git "$w/hook" init -q && scratch_git "$w/hook" remote add origin x ) >/dev/null 2>&1; echo "hook=$?"
 . "$c/scripts/test-support/scratch-git.sh"
 cd "$c" || exit 9
 hit() { ( scratch_git "$@" ) >/dev/null 2>&1; echo "$?"; }
@@ -131,6 +136,9 @@ else bad("7: [" .. go .. "] err=[" .. (g.stderr or "") .. "]") end
 if go:find("init=000\n", 1, true) and go:find("use=000\n", 1, true) then
     ok("8: a scratch repo outside, one nested in the checkout, and a bare one are admitted")
 else bad("8: [" .. go .. "] err=[" .. (g.stderr or "") .. "]") end
+if go:find("hook=0\n", 1, true) and go:find("origin=https://example.invalid/real.git\n", 1, true) then
+    ok("9: sourced under an exported GIT_DIR, scratch_git works on the scratch repo only")
+else bad("9: [" .. go .. "] err=[" .. (g.stderr or "") .. "]") end
 
 fs.write(rel .. "/cleanup.sh", 'rm -rf -- "$1"\n')
 proc.run{ argv = { BASH, rel .. "/cleanup.sh", rel } }
