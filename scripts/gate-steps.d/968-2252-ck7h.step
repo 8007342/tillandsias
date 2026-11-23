@@ -1,0 +1,12 @@
+# Gate step 2252-ck7h — per-platform smoke attestation refs for the daily RC:
+# refs/attest/smoke/<platform>/<rc-sha>; promotion needs a PASS per platform,
+# and a partial (credential step unmeasured) blocks.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking smoke attestation refs gate promotion on a PASS per platform (2252-ck7h)"
+STEP_LUA="scripts/lua/test-smoke-attest.lua"
+STEP_ERROR="a smoke attestation was written or counted without its evidence, or a partial counted as a pass (2252-ck7h) — see the FAIL lines above"
+STEP_OK="Smoke attestation refs gate promotion on a PASS per platform"
+STEP_READS="scripts/lua/attest-smoke.lua scripts/lua/check-smoke-attested.lua scripts/lua/test-smoke-attest.lua"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:smoke-attest:7 (mutation: checker counting partial as pass reds arm 1)"
+STEP_SECOND_REGIME="yolanda 2026-11-23 msys ok:smoke-attest:7 (at 4aa181124; at d12924486 red, C:/ read as relative)"
