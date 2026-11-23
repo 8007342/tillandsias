@@ -136,7 +136,9 @@ if arg[1] == "--check-file" then
 end
 
 local base = env.get("TILLANDSIAS_RUST_PIN_BASE") or env.get("TILLANDSIAS_GATE_DIFF_BASE") or "origin/linux-next"
-if not select(1, git("rev-parse", "--verify", "--quiet", base)) then
+-- `^{commit}` (2241-f8jg): a bare 40-hex "verifies" with no such object here,
+-- and every diff after it would fail quietly and judge nothing.
+if not select(1, git("rev-parse", "--verify", "--quiet", base .. "^{commit}")) then
     verdict.emit("ok:rust-source-pin-added:base-unavailable", 0,
         "  note: base ref '" .. base .. "' unavailable — added-line enforcement skipped")
 end

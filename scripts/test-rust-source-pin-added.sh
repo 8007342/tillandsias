@@ -26,7 +26,7 @@ GUARD="$ROOT/scripts/lua/check-rust-source-pin-added.lua"
 PLAN="${TILLANDSIAS_SCRIPT_RUNNER_BIN:-}"
 [ -n "$PLAN" ] || PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || PLAN=""
 case "$PLAN" in ./*) PLAN="$ROOT/${PLAN#./}" ;; esac
-pass=0; total=7
+pass=0; total=8
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1"; }
 
@@ -156,6 +156,20 @@ put "$R" '    #[test]
 run "$R"
 [ "$RC" -eq 0 ] && ok "arm 7: a pin already in the base is not re-litigated (diff-scoped)" \
     || bad "arm 7: rc=$RC [$OUT]"
+
+# 8 — 2241-f8jg: a base that is a 40-hex with NO such object is unavailable,
+#     by name; it must not "verify" and then judge nothing (0 checked).
+R="$(repo eight)"
+put "$R" '    #[test]
+    fn pins_source() {
+        let src = include_str!("lib.rs");
+        assert!(src.contains("pub fn f() -> u8"));
+    }
+'
+OUT="$(cd "$R" && TILLANDSIAS_REPO_ROOT="$R" TILLANDSIAS_RUST_PIN_BASE=0123456789abcdef0123456789abcdef01234567 "$PLAN" script run scripts/lua/check-rust-source-pin-added.lua 2>&1)"; RC=$?
+[ "$RC" -eq 0 ] && grep -q '^ok:rust-source-pin-added:base-unavailable$' <<<"$OUT" \
+    && ok "arm 8: a bogus 40-hex base is named base-unavailable, not a silent 0 checked" \
+    || bad "arm 8: rc=$RC [$OUT]"
 
 if [ "$pass" -eq "$total" ]; then
     echo "ok:rust-source-pin-added-fixture:$pass/$total"
