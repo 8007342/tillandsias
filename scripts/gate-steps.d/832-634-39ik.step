@@ -1,0 +1,16 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (2253-j2at batch 2): as a .step it is no
+# build.sh edit, so it never makes intake HEAVY, and it runs in the pool (a
+# read-only decider: it reads the tree and the diff, writes nothing).
+#
+# Order 634-39ik (Tlatoāni-approved bar raise 2026-08-11). Refuse any NEWLY
+# ADDED litmus step that pins a literal source expression without a negative
+# control. Diff-scoped by construction — it can only flag steps added on
+# this branch, never the existing corpus (624-cf9f backlog), so raising the
+# bar accepts standing debt rather than redding it (the operator's
+# CRDT/Erlang posture: keep the line running, file improvement packets).
+STEP_DESC="Checking for newly-added expression-pinned litmus steps (634-39ik)"
+STEP_LUA="scripts/lua/check-litmus-expression-pinning-added.lua"
+STEP_ERROR="a newly-added litmus step pins a literal source expression without a negative control (634-39ik)"
+STEP_OK="Expression-pinning enforcement passed"
+STEP_READS="scripts/lua/check-litmus-expression-pinning-added.lua"

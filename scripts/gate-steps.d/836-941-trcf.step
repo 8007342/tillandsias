@@ -1,0 +1,15 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (2253-j2at batch 2): as a .step it is no
+# build.sh edit, so it never makes intake HEAVY, and it runs in the pool (a
+# read-only decider: it reads the tree and the diff, writes nothing).
+#
+# Order 941-trcf. The fragment-overlay cost is linear in the index.d
+# backlog (~40ms of gate time per fragment per gate run, measured), so the
+# gate NAMES the backlog before it regrows to the 338 that doubled it.
+# ADVISORY on the 751-i9mb terms: a grown backlog is news for the next
+# coordination cycle, never a build break.
+STEP_DESC="Checking the plan fragment backlog against the compaction cadence (941-trcf, advisory)"
+STEP_LUA="scripts/lua/check-fragment-backlog.lua"
+STEP_ERROR="the fragment-backlog advisory could not run — that is a broken checkout, not a clean backlog"
+STEP_OK="Fragment-backlog advisory reported"
+STEP_READS="scripts/lua/check-fragment-backlog.lua"

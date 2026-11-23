@@ -1,0 +1,13 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (2253-j2at batch 2): as a .step it is no
+# build.sh edit, so it never makes intake HEAVY, and it runs in the pool (a
+# read-only decider: it reads the tree and the diff, writes nothing).
+#
+# 1746-2szd: a shipped skill, cheatsheet or agent instruction must not tell
+# a forge agent a browser is pre-installed while the forge image installs
+# none — forge-quick-intro did, and agents planned browser work on it.
+STEP_DESC="Checking forge docs claim no browser the image does not ship (1746-2szd)"
+STEP_LUA="scripts/lua/check-forge-skill-browser-claims-match-image.lua"
+STEP_ERROR="a forge doc claims a pre-installed browser the image does not install (1746-2szd) — see the claim lines above"
+STEP_OK="Forge browser-claim check passed"
+STEP_READS="scripts/lua/check-forge-skill-browser-claims-match-image.lua"

@@ -1,0 +1,13 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (2253-j2at batch 2): as a .step it is no
+# build.sh edit, so it never makes intake HEAVY, and it runs in the pool (a
+# read-only decider: it reads the tree and the diff, writes nothing).
+#
+# 1713-3v3f: Tillandsias never launches or drives a host browser. Every
+# launcher-shaped call site in crates/ must be on the guard's allowlist at
+# its exact count (only file/app opens, never a URL).
+STEP_DESC="Checking no code path launches a host browser (1713-3v3f)"
+STEP_LUA="scripts/lua/check-no-host-browser-launch.lua"
+STEP_ERROR="a code path hands a URL to the host browser (1713-3v3f) — see the unlisted/count-mismatch lines above"
+STEP_OK="No-host-browser-launch check passed"
+STEP_READS="scripts/lua/check-no-host-browser-launch.lua"

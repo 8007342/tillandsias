@@ -1,0 +1,13 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (2253-j2at batch 2): as a .step it is no
+# build.sh edit, so it never makes intake HEAVY, and it runs in the pool (a
+# read-only decider: it reads the tree and the diff, writes nothing).
+#
+# 1776-ch4m: a module that runs a versioned image also ensures it (through
+# launch_images.rs or an ensure call), so a host that never ran --init
+# builds on first use instead of failing "image missing".
+STEP_DESC="Checking every image a module runs is ensured (1776-ch4m)"
+STEP_LUA="scripts/lua/check-launch-images-table.lua"
+STEP_ERROR="a module runs an image it never ensures (1776-ch4m) — see the site lines above"
+STEP_OK="Launch-images check passed"
+STEP_READS="scripts/lua/check-launch-images-table.lua"
