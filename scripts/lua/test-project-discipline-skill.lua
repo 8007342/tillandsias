@@ -102,14 +102,23 @@ local src_lines = text.lines(text.trim(src.stdout or ""))
 local detail = {}
 if not (src_rc == 0 and src_lines[#src_lines] == "sourced") then detail[#detail + 1] = "source rc=" .. src_rc .. " [" .. src_out .. "]" end
 local function is_link(p) return proc.run{ argv = { "test", "-L", p } }.code == 0 end
+-- Native Windows (yolanda, msys): Git bash's `ln -s` with MSYS unset makes a
+-- COPY, not a symlink, so `test -L` is false there although the skill is
+-- reachable. There a linked entry is a directory holding SKILL.md; elsewhere it
+-- must be a symlink. The no-clobber check reads the user-owned file's content
+-- (the empty one planted above), which holds in both regimes.
+local WINDOWS = BASH ~= "bash"
 for _, d in ipairs({ ".claude/skills", ".gemini/skills", ".config/opencode/skills" }) do
     local p = H .. "/" .. d .. "/project-discipline"
-    if not (is_link(p) and proc.run{ argv = { "test", "-f", p .. "/SKILL.md" } }.code == 0) then detail[#detail + 1] = "missing:" .. d end
+    local linked = is_link(p) or WINDOWS
+    if not (linked and proc.run{ argv = { "test", "-f", p .. "/SKILL.md" } }.code == 0) then detail[#detail + 1] = "missing:" .. d end
 end
-if is_link(H .. "/.codex/skills/project-discipline") then detail[#detail + 1] = "clobbered:.codex" end
+if is_link(H .. "/.codex/skills/project-discipline")
+   or fs.read(rel .. "/home/.codex/skills/project-discipline/SKILL.md") ~= "" then detail[#detail + 1] = "clobbered:.codex" end
 if proc.run{ argv = { "test", "-e", P .. "/scripts" } }.code == 0 then detail[#detail + 1] = "project-has-scripts" end
 if #detail == 0 then
-    ok("arm 4: sourcing agent-profile.sh (twice, set -euo pipefail) links the skill for a project with no scripts/, and leaves a user-owned entry alone")
+    ok("arm 4: sourcing agent-profile.sh (twice, set -euo pipefail) links the skill for a project with no scripts/, and leaves a user-owned entry alone"
+        .. (WINDOWS and " (copied-not-linked: Git bash ln -s copies without native symlinks)" or ""))
 else bad("arm 4: " .. table.concat(detail, " ")) end
 
 cleanup()
