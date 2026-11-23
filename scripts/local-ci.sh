@@ -398,71 +398,57 @@ case "$CI_PHASE" in
         ;;
 esac
 
+# 2223-bzsn (local-ci.sh to Lua, slice 3): the check catalog — weight, spec
+# ref and failure reason per check id — is ONE table in
+# scripts/lua/local-ci-check-catalog.lua. It replaced three bash case tables
+# keyed by the same ids. load_check_catalog reads its rows once per shell;
+# the three lookups below keep their old names and answers. Without a plan
+# binary there is no catalog: every check then weighs 0 against spec:unknown,
+# and the warning names why.
+_CATALOG_LOADED=0
+_CATALOG_IDS=(); _CATALOG_WEIGHTS=(); _CATALOG_SPECS=(); _CATALOG_REASONS=()
+load_check_catalog() {
+    [[ "$_CATALOG_LOADED" == 1 ]] && return 0
+    _CATALOG_LOADED=1
+    local _cc_plan _cc_rows _cc_id _cc_w _cc_s _cc_r
+    _cc_plan="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _cc_plan=""
+    [[ "$_cc_plan" == ./* ]] && _cc_plan="$REPO_ROOT/${_cc_plan#./}"
+    if [[ -n "$_cc_plan" ]]; then
+        _cc_rows="$(cd "$REPO_ROOT" && "$_cc_plan" script run --helper scripts/lua/local-ci-check-catalog.lua)" || _cc_rows=""
+    else
+        _cc_rows=""
+    fi
+    if [[ -z "$_cc_rows" ]]; then
+        echo "warn:local-ci:check-catalog-unavailable — no runnable tillandsias-plan answered scripts/lua/local-ci-check-catalog.lua; convergence weights are 0 and spec refs unknown (2223-bzsn)" >&2
+        return 0
+    fi
+    while IFS=$'\t' read -r _cc_id _cc_w _cc_s _cc_r; do
+        [[ -n "$_cc_id" ]] || continue
+        _CATALOG_IDS+=("$_cc_id"); _CATALOG_WEIGHTS+=("$_cc_w")
+        _CATALOG_SPECS+=("$_cc_s"); _CATALOG_REASONS+=("$_cc_r")
+    done <<< "$_cc_rows"
+}
+# Index of <id> in the catalog, else of its default row `*`, else empty.
+_catalog_index() {
+    load_check_catalog
+    local i fallback=""
+    for i in "${!_CATALOG_IDS[@]}"; do
+        [[ "${_CATALOG_IDS[i]}" == "$1" ]] && { echo "$i"; return 0; }
+        [[ "${_CATALOG_IDS[i]}" == "*" ]] && fallback="$i"
+    done
+    echo "$fallback"
+}
 check_weight() {
-    case "$1" in
-        spec-cheatsheet-binding) echo 100 ;;
-        spec-code-drift) echo 120 ;;
-        spec-trace-coverage) echo 90 ;;
-        version-monotonicity) echo 40 ;;
-        rust-formatting) echo 40 ;;
-        rust-clippy) echo 60 ;;
-        rust-clippy-all-features) echo 180 ;;
-        rust-tests) echo 80 ;;
-        container-base-policy) echo 40 ;;
-        cheatsheet-tiers) echo 80 ;;
-        no-python-scripts) echo 30 ;;
-        no-base64-script-injection) echo 30 ;;
-        litmus-pre-build) echo 100 ;;
-        litmus-post-build) echo 120 ;;
-        litmus-runtime) echo 140 ;;
-        litmus-tests) echo 140 ;;
-        *) echo 0 ;;
-    esac
+    local i; i="$(_catalog_index "$1")"
+    if [[ -n "$i" ]]; then echo "${_CATALOG_WEIGHTS[i]}"; else echo 0; fi
 }
-
 check_spec_ref() {
-    case "$1" in
-        spec-cheatsheet-binding) echo "spec:spec-traceability" ;;
-        spec-code-drift) echo "spec:spec-traceability" ;;
-        spec-trace-coverage) echo "spec:methodology-accountability" ;;
-        version-monotonicity) echo "spec:versioning" ;;
-        rust-formatting) echo "spec:dev-build" ;;
-        rust-clippy) echo "spec:dev-build" ;;
-        rust-clippy-all-features) echo "spec:dev-build" ;;
-        rust-tests) echo "spec:testing" ;;
-        container-base-policy) echo "spec:default-image" ;;
-        cheatsheet-tiers) echo "spec:cheatsheet-source-layer" ;;
-        no-python-scripts) echo "methodology.yaml tlatoani_hard_no_python" ;;
-        no-base64-script-injection) echo "methodology.yaml base64_script_injection_ban" ;;
-        litmus-pre-build) echo "spec:podman-orchestration" ;;
-        litmus-post-build) echo "spec:dev-build" ;;
-        litmus-runtime) echo "spec:litmus-convergence" ;;
-        litmus-tests) echo "spec:litmus-convergence" ;;
-        *) echo "spec:unknown" ;;
-    esac
+    local i; i="$(_catalog_index "$1")"
+    if [[ -n "$i" ]]; then echo "${_CATALOG_SPECS[i]}"; else echo "spec:unknown"; fi
 }
-
 failed_reason_for_check() {
-    local check_name="$1"
-    case "$check_name" in
-        spec-cheatsheet-binding) echo "Spec-cheatsheet binding below 90% (see /tmp/binding-check.log)" ;;
-        spec-code-drift) echo "Spec-code drift detected: ghost traces or zero-trace specs found (see /tmp/drift-check.log)" ;;
-        spec-trace-coverage) echo "Spec trace coverage below 90% (see /tmp/trace-coverage.log)" ;;
-        version-monotonicity) echo "Version is not monotonically greater than last release (see /tmp/version-check.log)" ;;
-        rust-formatting) echo "Rust code not formatted: run 'cargo fmt --all' (see /tmp/fmt-check.log)" ;;
-        rust-clippy) echo "Clippy warnings found: run 'cargo clippy --workspace' to see details (see /tmp/clippy-check.log)" ;;
-        rust-clippy-all-features) echo "All-features clippy warnings: run 'cargo clippy --workspace --all-targets --all-features -- -D warnings' (see /tmp/clippy-all-features-check.log)" ;;
-        rust-tests) echo "Test failures detected: run 'cargo test --workspace --lib --no-fail-fast' to see details (see /tmp/test-check.log)" ;;
-        container-base-policy) echo "Container base-image policy drift found (see /tmp/container-bases.log)" ;;
-        cheatsheet-tiers) echo "Cheatsheet tier errors or strict warnings found (see /tmp/cheatsheet-tiers.log)" ;;
-        no-python-scripts) echo "Python scripts found in tracked files (see /tmp/no-python-check.log)" ;;
-        no-base64-script-injection) echo "Base64 script injection detected (see /tmp/no-base64-script-injection.log)" ;;
-        litmus-pre-build) echo "Pre-build litmus failures detected (see /tmp/litmus-pre-build.log)" ;;
-        litmus-post-build) echo "Post-build smoke failures detected (see /tmp/litmus-post-build.log)" ;;
-        litmus-runtime) echo "Runtime litmus failures detected (see /tmp/litmus-runtime.log)" ;;
-        litmus-tests) echo "Litmus test failures detected (see /tmp/litmus-check.log)" ;;
-        *) echo "Check failed: $check_name" ;;
-    esac
+    local i r; i="$(_catalog_index "$1")"
+    if [[ -n "$i" ]]; then r="${_CATALOG_REASONS[i]}"; echo "${r//%s/$1}"; else echo "Check failed: $1"; fi
 }
 
 litmus_args_for_phase() {
@@ -533,6 +519,7 @@ run_litmus_phase() {
 }
 
 write_convergence_artifacts() {
+    load_check_catalog
     mkdir -p "$SIGNATURE_DIR"
 
     local total_cc=0
