@@ -74,7 +74,6 @@ scripts/test-added-test-is-referenced.sh
 scripts/test-agent-identity.sh
 scripts/test-append-event-archived-refusal.sh
 scripts/test-append-vs-origin-fold.sh
-scripts/test-archiver-concurrent-check.sh
 scripts/test-archiver-could-not-run-is-self-naming.sh
 scripts/test-archiver-could-not-run-verdict.sh
 scripts/test-archiver-ruby-could-not-run.sh
@@ -221,7 +220,6 @@ scripts/test-gate-step-prefix-allocation.sh
 scripts/test-gate-step-regimes.sh
 scripts/test-gate-step-skip-exit.sh
 scripts/test-gate-thresholds-are-chosen.sh
-scripts/test-ghost-trace-yaml-anchoring.sh
 scripts/test-git-credential-helper.sh
 scripts/test-git-mirror-dns-identity.sh
 scripts/test-git-mirror-existing-volume-hardening.sh
@@ -259,7 +257,6 @@ scripts/test-image-usability-check.sh
 scripts/test-inference-engine-pinned-and-npu-honest.sh
 scripts/test-inference-mkdir-fatal-1183-j9dk.sh
 scripts/test-inference-pull-failure-classification.sh
-scripts/test-inference.sh
 scripts/test-initialize-bare-metal-host-idempotent.sh
 scripts/test-install-macos-announces-its-pin.sh
 scripts/test-install-path.sh
@@ -309,7 +306,6 @@ scripts/test-litmus-scalar-unescape.sh
 scripts/test-litmus-stdin-does-not-eat-the-spec-list.sh
 scripts/test-litmus-step-model.sh
 scripts/test-litmus-step-pipefail.sh
-scripts/test-litmus-step-timing.sh
 scripts/test-litmus-steps-can-fail.sh
 scripts/test-litmus-structured-assert.sh
 scripts/test-litmus-terminal-verdict.sh
@@ -363,7 +359,6 @@ scripts/test-plan-binary-copy-refresh.sh
 scripts/test-plan-binary-locus-native.sh
 scripts/test-plan-binary-probe-release-over-debug.sh
 scripts/test-plan-binary-probe-usage-determinism.sh
-scripts/test-plan-binary-probe-usage-population.sh
 scripts/test-plan-binary-probe.sh
 scripts/test-plan-binary-runnability-precondition.sh
 scripts/test-plan-field-get.sh
@@ -399,11 +394,9 @@ scripts/test-preflight-verdict-categories.sh
 scripts/test-pretooluse-command-policy.sh
 scripts/test-probe-nix-capability-evidence.sh
 scripts/test-probe-refuses-stale-candidate.sh
-scripts/test-project-discipline-skill.sh
 scripts/test-project-info-grep-code-recall.sh
 scripts/test-promote-stable-evidence-gate.sh
 scripts/test-provider-device-auth.sh
-scripts/test-rank-refusal-hits.sh
 scripts/test-reclaim-stranded-claims.sh
 scripts/test-refusal-affordance-added.sh
 scripts/test-refusal-names-the-ungated-lane.sh

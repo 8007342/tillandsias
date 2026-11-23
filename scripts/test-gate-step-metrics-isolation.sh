@@ -147,8 +147,9 @@ echo "arm 4 — CONTROL: the guard keys on GROWTH, not on the file existing"
 # every subsequent step fail. The gate compares before/after, so a pre-existing
 # file that no step adds to is not an offence.
 # 1916-tsel: the baseline line count is handed to the attribution helper,
-# which reads only the records appended after it.
-if grep -qF '"$_metrics_shared" "${_metrics_shared_before:-0}"' "$ROOT/build.sh"; then
+# which reads only the records appended after it. 2238-3skn: the window past
+# that baseline is now cut ONCE into the snapshot the helper reads.
+if grep -qF 'tail -n "+$(( ${_metrics_shared_before:-0} + 1 ))" "$_metrics_shared" > "$_metrics_snap"' "$ROOT/build.sh"; then
     ok "the comparison is before-vs-after, so a pre-existing file alone does not refuse"
 else
     bad "the guard does not compare against a baseline — a pre-existing file would fail every step"
