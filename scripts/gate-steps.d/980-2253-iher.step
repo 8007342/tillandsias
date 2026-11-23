@@ -1,0 +1,17 @@
+# Gate step 2253-iher — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. `./build.sh --check --keep-going` (and --gate-steps ...
+# --keep-going) names EVERY refusing gate step, not only the first, and still
+# exits 1 without a stamp; the default stays fail-fast. The bundle gate's
+# culprit search keys on the failing step, so a gate that stops at the first
+# red hides every other culprit. The fixture drives the real step loop over
+# scratch roots (serial and jobs=3) and carries a mutant arm proving the
+# record-and-continue line is what makes arm 2 pass.
+STEP_DESC="Checking --keep-going names every red gate step (2253-iher)"
+STEP_LUA="scripts/lua/test-gate-keep-going.lua"
+STEP_ERROR="--keep-going no longer names every refusing gate step, or the default is no longer fail-fast (2253-iher); see which arm failed above"
+STEP_OK="--keep-going names every red step; the default stays fail-fast"
+# Runs nested build.sh --gate-steps gates: alone, never beside a sibling.
+STEP_SERIAL="runs four nested build.sh --gate-steps gates over scratch roots"
+# ORDER 2157-ginp: recorded only.
+STEP_READS="build.sh scripts/lua/test-gate-keep-going.lua"
