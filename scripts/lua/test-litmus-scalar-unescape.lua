@@ -28,7 +28,8 @@ end
 if #fn == 0 then T:refuse("helper-absent", "yaml_unescape_dq not defined in run-litmus-test.sh") end
 local FN = table.concat(fn, "\n") .. "\n"
 local function call(body, input)
-    local r = T:run{ fixture.posix_shell(), "-s", "--", input, stdin = body .. 'yaml_unescape_dq "$1"\n' }
+    -- By env, never argv: native msys drops double quotes from argv (yolanda, #1451).
+    local r = T:run{ fixture.posix_shell(), "-s", stdin = body .. 'yaml_unescape_dq "$IN"\n', env = { IN = input } }
     return r.code == 0 and (r.stdout or "") or ("rc=" .. tostring(r.code) .. " " .. tostring(r.stderr))
 end
 local function check(label, input, want)
