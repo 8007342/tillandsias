@@ -1,0 +1,16 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by 2253-j2at (the structural lever of 2250-gwfy): as a .step it
+# is no build.sh edit, so it never makes intake HEAVY, and it runs in the pool.
+#
+# ORDER 1577-g96z — what THIS change owes each carried obligation
+# (methodology/convergence.yaml carried_obligations; shell-to-lua is at
+# stage gentle). One carried:<backlog>:<not-due|paid|waived|due> line per
+# backlog; in --check it never refuses a due change (silence is refused
+# only at landing, by the land queue running it with --landing). It does
+# refuse a tree whose backlog table does not parse.
+STEP_DESC="Checking what this change owes each carried obligation (1577-g96z)"
+STEP_LUA="scripts/lua/check-carried-obligations.lua"
+STEP_ERROR="the carried-obligation guard could not read methodology/convergence.yaml carried_obligations — see the line above (1577-g96z)"
+STEP_OK="Carried obligations reported"
+STEP_SERIAL="fetches the origin work refs into the shared repository (taken_items snapshot)"
+STEP_READS="scripts/lua/check-carried-obligations.lua"

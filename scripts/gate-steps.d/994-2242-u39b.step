@@ -1,0 +1,12 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by 2253-j2at (the structural lever of 2250-gwfy): as a .step it
+# is no build.sh edit, so it never makes intake HEAVY, and it runs in the pool.
+#
+# ORDER 2242-u39b — the pre-push-hook fixtures test their scratch
+# checkout, never a frozen base the caller left behind without its _ROOT.
+STEP_DESC="Checking the pre-push fixtures ignore an inherited diff base (2242-u39b)"
+STEP_LUA="scripts/lua/test-pre-push-fixtures-ignore-an-inherited-base.lua"
+STEP_ERROR="a pre-push-hook fixture judged the caller's TILLANDSIAS_GATE_DIFF_BASE instead of its scratch checkout — pass TILLANDSIAS_GATE_DIFF_BASE and _ROOT empty in its child env; see the FAIL lines above (2242-u39b)"
+STEP_OK="Inherited diff-base fixture passed"
+STEP_SERIAL="drives three pre-push-hook fixtures that each build a scratch checkout and run its hook"
+STEP_READS="scripts/lua/test-pre-push-fixtures-ignore-an-inherited-base.lua"

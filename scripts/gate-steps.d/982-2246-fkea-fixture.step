@@ -1,0 +1,8 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by 2253-j2at (the structural lever of 2250-gwfy): as a .step it
+# is no build.sh edit, so it never makes intake HEAVY, and it runs in the pool.
+STEP_DESC="Checking the native-argv decider refuses what it should (2246-fkea)"
+STEP_LUA="scripts/lua/test-lua-fixture-native-argv-added.lua"
+STEP_ERROR="check-lua-fixture-native-argv-added.lua no longer refuses a pwd -P root or a bare bash/sed argv, or refuses the helper form; see the FAIL lines above (2246-fkea)"
+STEP_OK="Native argv fixture passed"
+STEP_READS="scripts/lua/test-lua-fixture-native-argv-added.lua"

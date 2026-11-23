@@ -1,0 +1,13 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by 2253-j2at (the structural lever of 2250-gwfy): as a .step it
+# is no build.sh edit, so it never makes intake HEAVY, and it runs in the pool.
+#
+# Its fixture, the tree's first Lua gate fixture (1577-g96z): the guard's
+# verdicts on constructed diffs in a scratch repo. A Lua fixture runs here
+# directly through the one runner (no .step file, so no second-regime
+# record is needed to enter --check).
+STEP_DESC="Checking the carried-obligation guard's fixture (1577-g96z)"
+STEP_LUA="scripts/lua/test-carried-obligations.lua"
+STEP_ERROR="the carried-obligation guard no longer prints due/paid/waived/not-due correctly on its constructed diffs — see the FAIL lines above (1577-g96z)"
+STEP_OK="Carried-obligation fixture passed"
+STEP_READS="scripts/lua/test-carried-obligations.lua"

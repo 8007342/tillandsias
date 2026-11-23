@@ -1,0 +1,11 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by 2253-j2at (the structural lever of 2250-gwfy): as a .step it
+# is no build.sh edit, so it never makes intake HEAVY, and it runs in the pool.
+#
+# ORDER 2248-zcqh — the bundle intake gate: deferral, HEAVY, legacy
+# unchanged, and a crate graph held to cargo metadata.
+STEP_DESC="Checking --changed's derived crate graph equals cargo metadata (2248-zcqh)"
+STEP_LUA="scripts/lua/check-gate-changed-crate-graph.lua"
+STEP_ERROR="scripts/gate-changed.sh derives a crate graph cargo does not resolve — intake would skip a dependent crate; see MISSING/EXTRA above (2248-zcqh)"
+STEP_OK="Crate-graph lint passed"
+STEP_READS="scripts/lua/check-gate-changed-crate-graph.lua"
