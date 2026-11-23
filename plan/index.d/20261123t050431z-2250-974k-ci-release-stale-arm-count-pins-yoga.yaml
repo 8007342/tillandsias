@@ -29,7 +29,7 @@ packets:
         host: yoga
         summary: "pins moved to 9 arms and 6 on work/2250-974k"
   - packet_id: metrics-fallback-fixture-host-run-recreates-builder-on-silverblue
-    order: "2250-974k"
+    order: "2262-r74j"
     status: ready
     kind: defect
     priority: p3
