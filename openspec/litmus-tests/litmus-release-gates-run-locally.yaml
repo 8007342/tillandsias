@@ -126,7 +126,7 @@ critical_path:
     expected_behavior: "PASS: windows-only source verification report (11/11)"
 
   - step: "build.sh --check carries that report rather than staying silent"
-    command: "grep -F 'check-windows-only-sources-verified.sh' build.sh && grep -F 'this gate did NOT read them' build.sh && echo 'ok: the gate reports the stub substitution'"
+    command: "grep -F 'check-windows-only-sources-verified.lua' build.sh && grep -F 'this gate did NOT read them' build.sh && echo 'ok: the gate reports the stub substitution'"
     timeout_ms: 5000
     expected_behavior: "ok: the gate reports the stub substitution"
 

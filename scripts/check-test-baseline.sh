@@ -35,7 +35,7 @@
 # first thing anyone switches off. Linux carries exactly ONE standing failure
 # (see scripts/test-known-red.txt), macOS carried eight under --no-fail-fast.
 # A gate that is always red is a gate nobody reads — the same decay
-# check-windows-only-sources-verified.sh reasons about at length, and this file
+# scripts/lua/check-windows-only-sources-verified.lua reasons about at length, and this file
 # copies its shape deliberately: a tolerated failure must be WRITTEN DOWN, BY
 # HAND, with its issue.
 #

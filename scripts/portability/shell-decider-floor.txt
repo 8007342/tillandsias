@@ -1,8 +1,6 @@
 # The .sh deciders allowed to exist (1384-bxhk). May only SHRINK.
-scripts/check-added-fragments-parse.sh
 scripts/check-added-test-is-referenced.sh
 scripts/check-append-vs-origin-fold.sh
-scripts/check-approved-ux-strings.sh
 scripts/check-archive-answerability.sh
 scripts/check-arrival-routing.sh
 scripts/check-base-ledger-status-loss.sh
@@ -30,7 +28,6 @@ scripts/check-issue-citation-convention.sh
 scripts/check-jq-callsite-ratchet.sh
 scripts/check-litmus-pin-claims.sh
 scripts/check-long-running-view.sh
-scripts/check-macos-only-sources-verified.sh
 scripts/check-mcp-expert-health.sh
 scripts/check-mcp-live-build.sh
 scripts/check-mcp-surface.sh
@@ -65,7 +62,6 @@ scripts/check-stranded-plan-writes.sh
 scripts/check-test-baseline.sh
 scripts/check-tracked-files-unwritten.sh
 scripts/check-unrunnable-platform-arms.sh
-scripts/check-windows-only-sources-verified.sh
 scripts/check-windows-tray-diagnose-surface.sh
 scripts/check-yaml-reader-availability.sh
 scripts/test-a-claim-names-a-workstation.sh
@@ -235,7 +231,6 @@ scripts/test-groundtruth-corpus-declaration.sh
 scripts/test-guest-binaries-nix-lane.sh
 scripts/test-guest-crashloop-detection.sh
 scripts/test-guest-staging-refuses-a-wireless-binary.sh
-scripts/test-guest-unit-hardening.sh
 scripts/test-hardware-fingerprint.sh
 scripts/test-harness-affinity-selection.sh
 scripts/test-harness-byte-cheap.sh
@@ -259,7 +254,6 @@ scripts/test-initialize-bare-metal-host-idempotent.sh
 scripts/test-install-path.sh
 scripts/test-installer-probes-by-attempt-not-by-help.sh
 scripts/test-installer-reports-wsl-guest-shape.sh
-scripts/test-installer-reset-probe.sh
 scripts/test-installers-quiet-progress.sh
 scripts/test-join-the-fleet-idempotent.sh
 scripts/test-jq-multiline-capture.sh
@@ -313,7 +307,6 @@ scripts/test-loop-status-audit-reads-current-emitter.sh
 scripts/test-lua-determinism.sh
 scripts/test-lww-channel-alias.sh
 scripts/test-lww-channel-consumers.sh
-scripts/test-macos-model-share-writable.sh
 scripts/test-macos-vsock-inference-closure.sh
 scripts/test-macos-vz-orphan-diagnosis.sh
 scripts/test-mcp-plan-resolver-pinning.sh
@@ -383,7 +376,6 @@ scripts/test-preflight-fixtures-default-target.sh
 scripts/test-preflight-front-door.sh
 scripts/test-preflight-scratch-is-off-checkout.sh
 scripts/test-preflight-setsid-probe.sh
-scripts/test-preflight-stale-plan-binary.sh
 scripts/test-preflight-verdict-categories.sh
 scripts/test-pretooluse-command-policy.sh
 scripts/test-probe-refuses-stale-candidate.sh
@@ -395,7 +387,6 @@ scripts/test-refusal-affordance-added.sh
 scripts/test-refusal-names-the-ungated-lane.sh
 scripts/test-relay-preflight.sh
 scripts/test-release-asset-integrity.sh
-scripts/test-release-runbook-tag-order.sh
 scripts/test-release-tier-freshness-reads-ci-full.sh
 scripts/test-release-tier-freshness.sh
 scripts/test-release-tier-timer-render.sh
@@ -466,7 +457,6 @@ scripts/test-tool-dispatch-lib.sh
 scripts/test-tool-dispatch-rejects-unusable-host-tool.sh
 scripts/test-tool-materialize-litmus-surfaces-arm.sh
 scripts/test-tool-materialize.sh
-scripts/test-toolbox-refusal-wsl-exception.sh
 scripts/test-trace-coverage.sh
 scripts/test-tracked-files-unwritten-guard.sh
 scripts/test-tray-asset-placeholder-refused.sh

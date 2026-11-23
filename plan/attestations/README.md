@@ -80,7 +80,7 @@ ran the tests — and `stale:` now means one thing only: the sources moved.
 
 ```bash
 cargo test -p tillandsias-windows-tray --bins 2>&1 \
-  | scripts/check-windows-only-sources-verified.sh attest --from -
+  | tillandsias-plan script run scripts/lua/check-windows-only-sources-verified.lua -- attest --from -
 ```
 
 `--from -` reads the transcript from stdin, so no temp file is needed. The same
@@ -95,7 +95,7 @@ Then commit the file. It is tracked on purpose.
 
 ## Reading one
 
-`scripts/check-windows-only-sources-verified.sh check` prefers a tracked
+`tillandsias-plan script run scripts/lua/check-windows-only-sources-verified.lua` (`check`; `-- --platform macos` for the macOS scope) prefers a tracked
 attestation and falls back to the host-local `$GIT_DIR` stamp, so nothing that
 depended on the local lane changed behaviour. `./build.sh --check` carries the
 verdict on every Linux cycle.

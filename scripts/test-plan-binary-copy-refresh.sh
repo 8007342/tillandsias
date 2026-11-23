@@ -28,6 +28,13 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# The arms judge THIS fixture's scratch repos. Inside a gate the caller exports
+# its frozen diff base, a sha the scratch repos do not have, and the copy
+# refresh (which falls back through it) then read every scratch checkout as
+# off-trunk: run 32 evicted #1330 on the CONTROL arm. Never inherit it
+# (the 2242-u39b class). The production check keeps reading it: inside a real
+# gate HEAD is trunk plus the change, and skipping the refresh there is right.
+unset TILLANDSIAS_GATE_DIFF_BASE TILLANDSIAS_GATE_DIFF_BASE_ROOT
 cd "$ROOT" || exit 2
 fail=0; pass=0
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
@@ -110,6 +117,43 @@ if grep -qE <<<"$_pf" 'install -m0755 .*expert_bin'; then
 else
     ok "cycle-preflight has no direct install over the expert copy"
 fi
+
+
+# ── 6. ORDER 2217-ab8h: OFF TRUNK the copy is left alone, by name ──────────
+# A work-branch build installed as the host's PATH copy turned a trunk fixture
+# red on one host only. With the caller's checkout named, a HEAD that is not
+# contained in the trunk ref must not be installed.
+_R="$W/checkout"
+git init -q "$_R"
+git -C "$_R" -c user.email=t@t -c user.name=t commit -q --allow-empty -m trunk
+git -C "$_R" update-ref refs/remotes/origin/linux-next HEAD
+git -C "$_R" -c user.email=t@t -c user.name=t commit -q --allow-empty -m "a work-branch commit"
+printf 'stale\n' > "$_dest"; chmod 0755 "$_dest"
+_before="$(sha256sum "$_dest" | cut -d' ' -f1)"
+_verdict="$(refresh_plan_binary_copy "$W/good" "$_dest" "$_R")"
+_after="$(sha256sum "$_dest" | cut -d' ' -f1)"
+if [ "$_verdict" = "refresh-skipped-off-trunk" ] && [ "$_before" = "$_after" ]; then
+    ok "OFF TRUNK: a work-branch build is not installed over the PATH copy, and the answer says why (2217-ab8h)"
+else
+    bad "OFF TRUNK: got '$_verdict', copy $([ "$_before" = "$_after" ] && echo untouched || echo REPLACED) — a branch build becomes the host's PATH binary"
+fi
+
+# ── 7. CONTROL for 6: ON TRUNK the refresh still happens ───────────────────
+# Without it, "never refresh when a root is named" passes arm 6 and silently
+# ends the expert refresh cycle-preflight exists to perform (799-m2vk).
+git -C "$_R" update-ref refs/remotes/origin/linux-next HEAD
+_verdict="$(refresh_plan_binary_copy "$W/good" "$_dest" "$_R")"
+if [ "$_verdict" = "refreshed" ] && cmp -s "$W/good" "$_dest"; then
+    ok "CONTROL: with HEAD contained in the trunk ref the copy is still refreshed"
+else
+    bad "CONTROL: an on-trunk checkout did not refresh (got '$_verdict')"
+fi
+
+# ── 8. cycle-preflight names its checkout, so the guard is in force ────────
+case "$_pf" in
+    *'refresh_plan_binary_copy "$plan_bin" "$expert_bin" "$ROOT"'*) ok "cycle-preflight hands the guard its checkout" ;;
+    *) bad "cycle-preflight calls refresh_plan_binary_copy without its checkout, so a branch build is installed again" ;;
+esac
 
 echo "plan-binary-copy-refresh: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -106,7 +106,10 @@ if [ -z "$(git ls-files -- '*.sh' build.sh 2>/dev/null)$(git ls-files --others -
     exit 1
 fi
 
-if ! git rev-parse --verify --quiet "$base_ref" >/dev/null 2>&1; then
+# A tree is a valid base here (only `git diff` reads it; the census passes the
+# empty tree to see every line), so peel to a tree: a missing object still fails
+# (2241-f8jg).
+if ! git rev-parse --verify --quiet "$base_ref^{tree}" >/dev/null 2>&1; then
     echo "ok:sigpipe-verdict-added:base-unavailable"
     echo "  note: base ref '$base_ref' unavailable — added-line enforcement skipped" >&2
     exit 0

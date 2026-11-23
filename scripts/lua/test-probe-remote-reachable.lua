@@ -27,7 +27,12 @@
 
 local BASH = require("common.fixture").posix_shell("/bin/bash") -- Git's bash on native Windows (2246-fkea)
 local RUNNER = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN")
-if not RUNNER or RUNNER == "" then RUNNER = "target/release/tillandsias-plan" end
+-- A tree with no build of its own (a scratch checkout) resolves one as every other
+-- fixture does; with none that runs, nothing was tested and that is what it says.
+if not RUNNER or RUNNER == "" then RUNNER = require("common.fixture").plan_binary() end
+if RUNNER == "" or proc.run{ argv = { RUNNER, "build-id" }, timeout_ms = 60000 }.code ~= 0 then
+    verdict.could_not_run("probe-remote-reachable", "no runnable plan binary [" .. RUNNER .. "]; set TILLANDSIAS_SCRIPT_RUNNER_BIN")
+end
 local rel = "target/plan-scratch/probe-remote-" .. tostring(time.now_ms())
 fs.mkdir(rel)
 fs.write(rel .. "/cleanup.sh", 'rm -rf -- "$1"\n')
