@@ -37,6 +37,28 @@ not run is not a green; the verdict carries the counts for that reason.
 change methodology first and this page second; never the other way round
 (CLAUDE.md, Authority).
 
+## Remote unreachable: STOP — check FIRST, and on the first GitHub failure (order 2239-rmun)
+
+The user's direction (2026-11-22): a host that cannot push code to the remote
+must stop work entirely, not retry with exponential backoff, and not keep
+doing local work. A host whose gh token went bad kept merging and porting for
+~25 minutes because every symptom ("Failed to connect to github.com:443",
+"graphql: i/o timeout") read as a flaky network.
+
+1. At the start of every loop, AND the moment any GitHub operation fails (a
+   push, `gh pr ...`, `git fetch`/`ls-remote`, an API timeout), run the probe
+   once:
+   `tillandsias-plan script run scripts/lua/probe-remote-reachable.lua`
+2. `ok:remote-reachable` → continue. Anything that is neither `ok:` nor
+   `blocked:remote-unreachable:` (a script error, a stale plan binary) judged
+   nothing: rebuild the plan binary and re-run it; never suspend on it.
+3. `blocked:remote-unreachable:<cause>` → **SUSPEND**: tell the user and the
+   coordinator (by name, with the cause and the probe's why/remedy), push and
+   claim nothing, start no further local work, and do not retry or back off.
+   Wait for a human to restore access, then run the probe again.
+4. Never run `gh auth login` or `gh auth refresh` yourself; restoring access
+   is the human's step on that host.
+
 ## 0 — Classify the host, name the session
 
 | Regime | Detected by | Session name | Checkpoints to |
@@ -72,6 +94,8 @@ Bare metal (all three OSes):
    refuse. It installs or upgrades our hook and REFUSES to overwrite a
    pre-push hook this project did not write. The plan-lane scripts run it
    silently before their first push, so a fresh floor-host clone arms itself.
+   It also configures the `tillandsias-floor` merge driver (2118-asur): without
+   it, floor files conflict textually (`degraded:hooks:merge-driver-unarmed`).
 3. **Builder toolbox** (Linux): `scripts/with-tillandsias-builder.sh true`
    creates or reuses `tillandsias-builder` (methodology `toolbox_first_scripts`).
    macOS and Windows hosts have no toolbox; the checker skips this by name.

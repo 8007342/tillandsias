@@ -37,13 +37,7 @@ if REAL:sub(1, 2) == "./" then REAL = ROOT .. "/" .. REAL:sub(3) end
 -- 2218-x4s3: the shell build.sh is written for. A native Windows process has
 -- no /bin/bash (the spawn itself fails: rc=nil on every arm) and a bare `bash`
 -- resolves to WSL's, so derive Git's bash from git's own exec path there.
-local BASH = "/bin/bash"
-do
-    local ep = text.trim(proc.run({ argv = { "git", "--exec-path" }, timeout_ms = 10000 }).stdout or "")
-    if ep:find("^%a:/.*/libexec/git%-core$") then  -- mingw64/ or ucrt64/, per Git build
-        BASH = (ep:gsub("/[^/]+/libexec/git%-core$", "/bin/bash.exe"))
-    end
-end
+local BASH = require("common.fixture").posix_shell("/bin/bash") -- Git's bash on native Windows (2246-fkea)
 if REAL == "" or proc.run({ argv = { "test", "-x", REAL }, timeout_ms = 10000 }).code ~= 0 then
     verdict.could_not_run("preflight-rebuilds-stale-plan-binary", "no plan binary to stand behind the planted stub")
 end

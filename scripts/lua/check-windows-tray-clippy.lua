@@ -93,7 +93,7 @@ else
     local base = env.get("TILLANDSIAS_WINDOWS_CLIPPY_BASE")
     if not nonempty(base) then base = env.get("TILLANDSIAS_GATE_DIFF_BASE") end
     if not nonempty(base) then base = "origin/linux-next" end
-    local v = run({ "git", "rev-parse", "--verify", "--quiet", base }, 30000)
+    local v = run({ "git", "rev-parse", "--verify", "--quiet", base .. "^{commit}" }, 30000)
     if v.status ~= "exited" or v.code ~= 0 then
         verdict.emit("skip:windows-tray-clippy:base-ref-unavailable:" .. base, 0)
     end

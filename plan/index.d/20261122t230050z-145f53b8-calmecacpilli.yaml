@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: gate-leak-report-keeps-nothing
+    field: status
+    value: implemented
+    ts: "2026-11-22T23:00:50Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: gate-leak-report-keeps-nothing
+    event:
+      type: progress
+      ts: "2026-11-22T23:00:50Z"
+      host: calmecacpilli
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: build.sh snapshots the step's window of the log ONCE before attribution and attributes, prints and keeps from it; an empty snapshot is could-not-keep:<reason>; test-gate-step-private-metrics-fallback arms 5 ROTATED and 6 EMPTY: 9/9 with the fix, 3 checks red against the pre-fix loop (with only the seam added)

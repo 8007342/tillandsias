@@ -52,7 +52,9 @@ if V == "" and not proc.run{ argv = { "yq", "--version" } }.ok then
     out.line("plan-lane-after-merge: 0 passed, 0 failed (skipped)")
     verdict.skip("plan-lane-after-merge:no-validator")
 end
-local HENV = { GIT_TERMINAL_PROMPT = "0" }
+-- 2242-u39b: the scratch checkout is tested, never the caller's frozen diff base
+-- (TILLANDSIAS_* names pass proc.run's scrub, so both are passed empty).
+local HENV = { GIT_TERMINAL_PROMPT = "0", TILLANDSIAS_GATE_DIFF_BASE = "", TILLANDSIAS_GATE_DIFF_BASE_ROOT = "" }
 if V ~= "" then HENV.TILLANDSIAS_PLAN_BIN = V end
 
 local function G(args)

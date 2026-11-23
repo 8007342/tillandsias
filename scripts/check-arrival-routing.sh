@@ -151,7 +151,7 @@ if ! plan_binary_has "$PLAN" arrival-routing-check; then
 fi
 
 base_ref="${TILLANDSIAS_ROUTING_BASE:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}"
-if ! git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
+if ! git rev-parse --verify --quiet "$base_ref^{commit}" >/dev/null 2>&1; then
     # No base means no diff scope, and a whole-ledger fallback is exactly the
     # gate this file refuses to be. Not `ok`: nothing was examined.
     echo "skipped:arrival-routing:no-diff-base"

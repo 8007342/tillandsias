@@ -22,6 +22,7 @@
 # PRE-FIX RESULT: FAILS — no guard existed, and 289 of 339 verdicts reached
 # trunk with no affordance (1247-amcu, measured per file, so a floor).
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
 # 1592-idmu: this fixture builds its own repo, so the gate's frozen base (a SHA of
 # the gated checkout) is not its base; its scratch origin/linux-next is.
 unset TILLANDSIAS_GATE_DIFF_BASE
@@ -41,15 +42,15 @@ case "$PLAN" in ./*) PLAN="$ROOT/${PLAN#./}" ;; esac
 
 _tmpbase="$ROOT/target/plan-scratch"; mkdir -p "$_tmpbase" 2>/dev/null || _tmpbase="${TMPDIR:-/tmp}"
 W="$(mktemp -d "$_tmpbase/refusal-affordance.XXXXXX")"
-trap 'rm -rf "$W"' EXIT INT TERM
+scratch_trap 'rm -rf "$W"'
 GC=(-c user.email=f@x -c user.name=f)
 
 repo() { # repo <name> [base content of scripts/x.sh]
     local r="$W/$1"
     mkdir -p "$r/scripts"
     printf '%s\n' "${2:-#!/bin/bash}" > "$r/scripts/x.sh"
-    git -C "$r" init -q && git -C "$r" "${GC[@]}" add -A && git -C "$r" "${GC[@]}" commit -qm base
-    git -C "$r" update-ref refs/remotes/origin/linux-next HEAD
+    scratch_git "$r" init -q && scratch_git "$r" "${GC[@]}" add -A && scratch_git "$r" "${GC[@]}" commit -qm base
+    scratch_git "$r" update-ref refs/remotes/origin/linux-next HEAD
     echo "$r"
 }
 # TILLANDSIAS_REPO_ROOT pins the runner to the scratch repo: an inherited one
@@ -159,7 +160,7 @@ echo "unrelated line eight"
 echo "unrelated line nine"
 echo "unrelated line ten"
 echo "violation:c:bare"'
-git -C "$R" "${GC[@]}" commit -qam audit
+scratch_git "$R" "${GC[@]}" commit -qam audit
 run "$R" --audit
 # Count only this file's sites: the scratch repo also holds the guard itself.
 xc="$(grep -c '^covered scripts/x.sh:' <<<"$OUT")"; xb="$(grep -c '^bare scripts/x.sh:' <<<"$OUT")"

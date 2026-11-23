@@ -84,7 +84,7 @@ Smallest actionable boundary:
 
 Sibling tests:
 - `tillandsias-plan script run scripts/lua/check-cheatsheet-sources.lua -- --no-sha`
-- `./scripts/check-cheatsheet-tiers.sh --strict`
+- `tillandsias-plan script run scripts/lua/check-cheatsheet-tiers.lua -- --strict`
 
 Scoped follow-up:
 ```bash

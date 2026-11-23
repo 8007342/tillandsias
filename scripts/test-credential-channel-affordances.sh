@@ -65,19 +65,33 @@ esac
 exit 0
 STUB
 chmod +x "$W/bin/gh"
+# A session bus that serves the secret service (2251-4xvd). Without it a
+# keyring-less Linux host (yoga) answers credential-unretrievable-no-keyring-service
+# before the helper-chain arm, and ARM3 SKIPS there: the 1365 regression was
+# visible only on darwin. With it the arm runs wherever busctl would be asked.
+cat > "$W/bin/busctl" <<'STUB'
+#!/bin/sh
+echo "org.freedesktop.secrets 1234 gnome-keyring-d fixture :1.1 user@1000.service - -"
+STUB
+chmod +x "$W/bin/busctl"
 repo="$W/repo"; git init -q -b main "$repo"
 git -C "$repo" config core.hooksPath .git/hooks
 git -C "$repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m x
 git -C "$repo" config credential.helper manager
-# The push "works" exactly when git would stop prompting: a seeded repo-local
-# store AND no interactive helper left first in the chain.
+# The push "works" exactly when git would stop prompting: the keyring-backed
+# `!gh auth git-credential` helper is in the chain (this gh stub is logged in)
+# AND no interactive helper is left in it. Since 2222-xjgu a plaintext
+# repo-local store is NOT a cure: a remedy that seeds one instead must stay red.
 # The guard runs TILLANDSIAS_CRED_PROBE_CMD as ARGV (word-split, no shell),
 # so the probe is a script file.
 cat > "$W/probe.sh" <<'PROBE'
 #!/bin/sh
-store="$(git rev-parse --path-format=absolute --git-common-dir)/.gh-credentials"
 helpers="$(git config --get-all credential.helper)"
-[ -s "$store" ] || exit 1
+case "
+$helpers
+" in *"
+!gh auth git-credential
+"*) ;; *) exit 1 ;; esac
 case "
 $helpers
 " in *"

@@ -3,10 +3,10 @@
 # test-check-credential-channel.sh, whose scratch `git -C` calls then rewrote the
 # REAL checkout's origin and credential.helper (calmecacpilli 2026-11-22).
 STEP_DESC="Checking fixtures ignore an inherited GIT_DIR (2224-gdir)"
-STEP_SCRIPT="scripts/test-fixtures-ignore-inherited-git-dir.sh"
+STEP_LUA="scripts/lua/test-fixtures-ignore-inherited-git-dir.lua"
 STEP_ERROR="a fixture run under an inherited GIT_DIR wrote that repository, or build.sh no longer clears GIT_DIR (2224-gdir) — see the FAIL lines above"
 STEP_OK="Fixtures ignore an inherited GIT_DIR"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY.
-STEP_READS="scripts/test-fixtures-ignore-inherited-git-dir.sh scripts/test-check-credential-channel.sh build.sh"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:fixtures-ignore-inherited-git-dir:3"
-# msys: yolanda 2026-11-22 msys ok:fixtures-ignore-inherited-git-dir:3 (native .exe under Git Bash; real .git/config hash unchanged)
+STEP_READS="scripts/lua/test-fixtures-ignore-inherited-git-dir.lua scripts/test-check-credential-channel.sh build.sh"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:fixtures-ignore-inherited-git-dir:4"
+# msys: yolanda 2026-11-23 msys ok:fixtures-ignore-inherited-git-dir:4 at 49352d5ea

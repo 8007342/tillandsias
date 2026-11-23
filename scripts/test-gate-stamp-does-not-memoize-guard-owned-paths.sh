@@ -35,6 +35,7 @@
 #
 # Hermetic: scratch git repo, no network. Removed on exit.
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STAMPER="$ROOT/scripts/gate-stamp.sh"
@@ -43,8 +44,8 @@ ok()  { echo "ok:   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/gate-stamp-plan.XXXXXX")"
-trap 'rm -rf "$W"' EXIT INT TERM
-G() { git -C "$W/wc" -c user.email=t@t -c user.name=t "$@"; }
+scratch_trap 'rm -rf "$W"'
+G() { scratch_git "$W/wc" -c user.email=t@t -c user.name=t "$@"; }
 
 git init -q -b linux-next "$W/wc"
 mkdir -p "$W/wc/scripts" "$W/wc/plan/index.d" "$W/wc/plan/loop_status.d"

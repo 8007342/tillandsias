@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-rank-refusal-hits-and-project-discipline-skill-fixtures
+    order: 2245-pf7x
+    status: ready
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      Port scripts/test-rank-refusal-hits.sh (step 660) and scripts/test-project-discipline-skill.sh (step 276) whole to Lua, with mutant parity.
+    context: |
+      Tech-debt session (bash to lua), coordinator direction 2026-11-23: whole-file ports with mutant parity. Both items are untaken by any open work ref (checked against every origin/work/* deletion) and self-contained: each is called only by its gate step (rank-refusal-hits also appears in scripts/local-delegate-replay/replay-set.tsv, pinned to historical shas, so it needs no change).
+    exit_criteria:
+      - "both Lua fixtures pass with the same arm count as the .sh they replace"
+      - "every subject mutant reds under both or greens under both (parity), recorded in the commit"
+      - "steps 660 and 276 run the Lua (STEP_LUA, STEP_READS follow); both .sh deleted and their floor lines removed"
+    unscoreable: "whole-file port of two gate-step fixtures; the Lua fixtures and their mutant record are the deliverable, run by steps 660 and 276."
+    next_action: "Land the work ref."
+    provenance: coordinator direction (macuahuitl-fedora, 2026-11-23); filed by lenovinha.
+    related: [1494-kkbi, 1446-qkx4]
+    events:
+      - {type: filed, ts: '2026-11-23T02:22:49Z', host: lenovinha, summary: port rank-refusal-hits and project-discipline-skill fixtures filed}

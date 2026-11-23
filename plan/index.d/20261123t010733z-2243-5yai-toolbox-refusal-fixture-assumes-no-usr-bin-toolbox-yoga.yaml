@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-23 (found by relay-preflight of work/2243-urcy).
+packets:
+  - packet_id: toolbox-refusal-fixture-assumes-usr-bin-has-no-toolbox
+    order: "2243-5yai"
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [fixtures, toolbox, silverblue]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-toolbox-refusal-wsl-exception.sh
+    title: "test-toolbox-refusal-wsl-exception fails on every Silverblue host: PATH=/usr/bin:/bin still finds /usr/bin/toolbox"
+    context: |
+      Arm 2 ("non-WSL Linux + no toolbox prints the toolbox FATAL") builds its "no toolbox" world with
+      PATH="/usr/bin:/bin". On Fedora Silverblue toolbox IS /usr/bin/toolbox, so the wrapper never reaches the refusal
+      and the arm reports "non-WSL Linux lost the toolbox FATAL message". Red on yoga with trunk's
+      with-tillandsias-builder.sh too (verified by swapping it in), so it is the fixture's premise, not a regression; it
+      only surfaces when a change touches the wrapper and the door selects this fixture.
+    exit_criteria:
+      - "The fixture builds a PATH that provably lacks toolbox (a scratch bin dir of symlinks to the few tools the wrapper needs) and asserts that premise before judging; green on a Silverblue host."
+    unscoreable: "host-dependent: reproduces only where /usr/bin/toolbox exists; the premise assertion pins it"
+    provenance: "yoga relay-preflight of work/2243-urcy, 2026-11-23"
+    events:
+      - type: filed
+        ts: "2026-11-23T01:07:33Z"
+        host: yoga
+        summary: "filed: the fixture's no-toolbox PATH still contains /usr/bin/toolbox on Silverblue"
