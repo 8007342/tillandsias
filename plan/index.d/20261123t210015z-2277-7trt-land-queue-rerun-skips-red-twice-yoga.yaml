@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: land-queue-rerun-skips-red-twice
+    order: "2277-7trt"
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [build-speed, land-queue]
+    estimated_hours: 2
+    owned_files:
+      - scripts/land-queue.sh
+      - scripts/test-land-queue.sh
+    title: "land-queue does not re-run a whole gate for a red the step runner already reproduced (red-twice)"
+    context: |
+      Read from source, not yet measured on a landing. scripts/land-queue.sh (2143-z5uj) re-runs the gate once on the
+      identical tree when rc=1, no flaky line is in the log, and a FAIL, refused, violation or blocked line names a
+      scripts path or litmus the diff does not touch. With 2276-5pzy a host-state step that fails its retry prints
+      red-twice instead of flaky, so a log that was excluded from this rule can now enter it. The step runner has
+      already run that step twice on that tree, so the re-run spends a whole gate to ask the same question again.
+      The trunk-red check (2118-tpmy) is nested inside the re-run; skipping the re-run must not skip that check, or
+      a red the trunk shares evicts a candidate for it.
+    exit_criteria:
+      - "A gate log with a red-twice line whose step's test the diff does not touch runs no identical-tree re-run, counted by the fixture's gate log."
+      - "The trunk-red check still runs for that red: a trunk that fails the same test holds the queue and evicts nobody."
+      - "Negative control: an untouched red with no red-twice line still re-runs once (ARM 32 unchanged)."
+    unscoreable: "fixture-scored: scripts/test-land-queue.sh is the pin; no litmus covers the land queue"
+    next_action: "After 2276-fnhy and 2276-5pzy land: split the rerun from the trunk-red check in the 2143-z5uj block."
+    provenance: "coordinator macuahuitl-fedora 2026-11-23, from yoga's diagnosis while fixing 2276-5pzy"
+    related: [2143-z5uj, 2118-tpmy, 2276-5pzy]
+    events:
+      - {type: filed, ts: "2026-11-23T21:00:15Z", host: yoga, summary: "filed on the coordinator's request; taken by yoga after 2276-fnhy"}
