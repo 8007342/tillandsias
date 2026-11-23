@@ -17,7 +17,7 @@ description: >
 
 preconditions:
   - workspace contains scripts/lua/check-macos-stock-binaries.lua
-  - workspace contains scripts/test-check-macos-stock-binaries.sh
+  - workspace contains scripts/lua/test-check-macos-stock-binaries.lua
   - workspace contains scripts/install-macos.sh
   - workspace contains crates/tillandsias-vm-layer/src/vz.rs
 
@@ -27,9 +27,9 @@ critical_path:
     timeout_ms: 30000
     expected_behavior: "ok:macos-stock-binaries:"
   - step: "the lint refuses an added qemu-img, a bare hdiutil, a bare spawn_bounded name, a removed or Homebrew-widened PATH pin, and passes an absolute stock spawn"
-    command: "bash scripts/test-check-macos-stock-binaries.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-check-macos-stock-binaries.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "PASS: check-macos-stock-binaries 7/7"
+    expected_behavior: "ok:check-macos-stock-binaries:7"
 
 observability:
   traces:

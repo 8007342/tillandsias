@@ -46,7 +46,7 @@
 #
 # SEAMS REUSED FROM THE ESTABLISHED FIXTURES, not invented here:
 #   - the bare-remote + working-copy + `core.hooksPath` + piped-refs harness
-#     is scripts/test-pre-push-plan-lane-after-merge.sh's (arms a/b: a
+#     is scripts/lua/test-pre-push-plan-lane-after-merge.lua's (arms a/b: a
 #     non-plan path must be judged against a DIFFERENT ref than the push
 #     target, or the defect cannot even be constructed — that fixture's own
 #     header explains why a same-branch repro proves nothing).

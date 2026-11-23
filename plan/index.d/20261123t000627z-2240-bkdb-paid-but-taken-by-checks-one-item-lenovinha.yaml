@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: paid-but-taken-by-judges-only-the-first-removed-item
+    order: 2240-bkdb
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 1
+    title: |
+      check-carried-obligations.lua's paid-but-taken-by judges only the FIRST item a change removes: the removed-item loop breaks on the first base item absent from HEAD, so a multi-file port whose first item is free reads as paid while a later item duplicates another open work ref.
+    context: |
+      #1379 (2239-crf7) deleted three .sh files; the first in population order, test-archiver-concurrent-check.sh, was free, so the guard printed paid and never checked test-plan-binary-probe-usage-population.sh, which yoga's #1376 (2239-5gb5, created 2026-11-22T23:46Z) already deletes. The coordinator caught it by hand. In the due branch, `removed` comes from `for _, f in ipairs(base_pop) do if not head_set[f] then removed = f; break end end`, and only that one item reaches taken_items(). (1589-hm2r added the taken-by test; it assumed one item per change.)
+    exit_criteria:
+      - "every item a change removes is checked against taken_items(); any taken one refuses paid-but-taken-by naming it"
+      - "an arm: a change removing two items where only the SECOND is taken by another open ref refuses (red against today's guard), and one where neither is taken passes"
+      - "the waiver line printed names the taken item, not the first removed one"
+    unscoreable: "unpinnable-until-the-guard-exists: the second-item-taken arm is the deliverable."
+    next_action: "Collect every removed item; check each against taken_items(); add the arm to the carried-obligations fixture."
+    provenance: coordinator question (macuahuitl-fedora, 2026-11-22); filed by lenovinha.
+    related: [1589-hm2r, 2239-crf7, 2239-5gb5]
+    events:
+      - {type: filed, ts: '2026-11-23T00:06:27Z', host: lenovinha, summary: paid-but-taken-by judges only the first removed item filed}

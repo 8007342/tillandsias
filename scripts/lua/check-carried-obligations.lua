@@ -211,6 +211,46 @@ local function shell_population(ref, b)
     table.sort(pop)
     return pop
 end
+-- ORDER 2219-crmv: a RETIRED uncounted script pays too. Deleting a top-level
+-- scripts/*.sh outside the population (a wrapper or a tombstone) is exactly
+-- the cleanup the backlog wants, yet it lowers no counter, so it used to need
+-- an uncounted-item waiver. It pays when the change deletes more top-level
+-- scripts/*.sh (bootstrap shell and the population excluded: the counter
+-- above judges those) than it adds, so a rename, or a delete beside a new
+-- script, never does. Returns the first such deletion.
+local function retired_uncounted(base, head, b)
+    local globs = (type(b) == "table" and type(b.population) == "table" and #b.population > 0) and b.population or DEFAULT_POPULATION
+    local pats = {}
+    for _, g in ipairs(globs) do pats[#pats + 1] = glob_to_pattern(g) end
+    local function in_pop(f)
+        for _, pat in ipairs(pats) do if f:match(pat) then return true end end
+        return false
+    end
+    local excl = (type(b) == "table" and type(b.population_excludes) == "string") and b.population_excludes
+        or "scripts/portability/bootstrap-shell-allowlist.txt"
+    local function top_sh(ref)
+        local _, allow = git({ "show", ref .. ":" .. excl })
+        local boot = {}
+        for _, l in ipairs(text.lines(allow)) do
+            local f = l:match("^%s*(%S+)")
+            if f and not f:find("^#") then boot[f] = true end
+        end
+        local _, tree = git({ "ls-tree", "--name-only", ref, "scripts/" })
+        local set = {}
+        for _, f in ipairs(lines(tree)) do
+            if f:match("^scripts/[^/]+%.sh$") and not boot[f] and not in_pop(f) then set[f] = true end
+        end
+        return set
+    end
+    local at_base, at_head = top_sh(base), top_sh(head)
+    local deleted, added = {}, 0
+    for f in pairs(at_base) do if not at_head[f] then deleted[#deleted + 1] = f end end
+    for f in pairs(at_head) do if not at_base[f] then added = added + 1 end end
+    if #deleted <= added then return nil end
+    table.sort(deleted)
+    return deleted[1]
+end
+
 -- ── the forge-helper-shell counter, at a ref (order 2049-w2q6 / 2049-74tx) ──
 -- openspec change forge-lua-helpers D4: the shell-outs in the forge image's
 -- sourced helpers, images/default/lib-*.sh, are a carried-obligation backlog
@@ -566,6 +606,8 @@ for _, b in ipairs(backlogs) do
             log.raw("Carried-Waiver: " .. name .. " conflict:" .. removed .. " (#<pr>)")
         elseif #head_pop < #base_pop and removed and not paid_by then
             out.line("carried:" .. name .. ":paid:" .. removed)
+        elseif name == "shell-to-lua" and #head_pop <= #base_pop and retired_uncounted(MERGE_BASE, HEAD, b) then
+            out.line("carried:" .. name .. ":paid:retired-uncounted:" .. retired_uncounted(MERGE_BASE, HEAD, b))
         elseif waivers[name] then
             out.line("carried:" .. name .. ":waived:" .. waivers[name])
         else

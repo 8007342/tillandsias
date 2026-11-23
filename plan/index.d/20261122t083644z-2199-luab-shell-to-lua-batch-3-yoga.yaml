@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-22: shell-to-lua batch 3, after #1304 widened verdict.emit.
+packets:
+  - packet_id: shell-to-lua-batch-3-check-engine-cpu-dispatch
+    order: "2199-luab"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/check-engine-cpu-dispatch.lua
+      - scripts/test-check-engine-cpu-dispatch.sh
+      - scripts/bench-inference-floor.sh
+    title: "Shell-to-lua batch 3: check-engine-cpu-dispatch"
+    context: |
+      check-engine-cpu-dispatch.sh is ported to scripts/lua/check-engine-cpu-dispatch.lua with byte-identical
+      verdict lines and exit codes; unavailable:<x> rc 2 is admitted by #1304's legacy-word table. The fixture
+      seam changes from ENGINE_DISPATCH_SYSINFO_CMD (a shell string the .sh eval'd; the Lua door runs no
+      shells) to ENGINE_DISPATCH_SYSINFO_FILE. The one production caller, bench-inference-floor.sh, runs the
+      .lua through the plan binary.
+      Not in this batch: check-opsx-generated-dirt prints ok:clean-tree with rc 4, which verdict.emit refuses
+      (house words take 0-3, and #1304's table did not cover it). The four items the carried check offered
+      (cheatsheet-tiers, windows-tray-clippy, preflight-fixtures-default-target, issue-citation-convention)
+      are each wired into the hook, relay-preflight, build.sh and up to 14 fixtures: a caller migration each.
+    exit_criteria:
+      - "test-check-engine-cpu-dispatch 9/9 against the .lua; .sh and .lua give the same line and rc on the real capability-row path; the .sh is deleted."
+    unscoreable: "the shell-to-lua counter is the measure"
+    provenance: "coordinator queue item 3."
+    events:
+      - type: filed
+        ts: "2026-11-22T08:36:44Z"
+        host: yoga
+        summary: "filed and claimed"

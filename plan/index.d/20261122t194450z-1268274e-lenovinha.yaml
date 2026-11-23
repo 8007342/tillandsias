@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: archiver-ready-set-check-becomes-lua-gate-step
+    field: status
+    value: completed
+    ts: "2026-11-22T19:44:50Z"
+    host: lenovinha
+
+events:
+  - packet_id: archiver-ready-set-check-becomes-lua-gate-step
+    event:
+      type: completed
+      ts: "2026-11-22T19:44:50Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 0d0cdaa87 land(1301) on origin/linux-next; landing gate green incl. test-archiver-could-not-run-verdict 4/4 after the arm-4 fix (4709ec093)
+  - packet_id: archiver-ready-set-check-becomes-lua-gate-step
+    event:
+      type: note
+      ts: "2026-11-22T19:44:50Z"
+      host: lenovinha
+      summary: |-
+        landed via PR #1301

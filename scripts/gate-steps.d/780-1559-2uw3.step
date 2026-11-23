@@ -9,13 +9,22 @@
 # and a source with no SOFT body (refused by name). Each sabotage asserts its
 # own edit landed once. Pre-fix: the clearer arm and the missing-body arm FAIL.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf). Ported from the .sh by
+# 2234-a964; the second-regime record below was taken on the .sh predecessor,
+# whose arms and verdict line the port reproduces exactly.
 STEP_DESC="Checking the Windows SOFT reset calls no Vault credential clearer (1559-2uw3)"
-STEP_SCRIPT="scripts/test-purge-guard-soft-arm.sh"
+STEP_LUA="scripts/lua/test-purge-guard-soft-arm.lua"
 STEP_ERROR="the purge guard's SOFT arm no longer refuses a clearer in --reset-state (1559-2uw3); see which arm failed above"
 STEP_OK="the Windows SOFT reset calls no Vault credential clearer"
 STEP_SECOND_REGIME="yolanda 2026-10-08 msys ok:purge-guard-soft-arm:4 arms"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="crates/tillandsias-windows-tray/src/notify_icon.rs scripts/check-purge-clears-vault-credentials.sh scripts/test-purge-guard-soft-arm.sh"
+STEP_READS="crates/tillandsias-windows-tray/src/notify_icon.rs scripts/check-purge-clears-vault-credentials.sh scripts/lua/test-purge-guard-soft-arm.lua"
+# ORDER 2184-sinp: DECLARED INPUTS (2118-tnut grammar). The script drives
+# check-purge-clears-vault-credentials.sh, which reads the Windows tray SOFT
+# body (notify_icon.rs) AND scans every tracked *.sh and *.ps1 (git ls-files),
+# so any shell or PowerShell file is an input; the glob matches across
+# directories (a case pattern, where * matches /). An ATIME TRACE of a real
+# run read nothing outside these.
+STEP_INPUTS="path:scripts/check-purge-clears-vault-credentials.sh path:crates/tillandsias-windows-tray/src/notify_icon.rs path:*.sh path:*.ps1"
