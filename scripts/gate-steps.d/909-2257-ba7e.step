@@ -1,0 +1,12 @@
+# Gate step 2257-ba7e — every end-user UX string in the decider's table is the one the
+# operator approved in the ledger (626-w3fn). spec:tray-ux makes this governance,
+# not style: an unapproved user-facing string must not ship, and an in-file unit
+# test cannot catch a reword (one find-and-replace edits the assertion too).
+# Moved here from an inline build.sh step when the decider was ported to Lua.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking end-user UX strings against recorded operator approval (626-w3fn)..."
+STEP_LUA="scripts/lua/check-approved-ux-strings.lua"
+STEP_ERROR="an end-user UX string is not the one the operator approved in the ledger (626-w3fn, spec:tray-ux)"
+STEP_OK="Approved-UX-string gate passed"
+STEP_READS="crates/tillandsias-headless/src/bringup_progress.rs crates/tillandsias-macos-tray/src/reset_state.rs plan/archive/** plan/index.d/** plan/index.yaml scripts/lua/check-approved-ux-strings.lua"
