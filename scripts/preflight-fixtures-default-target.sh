@@ -29,7 +29,14 @@
 # It is refused only if the normal run passes and the stripped run fails, or
 # prints a skip: line the normal run did not (a fixture that skips when it
 # cannot find the binary is exactly as blind). A fixture red in BOTH regimes
-# is someone else's defect and is reported as a note, never as this class.
+# is not this class, but it is not nothing either (2262-5kk6): it is a NOTE only
+# when a gate step or an inline build.sh step runs that fixture and so reports it,
+# and the note names that step. A litmus binding is not enough: the suite is not in
+# --check (748-tkjx). One nothing gates is REFUSED here, or it stays red unseen.
+# One that is green from the checkout, where a gate runs it, is red only from this
+# guard's scratch cwd: a note of its own (#1358's test-scorable-closure-quoting).
+# Exit 3 with a could-not-run: line is a note: nothing was tested. Either way the
+# fixture's own last verdict line is carried.
 #
 # POPULATION: scripts/test-*.sh and scripts/lua/test-*.lua added or changed
 # against the base (default origin/linux-next, override
@@ -59,6 +66,7 @@
 #   ok:fixture-default-target:<n> checked
 #   skip:fixture-default-target:<reason>
 #   refused:fixture-default-target:<script>   (one per offender, exit 1)
+#   refused:fixture-default-target:ungated-red:<script>   (2262-5kk6, exit 1)
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -125,6 +133,29 @@ _bounded() { # run "$@" under the deadline
     "$TIMEOUT_CMD" "$DEADLINE" "$@"
 }
 
+# 2262-5kk6: the gate step that runs fixture $1 and fails on it, or nothing.
+_gated_by() {
+    local st
+    for st in scripts/gate-steps.d/*.step; do
+        [ -f "$st" ] || continue
+        if grep -qxF -e "STEP_SCRIPT=\"$1\"" -e "STEP_LUA=\"$1\"" "$st"; then
+            printf 'step %s' "${st##*/}"; return 0
+        fi
+    done
+    # An inline call that fails the build: not a comment, not `|| true`.
+    if awk -v f="$1" '/^[[:space:]]*#/ || /\|\|[[:space:]]*(true|:)/ { next }
+            index($0, "_run bash \"$SCRIPT_DIR/" f "\"") || index($0, "_run_lua_decider \"" f "\"") { hit = 1; exit }
+            END { exit !hit }' build.sh 2>/dev/null; then
+        printf 'build.sh inline step'; return 0
+    fi
+    return 1
+}
+# The fixture's own words: its last verdict or FAIL line, else its last line.
+_last_word() {
+    awk 'NF { last = $0 } /^(FAIL|fail|violation|refused|blocked|could-not-run|red)[: ]/ { v = $0 }
+         END { print substr(v != "" ? v : last, 1, 200) }' <<<"$1"
+}
+
 checked=0; refused=0
 while IFS= read -r f; do
     case "$f" in scripts/test-*.sh) kind=sh ;; scripts/lua/test-*.lua) kind=lua ;; *) continue ;; esac
@@ -161,7 +192,23 @@ while IFS= read -r f; do
         fi
     fi
     if [ "$rc_n" -ne 0 ]; then
-        echo "note:fixture-default-target:red-in-both-or-normal-regime:$f:rc=$rc_n" >&2
+        said="$(_last_word "$normal")"
+        [ "$rc_n" -ne 124 ] || said="no answer within ${DEADLINE}s; last line: $said"
+        if [ "$rc_n" -eq 3 ] && grep -q '^could-not-run:' <<<"$normal"; then
+            echo "note:fixture-default-target:could-not-run:$f — $said" >&2
+        elif [ "$kind" = sh ] && [ "$rc_n" -ne 124 ] && (cd "$ROOT" && _bounded bash "$ROOT/$f" >/dev/null 2>&1); then
+            # Red only because this guard starts it outside the checkout (a bare
+            # `git` finds no repository there); a gate runs it from the root.
+            echo "note:fixture-default-target:red-only-from-scratch-cwd:$f:rc=$rc_n — $said" >&2
+        elif gate="$(_gated_by "$f")"; then
+            echo "note:fixture-default-target:red-in-both-or-normal-regime:$f:rc=$rc_n gated-by: $gate — $said" >&2
+        else
+            echo "note:fixture-default-target:red-in-both-or-normal-regime:$f:rc=$rc_n ungated — $said" >&2
+            echo "  why: $f fails in the caller's own regime and no gate step or inline build.sh step runs it, so nothing else would report it" >&2
+            echo "  remedy: make it green (it failed from the checkout too), or wire it to a gate step" >&2
+            echo "refused:fixture-default-target:ungated-red:$f"
+            refused=$((refused + 1))
+        fi
         continue
     fi
     skip_n=0; skip_s=0

@@ -1,8 +1,6 @@
 # The .sh deciders allowed to exist (1384-bxhk). May only SHRINK.
-scripts/check-added-fragments-parse.sh
 scripts/check-added-test-is-referenced.sh
 scripts/check-append-vs-origin-fold.sh
-scripts/check-approved-ux-strings.sh
 scripts/check-archive-answerability.sh
 scripts/check-arrival-routing.sh
 scripts/check-base-ledger-status-loss.sh
@@ -233,7 +231,6 @@ scripts/test-groundtruth-corpus-declaration.sh
 scripts/test-guest-binaries-nix-lane.sh
 scripts/test-guest-crashloop-detection.sh
 scripts/test-guest-staging-refuses-a-wireless-binary.sh
-scripts/test-guest-unit-hardening.sh
 scripts/test-hardware-fingerprint.sh
 scripts/test-harness-affinity-selection.sh
 scripts/test-harness-byte-cheap.sh
@@ -392,7 +389,6 @@ scripts/test-refusal-affordance-added.sh
 scripts/test-refusal-names-the-ungated-lane.sh
 scripts/test-relay-preflight.sh
 scripts/test-release-asset-integrity.sh
-scripts/test-release-runbook-tag-order.sh
 scripts/test-release-tier-freshness-reads-ci-full.sh
 scripts/test-release-tier-freshness.sh
 scripts/test-release-tier-timer-render.sh

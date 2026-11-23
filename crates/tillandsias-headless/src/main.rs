@@ -5808,6 +5808,37 @@ fn refuse_real_home_in_test(certs_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// 2258-sr65: how long a minter waits for another one. A mint is openssl plus a
+/// keyring write; 5 s lost to a loaded host (12 test processes) twice in one day.
+const GENERATION_LOCK_WAIT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// A mkdir lock, removed on drop.
+pub(crate) struct GenerationLock(PathBuf);
+impl Drop for GenerationLock {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir(&self.0);
+    }
+}
+
+pub(crate) fn acquire_generation_lock(
+    lock_dir: &Path,
+    what: &str,
+) -> Result<GenerationLock, String> {
+    let deadline = std::time::Instant::now() + GENERATION_LOCK_WAIT;
+    loop {
+        match std::fs::create_dir(lock_dir) {
+            Ok(()) => return Ok(GenerationLock(lock_dir.to_path_buf())),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                if std::time::Instant::now() >= deadline {
+                    return Err(format!("Timed out waiting for {what}"));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            Err(e) => return Err(format!("Failed to acquire {what}: {e}")),
+        }
+    }
+}
+
 fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     // @trace spec:secret-rotation, spec:reverse-proxy-internal
     let certs_dir = PathBuf::from(ca_dir());
@@ -5862,30 +5893,12 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
 
     if should_refresh {
         refuse_mint_in_read_only_process(read_only_process())?;
-        let lock_dir = certs_dir.join(".ca-generation.lock");
-        let mut acquired_lock = false;
-        for _ in 0..50 {
-            match std::fs::create_dir(&lock_dir) {
-                Ok(()) => {
-                    acquired_lock = true;
-                    break;
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                    std::thread::sleep(std::time::Duration::from_millis(100));
-                }
-                Err(e) => return Err(format!("Failed to acquire CA generation lock: {e}")),
-            }
-        }
-        if !acquired_lock {
-            return Err("Timed out waiting for CA generation lock".to_string());
-        }
-        struct LockDir(PathBuf);
-        impl Drop for LockDir {
-            fn drop(&mut self) {
-                let _ = std::fs::remove_dir(&self.0);
-            }
-        }
-        let _lock = LockDir(lock_dir);
+        // 2258-sr65: asked BEFORE the lock. `podman inspect` may take its whole
+        // 30 s budget on a loaded host, and a second minter was timing out
+        // behind it. Only the warning below uses the answer.
+        let vault_running = vault_bootstrap::container_running_answer("tillandsias-vault");
+        let _lock =
+            acquire_generation_lock(&certs_dir.join(".ca-generation.lock"), "CA generation lock")?;
 
         if !ca_bundle_needs_refresh(&crt, &key) {
             return Ok(certs_dir);
@@ -5906,8 +5919,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
             std::env::current_exe()
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|_| "unknown".into()),
-            vault_bootstrap::container_running_answer("tillandsias-vault")
-                .map_or("unknown", |r| if r { "yes" } else { "no" }),
+            vault_running.map_or("unknown", |r| if r { "yes" } else { "no" }),
         );
         wipe_broken_ca_state(&certs_dir, &crt, &key);
 
@@ -37991,6 +38003,70 @@ esac
             &dir.join("intermediate.crt"),
             &dir.join("intermediate.key")
         ));
+    }
+
+    /// 2258-sr65: a minter holding the lock past the old 5 s limit makes the
+    /// second one wait, not fail.
+    #[test]
+    fn a_second_ca_minter_waits_out_a_slow_first_one() {
+        let _pseam_lock = podman_seam_lock();
+        let _guard = env_lock();
+        let _home = ScratchHome::new();
+        let dir = PathBuf::from(ca_dir());
+        std::fs::create_dir_all(&dir).unwrap();
+        let lock = dir.join(".ca-generation.lock");
+        std::fs::create_dir(&lock).unwrap();
+        let started = std::time::Instant::now();
+        std::thread::scope(|s| {
+            s.spawn(|| {
+                std::thread::sleep(std::time::Duration::from_millis(6000));
+                std::fs::remove_dir(&lock).unwrap();
+            });
+            ensure_ca_bundle(false).expect("the second minter waits for the lock");
+        });
+        assert!(started.elapsed() >= std::time::Duration::from_millis(5900));
+        assert!(!lock.exists(), "the lock is released");
+    }
+
+    /// 2258-sr65: podman is never called with the mint lock held.
+    #[test]
+    #[cfg(unix)]
+    fn the_ca_mint_lock_is_not_held_across_podman() {
+        use std::os::unix::fs::PermissionsExt;
+        let _pseam_lock = podman_seam_lock();
+        let _guard = env_lock();
+        let home = ScratchHome::new();
+        let lock = PathBuf::from(ca_dir()).join(".ca-generation.lock");
+        let (asked, held) = (home.path().join("asked"), home.path().join("held"));
+        let stub = home.path().join("podman-stub");
+        std::fs::write(
+            &stub,
+            format!(
+                "#!/bin/sh\n: > '{}'\n[ -d '{}' ] && : > '{}'\necho 'no such object' >&2\nexit 125\n",
+                asked.display(),
+                lock.display(),
+                held.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let prev = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
+        // SAFETY: serialised by podman_seam_lock and env_lock.
+        unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", &stub) };
+        let minted = ensure_ca_bundle(false);
+        // SAFETY: as above.
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var("TILLANDSIAS_PODMAN_BIN", v),
+                None => std::env::remove_var("TILLANDSIAS_PODMAN_BIN"),
+            }
+        }
+        minted.expect("ensure_ca_bundle");
+        assert!(
+            asked.exists(),
+            "the mint asked podman (the test has a subject)"
+        );
+        assert!(!held.exists(), "podman ran while the mint lock was held");
     }
 
     /// 1898-hyhf exit criterion 1: with HOME and the runtime dir on scratch

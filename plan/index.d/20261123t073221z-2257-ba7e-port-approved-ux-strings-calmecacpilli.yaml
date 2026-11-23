@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: the port queue (macuahuitl-fedora), preferring ports that remove an inline build.sh block.
+packets:
+  - packet_id: port-check-approved-ux-strings-to-lua
+    order: "2257-ba7e"
+    status: claimed
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, gate]
+    estimated_hours: 2
+    title: "Port check-approved-ux-strings.sh to Lua and move its inline build.sh block to a gate step"
+    context: |
+      Found while porting: the awk capture ran on into the next file, so a comment at the top of a fragment after one that
+      ends in an operator_note counted as an approval. On the real ledger 16 header-comment lines were read that way. The
+      port ends a capture with its file.
+    exit_criteria:
+      - "check-approved-ux-strings.sh and the inline build.sh block are gone; gate step 909-2257-ba7e runs the Lua decider."
+      - "test-approved-ux-strings.lua 7 arms, including a comment opening the next file (the .sh approves it)."
+    unscoreable: "pinned-elsewhere: gate steps 469-1642-cc54 (the fixture) and 909-2257-ba7e (the decider)."
+    next_action: "Land the PR with darwin and msys records for step 909."
+    provenance: "macuahuitl-fedora 2026-11-22, port queue."
+    events:
+      - type: filed
+        ts: "2026-11-23T07:32:21Z"
+        host: calmecacpilli
+        summary: "filed and claimed; implemented in the same change"

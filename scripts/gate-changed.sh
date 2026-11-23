@@ -489,6 +489,28 @@ if [ "$_build_block_only" = 1 ] && [ -s "$WORK/build-block-fx" ]; then
     FX_N="$(wc -l < "$WORK/fx-sel" | tr -d ' ')"
 fi
 
+# ORDER 2260-qw67: a guard build.sh declares `gate-context` (its preflight
+# precondition table) answers about a RUNNING gate, not the tree, so a scoped run
+# has no subject for it. It was run anyway, without the arguments its call site
+# passes on a continuation line, and read could-not-run on every sample. Left out
+# of the SELECTION, never of the population: its inputs must stay mapped, or a
+# change to one would select everything. Named; the full gate still runs it.
+awk -F'|' '/^_preflight_preconditions\(\)/ { t = 1; next } t && /^PRECONDS$/ { exit }
+           t && $2 == "gate-context" { print $1 }' build.sh > "$WORK/gate-context"
+if [ -s "$WORK/gate-context" ]; then
+    : > "$WORK/fx-ctx"
+    while IFS=$'\t' read -r _u _why; do
+        _fp="${_u%% *}"
+        if grep -qxF -- "${_fp##*/}" "$WORK/gate-context"; then
+            echo "skip:gate-changed:gate-context:$_fp — build.sh declares it has no subject outside a running gate" >&2
+        else
+            printf '%s\t%s\n' "$_u" "$_why" >> "$WORK/fx-ctx"
+        fi
+    done < "$WORK/fx-sel"
+    mv "$WORK/fx-ctx" "$WORK/fx-sel"
+    FX_N="$(wc -l < "$WORK/fx-sel" | tr -d ' ')"
+fi
+
 # INTAKE: defer whole-tree readers and declared-slow fixtures to the bundle.
 : > "$WORK/fx-deferred"
 if [ "$INTAKE" = 1 ]; then
