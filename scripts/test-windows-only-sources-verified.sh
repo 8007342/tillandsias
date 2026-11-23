@@ -2,7 +2,8 @@
 # freshness: auditor=linux-macuahuitl-fable5-20260816t1140z date=2026-08-16 verdict=refreshed scope=fixture re-run live on linux 7/7 PASS (incl. case 7 stamp-demands-evidence); consumer wiring intact (build.sh invokes check-windows-only-sources-verified.sh at 2 sites, 716-f5kc report lane); no stale arm
 # @trace spec:windows-native-tray, spec:methodology-accountability
 #
-# Fixture for scripts/check-windows-only-sources-verified.sh (order 716-f5kc).
+# Fixture for scripts/lua/check-windows-only-sources-verified.lua (order 716-f5kc;
+# the .sh it ported was retired by 2243-wosv slice 2, run through the plan runner).
 #
 # The checker exists because a Linux build of the Windows tray compiles STUBS
 # and goes green without reading the edited file. A checker for that which
@@ -12,7 +13,9 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CHECK="$ROOT/scripts/check-windows-only-sources-verified.sh"
+CHECK="$ROOT/scripts/lua/check-windows-only-sources-verified.lua"
+PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && _p="$(resolve_plan_binary 2>/dev/null)" && case "$_p" in (/*) printf '%s' "$_p" ;; (*) printf '%s/%s' "$PWD" "${_p#./}" ;; esac)" \
+    || { echo "skip:windows-only-sources-fixture:no-plan-binary"; exit 0; }
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -38,7 +41,8 @@ echo "// portable" > "$SRC/portable_thing.rs"
 
 run() {
     WINDOWS_ONLY_ROOT="$WORK" WINDOWS_ONLY_STAMP="$WORK/stamp" \
-        WINDOWS_ONLY_ATTEST_DIR="$WORK/plan/attestations" bash "$CHECK" "$@"
+        WINDOWS_ONLY_ATTEST_DIR="$WORK/plan/attestations" \
+        "$PLAN" script run "$CHECK" -- "$@"
 }
 
 # A transcript that looks like a clean cargo run. `stamp` demands one, because a
@@ -120,10 +124,8 @@ test a::undeclared_red ... FAILED
 ' > "$WORK/red.txt"
 out="$(run stamp --from "$WORK/red.txt" 2>/dev/null)"
 [ "$out" = "refused:undeclared-failure:undeclared_red" ]     || fail "case 7: an undeclared red must refuse and name the test, got '$out'"
-printf 'undeclared_red
-' > "$WORK/scripts/windows-only-known-red.txt" 2>/dev/null || {
-    mkdir -p "$WORK/scripts"; printf 'undeclared_red
-' > "$WORK/scripts/windows-only-known-red.txt"; }
+mkdir -p "$WORK/scripts"
+printf 'undeclared_red\n' > "$WORK/scripts/windows-only-known-red.txt"
 out="$(run stamp --from "$WORK/red.txt")"
 [ "$out" = "ok:sources-verified:windows-only:2" ]     || fail "case 7: a DECLARED red must be tolerated, got '$out'"
 echo "ok: case 7 — the stamp demands evidence and refuses undeclared reds"
