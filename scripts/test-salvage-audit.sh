@@ -58,6 +58,50 @@ have_refs=$(git -C "$ROOT" for-each-ref --format='%(refname)' refs/remotes/origi
 
 TMPDIR_ARM2B="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR_ARM2B"' EXIT
+# ── THE AUDITED REPO (2270-7gp6, measured: arm 1's live audit of 334 refs was 74 of
+# this fixture's 75 s, and it grows with the fleet's ref count) ─────────────
+# Arms 1-3 assert properties of the audit's LOOKUP and LABELS: refs are found
+# under both surfaces, the header names both, the count covers both, and every
+# difference carries a direction. None of that needs the live refs, so the
+# audit runs over a scratch repo built to have each case: origin/linux-next, a
+# STALE salvage ref (diverged, tip older than the branch's edit: is-AHEAD), a
+# NEWER diverged work ref (ref-may-be-AHEAD) and an ancestor work ref (nothing
+# differs). TILLANDSIAS_SALVAGE_AUDIT_LIVE=1 audits this checkout's real refs
+# instead; the land queue's --daily-full gate sets it, so the live audit still
+# runs once a day (TILLANDSIAS_ prefixed: only that prefix crosses the toolbox
+# boundary, scripts/with-tillandsias-builder.sh). A normal gate names the
+# skipped live arm on a not-run: line.
+_AUD="$ROOT"
+AUD_CHECK="$CHECK"
+if [ "${TILLANDSIAS_SALVAGE_AUDIT_LIVE:-0}" != 1 ]; then
+    echo "not-run:salvage-audit:live-refs — arms 1-3 audit a constructed repo; the audit of this checkout's real origin/salvage+work refs runs on the --daily-full gate (TILLANDSIAS_SALVAGE_AUDIT_LIVE=1, 2270-7gp6)"
+    _AUD="$TMPDIR_ARM2B/audited"
+    AUD_CHECK="$_AUD/scripts/salvage-audit.sh"
+    _ag() { git -C "$_AUD" -c user.name=salvfix -c user.email=salvfix@invalid -c commit.gpgsign=false "$@"; }
+    _at() { GIT_AUTHOR_DATE="$1 +0000" GIT_COMMITTER_DATE="$1 +0000" _ag commit -qm "$2"; }
+    if mkdir -p "$_AUD/scripts" && git -C "$_AUD" init -q 2>/dev/null \
+        && cp "$CHECK" "$AUD_CHECK" \
+        && printf 'v1\n' > "$_AUD/VERSION" && _ag add -A && _at 1700000000 base \
+        && _abase="$(_ag rev-parse HEAD)" \
+        && printf 'v2\n' > "$_AUD/VERSION" && _ag add VERSION && _at 1700001000 'branch edit' \
+        && _ag update-ref refs/remotes/origin/linux-next HEAD \
+        && _ag update-ref refs/remotes/origin/work/ancestor "$_abase" \
+        && _ag checkout -q "$_abase" 2>/dev/null \
+        && printf 'stale\n' > "$_AUD/VERSION" && _ag add VERSION && _at 1700000940 'stale snapshot' \
+        && _ag update-ref refs/remotes/origin/salvage/stale HEAD \
+        && _ag checkout -q "$_abase" 2>/dev/null \
+        && printf 'newer\n' > "$_AUD/VERSION" && _ag add VERSION && _at 1700002000 'newer work' \
+        && _ag update-ref refs/remotes/origin/work/newer HEAD \
+        && _ag checkout -q refs/remotes/origin/linux-next 2>/dev/null; then :
+    else
+        echo "FAIL: could not build the audited scratch repo — arms 1-3 would have nothing to read"
+        echo "FAIL: salvage-audit $pass/$((pass + fail + 1)) (1226-jb8y)"
+        exit 1
+    fi
+fi
+# ARM 0's nested run swaps in a deliberately slow subject: honour it.
+[ -n "${SALVAGE_AUDIT_CHECK:-}" ] && AUD_CHECK="$SALVAGE_AUDIT_CHECK"
+have_refs=$(git -C "$_AUD" for-each-ref --format='%(refname)' refs/remotes/origin/salvage 2>/dev/null | wc -l)
 # ── THE CEILING (order 1672-8i7t) ───────────────────────────────────────────
 # This was a fixed `timeout 300`, and the arms below then read `tail -1` of the
 # capture as the verdict. On yolanda-windows 2026-10-13 (tillandsias-build,
@@ -90,7 +134,7 @@ if [ -z "${TEST_SALVAGE_AUDIT_NESTED:-}" ]; then
 fi
 
 _capture_t0=$SECONDS
-out="$(timeout "$SALVAGE_AUDIT_TIMEOUT_S" bash "$CHECK" 2>&1)"
+out="$(timeout "$SALVAGE_AUDIT_TIMEOUT_S" bash "$AUD_CHECK" 2>&1)"
 _capture_rc=$?
 if [ "$_capture_rc" -eq 124 ]; then
     echo "FAIL: timeout after ${SALVAGE_AUDIT_TIMEOUT_S}s — the audit was killed at the fixture's ceiling ($((SECONDS - _capture_t0))s elapsed), so its cut-short output was NOT parsed by any arm"
@@ -118,8 +162,8 @@ fi
 # tells a blocked host to use. Pointing it at work/ the first time turned up an
 # eleven-day-old ledger event absent from trunk. A default that silently covers
 # one surface is this audit's own false-negative, one level up.
-have_salv=$(git -C "$ROOT" for-each-ref --format='%(refname)' refs/remotes/origin/salvage 2>/dev/null | wc -l)
-have_work=$(git -C "$ROOT" for-each-ref --format='%(refname)' refs/remotes/origin/work 2>/dev/null | wc -l)
+have_salv=$(git -C "$_AUD" for-each-ref --format='%(refname)' refs/remotes/origin/salvage 2>/dev/null | wc -l)
+have_work=$(git -C "$_AUD" for-each-ref --format='%(refname)' refs/remotes/origin/work 2>/dev/null | wc -l)
 if [ "$have_salv" -eq 0 ] && [ "$have_work" -eq 0 ]; then
     echo "skip: ARM 1b — this clone has neither salvage nor work refs"
 else
