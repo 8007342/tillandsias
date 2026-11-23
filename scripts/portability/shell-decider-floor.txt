@@ -53,7 +53,6 @@ scripts/check-release-asset-integrity.sh
 scripts/check-release-tier-freshness.sh
 scripts/check-resumable-claim-dirt.sh
 scripts/check-running-image-freshness.sh
-scripts/check-rust-source-pin-added.sh
 scripts/check-salvage-refs-ledger.sh
 scripts/check-scorable-obligation-added.sh
 scripts/check-script-exec-bits.sh
@@ -140,8 +139,6 @@ scripts/test-credential-channel-host-push-lane.sh
 scripts/test-credential-channel-names-a-locked-keyring.sh
 scripts/test-credential-channel-survives-a-killed-probe.sh
 scripts/test-credential-cold-state-probe.sh
-scripts/test-credential-remedy-runnable.sh
-scripts/test-credential-store-worktree.sh
 scripts/test-credential-verdict-script.sh
 scripts/test-cycle-checkout-lock.sh
 scripts/test-cycle-claims-report.sh
@@ -467,7 +464,6 @@ scripts/test-spec-index-staging-capacity.sh
 scripts/test-spec-registry-status.sh
 scripts/test-spec-script-paths.sh
 scripts/test-squid-supervisor.sh
-scripts/test-ssh-lane-refuses-when-unwired.sh
 scripts/test-ssh-lane-sidecar.sh
 scripts/test-status-channel-absent-is-first-class.sh
 scripts/test-stranded-plan-writes.sh

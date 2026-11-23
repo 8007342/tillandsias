@@ -30,9 +30,9 @@ per-file YAML sidecar (`.meta.yaml`) and an entry in the central
 - **AND** the on-disk path uses the raw form (not the GitHub HTML wrapper)
 
 #### Scenario: INDEX.json is the union of all sidecars
-- **WHEN** `scripts/regenerate-source-index.sh` runs
+- **WHEN** `scripts/regenerate-source-index.sh` runs <!-- spec-path-absent: ok (tombstone deleted, 2218-rsix; superseded by cheatsheets-license-tiered) -->
 - **THEN** `cheatsheet-sources/INDEX.json` contains one entry per `.meta.yaml` sidecar
-- **AND** `scripts/regenerate-source-index.sh --check` exits non-zero if INDEX.json is stale
+- **AND** `scripts/regenerate-source-index.sh --check` exits non-zero if INDEX.json is stale <!-- spec-path-absent: ok (tombstone deleted, 2218-rsix; superseded by cheatsheets-license-tiered) -->
 
 #### Scenario: Stored format precedence
 - **WHEN** the fetcher retrieves content from an IETF URL
@@ -199,7 +199,7 @@ Smallest actionable boundary:
 - `tillandsias-plan script run scripts/lua/check-cheatsheet-sources.lua -- --no-sha`
 
 Sibling tests:
-- `bash scripts/regenerate-source-index.sh --check`
+- `bash scripts/regenerate-source-index.sh --check` <!-- spec-path-absent: ok (tombstone deleted, 2218-rsix; superseded by cheatsheets-license-tiered) -->
 - `bash scripts/refresh-cheatsheet-sources.sh --max-age-days 90` <!-- spec-path-absent: ok (tombstone deleted, 2217-tmbs; superseded by cheatsheets-license-tiered) -->
 
 Scoped follow-up:

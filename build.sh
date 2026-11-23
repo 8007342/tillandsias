@@ -983,7 +983,7 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # (`gate-only-decider`, 1518-8p5k below, is a different token: excluded here.)
     _go="$(sed -n '1,40{/^# preflight: gate-only-decider/d;s/^# preflight: gate-only[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1)"
     if [ -n "$(sed -n '1,40{/^# preflight: gate-only-decider/d;/^# preflight: gate-only/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
-        _reason="$(printf '%s' "$_go" | sed 's/^[—-][[:space:]]*//')"
+        _reason="$(printf '%s' "$_go" | sed -e 's/^—[[:space:]]*//' -e 's/^-[[:space:]]*//')"
         case "$_p" in
             scripts/test-*)
                 if [ -n "$_reason" ]; then
@@ -1007,7 +1007,7 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # check-* that NO pre-push hook runs (the push lane keeps every decider it
     # has), only with a reason, and the full gate still runs it.
     if [ -n "$(sed -n '1,40{/^# preflight: gate-only-decider/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
-        _reason="$(sed -n '1,40{s/^# preflight: gate-only-decider[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+        _reason="$(sed -n '1,40{s/^# preflight: gate-only-decider[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed -e 's/^—[[:space:]]*//' -e 's/^-[[:space:]]*//')"
         case "$_p" in
             scripts/check-*)
                 if grep -qF "${_p##*/}" "$SCRIPT_DIR"/scripts/hooks/* 2>/dev/null; then
@@ -1035,7 +1035,7 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # left a Lua guard no way to run alone: the lc-numeric signal fixture
     # (step 455) wrote the same checkout paths as step 450 concurrently.
     if [ -n "$(sed -n '1,40{/^# preflight: serial/p;/^-- preflight: serial/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
-        _reason="$(sed -n '1,40{s/^# preflight: serial[[:space:]]*//p;s/^-- preflight: serial[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+        _reason="$(sed -n '1,40{s/^# preflight: serial[[:space:]]*//p;s/^-- preflight: serial[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed -e 's/^—[[:space:]]*//' -e 's/^-[[:space:]]*//')"
         if [ -n "$_reason" ]; then
             return 12
         fi
@@ -1049,7 +1049,7 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # whole budget, so it neither waits behind the roster nor extends it. A kill
     # is still a deadline skip. The reason is required, as for serial.
     if [ -n "$(sed -n '1,40{/^# preflight: own-deadline/p;/^-- preflight: own-deadline/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
-        _reason="$(sed -n '1,40{s/^# preflight: own-deadline[[:space:]]*//p;s/^-- preflight: own-deadline[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+        _reason="$(sed -n '1,40{s/^# preflight: own-deadline[[:space:]]*//p;s/^-- preflight: own-deadline[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed -e 's/^—[[:space:]]*//' -e 's/^-[[:space:]]*//')"
         if [ -n "$_reason" ]; then
             return 13
         fi
@@ -1745,6 +1745,27 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     # 300-guard fixture's seam) runs none of that family, so it skips the fetch:
     # the fetch writes .git/FETCH_HEAD and the remote refs, which kept the
     # fixture off the gate pool. The real roster always fetches.
+    # ORDER 2239-rmun: a host that cannot reach the remote stops HERE, named,
+    # before minutes of guards whose result can never be pushed (the user's
+    # direction 2026-11-22: stop work, do not retry). Off in CI (no host login
+    # to judge) and under a replaced roster (the fixture's seam), and by
+    # TILLANDSIAS_SKIP_REMOTE_PROBE=1. Never runs gh auth login/refresh.
+    if [ -z "${TILLANDSIAS_PREFLIGHT_ROSTER_FILE:-}" ] && [ -z "${CI:-}" ] && [ -z "${GITHUB_ACTIONS:-}" ] \
+       && [ "${TILLANDSIAS_SKIP_REMOTE_PROBE:-0}" != 1 ]; then
+        _rr_bin="$(. "$SCRIPT_DIR/scripts/plan-binary-probe.sh" && resolve_plan_binary 2>/dev/null || true)"
+        if [ -n "$_rr_bin" ]; then
+            _rr_out="$( cd "$SCRIPT_DIR" && "$_rr_bin" script run scripts/lua/probe-remote-reachable.lua 2>&1 )"; _rr_rc=$?
+            if [ "$_rr_rc" -ne 0 ]; then
+                printf '%s\n' "$_rr_out" >&2
+                echo "refused:preflight:remote-unreachable"
+                echo "  why: this host cannot reach the remote, so nothing this gate vouches for can be pushed (2239-rmun)" >&2
+                echo "  remedy: a human restores this host's access (see the probe's remedy above); until then SUSPEND work here — no retries, no backoff" >&2
+                exit 1
+            fi
+        else
+            echo "note:preflight:remote-probe:no-plan-binary — the remote-reachable probe needs the plan binary; not judged (2239-rmun)" >&2
+        fi
+    fi
     [ -n "${TILLANDSIAS_PREFLIGHT_ROSTER_FILE:-}" ] || git -C "$SCRIPT_DIR" fetch -q origin 2>/dev/null || true
     _freeze_gate_diff_base || exit 1
 
@@ -5853,7 +5874,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # 827-d3dc found 92 such pins; four of the ten costliest were this shape,
     # and one kept a product defect green (1472-3d29). Diff-scoped.
     _step "Checking newly-added Rust source-literal pins (1473-scdq)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-rust-source-pin-added.sh" 2>&1; then
+    # 2242-rspn: a Lua decider on the one runner since its port.
+    if ! _run_lua_decider "scripts/lua/check-rust-source-pin-added.lua" 2>&1; then
         _error "a newly-added Rust test pins source text with no negative control or reason (1473-scdq); the site and the remedy are printed above"
         exit 1
     fi
