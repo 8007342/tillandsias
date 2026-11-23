@@ -1,0 +1,11 @@
+# Gate step 2267-6ss8 — a fixture runs ONCE per gate: refuse a script that a
+# .step names and an inline build.sh block also runs. test-land-queue.sh ran
+# twice per gate from 2026-09-28 (step 286) until 2266-4w3c.
+# Pool-safe: it reads build.sh and scripts/gate-steps.d/, writes nothing.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking no fixture runs both inline in build.sh and as a gate step (2267-6ss8)..."
+STEP_LUA="scripts/lua/check-gate-step-not-also-inline.lua"
+STEP_ERROR="a script runs both inline in build.sh and as a gate step, so every gate runs it twice — delete the inline block"
+STEP_OK="no fixture runs twice per gate"
+STEP_READS="scripts/lua/check-gate-step-not-also-inline.lua build.sh scripts/gate-steps.d/**"

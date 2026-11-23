@@ -1,0 +1,11 @@
+# Gate step 2267-6ss8 — the not-also-inline decider's fixture: live passes,
+# the re-added inline test-land-queue.sh block and a duplicated Lua step are
+# refused, a commented-out line is not a run.
+# Pool-safe: it writes only its own scratch copies.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the not-also-inline decider's fixture (2267-6ss8)..."
+STEP_LUA="scripts/lua/test-gate-step-not-also-inline.lua"
+STEP_ERROR="the not-also-inline decider no longer refuses a script run both inline and as a step — see the FAIL lines above"
+STEP_OK="not-also-inline fixture passed"
+STEP_READS="scripts/lua/check-gate-step-not-also-inline.lua scripts/lua/test-gate-step-not-also-inline.lua build.sh scripts/gate-steps.d/**"
