@@ -683,7 +683,6 @@ scripts scripts/test-loop-status-audit-reads-current-emitter.sh 2
 scripts scripts/test-lww-channel-alias.sh 3
 scripts scripts/test-lww-channel-consumers.sh 2
 scripts scripts/test-macos-model-share-writable.sh 1
-scripts scripts/test-macos-signing-seam.sh 1
 scripts scripts/test-macos-vz-orphan-diagnosis.sh 2
 scripts scripts/test-mcp-plan-resolver-pinning.sh 2
 scripts scripts/test-mcp-run-command-tool.sh 2
@@ -797,7 +796,6 @@ scripts scripts/test-tracked-files-unwritten-guard.sh 2
 scripts scripts/test-tray-asset-placeholder-refused.sh 1
 scripts scripts/test-tray-surface-parity-gate.sh 1
 scripts scripts/test-unrunnable-platform-arms.sh 9
-scripts scripts/test-unstable-installer-defaults-to-unstable.sh 1
 scripts scripts/test-vault-shutdown-forwards-sigterm.sh 2
 scripts scripts/test-verify-closure.sh 1
 scripts scripts/test-windows-host-lane-refusal.sh 4
