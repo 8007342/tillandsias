@@ -434,7 +434,10 @@ if [ "$INTAKE" = 1 ]; then
         _fp="${_u%% *}"
         if [ "$_why" = "*" ]; then
             printf '%s\twhole-tree\n' "$_u" >> "$WORK/fx-deferred"
-        elif [ -n "$(sed -n '1,40{/preflight: gate-only-decider/d;/^\(#\|--\) preflight: gate-only/p;}' "$_fp" 2>/dev/null | head -n 1)" ]; then
+        # awk, not sed: `\(a\|b\)` alternation is GNU-only, and BSD sed matched
+        # nothing, so on darwin no declared-slow fixture was ever deferred
+        # (macbookair, #1402: 974's DEFER-SLOW arm red there and on trunk).
+        elif [ -n "$(awk 'NR > 40 { exit } /preflight: gate-only-decider/ { next } /^(#|--) preflight: gate-only/ { print; exit }' "$_fp" 2>/dev/null)" ]; then
             printf '%s\tslow\n' "$_u" >> "$WORK/fx-deferred"
         else
             printf '%s\t%s\n' "$_u" "$_why" >> "$WORK/fx-keep"
