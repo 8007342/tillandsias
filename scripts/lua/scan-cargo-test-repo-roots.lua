@@ -37,6 +37,7 @@
 -- against the tillandsias-headless closure. --list prints the scanned roots.
 local check, only, declvar = true, "tillandsias-headless", "_CARGO_FEATURE_TEST_INPUTS"
 local showwhy = false
+local buildsh = "build.sh"  -- --build-sh FILE: judge a scratch copy (2239-5gb5 fixture)
 do
     local i = 1
     while arg and arg[i] do
@@ -46,6 +47,7 @@ do
         elseif arg[i] == "--workspace" then only = nil; i = i + 1
         elseif arg[i] == "--crate" then only = arg[i + 1]; i = i + 2
         elseif arg[i] == "--var" then declvar = arg[i + 1]; i = i + 2
+        elseif arg[i] == "--build-sh" then buildsh = arg[i + 1]; i = i + 2
         else i = i + 1 end
     end
 end
@@ -132,6 +134,20 @@ for _, f in ipairs(fs.walk("crates", { suffix = ".rs" })) do
                 cur = f .. ": " .. lit
                 if #parts > 0 and tops[parts[1]] and not lit:find("%s") then add(parts) end
             end
+            -- ORDER 2239-5gb5: A SCRIPT A TEST EXECUTES. `Command::new("bash")
+            -- .arg("scripts/x.sh")`, "bash scripts/x.sh", "$ROOT/scripts/x.sh",
+            -- an env-var default: any literal holding a scripts/ path counts, in
+            -- EVERY scanned file, rooted or not and wherever the path sits in
+            -- the string. Since scripts/** stopped being declared wholesale, a
+            -- missed exec would be a silent coverage hole, so this is the
+            -- wider net. Paths assembled with no literal at all stay the daily
+            -- full run's to catch (KNOWN LIMIT above).
+            for sp in lit:gmatch("scripts/[%w_.@/-]+") do
+                if not lit:match("^%.%./") then
+                    cur = f .. ": " .. lit
+                    add(split((sp:gsub("[./]+$", ""))))
+                end
+            end
         end
     end
 end
@@ -155,7 +171,7 @@ if not check then
 end
 
 -- --check: every scanned root must be covered by build.sh's declaration.
-local build = fs.read("build.sh") or ""
+local build = fs.read(buildsh) or ""
 local decl = build:match('\n' .. declvar .. '="([^"]*)"')
 if not decl then
     verdict.emit("violation:cargo-test-inputs:no-declaration", 1,

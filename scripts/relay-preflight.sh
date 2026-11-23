@@ -382,7 +382,9 @@ _run_decider() { # name -> sets DEC_OUT, returns rc
         check-gate-step-regimes) _cap bash "$SELF_DIR/check-gate-step-regimes.sh" ;;
         check-added-test-is-referenced) DEC_OUT="$(TILLANDSIAS_ADDED_TEST_BASE="$BASE" bash "$SELF_DIR/check-added-test-is-referenced.sh" 2>&1)"; return $? ;;
         check-refusal-affordance-added) DEC_OUT="$(TILLANDSIAS_AFFORDANCE_BASE="$BASE" bash "$SELF_DIR/check-refusal-affordance-added.sh" 2>&1)"; return $? ;;
-        check-rust-source-pin-added) DEC_OUT="$(TILLANDSIAS_RUST_PIN_BASE="$BASE" bash "$SELF_DIR/check-rust-source-pin-added.sh" 2>&1)"; return $? ;;
+        check-rust-source-pin-added)
+            _lua_runner "$name" || return 3
+            _cap env TILLANDSIAS_REPO_ROOT="$ROOT" TILLANDSIAS_RUST_PIN_BASE="$BASE" "$_lb" script run "$SELF_DIR/lua/check-rust-source-pin-added.lua" ;;
         check-no-python-scripts)
             _lua_runner "$name" || return 3
             _cap env TILLANDSIAS_REPO_ROOT="$ROOT" "$_lb" script run "$SELF_DIR/lua/check-no-python-scripts.lua" ;;

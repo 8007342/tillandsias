@@ -21,6 +21,7 @@
 #
 #   PASS: land-affordance <n>/<n>
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UNDER_TEST="$ROOT/scripts/land-on-platform-branch.sh"
@@ -29,7 +30,7 @@ ok()  { pass=$((pass + 1)); echo "ok:   $1"; }
 bad() { fail=$((fail + 1)); echo "FAIL: $1"; [ -n "${2:-}" ] && echo "      $2"; }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/land-afford.XXXXXX")" || { echo "FAIL: mktemp"; exit 1; }
-trap 'rm -rf "$W"' EXIT INT TERM
+scratch_trap 'rm -rf "$W"'
 export GIT_TERMINAL_PROMPT=0
 
 # $1 = dir. Seed: linux-next (trunk) and windows-next, trunk advanced by one
@@ -38,23 +39,23 @@ build_origin() {
     local w="$1"
     rm -rf "$w/seed" "$w/origin"
     git init -q -b linux-next "$w/seed"
-    git -C "$w/seed" config user.email f@e.invalid
-    git -C "$w/seed" config user.name f
+    scratch_git "$w/seed" config user.email f@e.invalid
+    scratch_git "$w/seed" config user.name f
     mkdir -p "$w/seed/scripts"
     cp "$UNDER_TEST" "$w/seed/scripts/land-on-platform-branch.sh"
     printf '#!/bin/sh\nexit 0\n' > "$w/seed/build.sh"
     chmod +x "$w/seed/build.sh"
     printf 'base\n' > "$w/seed/shared.txt"
-    git -C "$w/seed" add -A >/dev/null 2>&1
-    git -C "$w/seed" commit -qm base
-    git -C "$w/seed" branch windows-next
+    scratch_git "$w/seed" add -A >/dev/null 2>&1
+    scratch_git "$w/seed" commit -qm base
+    scratch_git "$w/seed" branch windows-next
     printf 'trunk version\n' > "$w/seed/shared.txt"
-    git -C "$w/seed" commit -qam "trunk edits shared.txt"
+    scratch_git "$w/seed" commit -qam "trunk edits shared.txt"
     git init -q --bare "$w/origin"
-    git -C "$w/origin" config core.hooksPath hooks
-    git -C "$w/origin" symbolic-ref HEAD refs/heads/linux-next
-    git -C "$w/seed" remote add origin "$w/origin"
-    git -C "$w/seed" push -q origin linux-next windows-next
+    scratch_git "$w/origin" config core.hooksPath hooks
+    scratch_git "$w/origin" symbolic-ref HEAD refs/heads/linux-next
+    scratch_git "$w/seed" remote add origin "$w/origin"
+    scratch_git "$w/seed" push -q origin linux-next windows-next
 }
 clone_on() { # $1 = branch, $2 = dest
     git clone -q "$W/origin" "$2"
@@ -73,10 +74,10 @@ afford_follows() { # $1 = verdict prefix: the why/remedy pair appears after it
 
 # ARM 1 — dirty worktree.
 build_origin "$W"; clone_on linux-next "$W/a1"
-printf 'local change\n' > "$W/a1/local.txt"; git -C "$W/a1" add local.txt
+printf 'local change\n' > "$W/a1/local.txt"; scratch_git "$W/a1" add local.txt
 rc="$(land "$W/a1" linux-next)"
 if [ "$rc" = 1 ] && afford_follows "refused:land:dirty-worktree"; then
-    git -C "$W/a1" commit -qm "commit the change, as the remedy says"
+    scratch_git "$W/a1" commit -qm "commit the change, as the remedy says"
     rc2="$(land "$W/a1" linux-next)"
     if [ "$rc2" = 0 ]; then
         ok "ARM 1: dirty-worktree says why and what clears it, and the remedy (commit) lands"
@@ -90,7 +91,7 @@ fi
 # ARM 2 — the mandated trunk merge conflicts on shared.txt.
 build_origin "$W"; clone_on windows-next "$W/a2"
 printf 'platform version\n' > "$W/a2/shared.txt"
-git -C "$W/a2" commit -qam "platform edits shared.txt"
+scratch_git "$W/a2" commit -qam "platform edits shared.txt"
 rc="$(land "$W/a2" windows-next)"
 if [ "$rc" = 2 ] && afford_follows "refused:land:trunk-merge-conflict"; then
     ( cd "$W/a2" && git merge -q origin/linux-next >/dev/null 2>&1
@@ -108,11 +109,11 @@ fi
 # ARM 3 — the gate refuses the tree.
 build_origin "$W"; clone_on linux-next "$W/a3"
 printf '#!/bin/sh\necho "violation:fixture:the tree is wrong"\nexit 1\n' > "$W/a3/build.sh"
-git -C "$W/a3" commit -qam "a tree the gate refuses"
+scratch_git "$W/a3" commit -qam "a tree the gate refuses"
 rc="$(land "$W/a3" linux-next)"
 if [ "$rc" != 0 ] && afford_follows "refused:land:gate-failed"; then
     printf '#!/bin/sh\nexit 0\n' > "$W/a3/build.sh"
-    git -C "$W/a3" commit -qam "fix what the gate named, as the remedy says"
+    scratch_git "$W/a3" commit -qam "fix what the gate named, as the remedy says"
     rc2="$(land "$W/a3" linux-next)"
     if [ "$rc2" = 0 ]; then
         ok "ARM 3: gate-failed says why and what clears it, and the remedy (fix, commit) lands"

@@ -16,6 +16,26 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
 
 ---
 
+## Remote unreachable: STOP — check FIRST, and on the first GitHub failure (order 2239-rmun)
+
+The user's direction (2026-11-22): a host that cannot push code to the remote
+must stop work entirely, not retry with exponential backoff, and not keep
+doing local work. A host whose gh token went bad kept merging and porting for
+~25 minutes because every symptom ("Failed to connect to github.com:443",
+"graphql: i/o timeout") read as a flaky network.
+
+1. At the start of every loop, AND the moment any GitHub operation fails (a
+   push, `gh pr ...`, `git fetch`/`ls-remote`, an API timeout), run the probe
+   once:
+   `tillandsias-plan script run scripts/lua/probe-remote-reachable.lua`
+2. `ok:remote-reachable` → continue.
+3. `blocked:remote-unreachable:<cause>` → **SUSPEND**: tell the user and the
+   coordinator (by name, with the cause and the probe's why/remedy), push and
+   claim nothing, start no further local work, and do not retry or back off.
+   Wait for a human to restore access, then run the probe again.
+4. Never run `gh auth login` or `gh auth refresh` yourself; restoring access
+   is the human's step on that host.
+
 ## 1 — Orient & Discover Environment
 
 1.  **Git Check**: Run:

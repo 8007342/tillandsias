@@ -3118,7 +3118,6 @@ struct FetchConfig {
     repo_root: PathBuf,
     sources_dir: PathBuf,
     allowlist: PathBuf,
-    scripts_dir: PathBuf,
     cache_dir: PathBuf,
     user_agent: String,
 }
@@ -3227,7 +3226,6 @@ fn fetch_cheatsheet_source(args: &[String]) {
         repo_root: repo_root.clone(),
         sources_dir,
         allowlist,
-        scripts_dir: repo_root.join("scripts"),
         cache_dir,
         user_agent: format!(
             "tillandsias-cheatsheet-fetcher/{FETCHER_VERSION} (+https://github.com/8007342/tillandsias)"
@@ -4118,15 +4116,9 @@ fn fetch_single_url(
         }
     }
 
-    // Regenerate INDEX.json via regenerate-source-index.sh if executable.
-    let regen = cfg.scripts_dir.join("regenerate-source-index.sh");
-    if fetch_is_executable(&regen) {
-        let _ = std::process::Command::new(&regen).status();
-    } else {
-        fetch_info(
-            "warning: regenerate-source-index.sh not found or not executable; INDEX.json not updated",
-        );
-    }
+    // ORDER 2218-rsix: no INDEX.json regeneration here. The script this called
+    // was a tombstone (obsolete:cheatsheet-source-layer); the index is baked at
+    // build time.
 
     println!("done: {url}");
 }
@@ -4137,20 +4129,6 @@ fn strip_repo_prefix(path: &Path, repo_root: &Path) -> String {
     let p = path.display().to_string();
     let prefix = format!("{}/", repo_root.display());
     p.strip_prefix(&prefix).map(|s| s.to_string()).unwrap_or(p)
-}
-
-fn fetch_is_executable(path: &Path) -> bool {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::metadata(path)
-            .map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
-            .unwrap_or(false)
-    }
-    #[cfg(not(unix))]
-    {
-        path.is_file()
-    }
 }
 
 fn fetch_utc_timestamp() -> String {

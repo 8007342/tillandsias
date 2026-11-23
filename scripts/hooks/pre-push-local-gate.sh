@@ -139,6 +139,26 @@ if [[ -z "${REFS//[[:space:]]/}" ]]; then
     echo "${GRN}✓ local gate: no refs on stdin — git is pushing nothing (already up to date, or a non-fast-forward it has already declined). Nothing to gate; if you expected a push, fetch and rebase.${RST}" >&2
     exit 0
 fi
+# ── ORDER 2239-rmun: A HOST THAT CANNOT REACH THE REMOTE STOPS, NAMED ────────
+# Before any gating: a push that cannot land must not first spend minutes of
+# gate (the user's direction 2026-11-22: stop work, do not retry with backoff).
+# The probe only reads; it never runs gh auth login/refresh.
+# TILLANDSIAS_SKIP_REMOTE_PROBE=1 is the fixture's (and an offline mirror's) way out.
+if [ "${TILLANDSIAS_SKIP_REMOTE_PROBE:-0}" != 1 ] && [ -z "${CI:-}" ] && [ -z "${GITHUB_ACTIONS:-}" ] \
+   && [ -f scripts/lua/probe-remote-reachable.lua ]; then
+    _rr_bin="$(. scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null || true)"
+    if [ -n "$_rr_bin" ]; then
+        _rr_rc=0; _rr_out="$("$_rr_bin" script run scripts/lua/probe-remote-reachable.lua 2>&1)" || _rr_rc=$?  # set -e-safe (2239-rmun)
+        if [ "$_rr_rc" -ne 0 ]; then
+            printf '%s\n' "$_rr_out" >&2
+            echo "${RED:-}✗ pre-push: refused:pre-push:remote-unreachable — this host cannot reach the remote (2239-rmun)${RST:-}" >&2
+            echo "  why: a push that cannot land must not spend the gate first, and a loop must not retry it" >&2
+            echo "  remedy: a human restores this host's access (the probe's remedy is above); SUSPEND work on this host until \`tillandsias-plan script run scripts/lua/probe-remote-reachable.lua\` answers ok" >&2
+            exit 1
+        fi
+    fi
+fi
+
 # ORDER 1315-4a7j. THE AFFORDANCE, in one place so every refusal carries the
 # COMPLETE preferred workflow rather than a fragment of it. A warning that names
 # a better lane without saying how to use it leaves the reader exactly where the

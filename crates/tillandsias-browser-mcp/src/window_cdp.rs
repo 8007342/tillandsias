@@ -992,7 +992,17 @@ mod tests {
                 .map(|(m, _)| m.clone())
                 .collect()
         };
-        assert_eq!(seen[0], ("Target.setAutoAttach".to_string(), None));
+        // ORDER 2238-x9mn: P1's attach is emitted BEFORE start(), so the reader
+        // may emulate P1 before start() sends setAutoAttach; cross-session order
+        // is not the contract (each page emulated before it runs is, below).
+        // Asserting seen[0] evicted #1330 with P1's setTouchEmulationEnabled first.
+        assert_eq!(
+            seen.iter()
+                .filter(|(m, s)| m == "Target.setAutoAttach" && s.is_none())
+                .count(),
+            1,
+            "{seen:?}"
+        );
         assert_eq!(
             on("P1").len(),
             10,

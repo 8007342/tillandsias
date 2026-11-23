@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-23T05:38:56Z (coordinator macuahuitl-fedora asked; host-state class).
+packets:
+  - packet_id: relay-preflight-restores-caller-branch
+    order: "2252-2mnf"
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [relay-preflight, host-state]
+    estimated_hours: 2
+    owned_files:
+      - scripts/relay-preflight.sh
+      - scripts/test-relay-preflight.sh
+    title: "relay-preflight leaves the caller's worktree on relay/<ts>: a following commit lands off the work ref"
+    context: |
+      Measured on yoga 2026-11-23 in worktree tl-cred: after scripts/relay-preflight.sh work/2251-4xvd, git branch
+      --show-current read relay/20261123t053507z (and again relay/20261123t053656z after the next run). The next
+      merge + commit (a0cfbeacc) landed on the relay branch, and the push of work/2251-4xvd sent the OLD head;
+      caught only by comparing local and remote SHAs. Same host-state class as a check rewriting origin: a check
+      must leave the caller's checkout as it found it.
+    exit_criteria:
+      - "relay-preflight records the caller's symbolic ref (or detached SHA) on entry and restores it on EVERY exit path (trap EXIT, including refusal and deadline kill), and says so in its output."
+      - "scripts/test-relay-preflight.sh gains an arm asserting git symbolic-ref HEAD is unchanged after a green run AND after a refused run."
+    unscoreable: "fixture-scored: the new test-relay-preflight.sh arm is the pin; it does not exist yet"
+    provenance: "yoga, 2026-11-23, coordinator request"
+    events:
+      - type: filed
+        ts: "2026-11-23T05:38:56Z"
+        host: yoga
+        summary: "filed: preflight leaves caller on relay/<ts>; commit landed off the work ref"

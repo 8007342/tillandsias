@@ -4,7 +4,7 @@
 # read by include_str! (or a window cut from it) passes while the product may
 # be wrong and fails on correct refactors. 827-d3dc counted 92; four of its ten
 # costliest pins were this shape, and one kept a product defect green
-# (1472-3d29). build.sh --check runs check-rust-source-pin-added.sh, which
+# (1472-3d29). build.sh --check runs check-rust-source-pin-added (Lua since 2242-rspn), which
 # refuses a newly added pin with no negative control or reasoned
 # `source-pin-ok:`. The fixture drives it over scratch repos.
 #
@@ -20,4 +20,4 @@ STEP_LANES="checkout"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/check-rust-source-pin-added.sh scripts/test-rust-source-pin-added.sh"
+STEP_READS="scripts/lua/check-rust-source-pin-added.lua scripts/test-rust-source-pin-added.sh"

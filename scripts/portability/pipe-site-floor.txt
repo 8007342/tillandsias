@@ -388,7 +388,6 @@ scripts scripts/check-release-asset-integrity.sh 12
 scripts scripts/check-release-tier-freshness.sh 7
 scripts scripts/check-resumable-claim-dirt.sh 1
 scripts scripts/check-running-image-freshness.sh 6
-scripts scripts/check-rust-source-pin-added.sh 2
 scripts scripts/check-salvage-refs-ledger.sh 3
 scripts scripts/check-scorable-obligation-added.sh 21
 scripts scripts/check-script-exec-bits.sh 6
@@ -527,7 +526,6 @@ scripts scripts/test-a-claim-names-a-workstation.sh 5
 scripts scripts/test-agent-identity.sh 4
 scripts scripts/test-append-event-archived-refusal.sh 4
 scripts scripts/test-append-vs-origin-fold.sh 7
-scripts scripts/test-archiver-concurrent-check.sh 2
 scripts scripts/test-archiver-could-not-run-is-self-naming.sh 1
 scripts scripts/test-archiver-could-not-run-verdict.sh 2
 scripts scripts/test-archiver-ruby-could-not-run.sh 8
@@ -572,7 +570,6 @@ scripts scripts/test-credential-channel-affordances.sh 1
 scripts scripts/test-credential-channel-host-push-lane.sh 1
 scripts scripts/test-credential-channel-names-a-locked-keyring.sh 6
 scripts scripts/test-credential-cold-state-probe.sh 2
-scripts scripts/test-credential-store-worktree.sh 2
 scripts scripts/test-cycle-checkout-lock.sh 9
 scripts scripts/test-cycle-claims-report.sh 1
 scripts scripts/test-cycle-driver.sh 3
@@ -645,8 +642,6 @@ scripts scripts/test-hook-phase-instrumentation.sh 5
 scripts scripts/test-host-tools.sh 30
 scripts scripts/test-image-build-convergence.sh 2
 scripts scripts/test-image-usability-check.sh 1
-scripts scripts/test-inference-pull-failure-classification.sh 4
-scripts scripts/test-inference.sh 2
 scripts scripts/test-installer-probes-by-attempt-not-by-help.sh 2
 scripts scripts/test-installers-quiet-progress.sh 3
 scripts scripts/test-join-the-fleet-idempotent.sh 8
@@ -698,16 +693,13 @@ scripts scripts/test-metrics-log-path-agreement.sh 1
 scripts scripts/test-mirror-host-cert-and-sshd.sh 11
 scripts scripts/test-mirror-receive-wrapper.sh 8
 scripts scripts/test-mirror-refuses-when-broken.sh 2
-scripts scripts/test-mirror-relay-state.sh 2
 scripts scripts/test-mirror-sshd-posture.sh 5
 scripts scripts/test-mirror-sync-state.sh 5
-scripts scripts/test-mirror-upstream-auth-overwrite.sh 2
 scripts scripts/test-mode-only-regression-887-bz88.sh 3
 scripts scripts/test-must-ship-rows.sh 8
 scripts scripts/test-nix-cache-service.sh 1
 scripts scripts/test-nix-toolbox.sh 9
 scripts scripts/test-no-competing-gate.sh 2
-scripts scripts/test-no-fixture-writes-live-ledger.sh 3
 scripts scripts/test-no-stale-base-revert-pre-receive.sh 3
 scripts scripts/test-no-stale-base-revert.sh 4
 scripts scripts/test-nvidia-cdi-stale-hostpath.sh 1
