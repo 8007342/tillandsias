@@ -1165,6 +1165,7 @@ git -C "$OTHER20" config commit.gpgsign false
 mkdir -p "$WORK_DIR/.git/hooks"
 cat > "$WORK_DIR/.git/hooks/pre-push" <<HOOK
 #!/usr/bin/env bash
+grep -q " refs/heads/linux-next " || exit 0  # 2248-jihs: race the TRUNK push, not the queue-status publish
 [ -e "$TMP/push20b/raced" ] && exit 0
 : > "$TMP/push20b/raced"
 mkdir -p "$OTHER20/plan/index.d"
@@ -2000,6 +2001,31 @@ if grep -q '^train:target-moved:' <<<"$out55b" && ! grep -q '^train:adopt' <<<"$
 else
     bad "ARM 55b: wanted train:target-moved, no adopt, no train= land; got
 $out55b"
+fi
+
+# ARM 56 (2248-jihs): `--status` answers without the lock. (a) no holder: the
+# idle line naming the newest land; (b) a live holder: the running phase from
+# the run dir's `current`, with elapsed rendered; neither gates nor locks; (c) a
+# real run published its last word to refs/tillandsias/queue/status.
+: > "$GATE_LOG"
+out56a="$(run_queue --status)"; rc56a=$?
+sleep 300 & _h56=$!
+_l56="$(cd "$WORK_DIR" && git rev-parse --show-toplevel)/.git/tillandsias-land-queue.lock"
+mkdir -p "$_l56" "$TMP/lq56/run1"; echo "$_h56" > "$_l56/pid"
+echo "$TMP/lq56/run1" > "$TMP/lq56/current-run"
+echo "queue:gating:#7 work/0001-abcd phase=gate started=$(( $(date +%s) - 5 )) train=- waiting=2" > "$TMP/lq56/run1/current"
+out56b="$(LOGDIR_OVERRIDE="$TMP/lq56" run_queue --status)"; rc56b=$?
+kill "$_h56" 2>/dev/null; wait "$_h56" 2>/dev/null
+_lock56=$([ -d "$_l56" ] && echo held); rm -rf "$_l56"
+pub56="$(git -C "$REMOTE_DIR" log -1 --format=%s refs/tillandsias/queue/status 2>/dev/null)"
+if [ "$rc56a" = 0 ] && grep -Eq '^queue:idle last-land=[0-9a-f]{40} [0-9]+s$' <<<"$out56a" \
+    && [ "$rc56b" = 0 ] && grep -Eq '^queue:gating:#7 work/0001-abcd phase=gate elapsed=[5-9] train=- waiting=2$' <<<"$out56b" \
+    && [ "$_lock56" = held ] && [ ! -s "$GATE_LOG" ] && grep -q '^queue:idle last-land=' <<<"$pub56"; then
+    ok "ARM 56: --status says idle/last-land or the live phase with elapsed, takes no lock, gates nothing; a run publishes refs/tillandsias/queue/status (2248-jihs)"
+else
+    bad "ARM 56: got rc=$rc56a/$rc56b lock=$_lock56 gates=$(grep -c . "$GATE_LOG") published='$pub56'
+$out56a
+$out56b"
 fi
 printf '\n'
 if [ "$fail" -eq 0 ]; then
