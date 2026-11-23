@@ -20,4 +20,5 @@ STEP_LANES="podman port"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin skip:mirror-healthcheck-quiet:no-versioned-git-image at 9b440dd50 (named skip: Homebrew podman present, the git image lives only in the macOS guest)"
 STEP_READS="images/git/healthcheck.sh VERSION scripts/lua/test-mirror-healthcheck-quiet.lua"
