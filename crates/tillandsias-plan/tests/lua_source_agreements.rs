@@ -335,10 +335,28 @@ fn cutover_callers_name_inputs_and_leave_no_bash_fallback() {
             "build caller names {named_input}"
         );
     }
+    // 2231-zmzd: local-ci.sh's landed guards are rows of a roster, and its loop
+    // runs a Lua row as `script run <path> -- <args>`. The same typed runner is
+    // reached when the roster carries the path and the named inputs on ONE row
+    // (fields are 0x1f-separated in its output; in its source, one table).
+    let roster = std::fs::read_to_string(root.join("scripts/lua/local-ci-landed-guards.lua"))
+        .expect("read local-ci's landed-guards roster");
+    let row = roster
+        .split("{ id = ")
+        .find(|r| r.contains("\"dev-embed-model-agreement\""))
+        .expect("the roster has a dev-embed-model-agreement row");
     assert!(
-        local_ci
-            .contains("script run scripts/lua/source-agreements.lua -- dev_embed_model_agreement"),
-        "local-ci reaches the same typed production runner"
+        row.contains("path = \"scripts/lua/source-agreements.lua\"")
+            && row.contains(
+                "args = \"dev_embed_model_agreement images/default/config-overlay/mcp/lib-dev-env.sh scripts/dev-inference-ensure.sh\""
+            )
+            && row.contains("runtime = \"lua\""),
+        "local-ci's roster runs source-agreements.lua with the named inputs"
+    );
+    assert!(
+        local_ci.contains("script run --helper scripts/lua/local-ci-landed-guards.lua")
+            && local_ci.contains("script run \"$_lg_path\" -- \"${_lg_argv[@]}\""),
+        "local-ci reaches the same typed production runner through its roster"
     );
     for legacy in [
         "check-tray-process-running-naming.sh",
@@ -351,7 +369,7 @@ fn cutover_callers_name_inputs_and_leave_no_bash_fallback() {
             "build has no Bash fallback {legacy}"
         );
         assert!(
-            !local_ci.contains(legacy),
+            !local_ci.contains(legacy) && !roster.contains(legacy),
             "local-ci has no Bash fallback {legacy}"
         );
     }

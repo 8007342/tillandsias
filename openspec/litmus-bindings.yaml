@@ -171,6 +171,7 @@ specs:
   litmus_tests:
   - litmus:floor-merge-driver-merges-clean
   - litmus:archive-answerability-tree-copy
+  - litmus:local-ci-landed-guards
   - litmus:local-ci-strict-specs
   - litmus:local-ci-check-catalog
   - litmus:script-run-roots-at-a-repository
