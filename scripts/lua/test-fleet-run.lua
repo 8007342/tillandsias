@@ -30,7 +30,8 @@
 --  14 the extract has a target/ dir, so the scratch door admits a step's scratch
 --     (RED before 2266-acwj: scratch.declare refused target/plan-scratch)
 --
---  15 the ref's build.sh has --gate-step: ONE step runs over the INTACT tree,
+--  15 the ref's build.sh has --gate-step: ONE step runs over the INTACT tree
+--     (native Windows: mode=direct, which never deletes; elsewhere mode=select),
 --     mode=select (RED before round 4: the other step files were deleted, so a
 --     fixture reading scripts/gate-steps.d/ went red: 746, 764)
 --  16 a red step's stdout verdict beats the door's stderr note: (RED before: the
@@ -153,7 +154,9 @@ c, o = fr(6)
 arm2("14 the extract has a target dir for the scratch door", c == 0 and text.contains(o, "verdict=ok:scratch:1"),
     "rc=" .. tostring(c) .. " " .. o)
 c, o = fr(7)
-arm2("15 one step runs over the intact tree (mode=select)", c == 0 and text.contains(o, ":mode=select:")
+-- Native Windows runs the step directly (mode=direct), never through build.sh.
+local WANT_MODE = (fixture.posix_shell() ~= "bash") and "direct" or "select"
+arm2("15 one step runs over the intact tree (mode=" .. WANT_MODE .. ")", c == 0 and text.contains(o, ":mode=" .. WANT_MODE .. ":")
     and text.contains(o, "verdict=ok:scratch:steps-intact"), "rc=" .. tostring(c) .. " " .. o)
 c, o = fr(8)
 arm2("16 a red step's stdout verdict beats the door's stderr note:", c == 1
