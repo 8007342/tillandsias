@@ -32,10 +32,15 @@
 --
 -- Usage: tillandsias-plan script run scripts/lua/fleet-run.lua -- <step-number> <ref>
 
+-- The extract is removed on every way out; only its log stays. A run that is
+-- KILLED cannot do this: its extract stays under target/work/fleet-run.
+local D
+local function drop() if D then proc.run({ argv = { "rm", "-rf", D }, timeout_ms = 300000 }) end end
 local function refuse(what, rc)
+    drop()
     verdict.emit("refused:fleet-run:" .. what, rc or 2)
 end
-local function cnr(why) verdict.emit("could-not-run:fleet-run:" .. why, 2) end
+local function cnr(why) drop(); verdict.emit("could-not-run:fleet-run:" .. why, 2) end
 
 local A = {}
 for i = 1, #arg do A[#A + 1] = arg[i] end
@@ -83,7 +88,7 @@ if not COMMIT then refuse("unknown-ref:" .. REF) end
 local _, TREE = run({ "git", "-C", ROOT, "rev-parse", COMMIT .. "^{tree}" })
 
 local BASE = ROOT .. "/target/work/fleet-run"
-local D = BASE .. "/" .. COMMIT
+D = BASE .. "/" .. COMMIT
 run({ "rm", "-rf", D })
 if run({ "mkdir", "-p", D }) ~= 0 then cnr("mkdir") end
 local GENV = { GIT_AUTHOR_NAME = "fleet-run", GIT_AUTHOR_EMAIL = "fleet-run@localhost",
@@ -172,5 +177,11 @@ for _, l in ipairs(text.lines(WINDOWS and (r.stdout or "") or o)) do
     elseif t:match("^%[build%]") then done = true -- the next door line ends the step
     elseif t:match("^[%a][%w-]*:[%w]") and not t:match("^regime:") then vline = t end
 end
+-- A step that did not exit (killed, timed out, never started) has no result:
+-- could-not-run, never ok: (calmecacpilli 2026-11-23).
+local ended = r.status == "exited"
+if not ended then vline = "could-not-run:step-did-not-exit:" .. tostring(r.status) end
+drop()
 out.line("regime:" .. PLATFORM .. ":step=" .. STEP .. ":rc=" .. src .. ":sha=" .. TREE .. ":verdict=" .. vline)
+if not ended then cnr("step-did-not-exit:" .. tostring(r.status)) end
 verdict.ok("fleet-run", "step=" .. STEP .. " rc=" .. src .. " log=target/work/fleet-run/" .. COMMIT .. "-" .. STEP .. ".log")
