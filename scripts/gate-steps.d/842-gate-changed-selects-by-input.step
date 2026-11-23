@@ -1,0 +1,14 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 4: the next slowest blocks,
+# measured one at a time on lenovinha). As a .step it is no build.sh edit, so it
+# never makes intake HEAVY; it runs in the pool (it writes only its own scratch).
+#
+# ORDER 1916-tsel — `./build.sh --changed` selects by declared input. The
+# fixture mutates a stub tree one path at a time: an input selects its
+# fixture and not an unrelated one, a crate selects its reverse
+# dependents, and a guard or an unmapped path selects everything.
+STEP_DESC="Checking --changed selects checks by their inputs (1916-tsel)"
+STEP_SCRIPT="scripts/test-gate-changed-selects-by-input.sh"
+STEP_ERROR="./build.sh --changed no longer scopes by input, or no longer fails safe to the full gate (1916-tsel)"
+STEP_OK="--changed selects checks by their inputs passed"
+STEP_READS="scripts/test-gate-changed-selects-by-input.sh"

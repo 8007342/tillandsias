@@ -1,0 +1,22 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 4: the next slowest blocks,
+# measured one at a time on lenovinha). As a .step it is no build.sh edit, so it
+# never makes intake HEAVY; it runs in the pool (it writes only its own scratch).
+#
+# 965-sxec: a missing or unusable ruby must read as COULD-NOT-RUN (exit 3),
+# never as a claim about the ready set. Inside a forge `command -v ruby`
+# finds a brew shim that cannot install one, exits 127, and the caller's
+# `-ne 0` arm then asserted "the plan archiver would CHANGE THE READY SET" —
+# a substantive ledger claim from a command that never executed. Wired here
+# because the defect is invisible on any host that HAS ruby, which is every
+# host that runs this gate; only the stub-PATH arms exercise it.
+# 964-zedm: the index builder must stage where the payload FITS. It staged
+# via the ambient TMPDIR, and in a forge /tmp is a 256 MB tmpfs while the
+# index root is on a 1.2 TB overlay — so a cold 22,645-chunk build died on
+# ENOSPC with 1.2 TB free. Wired here because the defect is invisible on any
+# host with a roomy /tmp, which is every host that runs this gate.
+STEP_DESC="Checking the spec-index builder stages where the payload fits (964-zedm)"
+STEP_SCRIPT="scripts/test-spec-index-staging-capacity.sh"
+STEP_ERROR="the spec-index builder stages into the ambient TMPDIR (964-zedm) — see the verdict line above"
+STEP_OK="Spec-index staging capacity check passed"
+STEP_READS="scripts/test-spec-index-staging-capacity.sh"

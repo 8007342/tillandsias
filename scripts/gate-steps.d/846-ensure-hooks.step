@@ -1,0 +1,9 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 4: the next slowest blocks,
+# measured one at a time on lenovinha). As a .step it is no build.sh edit, so it
+# never makes intake HEAVY; it runs in the pool (it writes only its own scratch).
+STEP_DESC="Checking test-ensure-hooks (1255-s4im)"
+STEP_SCRIPT="scripts/test-ensure-hooks.sh"
+STEP_ERROR="scripts/test-ensure-hooks.sh failed — a toolchain-less checkout may no longer arm its push guards (1255-s4im); read the fixture output above"
+STEP_OK="test-ensure-hooks passed"
+STEP_READS="scripts/test-ensure-hooks.sh"

@@ -1,0 +1,9 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 4: the next slowest blocks,
+# measured one at a time on lenovinha). As a .step it is no build.sh edit, so it
+# never makes intake HEAVY; it runs in the pool (it writes only its own scratch).
+STEP_DESC="Checking the gate-stamp scope fixture (887-bz88)"
+STEP_SCRIPT="scripts/test-gate-stamp-scope.sh"
+STEP_ERROR="the gate-stamp scope fixture regressed — what the stamp covers is unproven, and a too-narrow stamp once let a lost exec bit reach the trunk"
+STEP_OK="gate-stamp scope fixture passed"
+STEP_READS="scripts/test-gate-stamp-scope.sh"
