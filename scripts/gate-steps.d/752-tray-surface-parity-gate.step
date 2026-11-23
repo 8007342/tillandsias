@@ -14,4 +14,5 @@ STEP_ERROR="the new-surface parity railguard broke — surfaces could land rowle
 STEP_OK="New-surface parity railguard fixture passed"
 STEP_SERIAL="cargo build --release -p tillandsias-policy on the shared target dir"
 STEP_LANES="cargo"
+STEP_SECOND_REGIME="yolanda 2026-11-23 msys ok:tray-surface-parity-gate:7 at ac15428c5 (fleet-run)"
 STEP_READS="scripts/test-tray-surface-parity-gate.sh"
