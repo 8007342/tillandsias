@@ -1775,9 +1775,9 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
        && [ "${TILLANDSIAS_SKIP_REMOTE_PROBE:-0}" != 1 ]; then
         _rr_bin="$(. "$SCRIPT_DIR/scripts/plan-binary-probe.sh" && resolve_plan_binary 2>/dev/null || true)"
         if [ -n "$_rr_bin" ]; then
-            _rr_rc=0; _rr_out="$( cd "$SCRIPT_DIR" && "$_rr_bin" script run scripts/lua/probe-remote-reachable.lua 2>&1 )" || _rr_rc=$?  # set -e-safe: a bare capture aborts SILENTLY on rc=1 (2239-rmun)
-            if [ "$_rr_rc" -ne 0 ]; then
-                printf '%s\n' "$_rr_out" >&2
+            _rr_rc=0; ( cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh && . scripts/remote-probe-judge.sh && remote_probe_judge "$_rr_bin" ) || _rr_rc=$?
+            if [ "$_rr_rc" -ne 0 ] && [ "$_rr_rc" -ne 10 ]; then echo "could-not-run:remote-probe:judge-error:rc=$_rr_rc — the remote was not judged (2256-tt3v)" >&2; fi
+            if [ "$_rr_rc" -eq 10 ]; then
                 echo "refused:preflight:remote-unreachable"
                 echo "  why: this host cannot reach the remote, so nothing this gate vouches for can be pushed (2239-rmun)" >&2
                 echo "  remedy: a human restores this host's access (see the probe's remedy above); until then SUSPEND work here — no retries, no backoff" >&2
@@ -1995,7 +1995,12 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
         read -r _pf_rc _pf_el < "$_pf_dir/$_pf_i.rc"
         if [ "$_pf_pd" -eq 13 ] && [ -f "$_pf_dir/$_pf_i.lane-deadline" ]; then
             read -r _pf_gdl < "$_pf_dir/$_pf_i.lane-deadline"
-            echo "note:preflight:$_pf_label:own-deadline — ran beside the roster for ${_pf_el}s, deadlined at ${_pf_gdl}s of the door's budget (1631-6w8z)"
+            # 2250-44uy: a lane deadline of 0 is "no limit" (--full), not "0 s".
+            if [ "$_pf_gdl" = 0 ]; then
+                echo "note:preflight:$_pf_label:own-deadline — ran beside the roster for ${_pf_el}s, with no deadline (--full) (1631-6w8z)"
+            else
+                echo "note:preflight:$_pf_label:own-deadline — ran beside the roster for ${_pf_el}s, deadlined at ${_pf_gdl}s of the door's budget (1631-6w8z)"
+            fi
         fi
         if [ "$_pf_rc" = "not-launched" ]; then
             # The launcher and this pass disagreed (or the launcher died): run
@@ -4759,25 +4764,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # absent from a shallow clone.
     # 1218-25z3's must-ship-next advisory fixture is gate step 951 (2173-inst).
 
-    # ORDER 1369-sjbc. The release jobs upload a staged copy to `unstable` whose
-    # installers default to unstable; the versioned copy keeps stable. Hermetic,
-    # a few seconds; wired in local-ci.sh as well.
-    _step "Checking the unstable-channel installer default (1369-sjbc)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-unstable-installer-defaults-to-unstable.sh" 2>&1; then
-        _error "an installer fetched from the unstable release can again install stable"
-        exit 1
-    fi
-    _info "unstable-channel installer default fixture passed"
-
-    # ORDER 1380-zmpi. Every installer ends with a PENDING ACTIONS banner; the
-    # fixture RUNS each banner block (bash, and PowerShell where present).
-    # Hermetic, a few seconds; wired in local-ci.sh as well.
-    _step "Checking the installers' PENDING ACTIONS banner (1380-zmpi)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-installers-print-pending-banner.sh" 2>&1; then
-        _error "an installer can again finish without telling the user what is still pending"
-        exit 1
-    fi
-    _info "pending-actions banner fixture passed"
+    # ORDER 1369-sjbc and 1380-zmpi: the unstable-installer default and the
+    # PENDING ACTIONS banner fixtures moved to gate steps 405 and 404 (Lua, 2111-inst).
 
     # ORDER 970-7fqk. The stale-stamp refusal names paths whose CONTENT moved,
     # on the same axis the staleness decision uses, and keeps the mtime list as
@@ -6622,7 +6610,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Mirror rewrite-follow fixture passed"
 
     _step "Checking the nix-capability probe's evidence survives a noisy shell (917-zkge)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-probe-nix-capability-evidence.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-probe-nix-capability-evidence.lua" 2>&1; then
         _error "a capable row can carry shell noise as its proof that nix answered (917-zkge)"
         exit 1
     fi
@@ -7221,7 +7209,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Stranded-sweep predicate fixture passed"
 
     _step "Checking the inference pull-failure classifier (525)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-inference-pull-failure-classification.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-inference-pull-failure-classification.lua" 2>&1; then
         _error "a TLS-trust pull failure stopped being distinguishable from an empty cache (525) — see the failing case above"
         exit 1
     fi

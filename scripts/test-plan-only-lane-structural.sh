@@ -57,6 +57,11 @@
 #     CONTAINS the grep keywords so it exercises the new validator-surface
 #     path instead.
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
+# 2242-u39b: the scratch repos below are their own diff world. A gate exports
+# its frozen base (a sha of the REAL repo) and maybe its root; inherited, the
+# lane's checks would diff against an object these repos do not hold.
+unset TILLANDSIAS_GATE_DIFF_BASE TILLANDSIAS_GATE_DIFF_BASE_ROOT
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GUARD="$ROOT/scripts/hooks/pre-push-local-gate.sh"
@@ -67,7 +72,7 @@ ok()  { echo "ok:   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/plan-lane-structural.XXXXXX")"
-trap 'rm -rf "$WORK"' EXIT INT TERM
+scratch_trap 'rm -rf "$WORK"'
 export GIT_TERMINAL_PROMPT=0
 
 # ── Mutated copies of the two owned files, one per construct under test ────
@@ -152,7 +157,7 @@ git init -q --bare "$AB/bare.git"
 git init -q -b linux-next "$AB/wc"
 ( cd "$AB/wc" && git remote add origin "$AB/bare.git" \
       && git config core.hooksPath .git/hooks && git config core.autocrlf false )
-GA() { git -C "$AB/wc" -c user.email=t@t -c user.name=t "$@"; }
+GA() { scratch_git "$AB/wc" -c user.email=t@t -c user.name=t "$@"; }
 
 mkdir -p "$AB/wc/scripts/hooks" "$AB/wc/plan/index.d"
 cp "$GUARD" "$AB/wc/scripts/hooks/pre-push-local-gate.sh"
@@ -234,7 +239,7 @@ run_guard_ab_with() { # $1 = alternate hook script (absolute path)
     rm -f "$save"
     printf '%s\nGUARDRC=%d\n' "$out" "$rc"
 }
-reset_ab() { GA reset -q --hard origin/windows-next; git -C "$AB/wc" clean -qfd; mkdir -p "$AB/wc/plan/index.d"; }
+reset_ab() { GA reset -q --hard origin/windows-next; scratch_git "$AB/wc" clean -qfd; mkdir -p "$AB/wc/plan/index.d"; }
 
 if [ "$AB_VALIDATOR" -eq 0 ]; then
     echo "skip:arms-ab:no-plan-binary (1109-t8kw) — target/release/tillandsias-plan is not built in this checkout, so the lane's fold and status-loss precondition cannot be constructed (yq does not substitute, 1124-7f3u); NOT a verdict about the guard"
@@ -305,7 +310,7 @@ git init -q --bare "$CD/bare.git"
 git init -q -b linux-next "$CD/wc"
 ( cd "$CD/wc" && git remote add origin "$CD/bare.git" \
       && git config core.hooksPath .git/hooks && git config core.autocrlf false )
-GC() { git -C "$CD/wc" -c user.email=t@t -c user.name=t "$@"; }
+GC() { scratch_git "$CD/wc" -c user.email=t@t -c user.name=t "$@"; }
 
 mkdir -p "$CD/wc/scripts/hooks" "$CD/wc/plan/index.d" "$CD/wc/target/release" \
          "$CD/wc/crates/tillandsias-plan/src"
