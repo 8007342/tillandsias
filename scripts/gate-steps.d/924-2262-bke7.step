@@ -1,0 +1,10 @@
+# Gate step 2262-bke7 — the guest headless unit forks podman and must not be confined
+# (orders 308, 309): the checker over copies of every file that ships the unit.
+# Moved here from an inline build.sh step with the fixture's Lua port.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the guest headless unit stays unconfined (309, 1063-nraf)"
+STEP_LUA="scripts/lua/test-guest-unit-hardening.lua"
+STEP_ERROR="a shipped guest headless unit is confined, or the checker cannot find one, or it no longer refuses order 308's directives — see the FAIL lines above"
+STEP_OK="Guest unit hardening fixture passed"
+STEP_READS="scripts/lua/test-guest-unit-hardening.lua scripts/lua/check-guest-unit-hardening.lua crates/tillandsias-vm-layer/src/vz.rs crates/tillandsias-vm-layer/src/wsl.rs crates/tillandsias-windows-tray/src/wsl_lifecycle.rs images/vm/bootstrap/20-tillandsias.sh"
