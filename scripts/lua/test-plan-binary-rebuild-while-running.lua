@@ -26,12 +26,7 @@ local ROOT = fixture.repo_root()
 
 -- The shell the probe is written for. A native Windows process resolves a bare
 -- `bash` to WSL's, so derive Git's bash from git's own exec path.
-local BASH = "bash"
-local ep = T:run{ "git", "--exec-path" }
-local gp = text.trim(ep.stdout or "")
-if gp:find("^%a:/.*/libexec/git%-core$") then  -- mingw64/ or ucrt64/, per Git build
-    BASH = (gp:gsub("/[^/]+/libexec/git%-core$", "/bin/bash.exe"))
-end
+local BASH = fixture.posix_shell() -- Git's bash on native Windows (2246-fkea)
 
 local S = T:scratch("tree")
 fs.mkdir(S.rel .. "/target/release")

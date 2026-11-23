@@ -23,13 +23,7 @@
 --
 -- Verdict: ok:probe-remote-reachable:<n> or violation:probe-remote-reachable:<failed>.
 
-local BASH = "/bin/bash"
-do
-    local ep = text.trim(proc.run({ argv = { "git", "--exec-path" }, timeout_ms = 10000 }).stdout or "")
-    if ep:find("^%a:/.*/libexec/git%-core$") then
-        BASH = (ep:gsub("/[^/]+/libexec/git%-core$", "/bin/bash.exe"))
-    end
-end
+local BASH = require("common.fixture").posix_shell("/bin/bash") -- Git's bash on native Windows (2246-fkea)
 local RUNNER = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN")
 if not RUNNER or RUNNER == "" then RUNNER = "target/release/tillandsias-plan" end
 local rel = "target/plan-scratch/probe-remote-" .. tostring(time.now_ms())

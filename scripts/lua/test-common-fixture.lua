@@ -12,9 +12,14 @@
 --   7 T:scratch().abs is accepted by rm -rf
 --     (6, 7 pre-2158-vrb7 on msys: .abs was \\?\C:\..., refused by both)
 --   8 plain_path strips \\?\ and \\?\UNC\, leaves other paths unchanged
+--  10 native_path: /c/x -> C:/x and \\?\C:\x -> C:/x on native Windows; identity
+--     for /c/x elsewhere (a legal directory there)
+--  11 plan_binary is absolute, native, and runs
+--   9 posix_shell is Git's bash.exe on native Windows, else the caller's default ("bash" when none)
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-common-fixture.lua
 -- Verdict: ok:common-fixture:<n> arms | violation:common-fixture:<n>-failed
+-- msys record: yolanda 2026-11-22 msys ok:common-fixture:11 arms (at 1eb143c62, 3 runs; one earlier red on arm 11 with --version, unexplained, now probed with build-id and reported)
 
 local fixture = require "common.fixture"
 local V = require "common.verdict"
@@ -66,5 +71,39 @@ local d = T:scratch()
 fs.write(d.rel .. "/x", "y")
 T:cleanup()
 T:arm("5 cleanup removes every scratch dir", not fs.exists(d.rel) and not fs.exists(repo.rel), d.rel)
+
+-- 9 (2246-fkea). Native Windows: Git's own bash, whatever default is asked.
+-- Elsewhere: the default the caller names, "bash" when it names none.
+do
+    local ep = text.trim(proc.run{ argv = { "git", "--exec-path" }, timeout_ms = 10000 }.stdout or "")
+    local a, b = fixture.posix_shell(), fixture.posix_shell("/bin/bash")
+    local native_win = ep:find("^%a:/.*/libexec/git%-core$") ~= nil
+    T:arm("9 posix_shell is Git's bash on native Windows, else the caller's default",
+        native_win and (a == b and a:find("/bin/bash%.exe$") ~= nil)
+            or (not native_win and a == "bash" and b == "/bin/bash"),
+        "exec-path=" .. ep .. " posix_shell()=" .. a .. " posix_shell(\"/bin/bash\")=" .. b)
+end
+
+-- 10, 11 (2246-fkea): the third Windows trap, an msys path a native spawn
+-- cannot resolve.
+do
+    local win = fixture.posix_shell() ~= "bash"
+    local a, b = fixture.native_path("/c/Users/x"), fixture.native_path("\\\\?\\C:\\a\\b")
+    T:arm("10 native_path makes an msys drive path native on Windows and leaves it alone elsewhere",
+        b == "C:/a/b" and ((win and a == "C:/Users/x") or (not win and a == "/c/Users/x"))
+            and fixture.native_path("/home/x") == "/home/x" and fixture.native_path("C:/a") == "C:/a",
+        "win=" .. tostring(win) .. " /c/Users/x->" .. a .. " verbatim->" .. b)
+    local pb = fixture.plan_binary()
+    local abs = pb:sub(1, 1) == "/" or pb:find("^%a:/") ~= nil
+    -- `build-id` exits 0 with no stderr; `--version` is not a subcommand and
+    -- printed ~40 KB of usage (rc 2), and once on msys the arm went red with
+    -- no reason recorded (yolanda, 2026-11-22). The detail now says why.
+    local r = pb ~= "" and proc.run{ argv = { pb, "build-id" }, timeout_ms = 60000 } or {}
+    local ran = r.status == "exited" and r.code == 0
+    T:arm("11 plan_binary is absolute, native and spawnable",
+        abs and ran and not (win and pb:find("^/%a/")),
+        "plan_binary()=" .. pb .. " build-id status=" .. tostring(r.status) .. " code=" .. tostring(r.code)
+            .. " why=" .. tostring(r.why or r.reason))
+end
 
 T:finish()
