@@ -69,7 +69,7 @@ local function git(argv)
     return r.stdout or ""
 end
 
-if not git({ "git", "rev-parse", "--verify", "--quiet", base_ref }) then
+if not git({ "git", "rev-parse", "--verify", "--quiet", base_ref .. "^{commit}" }) then
     log.raw("  note: base ref '" .. base_ref .. "' unavailable — declared-closures enforcement skipped")
     verdict.ok("declared-closures", "0 checked")
 end
