@@ -36,16 +36,16 @@ fs.mkdir(S .. "/cheatsheet-sources")
 fs.mkdir(S .. "/crates/tillandsias-policy/src")
 fs.write(S .. "/" .. HOOK, fs.read(HOOK))
 local COUNTER = "calls.log"
-fs.write(S .. "/scripts/check-cheatsheet-tiers.sh", "#!/usr/bin/env bash\necho check-cheatsheet-tiers.sh >> \"$(git rev-parse --show-toplevel)/" .. COUNTER .. "\"\nexit 0\n")
--- The sources checker is Lua on trunk, run through the plan binary the hook
+-- Both checkers are Lua on trunk, run through the plan binary the hook
 -- resolves with scripts/plan-binary-probe.sh. Stub the probe to hand back a stub
--- runner that counts a `script run scripts/lua/check-cheatsheet-sources.lua`,
+-- runner that counts a `script run` of either checker,
 -- so the hook's scoping stays real and no real plan binary is needed.
 fs.mkdir(S .. "/scripts/lua")
 fs.write(S .. "/scripts/lua/check-cheatsheet-sources.lua", "-- stub\n")
+fs.write(S .. "/scripts/lua/check-cheatsheet-tiers.lua", "-- stub\n")
 fs.write(S .. "/scripts/stub-plan", "#!/usr/bin/env bash\n"
-    .. "[ \"$1 $2 $3\" = \"script run scripts/lua/check-cheatsheet-sources.lua\" ] || exit 9\n"
-    .. "echo check-cheatsheet-sources.lua >> \"$(git rev-parse --show-toplevel)/" .. COUNTER .. "\"\nexit 0\n")
+    .. "case \"$1 $2 $3\" in \"script run scripts/lua/check-cheatsheet-sources.lua\"|\"script run scripts/lua/check-cheatsheet-tiers.lua\") ;; *) exit 9 ;; esac\n"
+    .. "echo \"$3\" >> \"$(git rev-parse --show-toplevel)/" .. COUNTER .. "\"\nexit 0\n")
 fs.write(S .. "/scripts/plan-binary-probe.sh", "resolve_plan_binary() { printf '%s\\n' ./scripts/stub-plan; }\n")
 proc.run({ argv = { "chmod", "+x", S .. "/scripts/stub-plan" } })
 fs.write(S .. "/cheatsheet-sources/INDEX.json", "{}\n")
@@ -67,7 +67,7 @@ local function calls_after_staging(path, body)
     -- cwd, not `bash -c "cd …"`: under a native Windows runner a relative
     -- path handed to a bash -c string can reach a bash that resolves it
     -- elsewhere, and the arm then counts zero calls for the wrong reason.
-    proc.run({ argv = { "bash", HOOK }, cwd = ROOT .. "/" .. S, timeout_ms = 120000 })
+    proc.run({ argv = { require("common.fixture").posix_shell(), HOOK }, cwd = ROOT .. "/" .. S, timeout_ms = 120000 })
     git("commit", "-qm", "step", "--no-verify")
     local _, n = (fs.read(S .. "/" .. COUNTER) or ""):gsub("\n", "")
     return n
