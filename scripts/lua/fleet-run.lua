@@ -6,7 +6,12 @@
 -- gate step NUMBER and a REF (never a command), run exactly that one step of
 -- that ref's tree on this host and answer one line:
 --
---   regime:<platform>:step=<n>:rc=<rc>:sha=<tree>:verdict=<last verdict line>
+--   regime:<platform>:step=<n>:rc=<rc>:result=<kind>:base=<sha|none>:sha=<tree>:verdict=<last verdict line>
+--
+-- result= is the verdict line's first word; a skip also ends with
+-- skip:fleet-run:step=<n>:judged-nothing:... (rc 0), never ok:fleet-run.
+-- base= is merge-base(<ref>, origin/linux-next) on this checkout, exported to the
+-- step as TILLANDSIAS_GATE_DIFF_BASE(+_ROOT) so *-added deciders judge the diff.
 --
 -- The verdict is LAST because it may contain ':'.
 --
@@ -114,7 +119,26 @@ if dgit("init", "-q") ~= 0 then cnr("git-init") end
 -- files, as in an ordinary checkout there, and the nested path can be long.
 dgit("config", "core.autocrlf", "false")
 if WINDOWS then dgit("config", "core.symlinks", "false"); dgit("config", "core.longpaths", "true") end
-if dgit("fetch", "-q", "--depth=1", ROOT, COMMIT) ~= 0 then cnr("fetch") end
+-- The diff base (2250-44uy round 3): the gate freezes merge-base(HEAD,
+-- origin/linux-next) and every *-added decider diffs against it. A depth=1
+-- extract has no such commit, so each of them answered skip:...:no-base-ref,
+-- judging nothing. The base is computed here, on this checkout's refs, and the
+-- extract is fetched deep enough to hold it AND connect it to the ref (the
+-- door keeps an inherited base only if it is an ancestor of HEAD).
+local DIFF_BASE = ""
+do
+    local mc, mb = run({ "git", "-C", ROOT, "merge-base", COMMIT, "origin/linux-next" })
+    if mc == 0 and mb:match("^%x+$") then DIFF_BASE = mb end
+end
+local DEPTH = "1"
+if DIFF_BASE ~= "" then
+    local _, n = run({ "git", "-C", ROOT, "rev-list", "--count", DIFF_BASE .. ".." .. COMMIT })
+    DEPTH = tostring((tonumber(n) or 0) + 1)
+end
+if dgit("fetch", "-q", "--depth=" .. DEPTH, ROOT, COMMIT) ~= 0 then cnr("fetch") end
+if DIFF_BASE ~= "" and dgit("merge-base", "--is-ancestor", DIFF_BASE, COMMIT) ~= 0 then
+    cnr("diff-base-not-in-extract:" .. DIFF_BASE)
+end
 if dgit("checkout", "-q", "--detach", "FETCH_HEAD") ~= 0 then cnr("checkout") end
 local _, GOT = dgit("rev-parse", "HEAD^{tree}")
 if GOT ~= TREE then refuse("tree-mismatch:" .. TREE .. ":" .. GOT) end
@@ -162,6 +186,11 @@ local step_text = "\n" .. (fs.read("target/work/fleet-run/" .. COMMIT .. "/scrip
 local function field(k) return step_text:match("\n" .. k .. '="([^"\n]*)"') or "" end
 local desc = field("STEP_DESC")
 local benv = { TILLANDSIAS_PLAN_BIN = BIN, TILLANDSIAS_SCRIPT_RUNNER_BIN = BIN, CARGO_TARGET_DIR = CTD }
+-- Always set, so a base inherited from this host's own environment never rides in;
+-- empty when this checkout has no origin/linux-next to measure from.
+local _, DTOP = dgit("rev-parse", "--show-toplevel")
+benv.TILLANDSIAS_GATE_DIFF_BASE = DIFF_BASE
+benv.TILLANDSIAS_GATE_DIFF_BASE_ROOT = (DIFF_BASE ~= "") and DTOP or ""
 local argv = { BASH, "./build.sh", "--gate-steps", D }
 if WINDOWS then
     benv.TILLANDSIAS_SKIP_WSL2 = "1"   -- a step that runs build.sh must not re-exec into WSL
@@ -196,8 +225,13 @@ end
 local ended = r.status == "exited"
 if not ended then vline = "could-not-run:step-did-not-exit:" .. tostring(r.status) end
 drop()
-out.line("regime:" .. PLATFORM .. ":step=" .. STEP .. ":rc=" .. src .. ":sha=" .. TREE .. ":verdict=" .. vline)
+-- result= is the verdict's kind (ok, skip, violation, advisory, ...), so a skip
+-- is never read as evidence; base= is the diff base the step was given.
+local kind = vline:match("^([%a][%w-]*):") or "none"
+out.line("regime:" .. PLATFORM .. ":step=" .. STEP .. ":rc=" .. src .. ":result=" .. kind
+    .. ":base=" .. (DIFF_BASE ~= "" and DIFF_BASE or "none") .. ":sha=" .. TREE .. ":verdict=" .. vline)
 if not ended then cnr("step-did-not-exit:" .. tostring(r.status)) end
 if src ~= 0 then verdict.emit("violation:fleet-run:step=" .. STEP .. ":rc=" .. src
     .. ":log=target/work/fleet-run/" .. COMMIT .. "-" .. STEP .. ".log", 1) end
+if kind == "skip" then verdict.emit("skip:fleet-run:step=" .. STEP .. ":judged-nothing:" .. vline, 0) end
 verdict.ok("fleet-run", "step=" .. STEP .. " rc=" .. src .. " log=target/work/fleet-run/" .. COMMIT .. "-" .. STEP .. ".log")
