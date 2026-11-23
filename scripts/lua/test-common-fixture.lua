@@ -19,6 +19,7 @@
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-common-fixture.lua
 -- Verdict: ok:common-fixture:<n> arms | violation:common-fixture:<n>-failed
+-- msys record: yolanda 2026-11-22 msys ok:common-fixture:11 arms (at 1eb143c62, 3 runs; one earlier red on arm 11 with --version, unexplained, now probed with build-id and reported)
 
 local fixture = require "common.fixture"
 local V = require "common.verdict"
@@ -94,9 +95,15 @@ do
         "win=" .. tostring(win) .. " /c/Users/x->" .. a .. " verbatim->" .. b)
     local pb = fixture.plan_binary()
     local abs = pb:sub(1, 1) == "/" or pb:find("^%a:/") ~= nil
-    local ran = pb ~= "" and proc.run{ argv = { pb, "--version" }, timeout_ms = 30000 }.status == "exited"
+    -- `build-id` exits 0 with no stderr; `--version` is not a subcommand and
+    -- printed ~40 KB of usage (rc 2), and once on msys the arm went red with
+    -- no reason recorded (yolanda, 2026-11-22). The detail now says why.
+    local r = pb ~= "" and proc.run{ argv = { pb, "build-id" }, timeout_ms = 60000 } or {}
+    local ran = r.status == "exited" and r.code == 0
     T:arm("11 plan_binary is absolute, native and spawnable",
-        abs and ran and not (win and pb:find("^/%a/")), "plan_binary()=" .. pb)
+        abs and ran and not (win and pb:find("^/%a/")),
+        "plan_binary()=" .. pb .. " build-id status=" .. tostring(r.status) .. " code=" .. tostring(r.code)
+            .. " why=" .. tostring(r.why or r.reason))
 end
 
 T:finish()

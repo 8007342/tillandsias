@@ -23,6 +23,7 @@
 -- refusal was green on every host, and the shape reached a Windows gate first.
 --
 -- Verdict: ok:lua-fixture-native-argv-added-fixture:<n> arms | violation:...:<n>-failed
+-- msys record: yolanda 2026-11-22 msys ok:lua-fixture-native-argv-added-fixture:9 arms (at 1eb143c62; at 404aaf29e all 8 arms were rc=-1, the $PWD probe join)
 
 local fixture = require "common.fixture"
 local T = fixture.new("lua-fixture-native-argv-added-fixture")
