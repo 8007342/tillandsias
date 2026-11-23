@@ -266,9 +266,14 @@ if [ "${CYCLE_PREFLIGHT_SKIP_BUILD:-0}" != "1" ]; then
     expert_bin="${HOME}/.local/bin/tillandsias-plan"
     # ORDER 1060-wxdh: the decision lives in the probe, which runs the binary
     # before installing it. See refresh_plan_binary_copy for what this cost.
-    expert_report="$(refresh_plan_binary_copy "$plan_bin" "$expert_bin")"
+    # ORDER 2217-ab8h: and only a build of TRUNK, so a work-branch build never
+    # becomes the host's PATH copy that other fixtures fall through to.
+    expert_report="$(refresh_plan_binary_copy "$plan_bin" "$expert_bin" "$ROOT")"
     if [ "$expert_report" = "refresh-refused-not-runnable" ]; then
         echo "warn:preflight:plan:expert-refresh-refused: $plan_bin does not run here, so it was NOT installed over $expert_bin (1060-wxdh)"
+    fi
+    if [ "$expert_report" = "refresh-skipped-off-trunk" ]; then
+        echo "warn:preflight:plan:expert-refresh-skipped-off-trunk: $(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD) is not contained in ${TILLANDSIAS_PLAN_COPY_TRUNK_REF:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}, so its build was NOT installed over $expert_bin (2217-ab8h)"
     fi
     plan_verdict="${plan_verdict}+expert-${expert_report}"
 
