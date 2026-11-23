@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-23T05:04:31Z (relay-preflight of work/2248-jihs; coordinator asked to pin host-only vs trunk-wide).
+packets:
+  - packet_id: ci-release-litmus-stale-arm-count-pins
+    order: "2250-974k"
+    status: implemented
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, ci-release]
+    estimated_hours: 1
+    owned_files:
+      - openspec/litmus-tests/litmus-gate-step-private-metrics-fallback.yaml
+      - openspec/litmus-tests/litmus-preflight-declarations-host-sed.yaml
+    title: "ci-release red trunk-wide: two litmus pins name arm counts their fixtures outgrew (6->9 arms, 5->6)"
+    context: |
+      NOT host-dependent. In relay-preflight on yoga both fixtures pass every arm and print
+      ok:gate-step-private-metrics-fallback:9 arms and ok:preflight-declarations-host-sed:6, while the litmus files
+      still expect ":6 arms" and ":5". The fixtures grew arms in 428e497b4 (2236-rdj7, the em-dash arm) and,
+      most likely, d0577e7ba (2246-fkea); neither commit moved the pin. Any host running ci-release is red.
+    exit_criteria:
+      - "Both pins name the counts the fixtures print; scripts/run-litmus-test.sh ci-release green on these two tests inside relay-preflight."
+    unscoreable: "the litmus files ARE the pins this row corrects"
+    provenance: "yoga relay-preflight of work/2248-jihs, 2026-11-23"
+    events:
+      - type: implemented
+        ts: "2026-11-23T05:04:31Z"
+        host: yoga
+        summary: "pins moved to 9 arms and 6 on work/2250-974k"
+  - packet_id: metrics-fallback-fixture-host-run-recreates-builder-on-silverblue
+    order: "2262-r74j"
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [fixtures, toolbox, silverblue]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-gate-step-private-metrics-fallback.lua
+    title: "test-gate-step-private-metrics-fallback run from a Silverblue host shell fails every arm: env {PATH} only, podman cannot see the builder"
+    context: |
+      Run on yoga's host (scripts/run-litmus-test.sh ci-release --test litmus:gate-step-private-metrics-fallback),
+      every arm is rc=1 with "[tillandsias-builder] Creating 'tillandsias-builder' toolbox (first run)...": the
+      fixture's @env is PATH only, so build.sh --gate-steps re-execs through with-tillandsias-builder.sh without
+      HOME/XDG_RUNTIME_DIR and _toolbox_exists (podman container exists) answers absent, though the toolbox is
+      running. Inside relay-preflight the same fixture is 9/9. Same family as 2110-ghw2 and 2243-5yai.
+    exit_criteria:
+      - "Run from a Silverblue host shell the fixture is green, or skips by name (e.g. passes TILLANDSIAS_SKIP_TOOLBOX=1 to the scratch build.sh, whose step loop needs no cargo)."
+    unscoreable: "host-dependent: reproduces only on an rpm-ostree host run outside the toolbox"
+    provenance: "yoga, 2026-11-23"
+    events:
+      - type: filed
+        ts: "2026-11-23T05:04:31Z"
+        host: yoga
+        summary: "filed: host-shell run on Silverblue fails all arms; green inside relay-preflight"
