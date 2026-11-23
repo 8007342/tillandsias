@@ -8,55 +8,54 @@ size: e2e
 
 preconditions:
   - podman is installed and running in rootless mode
-  - jq is available for JSON parsing
   - forge image is available (tillandsias-forge:*)
   - /tmp has write access for test ephemeral containers
 
 critical_path:
   - step: "baseline: verify podman events command works"
-    command: "scripts/litmus-helper-event-driven.sh check-events-command"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-event-driven.lua --timeout 3m -- check-events-command"
     timeout_ms: 5000
     expected_behavior: "PODMAN_EVENTS_OK"
 
   - step: "start podman events listener in background, record timing"
-    command: "scripts/litmus-helper-event-driven.sh start-listener"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-event-driven.lua --timeout 3m -- start-listener"
     timeout_ms: 10000
     expected_behavior: "LISTENER_STARTED"
 
   - step: "launch test container with label, record launch timestamp"
-    command: "scripts/litmus-helper-event-driven.sh launch-container"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-event-driven.lua --timeout 3m -- launch-container"
     timeout_ms: 15000
     expected_behavior: "CONTAINER_ID=*"
 
   - step: "wait for create event in podman events stream"
-    command: "scripts/litmus-helper-event-driven.sh wait-create-event"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-event-driven.lua --timeout 3m -- wait-create-event"
     timeout_ms: 12000
     expected_behavior: "CREATE_EVENT_CAPTURED"
 
   - step: "wait for start event in podman events stream"
-    command: "scripts/litmus-helper-event-driven.sh wait-start-event"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-event-driven.lua --timeout 3m -- wait-start-event"
     timeout_ms: 12000
     expected_behavior: "START_EVENT_CAPTURED"
 
   - step: "verify event timing: events arrived within 100ms of state change"
-    command: "scripts/litmus-helper-event-driven.sh verify-timing"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-event-driven.lua --timeout 3m -- verify-timing"
     timeout_ms: 5000
 
   - step: "stop container via podman stop, record stop timestamp"
-    command: "scripts/litmus-helper-event-driven.sh stop-container"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-event-driven.lua --timeout 3m -- stop-container"
     timeout_ms: 15000
 
   - step: "wait for stop event in podman events stream"
-    command: "scripts/litmus-helper-event-driven.sh wait-stop-event"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-event-driven.lua --timeout 3m -- wait-stop-event"
     timeout_ms: 12000
 
   - step: "verify all lifecycle events captured: create, start, (stop or die)"
-    command: "scripts/litmus-helper-event-driven.sh verify-lifecycle-events"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-event-driven.lua --timeout 3m -- verify-lifecycle-events"
     timeout_ms: 5000
     expected_behavior: "LIFECYCLE_EVENTS_VERIFIED"
 
   - step: "cleanup: remove test label containers and event log"
-    command: "scripts/litmus-helper-event-driven.sh cleanup"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-event-driven.lua --timeout 3m -- cleanup"
     timeout_ms: 10000
 
 observability:
