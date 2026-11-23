@@ -73,7 +73,7 @@ end
 
 -- 2. Can git itself reach origin? (credential helper, network, remote url)
 local r = proc.run{ argv = argv_of(GIT, "ls-remote", "--exit-code", "origin", "HEAD"), timeout_ms = T,
-    env = { GIT_TERMINAL_PROMPT = "0" } }
+    env = { GIT_TERMINAL_PROMPT = "0", LANGUAGE = "en" } }  -- git's words are matched below (2281-amjg)
 if r.status == "timed_out" or (r.code == nil and not r.ok) then
     blocked("ls-remote-timeout", "`git ls-remote origin` did not answer within " .. T .. " ms",
         "check this host's network to the remote; do not loop on it.")

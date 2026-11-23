@@ -495,7 +495,7 @@ while :; do
         echo "ok:fragments-to-trunk:dry-run:$commit:$n"; exit 0
     fi
     rc=0
-    git push "$REMOTE" "$commit:refs/heads/$TRUNK" > "$tmp/push" 2>&1 || rc=$?
+    LANGUAGE=en git push "$REMOTE" "$commit:refs/heads/$TRUNK" > "$tmp/push" 2>&1 || rc=$?
     cat "$tmp/push" >&2
     if [ "$rc" -eq 0 ]; then
         echo "ok:fragments-on-trunk:$commit:$n"; exit 0

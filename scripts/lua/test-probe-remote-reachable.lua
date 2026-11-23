@@ -13,6 +13,8 @@
 --   4 LS-HANG     git ls-remote hangs -> blocked:remote-unreachable:ls-remote-timeout
 --                 inside the bounded timeout (no retry: one ls-remote call)
 --   5 LS-AUTH     git ls-remote refused credentials -> ...:ls-remote-auth
+--  14 FRENCH    under LANG=fr_FR.UTF-8, a git that speaks French unless told
+--                 LANGUAGE=en still reads as ls-remote-auth (2281-amjg)
 --   6 GH-HANG     gh hangs (a locked keyring) -> ...:gh-timeout, bounded, remedy names the keyring
 --   7 LOCAL       a non-GitHub origin (a fixture's local remote) never asks gh
 --   8 NO-GH       gh absent (the builder toolbox) is NOT unreachable: a named
@@ -53,6 +55,8 @@ d="@REL@"; echo "git $*" >> "$d/calls"
 case "$(cat "$d/git.mode")" in
   ok)   printf 'f79786f6084a62e797dc3b47ca14e03094f8304b\tHEAD\n'; exit 0 ;;
   hang) sleep 30; exit 0 ;;
+  fr)   if [ "${LANGUAGE:-}" = en ]; then echo "fatal: Authentication failed for 'https://github.com/x/y.git/'" >&2
+        else echo "fatal : Échec d'authentification pour 'https://github.com/x/y.git/'" >&2; fi; exit 128 ;;
   auth) echo "remote: Invalid username or token. Password authentication is not supported for Git operations." >&2
         echo "fatal: Authentication failed for 'https://github.com/x/y.git/'" >&2; exit 128 ;;
 esac
@@ -65,7 +69,8 @@ local function probe(gh_mode, git_mode, url, gh_bin)
     local t0 = time.now_ms()
     local p = proc.run{ argv = { RUNNER, "script", "run", "scripts/lua/probe-remote-reachable.lua" },
         env = { TILLANDSIAS_PROBE_GH = gh_bin or (rel .. "/gh.sh"), TILLANDSIAS_PROBE_GIT = rel .. "/git.sh",
-                TILLANDSIAS_PROBE_TIMEOUT_MS = "2000" }, timeout_ms = 60000 }
+                TILLANDSIAS_PROBE_TIMEOUT_MS = "2000", LANG = git_mode == "fr" and "fr_FR.UTF-8" or nil,
+                LANGUAGE = git_mode == "fr" and "fr" or nil }, timeout_ms = 60000 }
     return text.trim(p.stdout or ""), p.stderr or "", p.code, time.now_ms() - t0, fs.read(rel .. "/calls") or ""
 end
 
@@ -91,6 +96,10 @@ else bad("4: hung ls-remote answered [" .. o .. "] rc=" .. tostring(rc) .. " in 
 o, e, rc, ms, calls = probe("ok", "auth"); all_calls = all_calls .. calls
 if o == "blocked:remote-unreachable:ls-remote-auth" and rc == 1 then ok("5: refused git credentials -> ls-remote-auth")
 else bad("5: refused credentials answered [" .. o .. "] rc=" .. tostring(rc) .. " err=[" .. e .. "]") end
+
+o, e, rc, ms, calls = probe("ok", "fr"); all_calls = all_calls .. calls
+if o == "blocked:remote-unreachable:ls-remote-auth" and rc == 1 then ok("14: a French git's refused credentials -> ls-remote-auth")
+else bad("14: French git answered [" .. o .. "] rc=" .. tostring(rc) .. " err=[" .. e .. "]") end
 
 o, e, rc, ms, calls = probe("hang", "ok"); all_calls = all_calls .. calls
 if o == "blocked:remote-unreachable:gh-timeout" and rc == 1 and ms < 15000 and e:find("keyring", 1, true) then
