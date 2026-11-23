@@ -14,7 +14,9 @@
 --
 -- Verdict: ok:local-ci-check-catalog:4 arms | violation:local-ci-check-catalog:<n> failed
 
-local root = text.trim(proc.run{ argv = { "pwd", "-P" } }.stdout or "")
+local fixture = require "common.fixture"
+local SH = fixture.posix_shell()
+local root = fixture.repo_root()
 local failn = 0
 local function ok(m) out.line("ok:   " .. m) end
 local function bad(m) out.line("FAIL: " .. m); failn = failn + 1 end
@@ -26,7 +28,7 @@ local function cleanup() proc.run{ argv = { "find", root .. "/" .. rel, "-delete
 local RUNNER = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN") or ""
 if RUNNER == "" then
     fs.write(rel .. "/resolve.sh", ". scripts/plan-binary-probe.sh && resolve_plan_binary\n")
-    RUNNER = text.trim(proc.run{ argv = { "bash", root .. "/" .. rel .. "/resolve.sh" } }.stdout or "")
+    RUNNER = text.trim(proc.run{ argv = { SH, root .. "/" .. rel .. "/resolve.sh" } }.stdout or "")
     if RUNNER:sub(1, 2) == "./" then RUNNER = root .. "/" .. RUNNER:sub(3) end
 end
 if RUNNER == "" then cleanup(); verdict.could_not_run("local-ci-check-catalog:no-runner") end
@@ -53,7 +55,7 @@ fs.write(rel .. "/lookup.sh", table.concat({
     "for id in \"$@\"; do printf '%s|%s|%s\\n' \"$(check_weight \"$id\")\" \"$(check_spec_ref \"$id\")\" \"$(failed_reason_for_check \"$id\")\"; done",
 }, "\n") .. "\n")
 local function lookup(id)
-    local x = proc.run{ argv = { "bash", root .. "/" .. rel .. "/lookup.sh", id }, timeout_ms = 60000 }
+    local x = proc.run{ argv = { SH, root .. "/" .. rel .. "/lookup.sh", id }, timeout_ms = 60000 }
     return text.trim(x.stdout or ""), x.stderr or ""
 end
 local got = lookup("rust-clippy-all-features")
