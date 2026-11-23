@@ -65,7 +65,6 @@ scripts/test-codex-safe-state.sh 1
 scripts/test-command-policy-evaluator.sh 1
 scripts/test-competing-gate-consumer.sh 1
 scripts/test-concurrent-forge-shared-stack.sh 1
-scripts/test-credential-remedy-runnable.sh 1
 scripts/test-credential-verdict-script.sh 1
 scripts/test-cycle-checkout-lock.sh 1
 scripts/test-cycle-lock-attested-release.sh 1
@@ -118,7 +117,6 @@ scripts/test-host-slug-resolution.sh 2
 scripts/test-image-build-convergence.sh 1
 scripts/test-inference-mkdir-fatal-1183-j9dk.sh 1
 scripts/test-inference-pull-failure-classification.sh 1
-scripts/test-inference.sh 1
 scripts/test-install-path.sh 3
 scripts/test-installer-probes-by-attempt-not-by-help.sh 2
 scripts/test-installer-provisions-once.sh 1
@@ -152,7 +150,6 @@ scripts/test-opencode-entrypoint-prompt.sh 1
 scripts/test-opencode-render-probe.sh 1
 scripts/test-opencode-vault-auth-content.sh 1
 scripts/test-plan-binary-probe-usage-determinism.sh 2
-scripts/test-plan-binary-probe-usage-population.sh 1
 scripts/test-plan-binary-probe.sh 1
 scripts/test-plan-field-get.sh 1
 scripts/test-plan-fragments-lane-affordance.sh 1

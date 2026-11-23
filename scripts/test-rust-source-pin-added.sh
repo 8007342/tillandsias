@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # @trace order:1473-scdq, spec:ci-release
 #
-# Fixture for scripts/check-rust-source-pin-added.sh (1473-scdq), over scratch
+# Fixture for scripts/lua/check-rust-source-pin-added.lua (1473-scdq; ported 2242-rspn), over scratch
 # repos whose origin/linux-next is the base. Each arm adds one Rust test:
 #
 #   1. `let src = include_str!("lib.rs"); assert!(src.contains("…"))` is REFUSED,
@@ -22,13 +22,18 @@ set -uo pipefail
 # the gated checkout) is not its base; its scratch origin/linux-next is.
 unset TILLANDSIAS_GATE_DIFF_BASE
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GUARD="$ROOT/scripts/check-rust-source-pin-added.sh"
-pass=0; total=7
+# 2242-rspn: the guard is Lua on `script run` since its port.
+GUARD="$ROOT/scripts/lua/check-rust-source-pin-added.lua"
+PLAN="${TILLANDSIAS_SCRIPT_RUNNER_BIN:-}"
+[ -n "$PLAN" ] || PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || PLAN=""
+case "$PLAN" in ./*) PLAN="$ROOT/${PLAN#./}" ;; esac
+pass=0; total=8
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1"; }
 
 [ -f "$GUARD" ] || { echo "fail:rust-source-pin-added-fixture:0/$total (guard missing)"; exit 1; }
 command -v git >/dev/null 2>&1 || { echo "skip:rust-source-pin-added-fixture:no-git"; exit 0; }
+[ -n "$PLAN" ] || { echo "fail:rust-source-pin-added-fixture:0/$total (no runnable tillandsias-plan to run the guard; cargo build --release -p tillandsias-plan)"; exit 1; }
 
 _tmpbase="$ROOT/target/plan-scratch"; mkdir -p "$_tmpbase" 2>/dev/null || _tmpbase="${TMPDIR:-/tmp}"
 W="$(mktemp -d "$_tmpbase/rust-source-pin.XXXXXX")"
@@ -38,15 +43,17 @@ GC=(-c user.email=f@x -c user.name=f)
 # repo <name> [base test body]: crates/c/src/lib.rs with a tests module
 repo() {
     local r="$W/$1"
-    mkdir -p "$r/scripts" "$r/crates/c/src"
-    cp "$GUARD" "$r/scripts/"
+    mkdir -p "$r/scripts/lua" "$r/crates/c/src"
+    cp "$GUARD" "$r/scripts/lua/"
     printf 'pub fn f() -> u8 { 1 }\n#[cfg(test)]\nmod tests {\n%s}\n' "${2:-}" > "$r/crates/c/src/lib.rs"
     scratch_git "$r" init -q && scratch_git "$r" "${GC[@]}" add -A && scratch_git "$r" "${GC[@]}" commit -qm base
     scratch_git "$r" update-ref refs/remotes/origin/linux-next HEAD
     echo "$r"
 }
 put() { printf 'pub fn f() -> u8 { 1 }\n#[cfg(test)]\nmod tests {\n%s}\n' "$2" > "$1/crates/c/src/lib.rs"; }
-run() { OUT="$(cd "$1" && bash scripts/check-rust-source-pin-added.sh 2>&1)"; RC=$?; }
+# TILLANDSIAS_REPO_ROOT pins the scratch repo: an inherited PROJECT_ROOT (the
+# litmus runner exports the real checkout's) would otherwise root the runner there.
+run() { OUT="$(cd "$1" && TILLANDSIAS_REPO_ROOT="$1" "$PLAN" script run scripts/lua/check-rust-source-pin-added.lua 2>&1)"; RC=$?; }
 
 # 1 — a direct include_str! pin.
 R="$(repo one)"
@@ -150,6 +157,20 @@ put "$R" '    #[test]
 run "$R"
 [ "$RC" -eq 0 ] && ok "arm 7: a pin already in the base is not re-litigated (diff-scoped)" \
     || bad "arm 7: rc=$RC [$OUT]"
+
+# 8 — 2241-f8jg: a base that is a 40-hex with NO such object is unavailable,
+#     by name; it must not "verify" and then judge nothing (0 checked).
+R="$(repo eight)"
+put "$R" '    #[test]
+    fn pins_source() {
+        let src = include_str!("lib.rs");
+        assert!(src.contains("pub fn f() -> u8"));
+    }
+'
+OUT="$(cd "$R" && TILLANDSIAS_REPO_ROOT="$R" TILLANDSIAS_RUST_PIN_BASE=0123456789abcdef0123456789abcdef01234567 "$PLAN" script run scripts/lua/check-rust-source-pin-added.lua 2>&1)"; RC=$?
+[ "$RC" -eq 0 ] && grep -q '^ok:rust-source-pin-added:base-unavailable$' <<<"$OUT" \
+    && ok "arm 8: a bogus 40-hex base is named base-unavailable, not a silent 0 checked" \
+    || bad "arm 8: rc=$RC [$OUT]"
 
 if [ "$pass" -eq "$total" ]; then
     echo "ok:rust-source-pin-added-fixture:$pass/$total"
