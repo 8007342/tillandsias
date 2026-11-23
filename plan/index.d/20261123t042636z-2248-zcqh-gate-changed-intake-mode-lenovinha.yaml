@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: gate-changed-intake-mode-for-bundle-landing
+    order: 2248-zcqh
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 8
+    title: |
+      Bundle landing phase 0: an `--intake` mode for scripts/gate-changed.sh (`./build.sh --changed <base> --intake`), the light diff-scoped gate a work ref passes to be ACCEPTED onto a lander-owned bundle/<date>-<n>.
+    context: |
+      Operator approved the bundle-landing design 2026-11-22 (relayed by macuahuitl-fedora): members are accepted onto bundle/<date>-<n> after a diff-scoped INTAKE gate; one full selector-off gate per bundle promotes it to linux-next (16 members / 4 h at start, growing to 64 or a day). gate-changed.sh already derives each fixture's and crate's inputs, closes crates over reverse path-dependencies, treats tree-scanning fixtures as inputs `*`, and exits 10 on a guard file, an unmapped path or an empty population. STEP_INPUTS is declared on 10/223 steps, so the derived map is the working selector. Without --intake, --changed keeps today's behaviour.
+    exit_criteria:
+      - "Rust: changed paths map to owning crates plus the reverse-dep closure (plus crates whose sources name a changed repo path), run as one `cargo nextest run -E 'rdeps(a) | rdeps(b)'` where nextest answers, cargo test -p … otherwise (named, as build.sh's runner line does)"
+      - "Shell/Lua: fixtures whose derived inputs intersect the diff run in the existing pool; whole-tree readers (inputs `*`) and a declared slow list are DEFERRED to the bundle gate and named on one `deferred:` line"
+      - "exit 10 (guard file, unmapped path, empty population) prints `heavy:<reason>` and runs nothing; the caller marks the member HEAVY"
+      - "without --intake, --list/--run output and exit codes are byte-identical to today's (an arm pins it)"
+      - "a lint cross-checks the derived crate graph against `cargo metadata` path dependencies; red on a planted mismatch"
+    unscoreable: "unpinnable-until-the-guard-exists: the intake arms and the metadata lint are the deliverable."
+    next_action: "Add --intake to gate-changed.sh and build.sh --changed; arms in the existing --changed fixture."
+    provenance: operator approval 2026-11-22 relayed by macuahuitl-fedora (coordinator); filed by lenovinha.
+    related: [1916-tsel, 1931-steb, 2243-urcy]
+    events:
+      - {type: filed, ts: '2026-11-23T04:26:36Z', host: lenovinha, summary: gate-changed intake mode for bundle landing filed}

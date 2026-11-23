@@ -1,0 +1,13 @@
+# cargo-nextest configuration for the gate's test runs (order 2243-urcy).
+#
+# RETRIES ARE OFF ON PURPOSE. A retry turns a flaky failure into a green line,
+# and the failure-set ratchet (scripts/check-test-baseline.sh) would never see
+# it; a flake must stay red so it is named and fixed. The 10-run soak on yoga
+# (2026-11-23, 20 runs, 0 failures) is why no test-group serialises anything
+# here: add a group only for a test a soak NAMES, with that evidence beside it.
+[profile.default]
+retries = 0
+fail-fast = false
+# A test silent for 60 s is reported SLOW; after 5 such periods (300 s) it is
+# killed and reads as TIMEOUT (FAILED to the ratchet), never a hung gate.
+slow-timeout = { period = "60s", terminate-after = 5 }

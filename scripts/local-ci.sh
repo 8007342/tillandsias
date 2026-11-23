@@ -226,70 +226,22 @@ if [[ -n "$CI_IGNORE_SPEC_LIST" ]]; then
     export TILLANDSIAS_STRICT_IGNORE_SPECS="$CI_IGNORE_SPEC_LIST"
 fi
 
-normalize_spec_list() {
-    local raw="${1:-}"
-    raw="${raw//:/ }"
-    raw="${raw//,/ }"
-    for item in $raw; do
-        [[ -n "$item" ]] && printf '%s\n' "$item"
-    done | awk '!seen[$0]++'
-}
-
-spec_in_list() {
-    local needle="$1"
-    local raw_list="${2:-}"
-
-    [[ -z "$raw_list" ]] && return 1
-    while IFS= read -r item; do
-        [[ "$item" == "$needle" ]] && return 0
-    done < <(normalize_spec_list "$raw_list")
-    return 1
-}
-
-get_all_active_specs() {
-    # ORDER 746-htj9: the compiled reader + jq first — both exist in every
-    # environment the gates run in; yq and the awk parser stay as fallbacks
-    # for a fresh clone that has never built the binary.
-    local _bin=""
-    if [[ -f "$REPO_ROOT/scripts/plan-binary-probe.sh" ]]; then
-        # shellcheck source=scripts/plan-binary-probe.sh
-        . "$REPO_ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
-        command -v resolve_plan_binary &>/dev/null && _bin="$(resolve_plan_binary 2>/dev/null)" || _bin=""
-    fi
-    local v
-    if [[ -n "$_bin" ]] && command -v "$JQ" &>/dev/null \
-        && v="$("$_bin" yaml-json "$REPO_ROOT/openspec/litmus-bindings.yaml" 2>/dev/null | "$JQ" -r '.specs[] | select(.status=="active") | .spec_id' 2>/dev/null)"; then
-        [[ -n "$v" ]] && printf '%s\n' "$v"
-    elif command -v yq &>/dev/null; then
-        yq eval '.specs[] | select(.status=="active") | .spec_id' "$REPO_ROOT/openspec/litmus-bindings.yaml" 2>/dev/null || true
-    else
-        awk '
-            /^- spec_id: / {
-                gsub(/^- spec_id: /, "");
-                current_spec = $0
-                next
-            }
-            /^  status: / {
-                gsub(/^  status: /, "");
-                status = $0
-                if (status == "active" && current_spec != "") print current_spec
-            }
-        ' "$REPO_ROOT/openspec/litmus-bindings.yaml"
-    fi
-}
+# ORDER 2220-yj8f (local-ci.sh to Lua, slice 2): the --strict-all spec
+# selection is scripts/lua/local-ci-strict-specs.lua. It replaced
+# get_all_active_specs, spec_in_list and normalize_spec_list, and their
+# jq / yq / awk fallbacks: the plan binary that runs it parses the YAML.
 
 if [[ "$STRICT_ALL" == "1" ]]; then
-    STRICT_LIST="$(get_all_active_specs)"
-    if [[ -n "${CI_IGNORE_SPEC_LIST:-}" ]]; then
-        filtered_list=""
-        while IFS= read -r spec_id; do
-            [[ -z "$spec_id" ]] && continue
-            if ! spec_in_list "$spec_id" "$CI_IGNORE_SPEC_LIST"; then
-                filtered_list+="${spec_id}"$'\n'
-            fi
-        done <<<"$STRICT_LIST"
-        STRICT_LIST="$(printf '%s' "$filtered_list" | awk 'NF')"
+    # Every active spec minus CI_IGNORE_SPEC_LIST (2220-yj8f). With no plan
+    # binary there is nothing to parse the bindings with, and an empty list
+    # would quietly turn --strict-all off, so it stops by name instead.
+    _ss_plan="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _ss_plan=""
+    [[ "$_ss_plan" == ./* ]] && _ss_plan="$REPO_ROOT/${_ss_plan#./}"
+    if [[ -z "$_ss_plan" ]]; then
+        echo "could-not-run:local-ci:strict-all-needs-a-plan-binary — --strict-all selects specs with scripts/lua/local-ci-strict-specs.lua; build one: cargo build --release -p tillandsias-plan (2220-yj8f)" >&2
+        exit 3
     fi
+    STRICT_LIST="$(cd "$REPO_ROOT" && "$_ss_plan" script run --helper scripts/lua/local-ci-strict-specs.lua -- --ignore "${CI_IGNORE_SPEC_LIST:-}")"
     if [[ -n "$STRICT_LIST" ]]; then
         CI_FILTER_SPEC_LIST="$STRICT_LIST"
         CI_STRICT_SPEC_LIST="$STRICT_LIST"
@@ -1184,8 +1136,8 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # result is deterministic (6/6), so this is a real gate on the daily tier.
     # ============================================================================
     log_section "Archiver Concurrent Check (1132-r4mt)"
-    if [[ -f "scripts/test-archiver-concurrent-check.sh" ]]; then
-        if bash scripts/test-archiver-concurrent-check.sh 1 > /tmp/archiver-concurrent.log 2>&1; then
+    if [[ -f "scripts/lua/test-archiver-concurrent-check.lua" ]]; then
+        if "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" script run scripts/lua/test-archiver-concurrent-check.lua -- 1 > /tmp/archiver-concurrent.log 2>&1; then
             log_pass "Concurrent archiver --check runs share no scratch"
             archive_check_log "archiver-concurrent-check" "pass" /tmp/archiver-concurrent.log
         else
@@ -1194,7 +1146,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "archiver-concurrent-check" "fail" /tmp/archiver-concurrent.log
         fi
     else
-        log_fail_missing_guard "archiver-concurrent-check" "scripts/test-archiver-concurrent-check.sh"
+        log_fail_missing_guard "archiver-concurrent-check" "scripts/lua/test-archiver-concurrent-check.lua"
         archive_check_log "archiver-concurrent-check" "skipped"
     fi
 
@@ -1787,32 +1739,37 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
 
     # Order 1369-sjbc: the copy the release jobs upload to `unstable` defaults
     # its installers to unstable; the versioned (later stable) copy does not.
-    # Wired in build.sh --check as well; hermetic, a few seconds.
-    if [[ -f "scripts/test-unstable-installer-defaults-to-unstable.sh" ]]; then
-        if bash scripts/test-unstable-installer-defaults-to-unstable.sh 2>&1 | tee /tmp/unstable-installer-default.log; then
+    # Gate step 405 as well; hermetic, a few seconds. Lua since 2111-inst.
+    _ui_plan="$( . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null )" || _ui_plan=""
+    if [[ -f "scripts/lua/test-unstable-installer-defaults-to-unstable.lua" && -n "$_ui_plan" ]]; then
+        if "$_ui_plan" script run scripts/lua/test-unstable-installer-defaults-to-unstable.lua > /tmp/unstable-installer-default.log 2>&1; then
+            cat /tmp/unstable-installer-default.log
             log_pass "Unstable-channel installers default to unstable; stable copies do not"
             archive_check_log "unstable-installer-default" "pass" /tmp/unstable-installer-default.log
         else
+            cat /tmp/unstable-installer-default.log
             log_fail_tracked "unstable-installer-default" "Unstable installer default regression (see /tmp/unstable-installer-default.log)"
             archive_check_log "unstable-installer-default" "fail" /tmp/unstable-installer-default.log
         fi
     else
-        log_fail_missing_guard "unstable-installer-default" "scripts/test-unstable-installer-defaults-to-unstable.sh"
+        log_fail_missing_guard "unstable-installer-default" "scripts/lua/test-unstable-installer-defaults-to-unstable.lua (or no plan binary)"
         archive_check_log "unstable-installer-default" "skipped"
     fi
 
     # Order 1380-zmpi: every installer ends with a PENDING ACTIONS banner.
-    # Wired in build.sh --check as well; hermetic, a few seconds.
-    if [[ -f "scripts/test-installers-print-pending-banner.sh" ]]; then
-        if bash scripts/test-installers-print-pending-banner.sh 2>&1 | tee /tmp/pending-banner.log; then
+    # Gate step 404 as well; hermetic, a few seconds. Lua since 2111-inst.
+    if [[ -f "scripts/lua/test-installers-print-pending-banner.lua" && -n "$_ui_plan" ]]; then
+        if "$_ui_plan" script run scripts/lua/test-installers-print-pending-banner.lua > /tmp/pending-banner.log 2>&1; then
+            cat /tmp/pending-banner.log
             log_pass "Installers end with a PENDING ACTIONS banner"
             archive_check_log "pending-banner" "pass" /tmp/pending-banner.log
         else
+            cat /tmp/pending-banner.log
             log_fail_tracked "pending-banner" "Pending-actions banner regression (see /tmp/pending-banner.log)"
             archive_check_log "pending-banner" "fail" /tmp/pending-banner.log
         fi
     else
-        log_fail_missing_guard "pending-banner" "scripts/test-installers-print-pending-banner.sh"
+        log_fail_missing_guard "pending-banner" "scripts/lua/test-installers-print-pending-banner.lua (or no plan binary)"
         archive_check_log "pending-banner" "skipped"
     fi
 
@@ -1969,8 +1926,8 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # ============================================================================
 
     log_section "Cheatsheet Tier Discipline"
-    if [[ -f "scripts/check-cheatsheet-tiers.sh" ]]; then
-        if bash scripts/check-cheatsheet-tiers.sh --strict 2>&1 | tee /tmp/cheatsheet-tiers.log; then
+    if [[ -f "scripts/lua/check-cheatsheet-tiers.lua" ]]; then
+        if "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" script run scripts/lua/check-cheatsheet-tiers.lua -- --strict 2>&1 | tee /tmp/cheatsheet-tiers.log; then
             log_pass "Cheatsheet tier validation passed"
             archive_check_log "cheatsheet-tiers" "pass" /tmp/cheatsheet-tiers.log
         else
@@ -1979,7 +1936,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "cheatsheet-tiers" "fail" /tmp/cheatsheet-tiers.log
         fi
     else
-        log_fail_missing_guard "cheatsheet-tiers" "scripts/check-cheatsheet-tiers.sh"
+        log_fail_missing_guard "cheatsheet-tiers" "scripts/lua/check-cheatsheet-tiers.lua"
         archive_check_log "cheatsheet-tiers" "skipped"
     fi
 

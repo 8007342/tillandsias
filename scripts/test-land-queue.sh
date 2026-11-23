@@ -1035,15 +1035,20 @@ GATE
 o18a="$(run_queue)"
 trunk_push plan/index.d/20261017t000000z-probe.yaml 'packets: []'
 o18b="$(run_queue)"; g18="$(gates)"
-if grep -q 'reason=gate-aborted:rc=255' "$GH_COMMENTS" && ! grep -q 'reason=gate-failed' "$GH_COMMENTS" \
+# ORDER 2234-a964 supersedes the comment half: an aborted gate is now
+# could-not-run:host, so it posts NO eviction comment at all (macuahuitl run 29:
+# 14 PRs falsely evicted rc=255 by a keyring quota), and the PR is simply gated
+# again on the next run. What ARM 18 protected still holds: never stale-skipped.
+if ! grep -q 'land-queue:evicted' "$GH_COMMENTS" 2>/dev/null \
+   && grep -q 'could-not-run:host:gate-aborted:rc=255' <<<"$o18a" \
    && [ "$g18" -eq 2 ] && ! grep -q stale-head <<<"$o18b"; then
-    ok "ARM 18: an aborted gate (rc=255) is recorded as gate-aborted and re-gated after a plan-only move, never stale-skipped"
+    ok "ARM 18: an aborted gate (rc=255) is could-not-run:host, evicts and comments nobody, and is re-gated on the next run, never stale-skipped"
 else
-    bad "ARM 18: wanted reason=gate-aborted:rc=255 and a second gate; gates=$g18
+    bad "ARM 18: wanted could-not-run:host:gate-aborted:rc=255, no eviction comment, and a second gate; gates=$g18
 $o18a
 ---
 $o18b
-comments: $(grep -o 'land-queue:evicted[^>]*' "$GH_COMMENTS")"
+comments: $(grep -o 'land-queue:evicted[^>]*' "$GH_COMMENTS" 2>/dev/null)"
 fi
 
 # ── ARM 19 — A CFG-GATED macOS CRATE LANDS ONLY WITH A NATIVE LINT (1235-rfub).
@@ -1160,6 +1165,7 @@ git -C "$OTHER20" config commit.gpgsign false
 mkdir -p "$WORK_DIR/.git/hooks"
 cat > "$WORK_DIR/.git/hooks/pre-push" <<HOOK
 #!/usr/bin/env bash
+grep -q " refs/heads/linux-next " || exit 0  # 2248-jihs: race the TRUNK push, not the queue-status publish
 [ -e "$TMP/push20b/raced" ] && exit 0
 : > "$TMP/push20b/raced"
 mkdir -p "$OTHER20/plan/index.d"
@@ -1573,6 +1579,19 @@ else
 $out34"
 fi
 
+# ──────────────────────────────────────────────────────────── ARM 34b
+# 2238-gpxz WHERE THE WALL CLOCK GOES: a landed candidate prints one
+# timing:land-queue:#N:<stage>=<s>s line per stage, in stage order, and a
+# candidate that stopped at the host door prints none past where it stopped.
+t34="$(grep -o '^timing:land-queue:#42:[a-z+-]*=[0-9]*s$' <<<"$out34" | sed -E 's/^timing:land-queue:#42:([a-z+-]*)=.*/\1/' | tr '\n' ' ')"
+if [ "$t34" = "merge+door plan-refresh preflight gate post-gate+push " ] \
+    && ! grep -q '^timing:land-queue:#41:' <<<"$out34"; then
+    ok "ARM 34b: a landed candidate times every stage in order; one stopped at the door times none"
+else
+    bad "ARM 34b: wanted #42 stages 'merge+door plan-refresh preflight gate post-gate+push' and none for #41; got '$t34'
+$out34"
+fi
+
 # ──────────────────────────────────────────────────────────── ARM 35
 # 2118-tpmy RED ON TRUNK TOO: the untouched test is red twice on the candidate
 # AND on the bare trunk -> hold:trunk-red:<test>. Nobody is evicted, the queue
@@ -1937,6 +1956,76 @@ else
     bad "ARM 54: wanted rc 3/3 naming holder $_h54 and no gate; got rc=$rc54a/$rc54b gates=$(grep -c . "$GATE_LOG")
 $out54a
 $out54b"
+fi
+
+# ARM 55 (2215-trad): a train survives a PLAN-ONLY move of the trunk mid-gate.
+# Run 29 (macuahuitl 2026-11-22) gated a 4-member train ~25 min, then pushed
+# nothing: plan fragments had moved linux-next. The gate here moves the trunk
+# ONCE, from a side clone: 55 by a plan/index.d fragment (adopt, one gate, the
+# train lands on the new tip); 55b by a code file (no adopt, members go singly).
+arm55() { # <name> <moved path> <out var>
+    scaffold "$1"
+    candidate "$1" 1061-aaaa a55.txt A
+    candidate "$1" 1062-bbbb b55.txt B
+    cat > "$GH_PRS" <<JSON
+[{"number":61,"headRefName":"work/1061-aaaa","isDraft":false},
+ {"number":62,"headRefName":"work/1062-bbbb","isDraft":false}]
+JSON
+    _side="$TMP/$1/side"; _once="$TMP/$1/moved"
+    git clone -q "$REMOTE_DIR" "$_side"; git -C "$_side" config user.email t@l; git -C "$_side" config user.name t
+    cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+if [ ! -e "$_once" ]; then
+    : > "$_once"; mkdir -p "$_side/\$(dirname "$2")"; echo moved > "$_side/$2"
+    git -C "$_side" add -A && git -C "$_side" commit -qm move && git -C "$_side" push -q origin HEAD:linux-next
+fi
+exit 0
+GATE
+    _moved55="$(git -C "$_side" rev-parse HEAD)"
+    printf -v "$3" '%s' "$(ARM_BATCH_K=4 ARM_TRAIN_LOG="$TMP/$1/trains.log" run_queue)"
+}
+arm55 arm55 plan/index.d/20261122t000000z-arm55.yaml out55
+_h55="$(git -C "$REMOTE_DIR" rev-parse linux-next)"; _mv55="$(git -C "$TMP/arm55/side" rev-parse HEAD)"
+if grep -q '^train:adopt:plan-only-move:' <<<"$out55" && [ "$(grep -c '^land:6[12] .*train=' <<<"$out55")" -eq 2 ] \
+    && [ "$(grep -c . "$GATE_LOG")" -eq 1 ] && git -C "$REMOTE_DIR" merge-base --is-ancestor "$_mv55" "$_h55" \
+    && [ "$(git -C "$REMOTE_DIR" ls-tree --name-only "$_h55" | grep -c '^[ab]55\.txt$')" -eq 2 ]; then
+    ok "ARM 55: a train whose trunk moved by plan fragments only is adopted onto the new tip and lands on its one gate (2215-trad)"
+else
+    bad "ARM 55: wanted train:adopt, #61/#62 landed by the train, 1 gate, the fragment commit kept; got gates=$(grep -c . "$GATE_LOG")
+$out55"
+fi
+arm55 arm55b src55.rs out55b
+if grep -q '^train:target-moved:' <<<"$out55b" && ! grep -q '^train:adopt' <<<"$out55b" && ! grep -q 'train=' <<<"$(grep '^land:' <<<"$out55b")"; then
+    ok "ARM 55b: a code move mid-gate is not adopted; the train pushes nothing and its members go one at a time"
+else
+    bad "ARM 55b: wanted train:target-moved, no adopt, no train= land; got
+$out55b"
+fi
+
+# ARM 56 (2248-jihs): `--status` answers without the lock. (a) no holder: the
+# idle line naming the newest land; (b) a live holder: the running phase from
+# the run dir's `current`, with elapsed rendered; neither gates nor locks; (c) a
+# real run published its last word to refs/tillandsias/queue/status.
+: > "$GATE_LOG"
+out56a="$(run_queue --status)"; rc56a=$?
+sleep 300 & _h56=$!
+_l56="$(cd "$WORK_DIR" && git rev-parse --show-toplevel)/.git/tillandsias-land-queue.lock"
+mkdir -p "$_l56" "$TMP/lq56/run1"; echo "$_h56" > "$_l56/pid"
+echo "$TMP/lq56/run1" > "$TMP/lq56/current-run"
+echo "queue:gating:#7 work/0001-abcd phase=gate started=$(( $(date +%s) - 5 )) train=- waiting=2" > "$TMP/lq56/run1/current"
+out56b="$(LOGDIR_OVERRIDE="$TMP/lq56" run_queue --status)"; rc56b=$?
+kill "$_h56" 2>/dev/null; wait "$_h56" 2>/dev/null
+_lock56=$([ -d "$_l56" ] && echo held); rm -rf "$_l56"
+pub56="$(git -C "$REMOTE_DIR" log -1 --format=%s refs/tillandsias/queue/status 2>/dev/null)"
+if [ "$rc56a" = 0 ] && grep -Eq '^queue:idle last-land=[0-9a-f]{40} [0-9]+s$' <<<"$out56a" \
+    && [ "$rc56b" = 0 ] && grep -Eq '^queue:gating:#7 work/0001-abcd phase=gate elapsed=[5-9] train=- waiting=2$' <<<"$out56b" \
+    && [ "$_lock56" = held ] && [ ! -s "$GATE_LOG" ] && grep -q '^queue:idle last-land=' <<<"$pub56"; then
+    ok "ARM 56: --status says idle/last-land or the live phase with elapsed, takes no lock, gates nothing; a run publishes refs/tillandsias/queue/status (2248-jihs)"
+else
+    bad "ARM 56: got rc=$rc56a/$rc56b lock=$_lock56 gates=$(grep -c . "$GATE_LOG") published='$pub56'
+$out56a
+$out56b"
 fi
 printf '\n'
 if [ "$fail" -eq 0 ]; then

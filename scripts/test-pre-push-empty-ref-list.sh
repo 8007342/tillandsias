@@ -21,6 +21,7 @@
 # Hermetic: local bare remote, no network, no credentials, real composed-hook
 # shape (capture once, replay to each guard). Scratch tree removed on exit.
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GUARD="$ROOT/scripts/hooks/pre-push-local-gate.sh"
@@ -29,7 +30,7 @@ ok()  { echo "ok: $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/prepush-refs-test.XXXXXX")"
-trap 'restore_ambient_stamp; rm -rf "$W"' EXIT INT TERM
+scratch_trap 'restore_ambient_stamp; rm -rf "$W"'
 export GIT_TERMINAL_PROMPT=0
 G() { git -c user.email=t@t -c user.name=t "$@"; }
 
@@ -86,7 +87,7 @@ git init -q -b linux-next "$W/other"; ( cd "$W/other" && git remote add origin "
 # repo-local core.hooksPath always wins over the global one, and .git/hooks is
 # exactly where install_spy writes.
 for _r in "$W/wc" "$W/other"; do
-    git -C "$_r" config core.hooksPath "$_r/.git/hooks"
+    scratch_git "$_r" config core.hooksPath "$_r/.git/hooks"
 done
 unset _r
 #

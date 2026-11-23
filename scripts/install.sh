@@ -387,7 +387,7 @@ echo ""
 # nothing to do. "PENDING: none" is printed rather than omitted, because
 # silence and "nothing pending" produce the same bytes.
 # TILLANDSIAS_SWAP_UNIT is a test seam only (the fixture points it at a scratch path).
-# The two marker lines are what scripts/test-installers-print-pending-banner.sh
+# The two marker lines are what scripts/lua/test-installers-print-pending-banner.lua
 # cuts on to RUN this block; keep them.
 # BEGIN-PENDING-BANNER
 pending_banner() {

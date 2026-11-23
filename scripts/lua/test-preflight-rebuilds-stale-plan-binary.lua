@@ -1,4 +1,4 @@
--- @trace order:2186-x5kv
+-- @trace order:2186-x5kv, order:2218-x4s3
 -- @env TILLANDSIAS_SCRIPT_RUNNER_BIN TILLANDSIAS_PLAN_BIN CARGO_TARGET_DIR
 --
 -- test-preflight-rebuilds-stale-plan-binary.lua — 2186-x5kv's exit criteria.
@@ -34,6 +34,10 @@ if REAL == "" then
     REAL = (ctd ~= "" and ctd or ROOT .. "/target") .. "/release/tillandsias-plan"
 end
 if REAL:sub(1, 2) == "./" then REAL = ROOT .. "/" .. REAL:sub(3) end
+-- 2218-x4s3: the shell build.sh is written for. A native Windows process has
+-- no /bin/bash (the spawn itself fails: rc=nil on every arm) and a bare `bash`
+-- resolves to WSL's, so derive Git's bash from git's own exec path there.
+local BASH = require("common.fixture").posix_shell("/bin/bash") -- Git's bash on native Windows (2246-fkea)
 if REAL == "" or proc.run({ argv = { "test", "-x", REAL }, timeout_ms = 10000 }).code ~= 0 then
     verdict.could_not_run("preflight-rebuilds-stale-plan-binary", "no plan binary to stand behind the planted stub")
 end
@@ -70,10 +74,13 @@ local function run_door(name, stale_at_start, cargo_body)
     fs.write(REL .. "/" .. name .. "/cargo",
         "#!/usr/bin/env bash\necho \"$*\" >> '" .. A .. "/cargo.calls'\n" .. cargo_body:gsub("@A@", A) .. "\n")
     proc.run({ argv = { "chmod", "+x", A .. "/tillandsias-plan", A .. "/cargo" }, timeout_ms = 10000 })
-    local r = proc.run({ argv = { "/bin/bash", "./build.sh", "--preflight" }, cwd = ROOT, timeout_ms = 300000,
+    local r = proc.run({ argv = { BASH, "./build.sh", "--preflight" }, cwd = ROOT, timeout_ms = 300000,
         env = { TILLANDSIAS_PREFLIGHT_ROSTER_FILE = D .. "/roster",
                 TILLANDSIAS_PLAN_BIN = A .. "/tillandsias-plan",
                 TILLANDSIAS_SKIP_TOOLBOX = "1",
+                -- 2218-x4s3: the door under test is THIS host's. On Windows build.sh
+                -- re-execs into the WSL builder, where these C:/ stubs mean nothing.
+                TILLANDSIAS_SKIP_WSL2 = "1",
                 TILLANDSIAS_PREFLIGHT_CARGO = A .. "/cargo",
                 TILLANDSIAS_TIMING_LOG = A .. "/t.jsonl",
                 TILLANDSIAS_EXPERT_USAGE_LOG = A .. "/u.jsonl",
