@@ -501,11 +501,15 @@ _kg_summary() { # prints the reds; rc 0 when there were none
 _kg_arm() {
     [ "$FLAG_KEEP_GOING" = true ] || return 0
     _KG_FILE="$(mktemp "${TMPDIR:-/tmp}/gate-keep-going.XXXXXX")" || { _error "keep-going: no scratch file"; builtin exit 1; }
-    _KG_PID=$BASHPID
+    # bash 3.2 (darwin's /bin/bash) has no BASHPID: an exec'd sh's parent IS
+    # this shell (macbookair 2026-11-23). Inline, never in a helper function:
+    # called as $(helper) it would name the command substitution's pid.
+    _KG_PID="${BASHPID:-$(exec sh -c 'echo "$PPID"')}"
     echo "keep-going:armed (prerequisites stay fatal: $_KG_FATAL_RE)"
     exit() {
         local _rc="${1:-$?}"
-        if [ "$_rc" = 0 ] || [ "$BASHPID" != "$_KG_PID" ] || [ -z "$_KG_FILE" ]; then builtin exit "$_rc"; fi
+        local _me="${BASHPID:-$(exec sh -c 'echo "$PPID"')}"
+        if [ "$_rc" = 0 ] || [ "$_me" != "$_KG_PID" ] || [ -z "$_KG_FILE" ]; then builtin exit "$_rc"; fi
         if [[ "${_PHASE_NAME:-}" =~ $_KG_FATAL_RE ]]; then
             _kg_note "${_PHASE_NAME}" "$_rc (prerequisite: fatal)"
             _kg_summary
