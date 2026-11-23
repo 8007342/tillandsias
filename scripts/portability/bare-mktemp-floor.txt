@@ -90,10 +90,8 @@ scripts/test-forge-validate.sh 1
 scripts/test-fragment-batch-never-collapses-verdicts.sh 1
 scripts/test-fragment-status-loss.sh 1
 scripts/test-gate-fast-refusals.sh 1
-scripts/test-gate-host-memory-figure.sh 1
 scripts/test-gate-memory-wsl2-guest.sh 1
 scripts/test-gate-stamp-memoization.sh 1
-scripts/test-gate-stamp-must-be-earned.sh 1
 scripts/test-gate-stamp-scope.sh 1
 scripts/test-gate-stamp.sh 1
 scripts/test-gate-step-metrics-isolation.sh 2
@@ -190,7 +188,6 @@ scripts/test-spec-index-durable-tier-demotion.sh 1
 scripts/test-spec-index-endpoint-classification.sh 1
 scripts/test-spec-index-repo-relative-rung.sh 1
 scripts/test-squid-supervisor.sh 1
-scripts/test-ssh-lane-refuses-when-unwired.sh 1
 scripts/test-ssh-lane-sidecar.sh 1
 scripts/test-summarize-pubspec.sh 1
 scripts/test-timing-record-carries-reproduced.sh 1

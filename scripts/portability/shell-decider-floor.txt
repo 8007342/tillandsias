@@ -100,7 +100,6 @@ scripts/test-centicolon-extract.sh
 scripts/test-centicolon-grade.sh
 scripts/test-centicolon-ratchet.sh
 scripts/test-change-class.sh
-scripts/test-cheatsheet-source-anchors.sh
 scripts/test-check-bash-dialect.sh
 scripts/test-check-carry-forward.sh
 scripts/test-check-credential-channel.sh
@@ -209,12 +208,10 @@ scripts/test-fragment-status-loss.sh
 scripts/test-freshness-regime-budget.sh
 scripts/test-gate-divergence-is-declared.sh
 scripts/test-gate-fast-refusals.sh
-scripts/test-gate-host-memory-figure.sh
 scripts/test-gate-memory-refusal.sh
 scripts/test-gate-memory-wsl2-guest.sh
 scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh
 scripts/test-gate-stamp-memoization.sh
-scripts/test-gate-stamp-must-be-earned.sh
 scripts/test-gate-stamp-names-content-movers.sh
 scripts/test-gate-stamp-portable-digest.sh
 scripts/test-gate-stamp-scope.sh
@@ -342,10 +339,8 @@ scripts/test-mirror-healthcheck-quiet.sh
 scripts/test-mirror-host-cert-and-sshd.sh
 scripts/test-mirror-receive-wrapper.sh
 scripts/test-mirror-refuses-when-broken.sh
-scripts/test-mirror-relay-state.sh
 scripts/test-mirror-sshd-posture.sh
 scripts/test-mirror-sync-state.sh
-scripts/test-mirror-upstream-auth-overwrite.sh
 scripts/test-mo-full-attest.sh
 scripts/test-mo-full-record-precedes-marker.sh
 scripts/test-mode-only-regression-887-bz88.sh
@@ -471,7 +466,6 @@ scripts/test-spec-index-staging-capacity.sh
 scripts/test-spec-registry-status.sh
 scripts/test-spec-script-paths.sh
 scripts/test-squid-supervisor.sh
-scripts/test-ssh-lane-refuses-when-unwired.sh
 scripts/test-ssh-lane-sidecar.sh
 scripts/test-status-channel-absent-is-first-class.sh
 scripts/test-stranded-plan-writes.sh

@@ -6460,7 +6460,14 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Probe evidence-capture guard passed"
 
     _step "Checking a gate stamp cannot be written unearned (940-f77j)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-gate-stamp-must-be-earned.sh" 2>&1; then
+    # 2234-gmmc: the fixture is Lua. No runnable plan binary is a failed check.
+    _gsme_plan="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _gsme_plan=""
+    case "$_gsme_plan" in ./*) _gsme_plan="$SCRIPT_DIR/${_gsme_plan#./}" ;; esac
+    if [[ -z "$_gsme_plan" ]]; then
+        _error "could-not-run:gate-stamp-must-be-earned:no-plan-binary — scripts/lua/test-gate-stamp-must-be-earned.lua needs tillandsias-plan script run (940-f77j)"
+        exit 1
+    fi
+    if ! (cd "$SCRIPT_DIR" && _run "$_gsme_plan" script run scripts/lua/test-gate-stamp-must-be-earned.lua) 2>&1; then
         _error "a caller can stamp a tree the gate never passed — the stamp stops meaning 'this tree is green' (940-f77j)"
         exit 1
     fi
