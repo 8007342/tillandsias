@@ -8,6 +8,9 @@
 --
 -- The function is cut from the script by name (it execs on load, so it cannot
 -- be sourced whole) and run against stub toolbox/podman on PATH.
+--   arm0  the narrow PATH's awk and grep RUN (2258-6xu8): with both dead, as the
+--         symlinked copies were on native msys, every list reads "absent" and
+--         arm 2 passes for the wrong reason.
 --   arm1  toolbox list FAILS, podman says it exists   -> exists.  PRE-FIX: absent.
 --   arm2  toolbox list FAILS, podman says it does not -> absent (negative control).
 --   arm3  podman unavailable, toolbox lists it         -> exists (fallback kept).
@@ -45,17 +48,32 @@ local STUB = {
     yes = "#!/bin/sh\nexit 0\n",
     no = "#!/bin/sh\nexit 1\n",
 }
+-- Tools on the narrow PATH are WRAPPERS, not symlinks: `ln -s` copies on msys, and
+-- the copied awk and grep exit 127 there (yolanda-windows, measured).
+local function narrow(dir)
+    for t, p in pairs(TOOLS) do
+        fs.write(dir .. "/" .. t, '#!/bin/sh\nexec "' .. p .. '" "$@"\n')
+    end
+end
 local function probe(name, toolbox, podman)
     local d = W.rel .. "/" .. name
     fs.mkdir(d)
     fs.write(d .. "/toolbox", STUB[toolbox])
     if STUB[podman] then fs.write(d .. "/podman", STUB[podman]) end
+    narrow(d)
     T:must{ "chmod", "-R", "+x", W.abs .. "/" .. name }
-    for t, p in pairs(TOOLS) do T:must{ "ln", "-sf", p, W.abs .. "/" .. name .. "/" .. t } end
     local r = T:run{ BASH, W.abs .. "/probe.sh", W.abs .. "/fn.sh",
         env = { PATH = W.abs .. "/" .. name, TOOLBOX_NAME = "tillandsias-builder" } }
     return text.trim(r.stdout or "")
 end
+
+fs.mkdir(W.rel .. "/a0")
+narrow(W.rel .. "/a0")
+T:must{ "chmod", "-R", "+x", W.abs .. "/a0" }
+fs.write(W.rel .. "/tools.sh", "printf 'x tillandsias-builder\\n' | awk '{ print $2 }' | grep -x tillandsias-builder\n")
+local t0 = T:run{ BASH, W.abs .. "/tools.sh", env = { PATH = W.abs .. "/a0" } }
+T:arm("arm0 the narrow PATH's awk and grep run", text.trim(t0.stdout or "") == "tillandsias-builder",
+    tostring(t0.code) .. " " .. (t0.stdout or "") .. (t0.stderr or ""))
 
 local r = probe("a1", "fail", "yes")
 T:arm("arm1 failed toolbox list does not hide an existing container", r == "exists", r)
