@@ -15,13 +15,13 @@
 # accepted-ok, unclaimed failure. Pre-fix: the accepted-but-failed arm FAILS.
 # Without PowerShell and cmd.exe (a Linux gate) it skips by name.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking the installer's --reset-state probe tells a failed re-init from an old tray (1449-4qqu)"
-STEP_SCRIPT="scripts/test-installer-reset-probe.sh"
+STEP_LUA="scripts/lua/test-installer-reset-probe.lua"
 STEP_ERROR="the installer's --reset-state probe again reads a failed re-init as an old tray and would skip the repair (1449-4qqu); see which arm failed above"
 STEP_OK="installer reset probe distinguishes unsupported from ran-and-failed"
-STEP_SECOND_REGIME="yolanda 2026-09-28 msys ok:reset-probe-fixture:4"
+STEP_SECOND_REGIME="yolanda 2026-11-23 msys ok:reset-probe-fixture:4 (2254-y7rp Lua port)"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/install-windows.ps1 scripts/test-installer-reset-probe.sh"
+STEP_READS="scripts/install-windows.ps1 scripts/lua/test-installer-reset-probe.lua"
