@@ -6150,6 +6150,31 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _info "Groundtruth status-pin guard passed"
     fi
 
+    # Order 440 / 599-4wzr: the status vocabulary in plan/index.yaml
+    # (default_status_values) and plan/schema.yaml (statuses) must not diverge —
+    # a silent divergence would let the 650-dq6u ladder and the schema disagree.
+    # This guard shipped (order 440) but was ORPHANED (invoked by nothing) until
+    # the guard-activation audit (599-4wzr) surfaced it; wiring it here activates
+    # it as a real --check gate.
+    # Order 761-g36m: a bash-4-only construct in a shared script fails on
+    # Apple's bash 3.2 as a silent bad substitution or an empty verdict —
+    # the class that blocked every macOS push on 2026-08-16
+    # (agent-identity.sh) and emptied the windows sources verdict on
+    # 2026-08-14 (723-b9cn). Scripts must be 3.2-clean, refuse loudly, or
+    # carry the probed-fallback dual marker; the allowlist inside the
+    # checker is a burndown list, never an escape hatch.
+    # Order 309: the guest headless unit forks podman, and order 308 proved a
+    # cap-stripped uid-0 podman selects ROOTLESS mode and wedges every ensure.
+    # Re-adding confinement without the listener/orchestrator split reproduces
+    # that outage, so the absence of those directives is now enforced rather
+    # than merely true.
+    _step "Checking guest headless unit hardening (309)..."
+    if ! _run_lua_decider "scripts/lua/check-guest-unit-hardening.lua" 2>&1; then
+        _error "the guest headless unit carries confinement directives that wedge podman — see the verdict above (309)"
+        exit 1
+    fi
+    _info "Guest unit hardening guard passed"
+
     _step "Checking scripts/ bash dialect (761-g36m)..."
     if ! _run_lua_decider "scripts/lua/check-bash-dialect.lua" 2>&1; then
         _error "a shared script carries an unguarded bash-4-only construct — see the verdict line above (761-g36m)"
