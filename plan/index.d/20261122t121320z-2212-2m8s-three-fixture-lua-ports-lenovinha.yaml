@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Tech-debt session (bash→lua), coordinator direction 2026-11-22.
+packets:
+  - packet_id: plan-binary-freshness-issue-capture-install-hooks-fixtures-become-lua
+    order: 2212-2m8s
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 5
+    title: |
+      Port test-plan-binary-freshness.sh, test-pre-push-issue-capture-lane.sh (2196-rdec candidates) and test-install-hooks-refuses-global-hookspath.sh to scripts/lua, rewire build.sh, delete the three .sh.
+    context: |
+      Coordinator direction 2026-11-22: freshness and issue-capture-lane from 2196-rdec's list, plus the smallest free scripts/test-*.sh. test-rerun-failed-rust-tests.sh is smaller but drives a sourced bash library with bash-function runners, so a port would only wrap bash; install-hooks-refuses-global-hookspath is the next smallest. Open work refs were scanned first.
+    exit_criteria:
+      - "each Lua port prints the same arms as its .sh on this tree and reds on the same mutant; build.sh runs the Lua; the three .sh and their floor lines are gone"
+    unscoreable: "unpinnable-until-the-guard-exists: the existing build.sh steps are the proof and are recorded in the PR."
+    next_action: "Port, compare arm output and mutants, rewire, open the PR."
+    provenance: coordinator direction; filed by lenovinha.
+    depends_on: []
+    related: [2196-rdec, 2209-jw2t, 1442-wyf9]
+    events:
+      - {type: filed, ts: '2026-11-22T12:13:20Z', host: lenovinha, summary: filed three fixture Lua ports}

@@ -23,3 +23,7 @@ STEP_OK="set-field prose guard check passed"
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="no runnable tillandsias-plan resolved, so set-field could not be exercised"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   --append with --replace is refused rather than silently picking one"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="plan/index.d/** plan/index.yaml scripts/plan-binary-probe.sh scripts/test-set-field-prose-guard.sh"

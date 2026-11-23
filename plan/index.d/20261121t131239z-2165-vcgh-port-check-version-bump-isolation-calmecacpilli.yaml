@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: shell-to-lua backlog port, assigned by macuahuitl-fedora 2026-11-21.
+packets:
+  - packet_id: port-check-version-bump-isolation-to-lua
+    order: "2165-vcgh"
+    status: implemented
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, gate]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/check-version-bump-isolation.lua
+      - scripts/check-version-bump-isolation.sh
+      - scripts/test-version-bump-isolation-scope.sh
+      - openspec/litmus-tests/litmus-version-bump-isolation-shape.yaml
+      - build.sh
+    title: "Port scripts/check-version-bump-isolation.sh to scripts/lua (shell-to-lua)"
+    context: |
+      Same rule, scope (723-b9cn), population words (831-ezea), exit codes and summary line as the .sh. The Lua prints
+      the .sh's summary line, then the typed verdict the runtime requires (ok:/skip:/refused:/violation:version-bump-isolation:...).
+      It passes the caller's PWD as the git cwd: during the port, the litmus runner's child git ran in another repository
+      without it, and the guard examined nothing (rev-list exit 128). Callers moved: build.sh --check (_run_lua_decider),
+      the litmus (3 steps), test-version-bump-isolation-scope.sh, methodology/multi-host-development.yaml. Floors lowered.
+    exit_criteria:
+      - "scripts/check-version-bump-isolation.sh does not exist; scripts/lua/check-version-bump-isolation.lua does (on trunk the reverse)."
+      - "litmus:version-bump-isolation-shape passes all steps on the Lua, and test-version-bump-isolation-scope.sh passes 5/5 on it."
+    unscoreable: "a port: scored by the litmus and the scope fixture named above."
+    next_action: "Land."
+    provenance: "macuahuitl-fedora 2026-11-21 shell-to-lua queue, oldest-first; check-plan-ledger-readers.sh skipped (taken by work/2118-9awa), check-cheatsheet-tiers.sh skipped (cargo-build wrapper)."
+    events:
+      - type: filed
+        ts: "2026-11-21T13:12:39Z"
+        host: calmecacpilli
+        summary: "filed and ported on work/2165-vcgh"

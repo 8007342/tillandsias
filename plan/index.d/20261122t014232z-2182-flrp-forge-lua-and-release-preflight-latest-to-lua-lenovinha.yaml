@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Shell-to-Lua backlog (coordinator direction, 2026-11-21).
+packets:
+  - packet_id: the-forge-lua-tooling-and-release-preflight-latest-read-fixtures-are-lua-and-both-sh-are-deleted
+    order: 2182-flrp
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua]
+    estimated_hours: 2
+    title: |
+      Port scripts/test-forge-lua-tooling.sh (69 lines) and scripts/test-release-preflight-latest-read-bounded.sh (71 lines) to scripts/lua/, repoint their litmus tests, and delete both .sh files.
+    context: |
+      Next shell-to-lua candidates. No open work ref touches either file (checked).
+    exit_criteria:
+      - 'each Lua fixture reaches the same outcome as its .sh on this host, and a mutation fails it; both litmus tests run the Lua; both .sh files and their floor lines are gone'
+    unscoreable: 'unpinnable-until-the-guard-exists: the parity run is recorded in the PR.'
+    next_action: 'Port, prove parity, open the PR.'
+    provenance: shell-to-lua backlog; filed by lenovinha.
+    depends_on: []
+    related: [1864-qymj, 1523-rxt6]
+    events:
+      - {type: filed, ts: '2026-11-22T01:42:32Z', host: lenovinha, summary: filed the forge-lua and release-preflight-latest ports}

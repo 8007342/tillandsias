@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: convergence-top-residual-reasons-in-order-of-impact
+    order: 2229-k4jz
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 1
+    title: |
+      local-ci's top_residual_reasons is written in catalog order; methodology/litmus-centicolon-wiring.yaml says "in order of impact". Sort it by cc, heaviest first, ties in catalog order.
+    context: |
+      Noted on #1347 (2226-63ta, 2227-rqgw), which made the list non-empty for the first time. Coordinator direction 2026-11-22: a small row, done after #1347.
+    exit_criteria:
+      - "a run with several failures lists them heaviest first, ties in catalog order; the arm is red before the change"
+    unscoreable: "unpinnable-until-the-guard-exists: the red-first arm is the deliverable."
+    next_action: "After #1347: sort the list in scripts/lua/local-ci-convergence-artifacts.lua, red-first arm in its fixture."
+    provenance: coordinator direction; filed by lenovinha.
+    depends_on: [convergence-top-residual-reasons-always-empty]
+    related: [2227-rqgw, 2226-63ta]
+    events:
+      - {type: filed, ts: '2026-11-22T18:11:37Z', host: lenovinha, summary: residuals in order of impact filed}

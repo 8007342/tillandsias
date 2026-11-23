@@ -236,6 +236,47 @@ verdict.ok("scratch")
 }
 
 #[test]
+fn rename_stays_inside_the_root_and_never_clobbers_by_default() {
+    let e = env();
+    let root = e.tmp.join("s5");
+    fs::create_dir_all(&root).unwrap();
+    std::os::unix::fs::symlink(&e.outside, root.join("link")).unwrap();
+    let o = run(
+        &e,
+        &format!(
+            r#"
+scratch.declare({root})
+scratch.mkdir("a/x")
+scratch.write("a/x/f", "1")
+assert(scratch.rename("a", "b") == true and not scratch.exists("a") and scratch.read("b/x/f") == "1", "dir moved")
+scratch.write("c", "2")
+local ok, msg = pcall(scratch.rename, "c", "b/x/f")
+assert(not ok and tostring(msg):find("exists", 1, true), tostring(msg))
+assert(scratch.rename("c", "b/x/f", {{ replace = true }}) and scratch.read("b/x/f") == "2", "replace")
+for _, f in ipairs({{
+    function() scratch.rename("b", "../../outside/b") end,
+    function() scratch.rename("b", "link/b") end,
+    function() scratch.rename("b", {abs}) end,
+    function() scratch.rename(".", "z") end,
+}}) do
+    local ok2, m2 = pcall(f)
+    assert(not ok2 and (tostring(m2):find("refused", 1, true)), tostring(m2))
+end
+verdict.ok("scratch")
+"#,
+            root = lua_str(&root),
+            abs = lua_str(&e.outside.join("b"))
+        ),
+    );
+    assert!(o.status.success(), "{}", detail(&o));
+    assert!(
+        fs::read_dir(&e.outside).unwrap().next().is_none(),
+        "nothing may land outside"
+    );
+    assert!(root.join("b/x/f").is_file());
+}
+
+#[test]
 fn a_second_root_is_refused_and_the_root_is_never_removed() {
     let e = env();
     let o = run(

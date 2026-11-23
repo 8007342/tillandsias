@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: shell-to-lua row, assigned by macuahuitl-fedora 2026-11-22 (non-test scripts, smallest first).
+packets:
+  - packet_id: local-delegate-ladder-shim-removed
+    order: "2216-27ki"
+    status: implemented
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, lua]
+    estimated_hours: 1
+    owned_files:
+      - scripts/local-delegate-ladder.sh
+      - scripts/test-local-delegate-ladder.sh
+      - scripts/gate-steps.d/902-1834-ujsf.step
+      - scripts/lua/local-delegate-ladder.lua
+    title: "scripts/local-delegate-ladder.sh, a 21-line shim over the Lua decider, is removed; its fixture calls the Lua directly"
+    context: |
+      The shim resolved a plan binary and exec'd scripts/lua/local-delegate-ladder.lua aggregate --repo <root>. Its only
+      caller was scripts/test-local-delegate-ladder.sh (gate step 902-1834-ujsf); delegate-outcome.sh already called the
+      Lua directly. The fixture now does the same. No floor file listed the shim.
+    exit_criteria:
+      - "test-local-delegate-ladder.sh: ok:local-delegate-ladder:29/29 on the ported path."
+      - "Mutant parity: with the R1 revert bound loosened (rev*100 <= 50*n), the fixture reds refused:local-delegate-ladder:27/29 with the same two FAILs (3d, 5b) through the shim before and through the Lua after (measured 2026-11-22)."
+    unscoreable: "a shim removal: scored by the fixture and the mutant parity above."
+    next_action: "Land."
+    provenance: "macuahuitl-fedora 2026-11-22: Lua ports with mutant parity for non-test scripts/*.sh, smallest first."
+    events:
+      - type: filed
+        ts: "2026-11-22T12:54:53Z"
+        host: calmecacpilli
+        summary: "filed and implemented on work/2216-27ki"

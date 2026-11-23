@@ -323,7 +323,7 @@ staged_touches() {
     return 1
 }
 CHEATSHEET_INPUTS=(cheatsheets/ cheatsheet-sources/ crates/tillandsias-policy/
-    scripts/check-cheatsheet-tiers.sh scripts/lua/check-cheatsheet-sources.lua Cargo.lock)
+    scripts/lua/check-cheatsheet-tiers.lua scripts/lua/check-cheatsheet-sources.lua Cargo.lock)
 
 # --- 4. Cheatsheet source binding check ------------------------------------
 # Legacy verbatim source layer check — kept for the three-release retention
@@ -358,7 +358,7 @@ cheatsheet_source_check() {
 }
 
 # --- 4b. Cheatsheet tier-aware validator (cheatsheets-license-tiered) ------
-# Runs scripts/check-cheatsheet-tiers.sh in --quiet mode. ERRORs surface as
+# Runs scripts/lua/check-cheatsheet-tiers.lua in --quiet mode (ported, 2241-chtr). ERRORs surface as
 # non-blocking OpenSpec warnings (CRDT-convergence philosophy). The validator
 # itself is non-fatal: it exits 0 unless tier-conditional fields are missing
 # or CRDT override discipline is violated.
@@ -366,11 +366,14 @@ cheatsheet_source_check() {
 
 cheatsheet_tier_check() {
     staged_touches "${CHEATSHEET_INPUTS[@]}" || return 0
-    local checker="${REPO_ROOT}/scripts/check-cheatsheet-tiers.sh"
+    local checker="${REPO_ROOT}/scripts/lua/check-cheatsheet-tiers.lua" plan
     [[ -f "${checker}" ]] || return 0
+    # Non-blocking, like the rest of this check: no plan binary is no check.
+    plan="$(cd "${REPO_ROOT}" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || return 0
+    [[ -n "${plan}" ]] || return 0
 
     local output exit_code
-    output="$(bash "${checker}" --quiet 2>&1)" || exit_code=$?
+    output="$(cd "${REPO_ROOT}" && "${plan}" script run scripts/lua/check-cheatsheet-tiers.lua -- --quiet 2>&1)" || exit_code=$?
     exit_code="${exit_code:-0}"
 
     if [[ "${exit_code}" -ne 0 ]]; then

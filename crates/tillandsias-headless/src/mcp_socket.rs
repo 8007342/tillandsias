@@ -1605,8 +1605,48 @@ type LaneWindows = (
 static LANE_WINDOWS: OnceLock<Mutex<std::collections::HashMap<LaneListenerKey, LaneWindows>>> =
     OnceLock::new();
 
+/// Order 1911-3gqy: how often the idle sweeper looks. A minute is noise next
+/// to the hour-scale idle limit.
+const WINDOW_SWEEP_EVERY: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Order 1911-3gqy (spec:browser-window-timeout): close every lane's windows
+/// that passed their idle or absolute limit. Returns how many it closed.
+pub(crate) fn sweep_lane_windows() -> usize {
+    let lanes: Vec<LaneWindows> = match LANE_WINDOWS.get() {
+        Some(map) => map
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .values()
+            .cloned()
+            .collect(),
+        None => return 0,
+    };
+    lanes
+        .iter()
+        .map(|(windows, debounce)| {
+            tillandsias_browser_mcp::window_registry::sweep_timed_out(windows, debounce).len()
+        })
+        .sum()
+}
+
+/// Start the idle sweeper once, the first time any lane has a registry.
+fn start_window_sweeper() {
+    static STARTED: std::sync::Once = std::sync::Once::new();
+    STARTED.call_once(|| {
+        let _ = std::thread::Builder::new()
+            .name("browser-window-sweeper".into())
+            .spawn(|| {
+                loop {
+                    std::thread::sleep(WINDOW_SWEEP_EVERY);
+                    sweep_lane_windows();
+                }
+            });
+    });
+}
+
 /// The window registry of lane `(project, instance)`, created on first use.
 pub(crate) fn lane_windows(project: &str, instance: &str) -> LaneWindows {
+    start_window_sweeper();
     let mut map = LANE_WINDOWS
         .get_or_init(|| Mutex::new(std::collections::HashMap::new()))
         .lock()

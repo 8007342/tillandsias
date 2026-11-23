@@ -9,3 +9,7 @@ STEP_LUA="scripts/lua/check-model-licence-register.lua"
 STEP_ERROR="a media model is missing from or wrong in the licence register (1921-h4gv) — see the verdict line above"
 STEP_OK="Model licence register passed"
 STEP_SECOND_REGIME="yolanda 2026-10-31 msys ok:model-licence-register:rows=12"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="images/models/licence-register.tsv scripts/lua/check-model-licence-register.lua"

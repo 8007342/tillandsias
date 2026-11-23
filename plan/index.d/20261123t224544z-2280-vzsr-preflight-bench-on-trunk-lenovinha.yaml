@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: preflight-door-benches-guards-this-host-cannot-finish
+    order: 2280-vzsr
+    status: ready
+    kind: debt
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, preflight]
+    estimated_hours: 1
+    title: |
+      The preflight door does not start a guard that outlived its deadline on two doors in a row on this host; it names it, counts it benched= and as unanswered.
+    context: |
+      Supersedes 2275-fcpy (its row holds the design, the rulings and the data). Only the ref changes: work/2275-fcpy was stacked on #1443, and rebuilding it on trunk was refused by the stale-base-revert guard because the rebuild drops #1443's 928 step. Merging the old head would have put #1443's commits in its ancestry with their content removed. Coordinator ruling 2026-11-23: a fresh order and ref, no bypass; #1445 closed.
+    exit_criteria:
+      - "lenovinha's warm door well under 150 s with the same refused= (measured: 79, 77, 77, 77 s, refused=0)"
+      - "macuahuitl benches nothing and still runs all ~300 guards"
+      - "test-preflight-bench.lua (step 929) with its second-regime record; every rule's mutant red on its own arm"
+    unscoreable: "the per-host doors are the deliverable; macuahuitl's half is measured there."
+    next_action: "Push work/2280-vzsr, open the PR, close #1445; macuahuitl's doors after the RC."
+    provenance: coordinator ruling (macuahuitl-fedora, 2026-11-23); filed by lenovinha.
+    related: [2275-fcpy, 2272-cuxh, 2279-jbsd]
+    events:
+      - {type: filed, ts: '2026-11-23T22:45:44Z', host: lenovinha, summary: preflight bench on trunk filed, supersedes 2275-fcpy}

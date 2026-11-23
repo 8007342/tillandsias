@@ -32,3 +32,10 @@ STEP_OK="gate-step metrics isolation check passed"
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="scripts/test-litmus-budget-tally.sh is absent, so the isolation could not be exercised"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:step-metrics-isolation:4"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="runs the litmus runner (it wipes its runtime dirs)"
+STEP_LANES="litmus"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="openspec/litmus-bindings.yaml openspec/litmus-tests/** scripts/plan-binary-probe.sh scripts/run-litmus-test.sh scripts/test-gate-step-metrics-isolation.sh scripts/test-litmus-budget-tally.sh"

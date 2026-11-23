@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-21: build speed (coordinator: take the stub).
+packets:
+  - packet_id: codex-registration-fixture-uses-the-stub-not-a-slow-real-codex-on-path
+    order: "2154-cdxs"
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, litmus, flake]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-codex-mcp-registration.sh
+    title: "The Codex registration fixture uses its stub, not whatever slow real codex is on PATH"
+    context: |
+      forge-experts-discoverability step 10 timed out (30 s) on every yoga preflight run inside the builder
+      toolbox: there `codex` is ~/.local/bin/codex (standalone 0.140) and each call costs 2-3 s, against 7 ms on
+      the host. The fixture preferred a real codex on PATH. It now uses the committed stub unless CODEX_BIN names
+      a binary. Measured inside the toolbox: over 60 s (killed) before, 1 s after.
+    exit_criteria:
+      - "Inside the builder toolbox scripts/test-codex-mcp-registration.sh passes in under 5 s with the stub; CODEX_BIN=<real codex> still runs the real CLI."
+    unscoreable: "the toolbox timing is the measure"
+    provenance: "yoga diagnosis 2026-11-21; coordinator chose the stub."
+    events:
+      - type: filed
+        ts: "2026-11-21T05:56:18Z"
+        host: yoga
+        summary: "filed, claimed and fixed in the same PR"

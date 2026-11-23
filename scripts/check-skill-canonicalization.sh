@@ -30,7 +30,7 @@
 # different generator versions (1.3.1 / 1.7.0 / 1.8.0).
 #
 # Canonicalizing them would fight the generator, which simply rewrites them on
-# next launch — the churn already tracked by scripts/check-opsx-generated-dirt.sh.
+# next launch — the churn already tracked by scripts/lua/check-opsx-generated-dirt.lua.
 # So they are EXEMPT BY NAME, and the exemption is narrow: it covers only
 # directories matching the generated prefix. A hand-written skill can never
 # qualify, because the test below also requires the generated marker.

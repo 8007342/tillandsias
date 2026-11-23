@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed and taken by yolanda at macuahuitl-fedora's direction.
+packets:
+  - packet_id: fleet-run-answers-on-native-windows-from-a-nested-fetch-of-the-ref
+    order: 2259-fk3m
+    status: in_progress
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [gate-steps, second-regime, msys, fleet]
+    estimated_hours: 3
+    title: "fleet-run.lua answers on native Windows: the tree comes from a nested init plus fetch of the commit, not git archive"
+    context: |
+      MEASURED by yolanda on msys, work/2250-44uy at d2da94af5: could-not-run:fleet-run:extract. GNU tar reads a
+      C: path as a remote host; past that, archive plus add cannot equal the ref's tree on Windows (828 exec bits
+      and 97 symlinks lost, 78065db06 vs 45e6cd274). git init, fetch of the commit from the checkout, and checkout
+      with core.autocrlf=false and core.symlinks=false matched exactly. It is not a worktree and has no remote.
+    exit_criteria:
+      - "on msys, fleet-run of one step answers regime:msys:step=<n>:rc=<rc>:sha=<ref tree>:verdict=<line>, sha equal to the ref's tree"
+      - "a tree that differs from the ref's is still refused:fleet-run:tree-mismatch, and darwin still answers"
+    unscoreable: "unpinnable-until-the-responder-runs-there: the closure is a regime line answered on msys."
+    next_action: "Replace archive and extract with the nested fetch, use posix_shell, SKIP_WSL2 and the .exe binary; run on msys; ask the Mac to rerun on darwin."
+    provenance: coordinator queue item; filed by yolanda.
+    related: [2250-44uy]
+    events:
+      - {type: filed, ts: '2026-11-23T07:52:38Z', host: yolanda, summary: fleet-run native Windows side filed and claimed}

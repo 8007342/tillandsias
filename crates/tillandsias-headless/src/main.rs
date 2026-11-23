@@ -4174,8 +4174,34 @@ fn store_supports_shifting() -> Option<String> {
 /// plain `--userns=keep-id`, so one create covers them all. Best-effort: a
 /// failed warm only means the first start pays the copy, as before.
 fn warm_keep_id_mapping(image_name: &str, tag: &str, debug: bool) {
-    if !keep_id_warm_needed(store_supports_shifting().as_deref()) {
-        return;
+    let _ = warm_keep_id_mapping_on(store_supports_shifting().as_deref(), image_name, tag, debug);
+}
+
+/// What one keep-id warm did (order 2198-ee49).
+#[derive(Debug, PartialEq, Eq)]
+enum KeepIdWarm {
+    /// The store shifts IDs, or could not say: nothing to warm.
+    NotNeeded,
+    /// The keep-id create succeeded; the mapped copy exists.
+    Warmed,
+    /// The create failed or timed out; the first start pays the copy.
+    Failed(String),
+}
+
+/// ORDER 2198-ee49: the warm, given the store's shifting answer instead of
+/// asking for it. The warm test measured `false`, then the warm asked podman
+/// again; when that second `podman info` failed under load the answer was
+/// None, the warm returned silently, and the test read "the warm made the
+/// mapped copy: 0 != 1" with no cause (macuahuitl land queue, 2026-11-22).
+/// One answer per decision, and an outcome that says why nothing was warmed.
+fn warm_keep_id_mapping_on(
+    shifting: Option<&str>,
+    image_name: &str,
+    tag: &str,
+    debug: bool,
+) -> KeepIdWarm {
+    if !keep_id_warm_needed(shifting) {
+        return KeepIdWarm::NotNeeded;
     }
     let name = format!(
         "tillandsias-keepid-warm-{image_name}-{}",
@@ -4188,7 +4214,7 @@ fn warm_keep_id_mapping(image_name: &str, tag: &str, debug: bool) {
     let mut rm = podman_command();
     rm.args(["rm", "-f", &name]);
     let _ = rm.output_bounded(tillandsias_podman::OperationKind::Container.default_budget());
-    match created {
+    let why = match created {
         Ok(o) if o.status.success() => {
             if debug {
                 eprintln!(
@@ -4196,15 +4222,15 @@ fn warm_keep_id_mapping(image_name: &str, tag: &str, debug: bool) {
                     t0.elapsed().as_millis()
                 );
             }
+            return KeepIdWarm::Warmed;
         }
-        Ok(o) => eprintln!(
-            "[tillandsias] image {image_name}: keep-id warm failed; the first start pays the copy: {}",
-            String::from_utf8_lossy(&o.stderr).trim()
-        ),
-        Err(e) => eprintln!(
-            "[tillandsias] image {image_name}: keep-id warm failed; the first start pays the copy: {e}"
-        ),
-    }
+        Ok(o) => String::from_utf8_lossy(&o.stderr).trim().to_string(),
+        Err(e) => e.to_string(),
+    };
+    eprintln!(
+        "[tillandsias] image {image_name}: keep-id warm failed; the first start pays the copy: {why}"
+    );
+    KeepIdWarm::Failed(why)
 }
 
 /// How many trailing lines of podman's stderr a failed build carries into its
@@ -5782,6 +5808,37 @@ fn refuse_real_home_in_test(certs_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// 2258-sr65: how long a minter waits for another one. A mint is openssl plus a
+/// keyring write; 5 s lost to a loaded host (12 test processes) twice in one day.
+const GENERATION_LOCK_WAIT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// A mkdir lock, removed on drop.
+pub(crate) struct GenerationLock(PathBuf);
+impl Drop for GenerationLock {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir(&self.0);
+    }
+}
+
+pub(crate) fn acquire_generation_lock(
+    lock_dir: &Path,
+    what: &str,
+) -> Result<GenerationLock, String> {
+    let deadline = std::time::Instant::now() + GENERATION_LOCK_WAIT;
+    loop {
+        match std::fs::create_dir(lock_dir) {
+            Ok(()) => return Ok(GenerationLock(lock_dir.to_path_buf())),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                if std::time::Instant::now() >= deadline {
+                    return Err(format!("Timed out waiting for {what}"));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            Err(e) => return Err(format!("Failed to acquire {what}: {e}")),
+        }
+    }
+}
+
 fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     // @trace spec:secret-rotation, spec:reverse-proxy-internal
     let certs_dir = PathBuf::from(ca_dir());
@@ -5836,30 +5893,12 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
 
     if should_refresh {
         refuse_mint_in_read_only_process(read_only_process())?;
-        let lock_dir = certs_dir.join(".ca-generation.lock");
-        let mut acquired_lock = false;
-        for _ in 0..50 {
-            match std::fs::create_dir(&lock_dir) {
-                Ok(()) => {
-                    acquired_lock = true;
-                    break;
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                    std::thread::sleep(std::time::Duration::from_millis(100));
-                }
-                Err(e) => return Err(format!("Failed to acquire CA generation lock: {e}")),
-            }
-        }
-        if !acquired_lock {
-            return Err("Timed out waiting for CA generation lock".to_string());
-        }
-        struct LockDir(PathBuf);
-        impl Drop for LockDir {
-            fn drop(&mut self) {
-                let _ = std::fs::remove_dir(&self.0);
-            }
-        }
-        let _lock = LockDir(lock_dir);
+        // 2258-sr65: asked BEFORE the lock. `podman inspect` may take its whole
+        // 30 s budget on a loaded host, and a second minter was timing out
+        // behind it. Only the warning below uses the answer.
+        let vault_running = vault_bootstrap::container_running_answer("tillandsias-vault");
+        let _lock =
+            acquire_generation_lock(&certs_dir.join(".ca-generation.lock"), "CA generation lock")?;
 
         if !ca_bundle_needs_refresh(&crt, &key) {
             return Ok(certs_dir);
@@ -5880,8 +5919,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
             std::env::current_exe()
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|_| "unknown".into()),
-            vault_bootstrap::container_running_answer("tillandsias-vault")
-                .map_or("unknown", |r| if r { "yes" } else { "no" }),
+            vault_running.map_or("unknown", |r| if r { "yes" } else { "no" }),
         );
         wipe_broken_ca_state(&certs_dir, &crt, &key);
 
@@ -9443,6 +9481,45 @@ fn build_nix_cache_run_args(entrypoint: &str, image: &str, host_port: u16) -> Ve
 /// cache is not degraded — it is inapplicable, and this returns Ok so the
 /// ForgeLaunch edge never turns nix into a launch requirement (the exact
 /// posture cycle-preflight takes for inference: a report, never a gate).
+/// The prep script, relative to a Tillandsias checkout root.
+const NIX_CACHE_SCRIPT: &str = "scripts/nix-cache-service.sh";
+
+/// ORDER 2118-u675 — the checkout whose `scripts/nix-cache-service.sh` prepares
+/// the nix cache, from configuration only: `TILLANDSIAS_ROOT`, then
+/// `[dev] checkout` in config.toml, then `<watch_path>/tillandsias` per scanner
+/// path. NEVER the process cwd. `Err` is the named skip line, carrying what to
+/// set; a configured path that is not a checkout is named as such, not skipped
+/// past silently.
+fn resolve_nix_cache_checkout(
+    env_root: Option<PathBuf>,
+    configured: Option<PathBuf>,
+    watch_paths: &[PathBuf],
+) -> Result<PathBuf, String> {
+    let usable = |p: &Path| checkout_root_is_valid(p) && p.join(NIX_CACHE_SCRIPT).is_file();
+    for (source, path) in [
+        ("TILLANDSIAS_ROOT", env_root),
+        ("[dev] checkout", configured),
+    ] {
+        if let Some(p) = path {
+            if usable(&p) {
+                return Ok(p);
+            }
+            return Err(format!(
+                "skip:nix-cache:checkout-invalid:{source}={} — it is not a Tillandsias checkout carrying {NIX_CACHE_SCRIPT}; fix the path or unset it",
+                p.display()
+            ));
+        }
+    }
+    for w in watch_paths {
+        let p = w.join("tillandsias");
+        if usable(&p) {
+            return Ok(p);
+        }
+    }
+    Err("skip:nix-cache:no-checkout — no Tillandsias checkout configured, so the enclave nix cache is not started; set `checkout = \"/path/to/tillandsias\"` under [dev] in ~/.config/tillandsias/config.toml (or TILLANDSIAS_ROOT) on a host that builds with nix"
+        .to_string())
+}
+
 pub(crate) fn ensure_nix_cache_running(debug: bool) -> Result<(), String> {
     // The drain gate and the R4-race lock — their ABSENCE was two of the four
     // defects 801-vm4p names ("no runtime_phase drain gate", unsupervised
@@ -9462,27 +9539,35 @@ pub(crate) fn ensure_nix_cache_running(debug: bool) -> Result<(), String> {
         return Ok(());
     }
 
-    // Host-side prep lives in the script (see the module comment). Resolved
-    // relative to the checkout: this is a dev-tier service, and an installed
-    // end-user binary with no checkout correctly lands in the skip below.
-    let script = std::path::Path::new("scripts/nix-cache-service.sh");
-    if !script.exists() {
-        if debug {
-            eprintln!("[tillandsias] nix cache skip: no prep script (not a dev checkout)");
+    // Host-side prep lives in the script (see the module comment). ORDER
+    // 2118-u675: the checkout comes from CONFIGURATION, never from cwd. It was
+    // `Path::new("scripts/nix-cache-service.sh")`, relative to the process cwd,
+    // so an installed tray (not started from a checkout) skipped SILENTLY on
+    // every launch and the cache was never live on the hosts where gates build.
+    // An unresolved checkout is now a NAMED skip printed on every ensure.
+    let cfg = tillandsias_core::config::load_global_config();
+    let checkout = match resolve_nix_cache_checkout(
+        std::env::var_os("TILLANDSIAS_ROOT").map(PathBuf::from),
+        cfg.dev.checkout.clone(),
+        &cfg.scanner.watch_paths,
+    ) {
+        Ok(dir) => dir,
+        Err(skip) => {
+            eprintln!("[tillandsias] {skip}");
+            return Ok(());
         }
-        return Ok(());
-    }
+    };
     let prep = Command::new("bash")
-        .arg(script)
+        .arg(checkout.join(NIX_CACHE_SCRIPT))
         .arg("prepare")
+        .current_dir(&checkout)
         .output()
         .map_err(|e| format!("nix-cache prepare failed to spawn: {e}"))?;
     let verdict = String::from_utf8_lossy(&prep.stdout);
     let verdict = verdict.trim().lines().last().unwrap_or("").to_string();
     if verdict.starts_with("skip:") {
-        if debug {
-            eprintln!("[tillandsias] nix cache {verdict}");
-        }
+        // 2118-u675: a skip is a visible, named state, not a debug whisper.
+        eprintln!("[tillandsias] nix cache {verdict}");
         return Ok(());
     }
     let Some(entrypoint) = verdict
@@ -10939,7 +11024,34 @@ fn is_active_lane_container(name: &str, state: &str) -> bool {
     alive
         && (name.contains("-forge")
             || name.contains("-login-")
-            || name.starts_with("tillandsias-browser-"))
+            || (name.starts_with("tillandsias-browser-")
+                // 1911-3gqy: a forwarder serves a window and is not a lane; a
+                // leaked one used to hold the shared stack up forever.
+                && !name.starts_with("tillandsias-browser-fwd-")))
+}
+
+#[cfg(test)]
+mod browser_forwarder_lane_tests {
+    use super::is_active_lane_container;
+
+    /// Order 1911-3gqy: a forwarder serves a window and is not a lane. A
+    /// leaked `tillandsias-browser-fwd-*` used to count as live, so the
+    /// last-lane teardown never ran and the shared stack stayed up forever.
+    #[test]
+    fn a_forwarder_alone_is_not_a_live_lane_but_a_window_is() {
+        assert!(!is_active_lane_container(
+            "tillandsias-browser-fwd-0123456789ab",
+            "running"
+        ));
+        assert!(is_active_lane_container(
+            "tillandsias-browser-acme-0123456789ab",
+            "running"
+        ));
+        assert!(!is_active_lane_container(
+            "tillandsias-browser-acme-0123456789ab",
+            "exited"
+        ));
+    }
 }
 
 /// Tear the shared stack down IFF this is the LAST forge anywhere and no
@@ -26443,6 +26555,65 @@ mod tests {
         );
     }
 
+    /// A scratch Tillandsias checkout: VERSION, images/, and the prep script.
+    fn fake_nix_cache_checkout(dir: &Path) {
+        std::fs::create_dir_all(dir.join("images")).unwrap();
+        // ORDER 2239-5gb5: derived from the script path, never the bare top-level dir name as a
+        // literal — scan-cargo-test-repo-roots.lua reads that as "these tests
+        // read all of scripts/" and the feature-gated step could never skip.
+        std::fs::create_dir_all(dir.join(NIX_CACHE_SCRIPT).parent().unwrap()).unwrap();
+        std::fs::write(dir.join("VERSION"), "0.0.0\n").unwrap();
+        std::fs::write(dir.join(NIX_CACHE_SCRIPT), "#!/bin/sh\n").unwrap();
+    }
+
+    // ORDER 2118-u675: the checkout comes from configuration, never from cwd.
+    #[test]
+    fn nix_cache_checkout_resolves_from_configuration_in_order_and_never_from_cwd() {
+        let tmp = tempfile::tempdir().unwrap();
+        let env_co = tmp.path().join("env-co");
+        let cfg_co = tmp.path().join("cfg-co");
+        let watch = tmp.path().join("src");
+        fake_nix_cache_checkout(&env_co);
+        fake_nix_cache_checkout(&cfg_co);
+        fake_nix_cache_checkout(&watch.join("tillandsias"));
+        let w = vec![watch.clone()];
+
+        // TILLANDSIAS_ROOT wins, then [dev] checkout, then <watch>/tillandsias.
+        assert_eq!(
+            resolve_nix_cache_checkout(Some(env_co.clone()), Some(cfg_co.clone()), &w),
+            Ok(env_co.clone())
+        );
+        assert_eq!(
+            resolve_nix_cache_checkout(None, Some(cfg_co.clone()), &w),
+            Ok(cfg_co.clone())
+        );
+        assert_eq!(
+            resolve_nix_cache_checkout(None, None, &w),
+            Ok(watch.join("tillandsias"))
+        );
+
+        // NEGATIVE CONTROL: nothing configured is a named skip. The resolver
+        // takes no cwd at all (the defect was a cwd-relative lookup), so a valid
+        // checkout as the process cwd cannot be picked up; changing cwd here
+        // would race the parallel test threads, so it is not exercised.
+        let none = resolve_nix_cache_checkout(None, None, &[]);
+        let skip = none.unwrap_err();
+        assert!(skip.starts_with("skip:nix-cache:no-checkout"), "{skip}");
+        assert!(
+            skip.contains("[dev]") && skip.contains("config.toml"),
+            "the skip names what to set: {skip}"
+        );
+
+        // A configured path that is not a checkout is NAMED, not skipped past.
+        let bogus = tmp.path().join("not-a-checkout");
+        std::fs::create_dir_all(&bogus).unwrap();
+        let bad = resolve_nix_cache_checkout(None, Some(bogus.clone()), &w).unwrap_err();
+        assert!(
+            bad.starts_with("skip:nix-cache:checkout-invalid:[dev] checkout="),
+            "{bad}"
+        );
+    }
+
     #[test]
     fn nix_cache_run_args_match_the_service_contract() {
         // ORDER 801-vm4p. Two launch paths exist for the nix cache — the
@@ -30159,10 +30330,16 @@ mod tests {
             .output_bounded(OperationKind::Inspect.default_budget())
             .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
             .unwrap_or_default();
+        // ORDER 2171-qimg: never another TEST's image. keepid-warm-test builds
+        // `FROM scratch` (no `true`, no /bin/sh) and is left behind when its run
+        // is killed between build and rmi; listed first, it made this test run
+        // `true` in a scratch image and red every gate on yoga with exit 127
+        // ("crun: exec"), a verdict about a stray image, not about the options.
         let images: Vec<&str> = images
             .lines()
             .map(str::trim)
             .filter(|l| !l.is_empty() && !l.contains("<none>"))
+            .filter(|l| !l.contains("-test:") && !l.contains("keepid-warm"))
             .collect();
         let forge = images.iter().find(|i| i.contains("tillandsias-forge"));
         let Some(image) = forge.or(images.first()) else {
@@ -37828,6 +38005,70 @@ esac
         ));
     }
 
+    /// 2258-sr65: a minter holding the lock past the old 5 s limit makes the
+    /// second one wait, not fail.
+    #[test]
+    fn a_second_ca_minter_waits_out_a_slow_first_one() {
+        let _pseam_lock = podman_seam_lock();
+        let _guard = env_lock();
+        let _home = ScratchHome::new();
+        let dir = PathBuf::from(ca_dir());
+        std::fs::create_dir_all(&dir).unwrap();
+        let lock = dir.join(".ca-generation.lock");
+        std::fs::create_dir(&lock).unwrap();
+        let started = std::time::Instant::now();
+        std::thread::scope(|s| {
+            s.spawn(|| {
+                std::thread::sleep(std::time::Duration::from_millis(6000));
+                std::fs::remove_dir(&lock).unwrap();
+            });
+            ensure_ca_bundle(false).expect("the second minter waits for the lock");
+        });
+        assert!(started.elapsed() >= std::time::Duration::from_millis(5900));
+        assert!(!lock.exists(), "the lock is released");
+    }
+
+    /// 2258-sr65: podman is never called with the mint lock held.
+    #[test]
+    #[cfg(unix)]
+    fn the_ca_mint_lock_is_not_held_across_podman() {
+        use std::os::unix::fs::PermissionsExt;
+        let _pseam_lock = podman_seam_lock();
+        let _guard = env_lock();
+        let home = ScratchHome::new();
+        let lock = PathBuf::from(ca_dir()).join(".ca-generation.lock");
+        let (asked, held) = (home.path().join("asked"), home.path().join("held"));
+        let stub = home.path().join("podman-stub");
+        std::fs::write(
+            &stub,
+            format!(
+                "#!/bin/sh\n: > '{}'\n[ -d '{}' ] && : > '{}'\necho 'no such object' >&2\nexit 125\n",
+                asked.display(),
+                lock.display(),
+                held.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let prev = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
+        // SAFETY: serialised by podman_seam_lock and env_lock.
+        unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", &stub) };
+        let minted = ensure_ca_bundle(false);
+        // SAFETY: as above.
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var("TILLANDSIAS_PODMAN_BIN", v),
+                None => std::env::remove_var("TILLANDSIAS_PODMAN_BIN"),
+            }
+        }
+        minted.expect("ensure_ca_bundle");
+        assert!(
+            asked.exists(),
+            "the mint asked podman (the test has a subject)"
+        );
+        assert!(!held.exists(), "podman ran while the mint lock was held");
+    }
+
     /// 1898-hyhf exit criterion 1: with HOME and the runtime dir on scratch
     /// and the tmpfs key store inactive (as on macOS and Windows), the CA mint
     /// and the Vault leaf mint leave no unencrypted private key under HOME and
@@ -41457,6 +41698,21 @@ mod keep_id_warm_tests {
         assert!(!keep_id_warm_needed(None));
     }
 
+    /// 2198-ee49: the warm decides on the answer it is HANDED. A shifting or
+    /// unknown answer returns NotNeeded before any podman call (the tag names
+    /// no image, so a create would fail, not warm), which is what lets the
+    /// live test below pass its own measured answer instead of a re-query.
+    #[test]
+    fn the_warm_decides_on_the_answer_it_is_handed() {
+        for shifting in [Some("true"), Some(""), None] {
+            assert_eq!(
+                warm_keep_id_mapping_on(shifting, "t", "localhost/no-such-image:2198", false),
+                KeepIdWarm::NotNeeded,
+                "{shifting:?}"
+            );
+        }
+    }
+
     /// 1785-655p: the build arm of `ensure_image_exists` warms the keep-id
     /// mapping after a SUCCESSFUL build (after the retry loop's `break`), and
     /// nowhere a present image is merely reused, so the warm is never a
@@ -41495,6 +41751,16 @@ mod keep_id_warm_tests {
     #[test]
     fn a_built_image_is_keep_id_warm_before_its_first_start() {
         let _lock = crate::runtime_assets::podman_seam_lock();
+        // ORDER 2226-kiwe: the ENV lock too, in the crate's seam->env order.
+        // Every podman call here inherits this process's environment, and on a
+        // builder toolbox podman is a flatpak-spawn shim that forwards each
+        // TILLANDSIAS_* variable as --env=. A neighbouring test that holds the
+        // env lock sets TILLANDSIAS_AGENT_RESULT_FORMAT to the non-UTF-8 bytes
+        // b"json\xfe\xff"; flatpak-spawn then refuses ("Invalid byte sequence in
+        // conversion input") and the warm reads Failed (macuahuitl land gate
+        // for #1295, 2026-11-22). Holding the env lock keeps the environment
+        // still for the whole measurement.
+        let _env = crate::runtime_assets::env_lock();
         let shifting = store_supports_shifting();
         if !keep_id_warm_needed(shifting.as_deref()) {
             eprintln!("skip: this store shifts IDs or cannot say ({shifting:?}); no warm to test");
@@ -41576,7 +41842,9 @@ mod keep_id_warm_tests {
         // image's own unmapped layer must be visible first.
         let seen = rows_of_layer().len();
         let after_build = mapped();
-        warm_keep_id_mapping("keepid-warm-test", &tag, false);
+        // 2198-ee49: the warm is handed the answer measured above, so a second
+        // `podman info` failing under load can no longer skip it silently.
+        let warm = warm_keep_id_mapping_on(shifting.as_deref(), "keepid-warm-test", &tag, false);
         let after_warm = mapped();
         let name = format!("tillandsias-keepid-warm-test-{}", std::process::id());
         let _ = podman_cmd_sync()
@@ -41596,6 +41864,11 @@ mod keep_id_warm_tests {
         assert_eq!(
             after_build, 0,
             "a fresh image starts with no mapped copy (the premise)"
+        );
+        assert_eq!(
+            warm,
+            KeepIdWarm::Warmed,
+            "the warm ran on a store that cannot shift"
         );
         assert_eq!(after_warm, 1, "the warm made the mapped copy");
         assert_eq!(

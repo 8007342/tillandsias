@@ -601,6 +601,10 @@ _lt_gate_restore() {
 TIMEOUT_SECONDS=600
 VERBOSE=0
 LIST_ONLY=0
+# ORDER 2159-n9sa (priority:build-speed): --select-only walks the SAME selection
+# path as a real run and prints the same "Executing" lines and Total, but
+# executes no step. Each selected test is counted as a SKIP named select-only.
+SELECT_ONLY=0
 
 # ORDER 956-llei. CPU stall accounting for the kill-time adjudicator, read
 # from THIS cgroup's pressure file so a step run inside a container is
@@ -2109,9 +2113,30 @@ run_litmus_test_file() {
         # real git dir's gate files snapshotted around it.
         local _lt_gsnap=""
         _lt_gsnap="$(mktemp -d "${TMPDIR:-/tmp}/litmus-gate-snap.XXXXXX")" && _lt_gate_snapshot "$_lt_gsnap"
-        TILLANDSIAS_POLICY_REGIME=fixture TILLANDSIAS_FIXTURE_SCOPE="$LITMUS_FIXTURE_SCOPE" \
-            TILLANDSIAS_FIXTURE_GIT_DIRS="$LITMUS_REAL_GIT_DIRS" \
-            LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_shell_prelude}${step_command}" </dev/null >"$step_capture" 2>"$step_errcap" || exit_code=$?
+        # ORDER 2150-3j97 (priority:build-speed) — A STEP KILLED BY ITS OWN
+        # TIMEOUT WITH NO ASSERTION OUTPUT IS RE-RUN ONCE. RC attempt 4 failed
+        # only on two such kills (empty stdout, empty stderr) on a loaded host.
+        # Re-run only on rc 124/137 (timeout(1)'s TERM, then its --kill-after
+        # KILL) AND an empty stdout: a step that printed anything was judging
+        # something, so its red stands, and an assertion red (any other rc)
+        # is never re-run. The re-run is announced as flaky:<test>#<step>.
+        # A second timeout stays a timeout. LITMUS_TIMEOUT_RETRY=0 disables.
+        local _lt_retried=0
+        while :; do
+            exit_code=0
+            TILLANDSIAS_POLICY_REGIME=fixture TILLANDSIAS_FIXTURE_SCOPE="$LITMUS_FIXTURE_SCOPE" \
+                TILLANDSIAS_FIXTURE_GIT_DIRS="$LITMUS_REAL_GIT_DIRS" \
+                LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_shell_prelude}${step_command}" </dev/null >"$step_capture" 2>"$step_errcap" || exit_code=$?
+            if [[ "$_lt_retried" -eq 0 && "${LITMUS_TIMEOUT_RETRY:-1}" == 1 \
+                  && ( "$exit_code" -eq 124 || "$exit_code" -eq 137 ) && ! -s "$step_capture" ]]; then
+                _lt_retried=1
+                printf ' flaky:%s#%s timed out after %ss with no output (rc=%s); re-running it once\n' \
+                    "$(basename "${test_file%.yaml}")" "$step_index" "$timeout_sec" "$exit_code" >&2
+                : >"$step_capture"; : >"$step_errcap"
+                continue
+            fi
+            break
+        done
         local _lt_tampered=""
         if [[ -n "$_lt_gsnap" ]]; then
             _lt_tampered="$(_lt_gate_restore "$_lt_gsnap")"
@@ -2535,6 +2560,14 @@ run_tests_for_spec() {
             fi
         fi
 
+        # ORDER 2159-n9sa: everything above is selection, shared with a real
+        # run; from here on is execution, which --select-only does not do.
+        if [[ "$SELECT_ONLY" -eq 1 ]]; then
+            printf '%bℹ%b Executing %s...\n' "${BLUE}" "${NC}" "$test_name" >&2
+            log_test_result "$spec_id" "$test_name" "SKIP" "select-only (2159-n9sa): selected, not executed"
+            test_count=$((test_count+1))
+            continue
+        fi
         litmus_refresh_stale_podman_cli
         # Execute test and capture result
         # Always show which test is executing to prevent user-perceived hangs
@@ -2913,6 +2946,10 @@ parse_args() {
                 LIST_ONLY=1
                 shift
                 ;;
+            --select-only)
+                SELECT_ONLY=1
+                shift
+                ;;
             --parse-only)
                 PARSE_ONLY=1
                 shift
@@ -3266,7 +3303,12 @@ main() {
     # then fail with build.rs's own diagnostic, which already tells the reader
     # exactly what to do. Refusing the whole run here would trade 29 confusing
     # failures for a total outage on hosts that have no stake in them.
-    if [[ ! -f "$PROJECT_ROOT/images/router/tillandsias-router-sidecar" ]]; then
+    # ORDER 2118-ywk7 (priority:build-speed): ONLY A TREE THAT CAN COMPILE IT.
+    # A fixture's scratch project (a copy of scripts/, no crates/) has nothing
+    # that compiles tillandsias-headless and nothing to build the sidecar from;
+    # staging there cost ~20 s per runner start under target/plan-scratch.
+    if [[ ! -f "$PROJECT_ROOT/images/router/tillandsias-router-sidecar" \
+          && -f "$PROJECT_ROOT/crates/tillandsias-router-sidecar/Cargo.toml" ]]; then
         if [[ -f "$PROJECT_ROOT/scripts/build-sidecar.sh" ]]; then
             log_info "Staging router sidecar (build artifact, absent — 871-wrmv)..."
             if bash "$PROJECT_ROOT/scripts/build-sidecar.sh" >/dev/null 2>&1; then
@@ -3429,6 +3471,8 @@ main() {
             owner_spec="$(grep -m1 -F 'spec: ' "$resolved_file" 2>/dev/null | sed -E 's/^spec:[[:space:]]*//')"
             if [[ -n "$owner_spec" ]]; then
                 log_warn "hint: '${FILTER_SPEC}' is a test name; run its spec: scripts/run-litmus-test.sh ${owner_spec}"
+                # ORDER 2150-6vpc: one test alone is --test (1465-ijv3).
+                log_warn "hint: or run that test alone: scripts/run-litmus-test.sh ${owner_spec} --test litmus:${FILTER_SPEC#litmus:}"
             fi
         fi
         exit 1

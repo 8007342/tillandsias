@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: gate-changed-fixtures-ignore-an-inherited-root-and-a-harness-gate
+    order: 2260-qw67
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      Two small hermeticity gaps the intake measurement exposed: test-gate-changed-selects-by-input.sh judges whatever tree TILLANDSIAS_GATE_CHANGED_ROOT names when the caller set it, and check-no-competing-gate.sh reads a measurement harness running gate-changed.sh as a competing gate (could-not-run).
+    context: |
+      Found while timing intake on lenovinha (2249-tif9 / 2256-mvmy, 2026-11-23): every scoped sample reported test-gate-changed-selects-by-input red and check-no-competing-gate could-not-run, on landed-green merges. Neither is intake's fault (build.sh --changed exports no TILLANDSIAS_GATE_CHANGED_ROOT), but a fixture that tests its own scratch tree must not follow an inherited root (the 2242-u39b class), and the competing-gate probe should say what it saw rather than refuse a run it cannot classify. Coordinator direction 2026-11-23: one row.
+    exit_criteria:
+      - "test-gate-changed-selects-by-input.sh passes TILLANDSIAS_GATE_CHANGED_ROOT empty (or its own scratch root) to every child; an arm runs it with the variable set to another tree and stays green"
+      - "check-no-competing-gate.sh distinguishes a gate-changed.sh measurement from a gate, or names what it found; an arm with a planted harness process reads it as not-a-gate"
+    unscoreable: "unpinnable-until-the-guard-exists: the two arms are the deliverable."
+    next_action: "Scope the root variable in the fixture; read the competing-gate probe's process match."
+    provenance: lenovinha's intake measurement; coordinator direction (macuahuitl-fedora, 2026-11-23).
+    related: [2242-u39b, 2249-tif9, 2256-mvmy]
+    events:
+      - {type: filed, ts: '2026-11-23T09:21:31Z', host: lenovinha, summary: gate-changed fixtures ignore an inherited root and a harness gate filed}

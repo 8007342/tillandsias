@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-22 at the coordinator's direction (macuahuitl-fedora): land-speed (ii).
+packets:
+  - packet_id: tray-vsock-tests-wait-on-events-not-sleeps-or-backstops
+    order: "2239-3kh4"
+    status: ready
+    kind: speed
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [tests, speed, rust]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-headless/src/vsock_server.rs
+      - crates/tillandsias-headless/src/tray/mod.rs
+    title: "tray,listen-vsock suite 97.6 s -> 64.8 s: two tests wait on events instead of a 30 s backstop and a 3 s sleep"
+    context: |
+      Ranked on yoga (tray,listen-vsock headless bin, --test-threads=1, per-test wall from streamed completion lines):
+      watch_shutdown_marks_stopping_when_atomic_flips 30.0 s (a bare AtomicBool store with no wake, so the watcher
+      slept to SHUTDOWN_BACKSTOP), vault_image_goes_through_ensure_image_exists 5.7 s, subscriber eviction 5.4 s
+      (the production 5 s write deadline, by design), a_quiet_session_survives_on_heartbeats 4.1 s,
+      a_slow_tool_call_does_not_block_a_fast_one_on_the_same_connection 3.2 s (a 3 s engine sleep).
+    exit_criteria:
+      - "watch_shutdown_marks_stopping_when_atomic_flips flips the flag with the production wake and asserts the watcher reacts within 5 s (control: without the wake it fails on that bound)."
+      - "the slow/fast tool-call test holds the slow call on a gate opened after the fast answer, not a sleep."
+    unscoreable: "a wall-time claim; measured: suite 97.64 s -> 64.75 s on yoga, 1585 passed both runs"
+    provenance: "coordinator 2026-11-22 land-speed (ii): rank the tray+vsock set, fix sleep/timeout owners with event waits"
+    events:
+      - type: filed
+        ts: "2026-11-23T00:03:02Z"
+        host: yoga
+        summary: "filed with the fix: two event waits take 33 s off the tray,listen-vsock suite"

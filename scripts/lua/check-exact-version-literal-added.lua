@@ -54,7 +54,7 @@ local base_ref = env.get("TILLANDSIAS_EXACT_VERSION_BASE")
 if not nonempty(base_ref) then base_ref = env.get("TILLANDSIAS_GATE_DIFF_BASE") end
 if not nonempty(base_ref) then base_ref = "origin/linux-next" end
 
-if not git({ "git", "rev-parse", "--verify", "--quiet", base_ref }, ROOT) then
+if not git({ "git", "rev-parse", "--verify", "--quiet", base_ref .. "^{commit}" }, ROOT) then
     log.raw("  note: base ref '" .. base_ref .. "' unavailable — added-line enforcement skipped")
     verdict.ok("exact-version-literal-added", "base-unavailable")
 end

@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: two-ungated-fixtures-are-red-and-evict-any-pr-that-touches-them
+    order: 2272-cuxh
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      scripts/test-running-image-freshness.sh (red on trunk) and scripts/test-preflight-front-door.sh (red on the landing host) are wired into no gate, so they rot unseen until a PR touches them and 1401-x76w's ungated-red refusal evicts that PR.
+    context: |
+      Run 33 evicted #1358 (2238-gqpf) on refused:fixture-default-target:ungated-red for exactly these two; the PR's only change to them was a mechanical grep -q here-string edit, reverted there to unblock it. Measured on lenovinha: test-running-image-freshness.sh fails case 3 on trunk d42dfb55a ("synthetic stale image did not inherit the source-digest label"); test-preflight-front-door.sh is 20/20 on lenovinha and red on macuahuitl (landing host; log target/land-queue-logs/20261123T144952Z-3446066/pr-1358-gate.log). Neither is named by any gate step or build.sh block.
+    exit_criteria:
+      - "each is green on the landing host, or skips with a named reason where its subject cannot exist"
+      - "each is wired to a gate step (with a second-regime record), so it cannot rot unseen again"
+    unscoreable: "unpinnable-until-the-guard-exists: the wiring is the deliverable."
+    next_action: "Read the landing host's pr-1358-gate.log for the front-door failure; reproduce case 3 of the freshness fixture (podman label inheritance)."
+    provenance: found adopting #1358 at the coordinator's direction; filed by lenovinha.
+    related: [2238-gqpf, 1401-x76w]
+    events:
+      - {type: filed, ts: '2026-11-23T17:15:09Z', host: lenovinha, summary: two ungated fixtures red and evicting PRs filed}

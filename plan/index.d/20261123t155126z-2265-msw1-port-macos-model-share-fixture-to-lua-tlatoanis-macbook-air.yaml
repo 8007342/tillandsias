@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-23. Coordinator queue item (3): port one darwin-only .sh to Lua.
+packets:
+- packet_id: port-test-macos-model-share-writable-to-lua
+  order: 2265-msw1
+  status: implemented
+  kind: debt
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [shell-to-lua, macos, inference, fixtures]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 1
+  title: 'Port scripts/test-macos-model-share-writable.sh (order 1183-j9dk) to scripts/lua/test-macos-model-share-writable.lua on common.fixture'
+  context: >-
+    The darwin-only model-share fixture pins the inference container's --security-opt=label=disable (arm 0, in source) and probes the virtiofs share two levels deep in the guest, with the flag (arm 1, must pass) and without it (arm 2, must fail).
+    The port keeps the arms, verdict lines, subject clause and two-line could-not-run unchanged, and the guest probe text is byte-for-byte the shell's.
+    The .sh leaves the shell-decider, pipe-site and bare-mktemp floors.
+  exit_criteria:
+  - 'Lua and shell print the same last line and rc on every path reachable without a VM.'
+  - 'The shell file and its three floor lines are gone; references name the .lua.'
+  verifiable_closure: 'Parity table in PR #1430; the live arms on a published release with an empty model cache.'
+  unscoreable: 'The live VM arms (1 and 2 against a real guest) were NOT run: a dev bundle must not drive the guest, and the only bundle in dist/ is a stale 2026-11-04 dev build.'
+  next_action: >-
+    Implemented. Parity measured on darwin, Lua vs shell, identical last line and rc in 8 cases: no tray (skip no-app-bundle),
+    arm 0 mutated in main.rs (violation), stub trays pass/fail (ok:3), pass/pass (violation does-not-discriminate),
+    fail/fail (violation product-flags), ARM0 output (skip), no output (violation guest-unreachable), CRLF (ok:3).
+    Open: the live arms on the next published release with an empty model cache.
+  provenance: 'tlatoanis-macbook-air 2026-11-23, on the coordinator''s (macuahuitl-fedora) queue item (3).'
+  events:
+  - {type: filed, ts: '2026-11-23T15:51:26Z', host: tlatoanis-macbook-air, summary: 'filed with PR #1430, implemented'}

@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: flaky-test row assigned by macuahuitl-fedora 2026-11-22.
+packets:
+  - packet_id: keep-id-warm-test-holds-the-env-lock
+    order: "2226-kiwe"
+    status: implemented
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [test, flake, podman, toolbox]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: "keep_id_warm_tests::a_built_image_is_keep_id_warm_before_its_first_start holds the env lock, so a neighbour's non-UTF-8 env cannot break its podman calls"
+    context: |
+      Two land-gate failures on macuahuitl on 2026-11-22, two causes:
+      * #1301 (04:50Z): "the warm made the mapped copy" 0 != 1, with no stderr. That run predates 2198-ee49 (07:58Z), which
+        fixed exactly this: the warm re-asked podman info, and a failed second answer skipped the warm silently.
+      * #1295 (11:59Z): the warm returned Failed("flatpak-spawn: Invalid byte sequence in conversion input"). On a builder
+        toolbox podman is the 934-7jd4 flatpak-spawn shim, which forwards every TILLANDSIAS_* variable as --env=. Two
+        tests in the same binary (delegated_result_format_unknown_value_fails_closed and its sibling) hold the env lock and
+        set TILLANDSIAS_AGENT_RESULT_FORMAT to b"json\xfe\xff"; glib refuses the non-UTF-8 value and podman never runs. The
+        keep-id test held only podman_seam_lock, so nothing kept the environment still while it ran.
+      Fix: the test also takes crate::runtime_assets::env_lock(), after the seam lock (the crate's existing seam->env
+      order, 8 sites, so no lock-order inversion). Not reproduced locally: this host's builder toolbox cannot currently be
+      entered, so podman ran natively here and the shim was not in the path.
+      FOLLOW-UP (not in this change): the shim in scripts/with-tillandsias-builder.sh should skip, or fail by name on, an
+      env value that is not valid UTF-8, so no other caller hits the same opaque flatpak-spawn error.
+    exit_criteria:
+      - "cargo test -p tillandsias-headless --bin tillandsias keep_id_warm: 7 passed on calmecacpilli (native podman)."
+      - "The test acquires podman_seam_lock then env_lock, the order every other seam+env test in the crate uses."
+    unscoreable: "a race fix whose trigger needs the toolbox shim in the path: scored by the keep_id_warm tests and the lock-order check above."
+    next_action: "Land; file the shim follow-up."
+    provenance: "macuahuitl-fedora 2026-11-22: find the timing/host-state dependency in keep_id_warm and fix it or quarantine it; panic lines from the #1301 and #1295 gate logs."
+    events:
+      - type: filed
+        ts: "2026-11-22T14:53:05Z"
+        host: calmecacpilli
+        summary: "filed and implemented on work/2226-kiwe"

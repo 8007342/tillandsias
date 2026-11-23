@@ -14,3 +14,10 @@ STEP_LUA="scripts/lua/test-door-serial-lua-declaration.lua"
 STEP_ERROR="the preflight door no longer honours a .lua guard's -- preflight: serial, or a .mutant-lcnum-* writer runs beside other guards (1630-dwab) — see the FAIL lines above"
 STEP_OK="Door .lua serial declaration fixture passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-12 darwin ok:door-serial-lua-declaration:8 arms"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
+STEP_LANES="checkout"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lua/test-awk-float-lc-numeric-signal.lua scripts/lua/test-door-serial-lua-declaration.lua scripts/plan-binary-probe.sh scripts/test-awk-float-lc-numeric.sh"

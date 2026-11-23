@@ -1,7 +1,7 @@
 -- @trace order:1642-cc54
--- @env PATH
+-- @env PATH TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
 --
--- test-approved-ux-strings.lua — scripts/check-approved-ux-strings.sh finds an
+-- test-approved-ux-strings.lua — scripts/lua/check-approved-ux-strings.lua finds an
 -- operator approval recorded TODAY (an append-event fragment), still refuses a
 -- prose mention or a reword, and answers the same however long the notes are.
 --
@@ -25,6 +25,9 @@
 --                the pre-fix gate (were it able to read the fragment form)
 --                is shown red by arm 1, and this arm pins the SIGPIPE fix
 --   4 REWORD     code that says something else is refused
+--   6 BLIND      no table source in the tree, or no ledger: blocked / skip, never ok
+--   7 BOUNDARY   a note at the end of one file does not approve a comment at the
+--                top of the next (2257-ba7e: the .sh did)
 --   5 NO-ARCHIVE a tree with no plan/archive/*.yaml still reads the notes:
 --                under set -u, bash 3.2 calls an empty array unbound, and
 --                the pre-fix gate then read nothing at all
@@ -43,7 +46,13 @@ local old = proc.run({ argv = { "git", "show", PREFIX .. ":scripts/check-approve
 if old.status ~= "exited" or old.code ~= 0 then
     verdict.could_not_run("approved-ux-strings-fixture", "git show " .. PREFIX .. " did not answer")
 end
-local NEW = fs.read("scripts/check-approved-ux-strings.sh")
+local NEW = fs.read("scripts/lua/check-approved-ux-strings.lua")
+local fixture = require("common.fixture")
+local BASH = fixture.posix_shell()
+local PLAN = env.get("TILLANDSIAS_PLAN_BIN")
+if not PLAN or PLAN == "" then PLAN = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN") end
+if not PLAN or PLAN == "" then PLAN = fixture.plan_binary() end
+if PLAN == "" then verdict.could_not_run("approved-ux-strings-fixture", "no plan binary") end
 
 local REL = "target/plan-scratch/approved-ux-" .. time.iso_utc() .. "-" .. tostring(math.random(100000, 999999))
 local A = ROOT .. "/" .. REL
@@ -64,14 +73,16 @@ end
 -- base form), the two source files the gate's table reads, and `fragment` as
 -- the only file under plan/index.d.
 local n = 0
-local function tree(gate, code_sentence, fragment, no_archive)
+local function tree(gate, code_sentence, fragment, no_archive, tweak)
     n = n + 1
     local T = REL .. "/t" .. n
     fs.mkdir(T .. "/scripts")
     fs.mkdir(T .. "/plan/index.d")
     fs.mkdir(T .. "/crates/tillandsias-headless/src")
     fs.mkdir(T .. "/crates/tillandsias-macos-tray/src")
-    fs.write(T .. "/scripts/check-approved-ux-strings.sh", gate)
+    local lua = gate == NEW
+    if lua then fs.mkdir(T .. "/scripts/lua") end
+    fs.write(T .. (lua and "/scripts/lua/check-approved-ux-strings.lua" or "/scripts/check-approved-ux-strings.sh"), gate)
     fs.write(T .. "/plan/index.yaml", table.concat({
         "packets:",
         "  - packet_id: bring-up",
@@ -89,8 +100,15 @@ local function tree(gate, code_sentence, fragment, no_archive)
         fs.mkdir(T .. "/plan/archive")
         fs.write(T .. "/plan/archive/old.yaml", "packets: []\n")
     end
-    local r = proc.run({ argv = { "bash", A .. "/t" .. n .. "/scripts/check-approved-ux-strings.sh" },
-        cwd = ROOT, timeout_ms = 60000 })
+    if tweak then tweak(T) end
+    local dir = A .. "/t" .. n
+    local r
+    if lua then
+        r = proc.run({ argv = { PLAN, "script", "run", dir .. "/scripts/lua/check-approved-ux-strings.lua" },
+            cwd = dir, env = { TILLANDSIAS_REPO_ROOT = dir }, timeout_ms = 60000 })
+    else
+        r = proc.run({ argv = { BASH, dir .. "/scripts/check-approved-ux-strings.sh" }, cwd = ROOT, timeout_ms = 60000 })
+    end
     return r.code, text.trim((r.stdout or "") .. " " .. (r.stderr or ""))
 end
 
@@ -143,7 +161,7 @@ arm("5 NO-ARCHIVE a tree with no plan/archive still reads the notes (bash 3.2 em
 -- same `bash` the gate runs under (`--version`: the runtime refuses `bash -c`).
 -- A version it cannot read FAILS the arm; a probe that silently skips would
 -- retire the control on the very host it exists for.
-local bv = proc.run({ argv = { "bash", "--version" }, timeout_ms = 10000 })
+local bv = proc.run({ argv = { BASH, "--version" }, timeout_ms = 10000 })
 local major, minor = (bv.stdout or ""):match("version (%d+)%.(%d+)")
 major, minor = tonumber(major), tonumber(minor)
 if not major then
@@ -158,8 +176,23 @@ end
 rc, o = tree(NEW, "Setting things up again\u{2026}", approval)
 arm("4 REWORD code that says something else is refused", rc ~= 0 and o:find("UNAPPROVED", 1, true) ~= nil, rc .. " " .. o:sub(1, 120))
 
+local function rm(T, p) proc.run({ argv = { "rm", "-rf", ROOT .. "/" .. T .. "/" .. p }, timeout_ms = 10000 }) end
+rc, o = tree(NEW, SENTENCE, approval, false, function(T) rm(T, "crates/tillandsias-macos-tray") end)
+arm("6 BLIND a missing table source is blocked, not skipped", rc == 1 and o:find("missing-source", 1, true) ~= nil, rc .. " " .. o:sub(1, 160))
+rc, o = tree(NEW, SENTENCE, approval, false, function(T) rm(T, "crates") end)
+arm("6 BLIND no source at all is blocked:0", rc == 1 and o:find("blocked:approved-ux-strings:0", 1, true) ~= nil, rc .. " " .. o:sub(1, 160))
+rc, o = tree(NEW, SENTENCE, approval, false, function(T) fs.write(T .. "/crates/tillandsias-macos-tray/src/reset_state.rs", "fn x() {}\n") end)
+arm("6 BLIND a constant it cannot find is blocked", rc == 1 and o:find("no-string", 1, true) ~= nil, rc .. " " .. o:sub(1, 160))
+rc, o = tree(NEW, SENTENCE, approval, false, function(T) rm(T, "plan/index.yaml") end)
+arm("6 BLIND no ledger is skip:no-ledger", rc == 0 and o:find("skip:approved-ux-strings:no-ledger", 1, true) ~= nil, rc .. " " .. o:sub(1, 160))
+
+rc, o = tree(NEW, SENTENCE, event_fragment("operator_note", "Approved: another line"), false, function(T)
+    fs.write(T .. "/plan/index.d/zzz.yaml", "# the reword says " .. SENTENCE .. "\nevents: []\n")
+end)
+arm("7 BOUNDARY a comment opening the next file approves nothing", rc ~= 0 and o:find("UNAPPROVED", 1, true) ~= nil, rc .. " " .. o:sub(1, 120))
+
 proc.run({ argv = { "rm", "-rf", A }, timeout_ms = 60000 })
 if #failed > 0 then
     verdict.emit("violation:approved-ux-strings-fixture:" .. #failed .. "-failed", 1)
 end
-verdict.ok("approved-ux-strings-fixture", "5 arms")
+verdict.ok("approved-ux-strings-fixture", "7 arms")
