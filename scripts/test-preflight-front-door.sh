@@ -12,6 +12,9 @@ set -uo pipefail
 # this fixture inside itself.
 _fd_live="${TILLANDSIAS_FRONT_DOOR_LIVE:-0}"; _fd_inner="${FRONT_DOOR_SCRATCH:-}"
 unset TILLANDSIAS_FRONT_DOOR_LIVE FRONT_DOOR_SCRATCH
+# 2275-fcpy: the doors below are scratch doors; they neither read nor write this
+# host's bench record.
+export TILLANDSIAS_PREFLIGHT_BENCH=off
 if [ -z "$_fd_inner" ] && [ "$_fd_live" != 1 ]; then
     echo "not-run:preflight-front-door — runs on the --daily-full gate; here: TILLANDSIAS_FRONT_DOOR_LIVE=1 bash scripts/test-preflight-front-door.sh (2272-cuxh)"
     exit 0

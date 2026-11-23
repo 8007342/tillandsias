@@ -35,7 +35,7 @@ src="$(cat "$BUILD")"
 
 # ── ARM 1 — every category appears in the verdict line ──────────────────────
 missing=""
-for c in "ran=" "declared-skip=" "skipped-by-deadline=" "could-not-run=" "refused="; do
+for c in "ran=" "declared-skip=" "skipped-by-deadline=" "benched=" "could-not-run=" "refused="; do
     grep -q -- "$c" <<<"$src" || missing="$missing $c"
 done
 if [ -n "$missing" ]; then
