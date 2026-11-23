@@ -23,6 +23,7 @@
 #
 # PRE-FIX RESULT: FAILS at arm 1 — there was no `discipline` verb.
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 pass=0; total=6
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
@@ -47,7 +48,7 @@ command -v git >/dev/null 2>&1 || { echo "skip:branch-discipline-verb:no-git"; e
 _tmpbase="${TMPDIR:-/tmp}"
 [ ! -d /tmp/opencode ] || _tmpbase=/tmp/opencode
 W="$(mktemp -d "$_tmpbase/branch-discipline.XXXXXX")"
-trap 'rm -rf "$W"' EXIT INT TERM
+scratch_trap 'rm -rf "$W"'
 
 dis() { "$PLAN" discipline "$@"; }
 SEED="$ROOT/.tillandsias/branch-discipline.yaml"
@@ -73,6 +74,14 @@ sed 's/ref_grammar: warn/ref_grammar: enforced/' "$SEED" > "$W/strict.yaml"
 # Forge identity variables override git -c, so clear them only in this helper.
 fixture_git() (
     unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
+    # 2245-scgt: a `-C <dir>` goes through scratch_git, so an empty or stale
+    # scratch path cannot reach the real checkout.
+    if [ "${1:-}" = -C ]; then
+        _fg_dir="${2:-}"; shift 2
+        scratch_git "$_fg_dir" -c init.defaultBranch=main -c user.name=fixture \
+            -c user.email=fixture@host-a.test -c commit.gpgsign=false "$@"
+        exit $?
+    fi
     git -c init.defaultBranch=main -c user.name=fixture \
         -c user.email=fixture@host-a.test -c commit.gpgsign=false "$@"
 )
@@ -115,7 +124,7 @@ fi
 
 # 3 — the floor: a bare project with no seed is never refused.
 BARE="$W/bare"; mkdir -p "$BARE"
-git -C "$BARE" -c init.defaultBranch=main init -q
+scratch_git "$BARE" -c init.defaultBranch=main init -q
 bare_main="$(dis check-ref refs/heads/main --root "$BARE" 2>&1)"; bare_rc=$?
 bare_other="$(dis check-ref refs/heads/anything-at-all --root "$BARE" 2>&1)"; other_rc=$?
 if [ "$bare_rc" -eq 0 ] && [ "$(first "$bare_main")" = "ok:discipline:default-branch:level=0" ] \
@@ -140,9 +149,9 @@ sed 's/macos: osx-next/macos: main/' "$SEED" > "$W/eq.yaml"
 sed 's/work\/\[0-9\]{3,4}-\[a-z0-9\]{4}/work\/[0-9/' "$SEED" > "$W/re.yaml"
 sed 's/^level: 2$/level: 1/' "$SEED" > "$W/low.yaml"
 REG="$W/regressed"; mkdir -p "$REG"
-git -C "$REG" -c init.defaultBranch=main init -q
-git -C "$REG" -c user.name=f -c user.email=f@f commit -q --allow-empty -m seed
-git -C "$REG" update-ref refs/tillandsias/discipline/2/enforced/0000/1 HEAD
+scratch_git "$REG" -c init.defaultBranch=main init -q
+scratch_git "$REG" -c user.name=f -c user.email=f@f commit -q --allow-empty -m seed
+scratch_git "$REG" update-ref refs/tillandsias/discipline/2/enforced/0000/1 HEAD
 arm5=1; detail=""
 for case_ in "eq.yaml|$ROOT|integration-equals-default:macos" \
              "re.yaml|$ROOT|work-ref-regex" \

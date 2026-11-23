@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-22 at the coordinator's direction (macuahuitl-fedora): land-speed b2.
+packets:
+  - packet_id: feature-gated-cargo-tests-declare-the-exact-scripts-they-read-or-run
+    order: "2239-5gb5"
+    status: ready
+    kind: speed
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, class-selector, speed, rust]
+    estimated_hours: 2
+    owned_files:
+      - build.sh
+      - scripts/lua/scan-cargo-test-repo-roots.lua
+      - scripts/lua/test-scan-cargo-test-repo-roots.lua
+      - scripts/gate-steps.d/954-2175-ctin-cargo-test-inputs.step
+      - crates/tillandsias-headless/src/main.rs
+    title: "Feature-gated cargo tests (133 s/gate) declare the 20 scripts they read or execute instead of scripts/**"
+    context: |
+      2175-ctin made the tray/listen-vsock test step skippable against a daily full proof, but its declared inputs held
+      scripts/**, so any shell change ran it. The whole scripts/** came from ONE literal: fake_nix_cache_checkout in
+      crates/tillandsias-headless/src/main.rs created a scratch dir with dir.join("scripts"), which the scanner cannot
+      tell from a repo read. Coordinator caution: narrowing makes a missed EXEC a silent coverage hole, so the scanner
+      now also counts any literal holding a scripts/ path in every scanned file.
+    exit_criteria:
+      - "_CARGO_FEATURE_TEST_INPUTS names scripts/ files exactly (no scripts/**); scan --check passes on the real tree."
+      - "test-scan-cargo-test-repo-roots.lua: a script reached only through the exec net, or an include path, left out of the declaration is refused; a scanner with the exec net removed lets the exec gap through (mutant)."
+    unscoreable: "the saving appears once a green daily-full proof exists: the step's skip line on a non-Rust, non-listed-script PR"
+    provenance: "coordinator 2026-11-22 land-speed b2 approval with the exec-coverage caution"
+    events:
+      - type: filed
+        ts: "2026-11-22T23:35:00Z"
+        host: yoga
+        summary: "filed with the change: exact scripts in the feature-gated test inputs"

@@ -101,7 +101,10 @@ else bad(5, "an id-less record with no concurrent gate did not refuse: [" .. v5 
 
 -- 4: build.sh's step loop
 local build = fs.read("build.sh")
-if build:find('gate-step-metrics-attribution.sh" "$_metrics_shared" "${_metrics_shared_before:-0}" "${TILLANDSIAS_TIMING_RUN_ID:-none}"', 1, true)
+-- 2238-3skn: the helper reads the step's WINDOW, snapshotted once before
+-- attribution (so it is handed 0 lines-before), never the live shared log.
+if build:find('scripts/gate-step-metrics-attribution.sh}', 1, true)
+    and build:find('bash "$_metrics_attr_bin" "$_metrics_snap" 0 "${TILLANDSIAS_TIMING_RUN_ID:-none}"', 1, true)
     and build:find("verdict=refuse", 1, true) then ok(4)
 else bad(4, "build.sh's step loop does not attribute shared-log records by its run id") end
 
