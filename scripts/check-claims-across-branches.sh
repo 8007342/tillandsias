@@ -170,18 +170,22 @@ _claim_host_on_branch() { # _claim_host_on_branch <archived-tree> <packet-id-or-
         printf '%s' "$TILLANDSIAS_XBRANCH_CLAIM_HOST"
         return 0
     fi
-    local tree="$1" who="$2" f best_ts="" best_host=""
-    for f in "$tree"/plan/index.d/*.yaml; do
-        [ -e "$f" ] || continue
-        # A status entry names the packet, the field, and its host. Read the
-        # block that mentions this packet and carries `field: status`.
-        awk -v want="$who" '
+    local tree="$1" who="$2"
+    # A status entry names the packet, the field, and its host. Read the
+    # block that mentions this packet and carries `field: status`.
+    # ONE awk over every fragment (2271-5v9r), not one per file: ~6,500 fragments
+    # per sibling made a claimed packet's check spend ~36 s spawning awk.
+    # The block state resets at each file's first line, as the per-file
+    # spawn did; xargs -0 keeps a large fragment count under ARG_MAX.
+    [ -d "$tree/plan/index.d" ] || return 0
+    find "$tree/plan/index.d" -maxdepth 1 -name '*.yaml' -type f -print0 2>/dev/null |
+        LC_ALL=C sort -z | xargs -0 -r awk -v want="$who" '
+            FNR == 1 { inblk = 0; pid = ""; f = ""; t = ""; h = "" }
             /^[[:space:]]*-[[:space:]]*packet_id:/ { pid=$0; sub(/^[^:]*:[[:space:]]*/,"",pid); inblk=(index(pid,want)>0 || index(want,pid)>0); f=""; t=""; h="" }
             inblk && /^[[:space:]]*field:[[:space:]]*status[[:space:]]*$/ { f=1 }
             inblk && /^[[:space:]]*ts:/ { t=$0; sub(/^[^:]*:[[:space:]]*/,"",t); gsub(/"/,"",t) }
             inblk && /^[[:space:]]*host:/ { h=$0; sub(/^[^:]*:[[:space:]]*/,"",h); if (f && t != "" && h != "") print t "\t" h }
-        ' "$f" 2>/dev/null
-    done | sort -r | head -1 | cut -f2
+        ' 2>/dev/null | sort -r | head -1 | cut -f2
 }
 
 # BOTH VOCABULARIES COUNT AS "ME", and 1012-hu7d is why: a claim written with
