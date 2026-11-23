@@ -1745,6 +1745,27 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     # 300-guard fixture's seam) runs none of that family, so it skips the fetch:
     # the fetch writes .git/FETCH_HEAD and the remote refs, which kept the
     # fixture off the gate pool. The real roster always fetches.
+    # ORDER 2239-rmun: a host that cannot reach the remote stops HERE, named,
+    # before minutes of guards whose result can never be pushed (the user's
+    # direction 2026-11-22: stop work, do not retry). Off in CI (no host login
+    # to judge) and under a replaced roster (the fixture's seam), and by
+    # TILLANDSIAS_SKIP_REMOTE_PROBE=1. Never runs gh auth login/refresh.
+    if [ -z "${TILLANDSIAS_PREFLIGHT_ROSTER_FILE:-}" ] && [ -z "${CI:-}" ] && [ -z "${GITHUB_ACTIONS:-}" ] \
+       && [ "${TILLANDSIAS_SKIP_REMOTE_PROBE:-0}" != 1 ]; then
+        _rr_bin="$(. "$SCRIPT_DIR/scripts/plan-binary-probe.sh" && resolve_plan_binary 2>/dev/null || true)"
+        if [ -n "$_rr_bin" ]; then
+            _rr_out="$( cd "$SCRIPT_DIR" && "$_rr_bin" script run scripts/lua/probe-remote-reachable.lua 2>&1 )"; _rr_rc=$?
+            if [ "$_rr_rc" -ne 0 ]; then
+                printf '%s\n' "$_rr_out" >&2
+                echo "refused:preflight:remote-unreachable"
+                echo "  why: this host cannot reach the remote, so nothing this gate vouches for can be pushed (2239-rmun)" >&2
+                echo "  remedy: a human restores this host's access (see the probe's remedy above); until then SUSPEND work here — no retries, no backoff" >&2
+                exit 1
+            fi
+        else
+            echo "note:preflight:remote-probe:no-plan-binary — the remote-reachable probe needs the plan binary; not judged (2239-rmun)" >&2
+        fi
+    fi
     [ -n "${TILLANDSIAS_PREFLIGHT_ROSTER_FILE:-}" ] || git -C "$SCRIPT_DIR" fetch -q origin 2>/dev/null || true
     _freeze_gate_diff_base || exit 1
 
