@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-22. Coordinator queue item (3) after the operator approved bundle landing.
+packets:
+- packet_id: smoke-runs-are-attested-as-per-platform-refs-keyed-by-the-rc-commit-and-promotion-needs-a-pass-on-each
+  order: 2252-ck7h
+  status: in_progress
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [release, smoke, attestation, macos, msys, linux]
+  size: M
+  implementer_tier: sonnet
+  estimated_hours: 3
+  title: 'Smoke attestation refs: refs/attest/smoke/<platform>/<rc-commit-sha>, written by attest-smoke.lua from the evidence dir, and check-smoke-attested.lua passes promotion only on a PASS per platform'
+  context: >-
+    Coordinator rulings, 2026-11-22. (1) The ref is keyed by the RC's COMMIT sha, not the tag (immutable beats readable). The message carries the tag and the release-asset sha256, and the checker takes --version and resolves it.
+    (2) A run is attested either way. An unmeasured credential step is verdict=partial:credential-unmeasured, and the checker does NOT count a partial as a pass. A partial blocks main until the operator signs in and a re-run on the same sha upgrades it. The step is never faked.
+    Built here:
+    - attest-smoke.lua writes a commit whose TREE is the evidence dir, built through a throwaway index in the git dir so the checkout's index is untouched. Its message carries `Smoke: <host> <platform> <sha> <tag> <asset-sha256> <verdict>`, and a re-run is a child of the previous one.
+    - It refuses `pass` unless credential-step.txt starts with `measured`. It refuses any evidence file not newer than 00-run-start.txt (1189-7yvu).
+    - check-smoke-attested.lua counts a ref only if its Smoke: line names the same platform and sha.
+    Not built: the smoke skill's wiring (writing credential-step.txt and calling attest after section 5), and the promotion step calling the checker.
+  exit_criteria:
+  - 'scripts/lua/test-smoke-attest.lua gives 7/7. A mutation where the checker counts partial as pass reds arm 1 (measured).'
+  - 'One real darwin smoke of a published RC writes refs/attest/smoke/darwin/<sha>, pushed with --push.'
+  - 'The promote step (merge-to-main-and-release) refuses without a PASS per platform.'
+  verifiable_closure: 'the fixture on darwin, msys and linux, plus one real ref per platform for one RC.'
+  unscoreable: 'none.'
+  next_action: 'Wire the smoke skill section 5 (credential-step.txt plus attest-smoke --push) and the promotion step (check-smoke-attested --version <tag>). The coordinator names the owners.'
+  provenance: 'tlatoanis-macbook-air 2026-11-22, on the coordinator''s (macuahuitl-fedora) queue item (3) and its two rulings.'
+  events:
+  - {type: filed, ts: '2026-11-23T05:30:00Z', host: tlatoanis-macbook-air, summary: 'filed with its PR'}

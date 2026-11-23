@@ -254,7 +254,6 @@ scripts/test-initialize-bare-metal-host-idempotent.sh
 scripts/test-install-path.sh
 scripts/test-installer-probes-by-attempt-not-by-help.sh
 scripts/test-installer-reports-wsl-guest-shape.sh
-scripts/test-installer-reset-probe.sh
 scripts/test-installers-quiet-progress.sh
 scripts/test-join-the-fleet-idempotent.sh
 scripts/test-jq-multiline-capture.sh
@@ -308,7 +307,6 @@ scripts/test-loop-status-audit-reads-current-emitter.sh
 scripts/test-lua-determinism.sh
 scripts/test-lww-channel-alias.sh
 scripts/test-lww-channel-consumers.sh
-scripts/test-macos-model-share-writable.sh
 scripts/test-macos-vsock-inference-closure.sh
 scripts/test-macos-vz-orphan-diagnosis.sh
 scripts/test-mcp-plan-resolver-pinning.sh
@@ -459,7 +457,6 @@ scripts/test-tool-dispatch-lib.sh
 scripts/test-tool-dispatch-rejects-unusable-host-tool.sh
 scripts/test-tool-materialize-litmus-surfaces-arm.sh
 scripts/test-tool-materialize.sh
-scripts/test-toolbox-refusal-wsl-exception.sh
 scripts/test-trace-coverage.sh
 scripts/test-tracked-files-unwritten-guard.sh
 scripts/test-tray-asset-placeholder-refused.sh

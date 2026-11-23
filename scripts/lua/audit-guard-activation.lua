@@ -64,6 +64,9 @@ local SURFACES = {
     -- orphan while bound this way (2026-09-06).
     "scripts/gate-steps.d",
     "scripts/local-ci.sh",
+    -- 2231-zmzd: local-ci.sh's "Recently Landed Guards" are rows of this
+    -- roster, and local-ci.sh runs every row; the names left local-ci.sh.
+    "scripts/lua/local-ci-landed-guards.lua",
     "scripts/run-litmus-test.sh",
     "scripts/mo-full-attest.sh",
     "openspec/litmus-tests",
