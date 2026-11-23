@@ -19,6 +19,7 @@
 # PRE-FIX RESULT: FAILS — the guard did not exist, and an exact pin made the
 # first bump of the capability row unpublishable (lenovinha, 2026-09-02).
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
 # 1592-idmu: this fixture builds its own repo, so the gate's frozen base (a SHA of
 # the gated checkout) is not its base; its scratch origin/linux-next is.
 unset TILLANDSIAS_GATE_DIFF_BASE
@@ -36,16 +37,16 @@ case "$_plan" in ./*) _plan="$ROOT/${_plan#./}" ;; esac
 
 _tmpbase="$ROOT/target/plan-scratch"; mkdir -p "$_tmpbase" 2>/dev/null || _tmpbase="${TMPDIR:-/tmp}"
 W="$(mktemp -d "$_tmpbase/exact-version.XXXXXX")"
-trap 'rm -rf "$W"' EXIT INT TERM
+scratch_trap 'rm -rf "$W"'
 
 # repo <name> <base content of scripts/v.sh> -> a scratch repo whose base holds it
 repo() {
     local r="$W/$1"
     mkdir -p "$r/scripts" "$r/crates/c/src"
     printf '%s\n' "$2" > "$r/scripts/v.sh"
-    git -C "$r" init -q && git -C "$r" -c user.email=f@x -c user.name=f add -A \
-        && git -C "$r" -c user.email=f@x -c user.name=f commit -qm base
-    git -C "$r" update-ref refs/remotes/origin/linux-next HEAD
+    scratch_git "$r" init -q && scratch_git "$r" -c user.email=f@x -c user.name=f add -A \
+        && scratch_git "$r" -c user.email=f@x -c user.name=f commit -qm base
+    scratch_git "$r" update-ref refs/remotes/origin/linux-next HEAD
     echo "$r"
 }
 run() { OUT="$(cd "$1" && "$_plan" script run "$GUARD" 2>&1)"; RC=$?; }
