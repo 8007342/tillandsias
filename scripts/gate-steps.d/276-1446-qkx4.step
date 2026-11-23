@@ -9,7 +9,7 @@ STEP_DESC="Checking the /project-discipline skill and its forge wiring (1446-qkx
 STEP_LUA="scripts/lua/test-project-discipline-skill.lua"
 STEP_ERROR="/project-discipline stopped existing, lost a hook refusal family's section, or stopped reaching a forge on a non-Tillandsias project (1446-qkx4) — see the verdict line above"
 STEP_OK="Project-discipline skill passed"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-27 darwin ok:project-discipline-skill:4/4"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:project-discipline-skill:4/4 (Lua port, at 462eaf018)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
 STEP_LANES="checkout"
