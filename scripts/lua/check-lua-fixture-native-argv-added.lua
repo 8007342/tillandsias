@@ -10,6 +10,9 @@
 --                            cwd ("proc.run: cwd '/c/Users/...' is relative").
 --                            Use require("common.fixture").repo_root(), which
 --                            asks git and gets C:/... there.
+--   a "$PWD" probe join     `$PWD/${p#./}` inside a probe's shell: Git bash
+--                            answers /c/..., which a native spawn cannot find.
+--                            Use require("common.fixture").plan_binary().
 --   a bare "bash" or "sed"   { "bash", ... } / { "sed", ... } as an argv.
 --                            On native Windows a bare name resolves to WSL's
 --                            bash.exe (another filesystem, another git) or to
@@ -67,6 +70,12 @@ local SHAPES = {
       fix = 'require("common.fixture").posix_shell() as argv[1]' },
     { pat = '{%s*"sed"%s*[,}]', what = 'a bare "sed" argv (absent or WSL\'s on native Windows)',
       fix = 'text.* in Lua, or posix_shell() running a script that calls sed' },
+    -- The third trap (yolanda, #1389): a probe that joins its answer to
+    -- "$PWD" INSIDE Git bash hands back /c/..., which a native spawn cannot
+    -- resolve. Plain-text match: `$PWD/${p#./}` is the shape every copy uses.
+    -- native-argv: the shape this decider refuses, as its own pattern literal
+    { plain = '$PWD/${p#./}', what = 'a probe path joined to "$PWD" inside the shell (Git bash answers /c/..., unresolvable natively)',
+      fix = 'require("common.fixture").plan_binary(), or native_path() on the answer' },
 }
 
 local SPECS = { "scripts/lua/*.lua", "lib/lua/*.lua", "lib/lua/**/*.lua" }
@@ -122,7 +131,7 @@ for _, f in ipairs(files) do
             local trimmed = line:gsub("^%s+", "")
             if not text.starts_with(trimmed, "--") then
                 for _, sh in ipairs(SHAPES) do
-                    if line:find(sh.pat) then
+                    if (sh.plain and line:find(sh.plain, 1, true)) or (sh.pat and line:find(sh.pat)) then
                         local reasoned = false
                         for i = math.max(1, ln - 2), ln do
                             if text.contains(lines[i] or "", "native-argv:") then reasoned = true; break end

@@ -61,6 +61,42 @@ function M.posix_shell(default)
     return GIT_BASH or default or "bash"
 end
 
+-- ORDER 2246-fkea. A path a native spawn can resolve, from whatever spelling a
+-- shell or the scratch door handed back: an MSYS drive path /c/x becomes C:/x
+-- (Git bash's $PWD and resolve_plan_binary answer that form, and a native
+-- CreateProcess cannot find it: "The system cannot find the path specified"),
+-- and a verbatim \\?\C:\x becomes C:/x (plain_path). Anything else is
+-- returned unchanged, so on Linux and macOS this is the identity: /c/x is
+-- only rewritten when the runner is native Windows (posix_shell() found
+-- Git's bash), because /c is a legal directory everywhere else.
+function M.native_path(p)
+    if type(p) ~= "string" then return p end
+    p = M.plain_path(p)
+    if M.posix_shell() ~= "bash" then  -- "bash" with no default = not native Windows
+        local drive, rest = p:match("^/(%a)/(.*)$")
+        if drive then return drive:upper() .. ":/" .. rest end
+        drive = p:match("^/(%a)$")
+        if drive then return drive:upper() .. ":/" end
+    end
+    return p
+end
+
+-- ORDER 2246-fkea. The plan binary for a fixture to spawn: the probe
+-- (scripts/plan-binary-probe.sh) run under posix_shell(), its answer joined
+-- to repo_root() when relative and made native with native_path(). "" when
+-- the probe resolves nothing. Never build "$PWD/..." inside the probe's
+-- shell: under Git bash that is /c/..., which a native spawn cannot resolve.
+function M.plan_binary()
+    local root = M.repo_root()
+    local r = proc.run{ argv = { M.posix_shell(), "-s" }, cwd = root, timeout_ms = 60000,
+        stdin = '. scripts/plan-binary-probe.sh\np="$(resolve_plan_binary 2>/dev/null)" || p=""\nprintf "%s" "$p"\n' }
+    local p = text.trim(r.stdout or "")
+    if p == "" then return "" end
+    if p:sub(1, 2) == "./" then p = root .. "/" .. p:sub(3)
+    elseif not (p:sub(1, 1) == "/" or p:find("^%a:[/\\]")) then p = root .. "/" .. p end
+    return M.native_path(p)
+end
+
 local SCRATCH = "target/plan-scratch"
 
 -- ORDER 2158-vrb7. scratch.mkdir returns a Windows verbatim path (\\?\C:\...).

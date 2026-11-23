@@ -14,6 +14,8 @@
 --   6 COMMENT   a shape inside a comment line is admitted
 --   7 STANDING  a shape already in the base is not re-litigated: the change
 --               edits THAT file, and only its own added line is judged
+--   9 PWD-JOIN  an added probe that joins "$PWD/${p#./}" in the shell is refused,
+--               naming plan_binary()
 --   8 NO-BASE   a base that does not exist (40 hex) is named base-unavailable,
 --               never judged ok as checked
 --
@@ -27,9 +29,7 @@ local T = fixture.new("lua-fixture-native-argv-added-fixture")
 local ROOT = fixture.repo_root()
 local GUARD = ROOT .. "/scripts/lua/check-lua-fixture-native-argv-added.lua"
 
-local probe = T:run{ fixture.posix_shell(), "-s", cwd = ROOT, timeout_ms = 60000,
-    stdin = '. scripts/plan-binary-probe.sh\np="$(resolve_plan_binary 2>/dev/null)" || p=""\ncase "$p" in ./*) p="$PWD/${p#./}" ;; esac\nprintf "%s" "$p"\n' }
-local PB = text.trim(probe.stdout or "")
+local PB = fixture.plan_binary()
 if PB == "" then T:refuse("no-plan-binary", "plan-binary-probe resolved nothing") end
 
 -- A scratch repo whose base commit holds `standing` (if any) under
@@ -99,5 +99,10 @@ T:arm("7 STANDING a shape already in the base is not judged; the change's clean 
 rc, o = judge("nobase", 'local r = proc.run{ argv = { "bash" } }\n', nil, string.rep("de", 20))  -- native-argv: fixture data
 T:arm("8 NO-BASE a missing 40-hex base is named base-unavailable, not judged",
     rc == 0 and o == "ok:lua-fixture-native-argv-added:base-unavailable", "rc=" .. rc .. " out=" .. o)
+
+rc, o, e = judge("pwdjoin", "local s = 'case \"$p\" in ./*) p=\"$PWD/${p#./}\" ;; esac'\n")  -- native-argv: fixture data
+T:arm("9 PWD-JOIN an added in-shell $PWD probe join is refused, naming plan_binary()",
+    rc == 1 and o == "violation:lua-fixture-native-argv-added:1" and text.contains(e, "plan_binary()"),
+    "rc=" .. rc .. " out=" .. o .. " err=" .. e)
 
 T:finish()
