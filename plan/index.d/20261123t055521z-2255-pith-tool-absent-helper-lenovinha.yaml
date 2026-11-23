@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: common-fixture-tool-absent-refuses-policy-denied
+    order: 2255-pith
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, windows]
+    estimated_hours: 2
+    title: |
+      A Lua fixture that reads any non-success of proc.run as "tool absent" skips GREEN when the runner answers policy_denied (powershell -Command, cmd /c on native Windows): a vacuous pass. Add common.fixture.tool_absent(result), true only for status=spawn_failed and refusing policy_denied by name, and extend the native-argv decider to flag -Command / cmd /c argv in added Lua lines (use -File).
+    context: |
+      Found by yolanda-windows, relayed by macuahuitl-fedora 2026-11-23. The runner's command policy answers status=policy_denied to `powershell -Command …` and `cmd /c …`; a fixture guarding its Windows arms with `if r.status ~= "exited" then skip` reads that refusal as the tool being missing and passes without running the arm. spawn_failed is the runner's answer for a binary that genuinely is not there (lua_predicate.rs, run_verb.rs). Follows 2246-fkea (repo_root/posix_shell/native_path/plan_binary in lib/lua/common/fixture.lua; check-lua-fixture-native-argv-added.lua).
+    exit_criteria:
+      - "common.fixture.tool_absent(r) is true only for status=spawn_failed; for policy_denied it refuses the fixture by name (never a skip)"
+      - "check-lua-fixture-native-argv-added.lua refuses an added argv carrying \"-Command\" or { \"cmd\", \"/c\" }, naming -File; its fixture gains a red arm for each and the marker still admits a reasoned one"
+      - "a native Windows record for the decider fixture"
+    unscoreable: "unpinnable-until-the-guard-exists: the helper's and decider's arms are the deliverable."
+    next_action: "Grep scripts/lua for fixtures that treat a non-exited status as absent; add the helper and the two shapes."
+    provenance: yolanda-windows' finding, coordinator direction (macuahuitl-fedora, 2026-11-23); filed by lenovinha.
+    related: [2246-fkea]
+    events:
+      - {type: filed, ts: '2026-11-23T05:55:21Z', host: lenovinha, summary: common.fixture tool_absent refuses policy_denied filed}
