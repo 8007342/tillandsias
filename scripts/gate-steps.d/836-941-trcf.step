@@ -12,4 +12,5 @@ STEP_DESC="Checking the plan fragment backlog against the compaction cadence (94
 STEP_LUA="scripts/lua/check-fragment-backlog.lua"
 STEP_ERROR="the fragment-backlog advisory could not run — that is a broken checkout, not a clean backlog"
 STEP_OK="Fragment-backlog advisory reported"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin advisory:fragment-backlog:7222>50 (advisory) at 1af8ff01c (fleet-run)"
 STEP_READS="scripts/lua/check-fragment-backlog.lua"

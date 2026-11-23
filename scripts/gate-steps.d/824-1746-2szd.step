@@ -10,4 +10,5 @@ STEP_DESC="Checking forge docs claim no browser the image does not ship (1746-2s
 STEP_LUA="scripts/lua/check-forge-skill-browser-claims-match-image.lua"
 STEP_ERROR="a forge doc claims a pre-installed browser the image does not install (1746-2szd) — see the claim lines above"
 STEP_OK="Forge browser-claim check passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin ok:forge-browser-claims:docs=294:claims=0:image-browsers=none at 1af8ff01c (fleet-run)"
 STEP_READS="scripts/lua/check-forge-skill-browser-claims-match-image.lua"
