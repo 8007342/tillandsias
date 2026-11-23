@@ -277,7 +277,6 @@ scripts/test-land-notice-names-unrun-litmus.sh
 scripts/test-land-push-bounded.sh
 scripts/test-land-queue.sh
 scripts/test-land-verdict-through-a-pipe.sh
-scripts/test-landed-but-open.sh
 scripts/test-ledger-node-claim-resolution.sh
 scripts/test-ledger-prose-roundtrip.sh
 scripts/test-ledger-ts-guard.sh
