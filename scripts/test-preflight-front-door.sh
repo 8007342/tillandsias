@@ -1,10 +1,21 @@
 #!/usr/bin/env bash
-# @trace order:1305-udgs
+# @trace order:1305-udgs, order:2272-cuxh
+# preflight: gate-only — it runs the door itself several times (825 s on lenovinha 2026-11-23)
 #
 # Each arm reproduces a defect this door actually had, measured on pirria
 # 2026-09-20. A front door is a thing people run instead of thinking, so every
 # way it can lie has to be pinned.
 set -uo pipefail
+# 2272-cuxh: 825 s on lenovinha, so a normal gate NAMES it not-run and the land
+# queue's --daily-full gate runs it. The switches are read ONCE and unset: the
+# doors below scan gate-steps.d, and would otherwise inherit them and start
+# this fixture inside itself.
+_fd_live="${TILLANDSIAS_FRONT_DOOR_LIVE:-0}"; _fd_inner="${FRONT_DOOR_SCRATCH:-}"
+unset TILLANDSIAS_FRONT_DOOR_LIVE FRONT_DOOR_SCRATCH
+if [ -z "$_fd_inner" ] && [ "$_fd_live" != 1 ]; then
+    echo "not-run:preflight-front-door — runs on the --daily-full gate; here: TILLANDSIAS_FRONT_DOOR_LIVE=1 bash scripts/test-preflight-front-door.sh (2272-cuxh)"
+    exit 0
+fi
 # 2272-cuxh: ROOT is where this script lives, not where the caller stands. From
 # a directory outside any repository (the 1401-x76w decider starts fixtures
 # there on purpose) the old `git rev-parse || pwd` made ROOT that directory and
@@ -27,7 +38,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; cd "$ROOT" || exit 1
 _exit_on_signal() {
     trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP; trap 'exit 141' PIPE
 }
-if [ -z "${FRONT_DOOR_SCRATCH:-}" ]; then
+if [ -z "$_fd_inner" ]; then
     SCR="$(mktemp -d "${TMPDIR:-/tmp}/front-door.XXXXXX")"
     sampler=""
     # 1600-nn5b: the worktree is removed on EVERY exit, not only after a normal
