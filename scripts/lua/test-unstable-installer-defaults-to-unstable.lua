@@ -37,7 +37,7 @@ local w = T:scratch()
 local BASEPATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 
 local function stage(src, dst) -- -> rc, stdout
-    local r = proc.run{ argv = { "bash", STAGE, w.abs .. "/" .. src, w.abs .. "/" .. dst },
+    local r = proc.run{ argv = { fixture.posix_shell(), STAGE, w.abs .. "/" .. src, w.abs .. "/" .. dst },
         env = { PATH = BASEPATH }, timeout_ms = 60000 }
     return (r.status == "exited") and r.code or -1, r.stdout or "", r.stderr or ""
 end
@@ -94,7 +94,7 @@ T:arm("F no stale bundle beside a rewritten installer", not scratch.exists(w.lea
 local function resolved(inst, channel)
     local argv = { "/usr/bin/env", "-u", "TILLANDSIAS_CHANNEL", "-u", "TILLANDSIAS_RELEASE_BASE", "-u", "TILLANDSIAS_VERSION" }
     if channel then argv[#argv + 1] = "TILLANDSIAS_CHANNEL=" .. channel end
-    for _, a in ipairs({ "TILLANDSIAS_INSTALL_RESOLVE_ONLY=1", "bash", w.abs .. "/" .. inst }) do argv[#argv + 1] = a end
+    for _, a in ipairs({ "TILLANDSIAS_INSTALL_RESOLVE_ONLY=1", fixture.posix_shell(), w.abs .. "/" .. inst }) do argv[#argv + 1] = a end
     local r = proc.run{ argv = argv, env = { PATH = BASEPATH }, timeout_ms = 30000 }
     return (r.stdout or "") .. (r.stderr or "")
 end

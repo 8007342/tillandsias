@@ -51,7 +51,7 @@ T:arm("0 each installer has both banner markers exactly once", true)
 
 local function bash(cut, env) -- -> combined output
     env.PATH = "/usr/bin:/bin"
-    local r = proc.run{ argv = { "bash", w.abs .. "/" .. cut }, env = env, timeout_ms = 30000 }
+    local r = proc.run{ argv = { fixture.posix_shell(), w.abs .. "/" .. cut }, env = env, timeout_ms = 30000 }
     return (r.stdout or "") .. (r.stderr or "")
 end
 local idir, unit = w.abs .. "/bin", w.abs .. "/tillandsias-swap@.service"

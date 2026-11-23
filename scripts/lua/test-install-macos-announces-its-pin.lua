@@ -68,7 +68,7 @@ local function run_block(body, pin)
     scratch.write(f, unset .. PRELUDE .. "if true; then\n" .. body .. "\nfi\n")
     local env = { PATH = "/usr/bin:/bin" }
     if pin then env.TILLANDSIAS_RELEASE_BASE = pin end
-    local r = proc.run{ argv = { "bash", w.abs .. "/h" .. n .. ".sh" }, env = env, timeout_ms = 30000 }
+    local r = proc.run{ argv = { fixture.posix_shell(), w.abs .. "/h" .. n .. ".sh" }, env = env, timeout_ms = 30000 }
     return (r.stdout or "") .. (r.stderr or "")
 end
 local PIN = "https://example.invalid/releases/download/v9.9.9.9"
