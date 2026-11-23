@@ -35,6 +35,11 @@
 --                  by side (NEGATIVE CONTROL: arm 13 can tell)
 --  15 PLAN-LANE    a plan-only diff prints route:plan-lane and selects no
 --                  fixture
+--  16 NO-DEADLOCK  (2256-mvmy) the same tree padded past the 64 KB pipe buffer
+--                  (as the real population is, ~80 KB): a serial row's `wait`
+--                  must not sit on the loop's own input. Before the fix the
+--                  run hung in do_wait with `tr` blocked in anon_pipe_write;
+--                  it must now finish inside a 3-minute deadline
 --
 -- Verdict: ok:gate-changed-intake:<n> arms | violation:gate-changed-intake:<n>-failed
 
@@ -255,6 +260,40 @@ do
     local r14, iv14 = run_tree(false, "serial-legacy.log")
     T:arm("14 POOL-CONTROL without --intake the inline pair runs side by side",
         overlap(iv14, "a", "b") == true, "a/b=" .. tostring(overlap(iv14, "a", "b")) .. " out=" .. (r14.stdout or ""):sub(1, 300))
+end
+
+-- 16: the scratch tree again, padded so its population exceeds a pipe buffer.
+do
+    local X = T:scratch("deadlock-tree")
+    local function w(rel, body) fs.write(X.rel .. "/" .. rel, body) end
+    proc.run{ argv = { "mkdir", "-p", X.abs .. "/scripts/gate-steps.d" } }
+    w("Cargo.toml", "[workspace]\nmembers = [\n]\n")
+    w("scripts/shared.txt", "x\n")
+    w("scripts/test-a.sh", '#!/usr/bin/env bash\ncat "$(dirname "$0")/../scripts/shared.txt" >/dev/null\nexit 0\n')
+    w("scripts/test-b.sh", '#!/usr/bin/env bash\ncat "$(dirname "$0")/../scripts/shared.txt" >/dev/null\nexit 0\n')
+    w("build.sh", 'if [[ "$FLAG_CHECK" == true ]]; then\n'
+        .. '    _step "Inline a..."\n    if ! _run bash "$SCRIPT_DIR/scripts/test-a.sh" 2>&1; then\n        _error "a"\n        exit 1\n    fi\n'
+        .. '    _step "Inline b..."\n    if ! _run bash "$SCRIPT_DIR/scripts/test-b.sh" 2>&1; then\n        _error "b"\n        exit 1\n    fi\n'
+        .. 'elif [[ "$FLAG_TEST$FLAG_CHECK" == x ]]; then\n    :\nfi\n')
+    local pad = string.rep("padding-so-the-population-outgrows-a-pipe-buffer ", 8)
+    -- One script per filler: the population keeps one row per (path,args), so
+    -- fillers sharing a script collapse into one row and the pipe never fills.
+    for i = 1, 260 do
+        w("scripts/test-filler-" .. i .. ".sh", "#!/usr/bin/env bash\nexit 0\n")
+        w(string.format("scripts/gate-steps.d/%03d-filler.step", 100 + i),
+            'STEP_DESC="filler ' .. i .. " " .. pad .. '"\nSTEP_SCRIPT="scripts/test-filler-' .. i .. '.sh"\n')
+    end
+    T:must{ "git", "init", "-q", X.abs }
+    T:must{ "git", "-C", X.abs, "add", "-A" }
+    T:must{ "git", "-C", X.abs, "-c", "user.email=f@f", "-c", "user.name=f", "-c", "commit.gpgsign=false", "commit", "-qm", "tree" }
+    fs.write(S.rel .. "/deadlock-changed", "scripts/shared.txt\n")
+    local t0 = time.now_ms()
+    local r = proc.run{ argv = { SH, GC, "--run", "--intake", "--files", S.abs .. "/deadlock-changed" }, cwd = X.abs,
+        timeout_ms = 180000, env = { TILLANDSIAS_GATE_CHANGED_ROOT = X.abs, GATE_CHANGED_JOBS = "4" } }
+    local o16 = r.stdout or ""
+    T:arm("16 NO-DEADLOCK a serial row's wait does not sit on the loop's own input (population > 64 KB)",
+        r.status == "exited" and r.code == 0 and first(o16, "ok:gate-changed:intake") ~= nil,
+        "status=" .. tostring(r.status) .. " rc=" .. tostring(r.code) .. " ms=" .. (time.now_ms() - t0) .. " out=" .. o16:sub(1, 200))
 end
 
 -- 15: a plan-only diff goes to the plan lane.

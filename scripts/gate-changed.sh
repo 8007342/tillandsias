@@ -626,6 +626,12 @@ _fx_one() { # _fx_one <n> <runner> <path> <args> <adv>
     echo "$(( $(_now) - _s ))" > "$_o.ms"; echo "$_rc" > "$_o.rc"
 }
 : > "$WORK/fx.order"; : > "$WORK/fx.serial"
+# 2256-mvmy: the loop reads a FILE, never a process substitution. A serial
+# row calls `wait`, and on the real tree (population > the 64 KB pipe buffer)
+# that wait sat on the `tr` feeding the loop while `tr` blocked writing to the
+# pipe only the waiting loop drains: measured on lenovinha, the intake run in
+# do_wait for 46 min with tr in anon_pipe_write and no fixture started.
+tr '\t' '\037' < "$WORK/pop" > "$WORK/pop.us"
 _fxs="$(_now)"
 while IFS=$'\037' read -r _id _runner _path _args _adv _desc _rest; do
     grep -qxF -- "$_id${_args:+ $_args}" "$WORK/fx-sel.ids" || continue
@@ -657,7 +663,7 @@ while IFS=$'\037' read -r _id _runner _path _args _adv _desc _rest; do
         _fx_wait_below "$_jobs"
         _fx_one "$_ran" "$_runner" "$_path" "$_args" "$_adv" &
     fi
-done < <(tr '\t' '\037' < "$WORK/pop")
+done < "$WORK/pop.us"
 wait
 if [ "$INTAKE" = 1 ]; then
     _sms=0; _sn=0
