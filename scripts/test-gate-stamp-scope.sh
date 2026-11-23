@@ -135,9 +135,9 @@ out="$(cd "$D/work" && printf 'packets: []\n' > plan/index.d/frag.yaml && printf
 rc=$?
 after="$(remote_head "$D")"
 [ "$rc" != 0 ] || fail "case 2: an out-of-scope push was ACCEPTED (this is the F5 silent-green risk)"
-printf '%s' "$out" | grep -q 'scoped to .plan-ledger.' || fail "case 2: refusal did not name the scope: $out"
-printf '%s' "$out" | grep -q 'rust' || fail "case 2: refusal did not name the missing class: $out"
-printf '%s' "$out" | grep -q 'build.sh --check' || fail "case 2: refusal did not print the rerun command: $out"
+grep -q 'scoped to .plan-ledger.' <<<"$out" || fail "case 2: refusal did not name the scope: $out"
+grep -q 'rust' <<<"$out" || fail "case 2: refusal did not name the missing class: $out"
+grep -q 'build.sh --check' <<<"$out" || fail "case 2: refusal did not print the rerun command: $out"
 [ "$before" = "$after" ] || fail "case 2: remote advanced despite the refusal"
 echo "ok: case 2 — scoped stamp refuses an out-of-scope push, naming the missing class"
 
@@ -150,7 +150,7 @@ out="$(cd "$D/work" && printf 'packets: []\n' > plan/index.d/frag.yaml && git ad
 rc=$?
 after="$(remote_head "$D")"
 [ "$rc" = 0 ] || fail "case 3: an in-scope push was refused: $out"
-printf '%s' "$out" | grep -q "scoped stamp 'plan-ledger' covers every outgoing change class" \
+grep -q "scoped stamp 'plan-ledger' covers every outgoing change class" <<<"$out" \
     || fail "case 3: acceptance did not announce the scope check: $out"
 [ "$before" != "$after" ] || fail "case 3: in-scope push did not advance the remote"
 echo "ok: case 3 — scoped stamp accepts a push inside its scope, loudly"
@@ -162,8 +162,8 @@ out="$(cd "$D/work" && printf 'pub fn edit() {}\n' >> crates/demo/lib.rs && git 
 rc=$?
 after="$(remote_head "$D")"
 [ "$rc" != 0 ] || fail "case 4: a legacy bare-digest stamp was ACCEPTED"
-printf '%s' "$out" | grep -q 'predates scope recording' || fail "case 4: refusal did not explain the migration: $out"
-printf '%s' "$out" | grep -q 'build.sh --check' || fail "case 4: refusal did not print the rerun command: $out"
+grep -q 'predates scope recording' <<<"$out" || fail "case 4: refusal did not explain the migration: $out"
+grep -q 'build.sh --check' <<<"$out" || fail "case 4: refusal did not print the rerun command: $out"
 [ "$before" = "$after" ] || fail "case 4: remote advanced on a legacy stamp"
 echo "ok: case 4 — a legacy v1 stamp refuses with migration guidance"
 
@@ -175,7 +175,7 @@ rc=$?
 after="$(remote_head "$D")"
 rm -f /tmp/.d5
 [ "$rc" != 0 ] || fail "case 5: an unknown scope class was ACCEPTED"
-printf '%s' "$out" | grep -q 'does not declare a usable scope' || fail "case 5: refusal was not the unusable-scope refusal: $out"
+grep -q 'does not declare a usable scope' <<<"$out" || fail "case 5: refusal was not the unusable-scope refusal: $out"
 [ "$before" = "$after" ] || fail "case 5: remote advanced on an unknown scope token"
 echo "ok: case 5 — an unknown scope token is treated as stale (fail closed)"
 
@@ -206,7 +206,7 @@ out="$(cd "$D/work" && printf 'packets: []\n' > plan/index.d/lane.yaml && git ad
 rc=$?
 after="$(remote_head "$D")"
 [ "$rc" = 0 ] || fail "case 7: plan-only lane broke under the new stamp handling: $out"
-printf '%s' "$out" | grep -q 'plan-only lane clean' || fail "case 7: lane did not accept: $out"
+grep -q 'plan-only lane clean' <<<"$out" || fail "case 7: lane did not accept: $out"
 [ "$before" != "$after" ] || fail "case 7: lane accepted but the remote did not advance"
 echo "ok: case 7 — the 668-2xeh plan-only lane is preserved intact"
 

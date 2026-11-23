@@ -121,13 +121,13 @@ if [ "${1:-}" = "--self-test" ]; then
     printf '#!/bin/sh\n'                                                                                    > "$TDIR/unstamped.sh"
     out="$(FRESHNESS_FIXTURE_DIR="$TDIR" "$0")"
     fail=0
-    echo "$out" | grep -q  '^freshness-stale: stale.sh '        || { echo "SELFTEST-FAIL: stale fixture not flagged stale"; fail=1; }
-    echo "$out" | grep -qv '^freshness-stale: fresh.sh '        || { echo "SELFTEST-FAIL: fresh fixture flagged stale"; fail=1; }
-    echo "$out" | grep -q  '^freshness-stale: boundary.sh '     && { echo "SELFTEST-FAIL: boundary fixture flagged stale (must be fresh at exactly threshold)"; fail=1; }
-    echo "$out" | grep -q  '^freshness-malformed: malformed.sh' || { echo "SELFTEST-FAIL: malformed date not surfaced"; fail=1; }
-    echo "$out" | grep -q  '^freshness-clock-skew: future.sh '  || { echo "SELFTEST-FAIL: future date not surfaced as clock skew"; fail=1; }
-    echo "$out" | grep -q  '^freshness-unstamped: unstamped.sh$' || { echo "SELFTEST-FAIL: unstamped fixture not distinct"; fail=1; }
-    echo "$out" | grep -qE '^freshness-coverage: [0-9]+\.[0-9]% \(5/6' || { echo "SELFTEST-FAIL: coverage not fractional 5/6"; fail=1; }
+    grep -q  '^freshness-stale: stale.sh '        <<<"$out" || { echo "SELFTEST-FAIL: stale fixture not flagged stale"; fail=1; }
+    grep -qv '^freshness-stale: fresh.sh '        <<<"$out" || { echo "SELFTEST-FAIL: fresh fixture flagged stale"; fail=1; }
+    grep -q  '^freshness-stale: boundary.sh '     <<<"$out" && { echo "SELFTEST-FAIL: boundary fixture flagged stale (must be fresh at exactly threshold)"; fail=1; }
+    grep -q  '^freshness-malformed: malformed.sh' <<<"$out" || { echo "SELFTEST-FAIL: malformed date not surfaced"; fail=1; }
+    grep -q  '^freshness-clock-skew: future.sh '  <<<"$out" || { echo "SELFTEST-FAIL: future date not surfaced as clock skew"; fail=1; }
+    grep -q  '^freshness-unstamped: unstamped.sh$' <<<"$out" || { echo "SELFTEST-FAIL: unstamped fixture not distinct"; fail=1; }
+    grep -qE '^freshness-coverage: [0-9]+\.[0-9]% \(5/6' <<<"$out" || { echo "SELFTEST-FAIL: coverage not fractional 5/6"; fail=1; }
     [ "$fail" -eq 0 ] && echo "freshness-selftest: PASS (5 fixtures + unstamped, threshold=${THRESHOLD_DAYS}d)" || exit 1
     exit 0
 fi
