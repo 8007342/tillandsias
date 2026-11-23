@@ -28,6 +28,13 @@
 --  11 BUILD-MACH   the same diff plus one non-block line (a variable) stays
 --                  heavy:guard:build.sh
 --  12 BUILD-LEGACY without --intake the block-only diff is still select:all
+--  13 SERIAL       (2256-mvmy) in a scratch tree, two inline build.sh fixtures
+--                  and a STEP_SERIAL step never overlap under --intake --run,
+--                  and a phase:serial-fixtures line counts them (3)
+--  14 POOL-CONTROL the same tree without --intake runs the inline pair side
+--                  by side (NEGATIVE CONTROL: arm 13 can tell)
+--  15 PLAN-LANE    a plan-only diff prints route:plan-lane and selects no
+--                  fixture
 --
 -- Verdict: ok:gate-changed-intake:<n> arms | violation:gate-changed-intake:<n>-failed
 
@@ -187,5 +194,76 @@ T:arm("11 BUILD-MACH one non-block line keeps build.sh a guard (heavy)",
 rc, o = gc_env({ "--list", "--files", BONLY }, { TILLANDSIAS_GATE_CHANGED_BUILD_DIFF = diff_file("bd-legacy", {}) })
 T:arm("12 BUILD-LEGACY without --intake a block-only build.sh diff is still select:all",
     rc == 0 and first(o, "select:all reason=guard:build.sh") ~= nil, "rc=" .. rc .. " " .. (first(o, "") or ""))
+
+-- 13-14: a scratch tree whose fixtures log their own start/end.
+do
+    local X = T:scratch("serial-tree")
+    local function w(rel, body) fs.write(X.rel .. "/" .. rel, body) end
+    proc.run{ argv = { "mkdir", "-p", X.abs .. "/scripts/gate-steps.d" } }
+    w("Cargo.toml", "[workspace]\nmembers = [\n]\n")
+    w("scripts/shared.txt", "x\n")
+    local function fx(name)
+        w("scripts/test-" .. name .. ".sh", table.concat({
+            "#!/usr/bin/env bash", 'cat "$(dirname "$0")/../scripts/shared.txt" >/dev/null',
+            'echo "start ' .. name .. ' $(date +%s%N)" >> "$SERIAL_LOG"', "sleep 1",
+            'echo "end ' .. name .. ' $(date +%s%N)" >> "$SERIAL_LOG"', "exit 0", "" }, "\n"))
+    end
+    for _, n in ipairs({ "a", "b", "c", "d" }) do fx(n) end
+    local blk = {}
+    for _, n in ipairs({ "a", "b" }) do
+        blk[#blk + 1] = '    _step "Inline ' .. n .. '..."'
+        blk[#blk + 1] = '    if ! _run bash "$SCRIPT_DIR/scripts/test-' .. n .. '.sh" 2>&1; then'
+        blk[#blk + 1] = '        _error "' .. n .. '"'
+        blk[#blk + 1] = "        exit 1"
+        blk[#blk + 1] = "    fi"
+    end
+    w("build.sh", 'if [[ "$FLAG_CHECK" == true ]]; then\n' .. table.concat(blk, "\n")
+        .. '\nelif [[ "$FLAG_TEST$FLAG_CHECK" == x ]]; then\n    :\nfi\n')
+    w("scripts/gate-steps.d/100-c.step", 'STEP_DESC="c"\nSTEP_SCRIPT="scripts/test-c.sh"\nSTEP_SERIAL="planted serial step"\n')
+    w("scripts/gate-steps.d/110-d.step", 'STEP_DESC="d"\nSTEP_SCRIPT="scripts/test-d.sh"\n')
+    T:must{ "git", "init", "-q", X.abs }
+    T:must{ "git", "-C", X.abs, "add", "-A" }
+    T:must{ "git", "-C", X.abs, "-c", "user.email=f@f", "-c", "user.name=f", "-c", "commit.gpgsign=false", "commit", "-qm", "tree" }
+    fs.write(S.rel .. "/serial-changed", "scripts/shared.txt\n")
+    local function run_tree(intake, logname)
+        fs.write(S.rel .. "/" .. logname, "")
+        local argv = { SH, GC, "--run" }
+        if intake then argv[#argv + 1] = "--intake" end
+        argv[#argv + 1] = "--files"; argv[#argv + 1] = S.abs .. "/serial-changed"
+        local r = proc.run{ argv = argv, cwd = X.abs, timeout_ms = 300000,
+            env = { TILLANDSIAS_GATE_CHANGED_ROOT = X.abs, SERIAL_LOG = S.abs .. "/" .. logname, GATE_CHANGED_JOBS = "4" } }
+        local iv = {}
+        for _, l in ipairs(text.lines(fs.read(S.rel .. "/" .. logname) or "")) do
+            local k, n, t = l:match("^(%a+) (%a) (%d+)$")
+            if k then iv[n] = iv[n] or {}; iv[n][k] = tonumber(t) end
+        end
+        return r, iv
+    end
+    local function overlap(iv, a, b)
+        local x, y = iv[a], iv[b]
+        if not (x and y and x.start and x["end"] and y.start and y["end"]) then return nil end
+        return x.start < y["end"] and y.start < x["end"]
+    end
+    local r13, iv13 = run_tree(true, "serial-intake.log")
+    local o13 = (r13.stdout or "")
+    local sline = first(o13, "phase:serial-fixtures") or ""
+    T:arm("13 SERIAL inline fixtures and a STEP_SERIAL step never overlap at intake",
+        overlap(iv13, "a", "b") == false and overlap(iv13, "a", "c") == false and overlap(iv13, "b", "c") == false
+            and sline:find(" n=3", 1, true) ~= nil,
+        "a/b=" .. tostring(overlap(iv13, "a", "b")) .. " a/c=" .. tostring(overlap(iv13, "a", "c"))
+            .. " b/c=" .. tostring(overlap(iv13, "b", "c")) .. " " .. sline .. " out=" .. o13:sub(1, 300))
+    local r14, iv14 = run_tree(false, "serial-legacy.log")
+    T:arm("14 POOL-CONTROL without --intake the inline pair runs side by side",
+        overlap(iv14, "a", "b") == true, "a/b=" .. tostring(overlap(iv14, "a", "b")) .. " out=" .. (r14.stdout or ""):sub(1, 300))
+end
+
+-- 15: a plan-only diff goes to the plan lane.
+local PLANONLY = changes("plan-only", { "plan/index.d/README.md" })
+rc, o = gc{ "--list", "--intake", "--files", PLANONLY }
+local _, ro = gc_env({ "--run", "--intake", "--files", PLANONLY }, {})
+T:arm("15 PLAN-LANE a plan-only diff routes to the plan lane and selects no fixture",
+    first(ro, "route:plan-lane") ~= nil and count(ro, "ok:gate-changed:fixture:") == 0
+        and (first(ro, "ok:gate-changed:intake:plan-lane") ~= nil or first(ro, "fail:gate-changed:intake:plan-lane") ~= nil),
+    "out=" .. ro:sub(1, 400))
 
 T:finish()
