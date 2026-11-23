@@ -24,7 +24,8 @@
 -- Usage: tillandsias-plan script run scripts/lua/test-preflight-stale-plan-binary.lua
 -- Verdict: ok:preflight-stale-plan-binary:<p>/<n> | violation:preflight-stale-plan-binary:<p>/<n>
 
-local root = text.trim(proc.run({ argv = { "git", "rev-parse", "--show-toplevel" }, timeout_ms = 30000 }).stdout or "")
+local fixture = require "common.fixture"
+local root = fixture.repo_root()
 local pass, fail = 0, 0
 local function ok(m) out.line("ok:   " .. m); pass = pass + 1 end
 local function bad(m) out.line("FAIL: " .. m); fail = fail + 1 end
@@ -63,7 +64,7 @@ mkstub("mute", "exit 2")
 mkstub("cargo", "exit 101")
 
 local function run(bin)
-    local r = proc.run({ argv = { "bash", W .. "/block.sh", root }, timeout_ms = 120000,
+    local r = proc.run({ argv = { fixture.posix_shell(), W .. "/block.sh", root }, timeout_ms = 120000,
         env = { PATH = env.get("PATH"), HOME = env.get("HOME"),
                 TILLANDSIAS_PREFLIGHT_CARGO = W .. "/cargo", TILLANDSIAS_PLAN_BIN = bin } })
     return r.code, (r.stdout or "") .. (r.stderr or "")
