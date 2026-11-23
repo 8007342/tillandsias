@@ -1316,6 +1316,18 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
     if [ "$_grc" -eq 1 ] && [ "$_lane" = full ] && ! grep -q '^flaky:' "$_glog" 2>/dev/null; then
         _ftests="$(grep -E '^[[:space:]]*(FAIL|\[FAIL\]|refused:|violation:|blocked:)' "$_glog" 2>/dev/null \
                    | grep -oE 'scripts/[A-Za-z0-9_./-]+\.(sh|lua)|litmus:[A-Za-z0-9_-]+' | sort -u)"
+        # ORDER 2277-7trt: red-twice:<test file>:... is the step runner saying it ran
+        # that step twice on this tree and both were red (2276-5pzy). Its test joins
+        # the named ones, and when EVERY named test is one of those the re-run below
+        # would spend a gate on a question already answered twice. The trunk-red
+        # check after it still runs.
+        _rtwice=""
+        while IFS= read -r _rb; do
+            [ -n "$_rb" ] || continue
+            _rtwice="$_rtwice$(git ls-files -- "scripts/$_rb" "scripts/lua/$_rb" | head -n 1)"$'\n'
+        done <<< "$(sed -n 's/^red-twice:\([A-Za-z0-9_.-]*\):.*/\1/p' "$_glog" 2>/dev/null | sort -u)"
+        _rtwice="$(grep . <<<"$_rtwice")"
+        _ftests="$(printf '%s\n%s\n' "$_ftests" "$_rtwice" | grep . | sort -u)"
         _fdiff="$(git diff --name-only "$base_sha" "$merge_sha" 2>/dev/null)"
         _touched=0
         if [ -n "$_ftests" ]; then
@@ -1328,14 +1340,18 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
             done <<< "$_ftests"
             if [ "$_touched" -eq 0 ]; then
                 _flaky_test="$(head -n 1 <<<"$_ftests")"
-                say "land-queue: #$num red in $_flaky_test, which its diff does not touch — re-running the gate once on the identical tree"
-                ( _gate_clean_env; eval "$_gcmd" ) < /dev/null > "$_glog.rerun" 2>&1
-                _grc=$?
+                if [ -n "$_rtwice" ] && [ -z "$(grep -vxF -- "$_rtwice" <<<"$_ftests")" ]; then
+                    say "land-queue: #$num red-twice in $_flaky_test, already run twice on this tree — not re-running the gate"
+                else
+                    say "land-queue: #$num red in $_flaky_test, which its diff does not touch — re-running the gate once on the identical tree"
+                    ( _gate_clean_env; eval "$_gcmd" ) < /dev/null > "$_glog.rerun" 2>&1
+                    _grc=$?
+                fi
                 if [ "$_grc" -eq 0 ]; then
                     say "flaky:$_flaky_test — #$num red then green on the identical tree ${merge_sha:0:9}; landing"
                     mv -f "$_glog" "$_glog.first-red"
                 else
-                    mv -f "$_glog.rerun" "$_glog"
+                    [ ! -e "$_glog.rerun" ] || mv -f "$_glog.rerun" "$_glog"
                     # ORDER 2118-tpmy: RED TWICE. Is it the trunk's red? The bare
                     # trunk is gated once per base; the same failing test there
                     # holds the queue instead of evicting a candidate for it.
@@ -1351,8 +1367,8 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
                             git checkout -q --detach "$merge_sha" 2>/dev/null
                             _tr_verdict="green"
                             if [ "$_trc" -ne 0 ] \
-                               && grep -E '^[[:space:]]*(FAIL|\[FAIL\]|refused:|violation:|blocked:)' "$_glog.trunk" 2>/dev/null \
-                                  | grep -qF -- "$_flaky_test"; then
+                               && grep -qF -e "$_flaky_test" -e "red-twice:${_flaky_test##*/}:" \
+                                  <<<"$(grep -E '^[[:space:]]*(FAIL|\[FAIL\]|refused:|violation:|blocked:|red-twice:)' "$_glog.trunk" 2>/dev/null)"; then
                                 _tr_verdict="red $_flaky_test"
                             fi
                             printf '%s %s\n' "$base_sha" "$_tr_verdict" > "$TRUNK_RED_MEMO" 2>/dev/null || true
