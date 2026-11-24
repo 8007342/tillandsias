@@ -847,7 +847,7 @@ bundle_log() { # <base> <union> <result> <gate_s>; try_batch's nums/heavy_n/t_id
     case "$3" in
         landed:*) _v=green; _p="${3#landed:}" ;;
         green:*) _v=green ;;
-        red:rc=1) _v=red ;;
+        red:rc=1|red:rc=1:*) _v=red ;;
         red:*) _v=aborted ;;
         *) _v=abandoned ;;
     esac
@@ -862,11 +862,141 @@ train_log() { # <members> <base> <union> <result> <gate_s>
         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "${2:0:9}" "${3:0:9}" "$4" "$5" >> "$TRAIN_LOG" 2>/dev/null || true
     bundle_log "$2" "$3" "$4" "$5"
 }
+# ── TRAIN DIAGNOSIS (2289-bxzm, bundle landing phase 1): WHOSE RED IS IT, BY FAILING STEP ──
+# A red train used to cost one whole gate per member. Now the steps the gate log NAMES
+# are re-run alone: on the identical union (green = flake), on the bare trunk (red =
+# trunk-red, and only the whole bare-trunk gate confirms it, as for a single), then on
+# the per-member merge commits in order; the first red names the culprit. A train still
+# evicts nobody: the culprit leaves it and its OWN gate judges it, and the rest (or, for
+# a flake, the same members) ride ONE more train. Anything not judged alone (an unnamed
+# red, a litmus, a step neither red nor green) falls back to one at a time, as before.
+TRAIN_DIAGNOSE="${TILLANDSIAS_LAND_QUEUE_TRAIN_DIAGNOSE:-1}"
+TRAIN_STEP_S="${TILLANDSIAS_LAND_QUEUE_TRAIN_STEP_S:-900}"
+_train_try=1; _train_drop=" "; _train_again=0
+
+# trunk_red <base> <checkout back to> <test> <gate cmd> <log>: rc 0 when the BARE trunk's
+# whole gate names the same test red. One gate per base, remembered (2118-tpmy).
+trunk_red() {
+    local memo v trc
+    [ "$TRUNK_RED_CHECK" = 1 ] || return 1
+    memo="$(cat "$TRUNK_RED_MEMO" 2>/dev/null)"
+    if [ "${memo%% *}" = "$1" ]; then v="${memo#* }"
+    else
+        git checkout -q --detach "$1" 2>/dev/null
+        ( _gate_clean_env; eval "$4" ) < /dev/null > "$5" 2>&1; trc=$?
+        git checkout -q --detach "$2" 2>/dev/null
+        v=green
+        if [ "$trc" -ne 0 ] \
+           && grep -qF -e "$3" -e "red-twice:${3##*/}:" \
+              <<<"$(grep -E '^[[:space:]]*(FAIL|\[FAIL\]|refused:|violation:|blocked:|red-twice:|red-script:)' "$5" 2>/dev/null)"; then
+            v="red $3"
+        fi
+        printf '%s %s\n' "$1" "$v" > "$TRUNK_RED_MEMO" 2>/dev/null || true
+        rm -f "$5"
+    fi
+    [ "$v" = "red $3" ]
+}
+# gate_named_steps <gate log>: "<path>" or "<path> twice" per step the log names red.
+# The gate's own `red-script:<path>` (build.sh _error) decides, the LAST one: earlier ones
+# can be a nested gate inside a passing fixture. Only without one is the old guess read.
+gate_named_steps() {
+    local rb last
+    last="$(sed -n "s/^red-script:\(scripts\/[A-Za-z0-9_.\/-]*\)$/\1/p" "$1" 2>/dev/null | tail -n 1)"
+    if [ -n "$last" ]; then
+        if grep -qF "red-twice:${last##*/}:" "$1"; then echo "$last twice"; else echo "$last"; fi
+        return
+    fi
+    { grep -E '^[[:space:]]*(FAIL|\[FAIL\]|refused:|violation:|blocked:)' "$1" 2>/dev/null \
+          | grep -oE 'scripts/[A-Za-z0-9_./-]+\.(sh|lua)|litmus:[A-Za-z0-9_-]+'
+      sed -n 's/^red-twice:\([A-Za-z0-9_.-]*\):.*/\1/p' "$1" 2>/dev/null | while IFS= read -r rb; do
+          git ls-files -- "scripts/$rb" "scripts/lua/$rb" | sed -n 's/$/ twice/; 1p'
+      done
+    } | sort -r | awk '!s[$1]++'
+}
+# train_step_cmd <test>: how THE GATE runs it, as a command line; rc 1 when it does not.
+# A log line can name any script and some are actors, so only a test-*/check-* that this
+# tree's gate itself runs (one step file, or an inline call) is ever executed.
+train_step_cmd() {
+    local f hit="" n=0
+    [[ "$1" =~ ^scripts/(lua/)?(test|check)-[A-Za-z0-9_.-]+\.(sh|lua)$ ]] || return 1
+    for f in scripts/gate-steps.d/*.step; do
+        [ -f "$f" ] || continue
+        if grep -qxE "STEP_(SCRIPT|LUA)=\"${1//./\\.}\"" "$f"; then hit="$f"; n=$((n + 1)); fi
+    done
+    if [ "$n" -eq 1 ]; then
+        f="${hit##*/}"; printf './build.sh --gate-steps . --gate-step %s' "${f%%-*}"; return 0
+    fi
+    [ "$n" -eq 0 ] || return 1
+    grep -qE "^[^#]*(_run bash|_run_lua_decider) \"(\\\$SCRIPT_DIR/)?${1//./\\.}\"" build.sh 2>/dev/null || return 1
+    case "$1" in *.lua) printf '"$PLAN" script run %s' "$1" ;; *) printf 'bash %s' "$1" ;; esac
+}
+# train_step <tree> <test> <log> <tests absent here are: green|unjudged> -> green|red|unjudged
+train_step() {
+    local cmd rc key
+    git checkout -q --detach "$1" 2>/dev/null || { echo unjudged; return; }
+    [ -e "$2" ] || { echo "$4"; return; }
+    cmd="$(train_step_cmd "$2")" || { echo unjudged; return; }
+    # the plan binary runs every Lua step: it must be this tree's
+    if [ -n "$PLAN_REFRESH" ]; then
+        key="$(plan_refresh_key)" || key=""
+        if [ -z "$key" ] || [ "$key" != "$(cat "$PLAN_REFRESH_STAMP" 2>/dev/null)" ]; then
+            ( eval "$PLAN_REFRESH" ) < /dev/null > "$3.refresh" 2>&1 || { echo unjudged; return; }
+            if key="$(plan_refresh_key)"; then printf '%s\n' "$key" > "$PLAN_REFRESH_STAMP" 2>/dev/null || true; fi
+        fi
+    fi
+    command -v timeout >/dev/null 2>&1 && cmd="timeout $TRAIN_STEP_S $cmd"
+    ( _gate_clean_env; eval "$cmd" ) < /dev/null > "$3" 2>&1; rc=$?
+    case "$rc" in 0) echo green ;; 1) echo red ;; *) echo unjudged ;; esac
+}
+# train_diagnose <gate log>: sets _td (flaky | trunk-red=<test> | culprit=#a,#b | unjudged:<why>)
+# and _td_drop. try_batch's base/union/nums/ids are in scope. Leaves HEAD on the union.
+train_diagnose() {
+    local t twice v i k="" steps n=0 red=0 log="$_RUNDIR/train-step"
+    local -a chain=()
+    _td=""; _td_drop=""
+    steps="$(gate_named_steps "$1")"
+    [ -n "$steps" ] || { _td=unjudged:no-step-named; return; }
+    [ "$(grep -c . <<<"$steps")" -le 6 ] || { _td=unjudged:too-many-steps; return; }
+    while IFS= read -r t; do chain+=("$t"); done < <(git rev-list --first-parent --reverse "$base..$union")
+    [ "${#chain[@]}" -eq "${#nums[@]}" ] || { _td=unjudged:chain-is-not-one-merge-per-member; return; }
+    while IFS=' ' read -r t twice; do
+        n=$((n + 1))
+        _lq_phase "${nums[0]}" train "train-diagnose:$t" "$ids"
+        v="$(train_step "$union" "$t" "$log-$n-union.log" unjudged)"
+        [ "$v" != unjudged ] || { _td="unjudged:$t"; break; }
+        if [ "$v" = green ] && [ -z "$twice" ]; then say "train:step:$t union=green on a re-run"; continue; fi
+        # red-twice then green alone is not a flake to wave through, nor a step that bisects
+        [ "$v" = red ] || { _td="unjudged:$t:red-twice-in-the-gate-green-alone"; break; }
+        red=1
+        v="$(train_step "$base" "$t" "$log-$n-base.log" green)"
+        if [ "$v" = red ]; then
+            if trunk_red "$base" "$union" "$t" "$GATE" "$log-$n-trunk-gate.log"; then _td="trunk-red=$t"
+            else _td="unjudged:$t:red-alone-on-trunk-but-not-in-its-gate"; fi
+            break
+        fi
+        [ "$v" = green ] || { _td="unjudged:$t:base"; break; }
+        k=""
+        for i in "${!chain[@]}"; do
+            if [ "$i" -eq $((${#chain[@]} - 1)) ]; then v=red  # the union: already red
+            else v="$(train_step "${chain[$i]}" "$t" "$log-$n-member-$i.log" green)"; fi
+            case "$v" in
+                red) k="$i"; break ;;
+                unjudged) _td="unjudged:$t:#${nums[$i]}"; break 2 ;;
+            esac
+        done
+        say "train:step:$t base=green first-red=#${nums[$k]}"
+        case " $_td_drop" in *" ${nums[$k]} "*) ;; *) _td_drop="$_td_drop${nums[$k]} " ;; esac
+    done <<< "$steps"
+    git checkout -q --detach "$union" 2>/dev/null
+    if [ -n "$_td" ]; then _td_drop=""; return; fi
+    if [ "$red" -eq 0 ]; then _td=flaky
+    else _td="culprit=#$(printf '%s' "${_td_drop% }" | sed 's/ /,#/g')"; fi
+}
 try_batch() {
     [ "$BATCH_K" -ge 2 ] 2>/dev/null || return 0
     [ "$DRY_RUN" -eq 1 ] && return 0
     local base union n h hs lm mb pre ids="" carried="" out err rc key t0 gs c now
-    local heavy_n=0 heavy_cap=0 tier t_id; t_id="train-$(date +%s)"
+    local heavy_n=0 heavy_cap=0 tier t_id; t_id="train-$(date +%s)"; [ "$_train_try" -eq 1 ] || t_id="$t_id-2"
     local -a nums=() heads=() parents=()
     git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null || return 0
     base="$(git rev-parse "$REMOTE/$TRUNK" 2>/dev/null)" || return 0
@@ -874,6 +1004,7 @@ try_batch() {
     while IFS=$'\t' read -r n h; do
         [ -n "$n" ] || continue
         [ "${#nums[@]}" -lt "$BATCH_K" ] || break
+        case "$_train_drop" in *" $n "*) continue ;; esac
         [[ "$h" =~ $WORK_RE ]] || continue
         git fetch -q "$REMOTE" "$h" 2>/dev/null || continue
         hs="$(git rev-parse FETCH_HEAD)"
@@ -962,8 +1093,22 @@ try_batch() {
     ( _gate_clean_env; eval "$GATE" ) < /dev/null > "$_RUNDIR/train-gate.log" 2>&1; rc=$?
     gs=$((SECONDS - t0))
     if [ "$rc" -ne 0 ]; then
-        say "train:red:rc=$rc — nobody is evicted by a train; members $ids go one at a time (log: $_RUNDIR/train-gate.log)"
-        train_log "$ids" "$base" "$union" "red:rc=$rc" "$gs"
+        _td=""
+        if [ "$rc" -eq 1 ] && [ "$_train_try" -eq 1 ] && [ "$TRAIN_DIAGNOSE" = 1 ]; then train_diagnose "$_RUNDIR/train-gate.log"; cp -f "$_RUNDIR/train-gate.log" "$_RUNDIR/train-gate-1.log" 2>/dev/null; fi
+        case "$_td" in
+            trunk-red=*)
+                say "hold:trunk-red:${_td#trunk-red=} — trunk ${base:0:9} fails it too; no member of $ids is evicted; the queue holds until trunk is fixed (log: $_RUNDIR/train-gate.log)"
+                _held=1 ;;
+            flaky)
+                say "train:red:flaky — every named step is green on the identical union; members $ids ride one more train"
+                _train_again=1 ;;
+            culprit=*)
+                say "train:red:$_td — it leaves the train and its own gate judges it; the rest ride one more train"
+                _train_drop="$_train_drop$_td_drop"; _train_again=1 ;;
+            *)
+                say "train:red:rc=$rc${_td:+:$_td} — nobody is evicted by a train; members $ids go one at a time (log: $_RUNDIR/train-gate.log)" ;;
+        esac
+        train_log "$ids" "$base" "$union" "red:rc=$rc${_td:+:$_td}" "$gs"
         git checkout -q --detach "$base" 2>/dev/null
         return 0
     fi
@@ -1019,8 +1164,10 @@ try_batch() {
     return 0
 }
 try_batch
+if [ "$_train_again" -eq 1 ] && [ "$_held" -eq 0 ]; then _train_try=2; try_batch; fi
 
 for _pass in 1 2; do
+[ "$_held" -eq 0 ] || break  # a train found the trunk red
 if [ "$_pass" -eq 2 ]; then
     [ -n "$_deferred" ] || break
     _p2="$_deferred"; _deferred=""
@@ -1452,26 +1599,7 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
                     # trunk is gated once per base; the same failing test there
                     # holds the queue instead of evicting a candidate for it.
                     _trunk_red=""
-                    if [ "$TRUNK_RED_CHECK" = 1 ]; then
-                        _memo="$(cat "$TRUNK_RED_MEMO" 2>/dev/null)"
-                        if [ "${_memo%% *}" = "$base_sha" ]; then
-                            _tr_verdict="${_memo#* }"
-                        else
-                            git checkout -q --detach "$base_sha" 2>/dev/null
-                            ( _gate_clean_env; eval "$_gcmd" ) < /dev/null > "$_glog.trunk" 2>&1
-                            _trc=$?
-                            git checkout -q --detach "$merge_sha" 2>/dev/null
-                            _tr_verdict="green"
-                            if [ "$_trc" -ne 0 ] \
-                               && grep -qF -e "$_flaky_test" -e "red-twice:${_flaky_test##*/}:" \
-                                  <<<"$(grep -E '^[[:space:]]*(FAIL|\[FAIL\]|refused:|violation:|blocked:|red-twice:)' "$_glog.trunk" 2>/dev/null)"; then
-                                _tr_verdict="red $_flaky_test"
-                            fi
-                            printf '%s %s\n' "$base_sha" "$_tr_verdict" > "$TRUNK_RED_MEMO" 2>/dev/null || true
-                            rm -f "$_glog.trunk"
-                        fi
-                        [ "$_tr_verdict" = "red $_flaky_test" ] && _trunk_red="$_flaky_test"
-                    fi
+                    trunk_red "$base_sha" "$merge_sha" "$_flaky_test" "$_gcmd" "$_glog.trunk" && _trunk_red="$_flaky_test"
                     if [ -n "$_trunk_red" ]; then
                         shadow_note "$num" "$_sh_base" "$head_sha" trunk-red single
                         say "hold:trunk-red:$_trunk_red — trunk ${base_sha:0:9} fails it too; #$num is not evicted; the queue holds until trunk is fixed (full log: $_glog)"

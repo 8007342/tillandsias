@@ -464,7 +464,14 @@ NC='\033[0m'
 
 _info()  { [[ "${FLAG_GRAPHS:-false}" == true ]] || echo -e "${GREEN}[build]${NC} $*"; }
 _warn()  { [[ "${FLAG_GRAPHS:-false}" == true ]] || echo -e "${YELLOW}[build]${NC} $*"; }
-_error() { echo -e "${RED}[build]${NC} $*" >&2; }
+# ORDER 2289-bxzm: a refusing caller says _error right after its _run, so the script that
+# exited 1 is named ONCE, on its own line, as red-script:<path> (an advisory caller warns
+# instead and prints nothing). The land queue re-runs that one step to judge a red train.
+_RED_SCRIPT=""
+_error() {
+    if [ -n "$_RED_SCRIPT" ]; then echo "red-script:$_RED_SCRIPT" >&2; _RED_SCRIPT=""; fi
+    echo -e "${RED}[build]${NC} $*" >&2
+}
 # ORDER 1515-iwb3 (1247-amcu): a refusal says the rule that refused and what
 # clears it, in the fleet's why/remedy shape.
 _afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
@@ -3093,9 +3100,15 @@ fi
 # construction, and a broken clock can only mis-add, never fail the step.
 _run() {
     _require_host_build_tools
-    local _run_t0 _run_rc=0 _run_dt
+    local _run_t0 _run_rc=0 _run_dt _run_a
+    _RED_SCRIPT=""
     _run_t0="$(_now_ms)"
     (cd "$SCRIPT_DIR" && "$@") || _run_rc=$?
+    if [ "$_run_rc" -eq 1 ]; then
+        for _run_a in "$@"; do
+            case "$_run_a" in "$SCRIPT_DIR"/scripts/*.sh|"$SCRIPT_DIR"/scripts/*.lua) _RED_SCRIPT="${_run_a#"$SCRIPT_DIR"/}"; break ;; esac
+        done
+    fi
     # ORDER 1176-fn2p — A CHILD THAT DIED ON A SIGNAL IS ASKED ABOUT, ONCE.
     #
     # 128+N is a signal death, and 137 (SIGKILL) is what the OOM killer leaves.
