@@ -7082,7 +7082,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _error "a litmus step named for a mutation performs none (1059-pb2j) — rename it to what it asserts; see the verdict line above"
         exit 1
     fi
-    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-mutation-arm-guard.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-litmus-mutation-arm-guard.lua" 2>&1; then
         _error "the mutation-arm guard lost a control (1059-pb2j) — see the verdict line above"
         exit 1
     fi
