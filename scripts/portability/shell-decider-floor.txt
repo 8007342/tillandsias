@@ -242,7 +242,6 @@ scripts/test-inference-mkdir-fatal-1183-j9dk.sh
 scripts/test-initialize-bare-metal-host-idempotent.sh
 scripts/test-install-path.sh
 scripts/test-installer-probes-by-attempt-not-by-help.sh
-scripts/test-installer-reports-wsl-guest-shape.sh
 scripts/test-installers-quiet-progress.sh
 scripts/test-join-the-fleet-idempotent.sh
 scripts/test-jq-multiline-capture.sh
