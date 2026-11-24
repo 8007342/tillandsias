@@ -350,8 +350,6 @@ scripts/test-reopen-is-history-not-loss.sh
 scripts/test-requirement-ids.sh
 scripts/test-reset-flags-are-accepted.sh
 scripts/test-reset-state-contract.sh
-scripts/test-resolve-open-pr.sh
-scripts/test-resolve-release-run.sh
 scripts/test-resumable-claim-dirt.sh
 scripts/test-run-verb-agent-door.sh
 scripts/test-running-image-freshness.sh
@@ -397,7 +395,6 @@ scripts/test-ssh-lane-sidecar.sh
 scripts/test-status-channel-absent-is-first-class.sh
 scripts/test-stranded-plan-writes.sh
 scripts/test-subdomain-routing.sh
-scripts/test-summarize-pubspec.sh
 scripts/test-sync-image-cheatsheets-for-commit.sh
 scripts/test-timing-clock-resolution.sh
 scripts/test-timing-record-carries-reproduced.sh
