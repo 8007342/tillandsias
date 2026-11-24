@@ -158,6 +158,10 @@ _last_word() {
 
 checked=0; refused=0
 while IFS= read -r f; do
+    # A case `*` matches `/`, so scripts/test-support/podman-mock.sh, a helper that
+    # exits 97 when run bare, read as a red fixture (2297-vrsa). Only files directly
+    # in the two directories are fixtures.
+    case "$f" in scripts/test-*/*|scripts/lua/test-*/*) continue ;; esac
     case "$f" in scripts/test-*.sh) kind=sh ;; scripts/lua/test-*.lua) kind=lua ;; *) continue ;; esac
     [ -f "$ROOT/$f" ] || continue
     # Its own fixture drives copies of this decider in scratch repos; running it
