@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: move-inline-check-blocks-to-gate-step-files-batch-5
+    order: 2291-ungn
+    status: ready
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      Move the next ten slowest movable inline --check blocks out of build.sh into gate-step files (batch 5).
+    context: |
+      From lenovinha's timing log (median of the last 15, 2026-11-24): test-fleet-activity 45 s, test-archiver-check-memo 15, check-bash-dialect 12, check-carry-forward 12, check-all-fragments-intact 10, check-plan-binary-probe-usage 8, test-expert-capability-behaviour-skew 4, check-no-spawn-in-if-not 4, check-fragment-keys-are-read 3.5, test-append-event-archived-refusal 3. Left inline: the two class-selector pilots (fragment-status-loss, groundtruth-mutable-status-pins), which a step cannot express, check-groundtruth-regime-invariance --strict (an argument), and fragment-events-land (its could-not-run branch is the call site's). One consumer greps build.sh for a moved script: litmus if-not-pipeline-guard-shape.
+    exit_criteria:
+      - "each moved block becomes one .step with the same text; the inline block is deleted"
+      - "gate-changed.sh's population is identical; no script runs both inline and as a step"
+      - "the litmus wiring assertion is green wired and red unwired"
+      - "each new step carries a second-regime record before the PR leaves draft"
+    unscoreable: "mechanical move; the per-step verdicts are unchanged by construction."
+    next_action: "Generate, verify the population, ask the Mac for ten records."
+    provenance: coordinator queue item 2 (macuahuitl-fedora, 2026-11-24); filed by lenovinha.
+    related: [2273-b2m2, 2253-j2at]
+    events:
+      - {type: filed, ts: '2026-11-24T09:23:32Z', host: lenovinha, summary: inline blocks batch 5}
