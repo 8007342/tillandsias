@@ -7410,8 +7410,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _step "Checking the held-claim report (1115-srfr)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-cycle-claims-report.sh" 2>&1; then
-        _error "scripts/test-cycle-claims-report.sh failed — the exit-time held-claim report is what stops a cycle ending on an unreleased claim; read the fixture output above"
+    if ! _run_lua_decider "scripts/lua/test-cycle-claims-report.lua" 2>&1; then
+        _error "scripts/lua/test-cycle-claims-report.lua failed — the exit-time held-claim report is what stops a cycle ending on an unreleased claim; read the fixture output above"
         exit 1
     fi
     _step "Checking test-subdomain-routing (1063-nraf; 14ms)..."
