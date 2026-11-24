@@ -88,12 +88,10 @@ scripts/test-check-jq-callsite-ratchet.sh
 scripts/test-check-opsx-generated-dirt.sh
 scripts/test-check-test-baseline.sh
 scripts/test-claims-across-branches.sh
-scripts/test-claims-affordance.sh
 scripts/test-claims-fleet-visible.sh
 scripts/test-claude-forge-bypass-preaccepted.sh
 scripts/test-clear-vault-credentials-partial-is-nonzero.sh
 scripts/test-clear-vault-host-credentials.sh
-scripts/test-closure-guards-name-the-way-out.sh
 scripts/test-cloudflare-login.sh
 scripts/test-cloudflare-oauth-core.sh
 scripts/test-cloudflare-token-rotation.sh
@@ -104,9 +102,7 @@ scripts/test-codex-oauth-restore.sh
 scripts/test-codex-safe-state.sh
 scripts/test-command-policy-consent.sh
 scripts/test-command-policy-evaluator.sh
-scripts/test-compaction-coverage.sh
 scripts/test-competing-gate-consumer.sh
-scripts/test-competing-gate-no-dispatch-cause.sh
 scripts/test-concurrent-forge-shared-stack.sh
 scripts/test-convergence-dashboard.sh
 scripts/test-credential-and-proxy-confinement.sh
