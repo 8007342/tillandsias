@@ -110,6 +110,9 @@ candidate() {
 # (macuahuitl run 26: ARM 1b/2/17a/22/30/34 red). Arms set ARM_* instead.
 run_queue() {
     ( cd "$WORK_DIR" && env -u TILLANDSIAS_LAND_QUEUE_BUNDLE_LOG -u TILLANDSIAS_LAND_QUEUE_HEAVY_PROBE \
+        TILLANDSIAS_LAND_QUEUE_SHADOW_INTAKE="${ARM_SHADOW:-}" TILLANDSIAS_LAND_QUEUE_SHADOW_LOG="${ARM_SHADOW_LOG:-$TMP/shadow.$$.log}" \
+        TILLANDSIAS_LAND_QUEUE_SHADOW_LOCK="${ARM_SHADOW_LOCK:-$TMP/shadow.$$.lock}" TILLANDSIAS_LAND_QUEUE_SHADOW_TREE="${ARM_SHADOW_TREE:-$TMP/shadow.$$.tree}" \
+        TILLANDSIAS_LAND_QUEUE_SHADOW_PR_S="${ARM_SHADOW_PR_S:-60}" TILLANDSIAS_LAND_QUEUE_SHADOW_RUN_S="${ARM_SHADOW_RUN_S:-60}" \
         ${ARM_HEAVY_PROBE:+"TILLANDSIAS_LAND_QUEUE_HEAVY_PROBE=$ARM_HEAVY_PROBE"} \
         TILLANDSIAS_BUNDLE_HEAVY_MAX="${ARM_HEAVY_MAX:-2}" \
         TILLANDSIAS_LAND_QUEUE_GH="$GH_BIN" \
@@ -2161,6 +2164,94 @@ if [ "$_ok58" = 1 ]; then
 else
     bad "ARM 58: failed: $_ok58
 $_d58"
+fi
+# ARM 60 (bundle landing phase 0): SHADOW INTAKE records intake's verdict beside the
+# gate's and changes nothing. One run, three candidates: #81 gate green + intake ok,
+# #82 gate red + intake red, #83 gate green + heavy (rc 10). (b) the stub writes into
+# its own tree and the queue's checkout stays clean; every shadow ran after the last
+# gate. (c) OFF by default: no log. (d) a train's members log via=train. (e) the run
+# bound names what it drops; (f) a per-PR timeout is timeout, never red. (g) a red
+# intake on a green gate (a false red) keeps its log. (h) --status names the log.
+_sh60="$TMP/shadow60.sh"
+cat > "$_sh60" <<'SH'
+[ -e dirt-from-shadow ] && dirty=dirty || dirty=clean
+echo "shadow gates=$(grep -c . "@GATES@") nice=$(nice) $dirty shared=${TILLANDSIAS_SHARED_TARGET:-on}" >> "@SEEN@"
+echo dirt > dirt-from-shadow; echo dirt >> seed-dirt
+if [ -e c83.txt ]; then echo "heavy:guard:x fixtures=9 crates=28 changed=1"; exit 10; fi
+if [ -e c82.txt ]; then echo "select:intake fixtures=6/9 deferred=1 crates=0/28 changed=1 base=x"; exit 1; fi
+if [ -e c84.txt ]; then : > "@LOCK@/stop"; exit 0; fi
+if [ -e c81.txt ]; then echo "select:intake fixtures=5/9 deferred=1 crates=2/28 changed=1 base=x"; exit 0; fi
+if [ -e slow.txt ]; then sleep 30; fi
+exit 1
+SH
+arm60() { # <name> <K> <files...> ; env SH60_* pass through
+    local n="$1" k="$2" i=81 f js="" ; shift 2
+    scaffold "$n"
+    for f in "$@"; do candidate "$n" "10$i-aaaa" "$f" A; js="$js${js:+,}{\"number\":$i,\"headRefName\":\"work/10$i-aaaa\",\"isDraft\":false}"; i=$((i + 1)); done
+    printf '[%s]\n' "$js" > "$GH_PRS"
+    printf '#!/usr/bin/env bash\necho gated >> "%s"\n[ -e c82.txt ] && exit 1\nexit 0\n' "$GATE_LOG" > "$GATE_BIN"
+    : > "$TMP/$n/seen"
+    sed -e "s#@GATES@#$GATE_LOG#; s#@SEEN@#$TMP/$n/seen#; s#@LOCK@#$TMP/$n/lock#" "$_sh60" > "$TMP/$n/stub.sh"
+    out60="$(ARM_BATCH_K="$k" ARM_SHADOW="${SH60_CMD-bash $TMP/$n/stub.sh}" ARM_SHADOW_LOCK="$TMP/$n/lock" ARM_SHADOW_TREE="$TMP/$n/shtree" \
+        ARM_SHADOW_LOG="$TMP/$n/shadow.log" ARM_SHADOW_PR_S="${SH60_PR_S:-60}" ARM_SHADOW_RUN_S="${SH60_RUN_S:-60}" LOGDIR_OVERRIDE="$TMP/$n/logs" run_queue)"
+    [ -d "$WORK_DIR/.git/tillandsias-land-queue.lock" ] && _b60="$_b60 $n-land-lock-held"
+    [ -n "${SH60_J:-}" ] || for _w in $(seq 1 600); do [ "$(grep -cE '^(shadow:accept|unmeasured):' "$TMP/$n/shadow.log" 2>/dev/null || [ -e "$TMP/$n/shadow.log" ] || echo 0)" -ge "${SH60_LINES:-1}" ] && [ ! -d "$TMP/$n/lock" ] && break; sleep 0.1; done
+    l60="$(cat "$TMP/$n/shadow.log" 2>/dev/null)"
+}
+_b60=""
+SH60_LINES=3 arm60 arm60a 1 c81.txt c82.txt c83.txt
+grep -Eq '^shadow:accept:81 tier=intake selected=5/9 crates=2 intake_s=[0-9]+ intake=ok gate=green via=single base=[0-9a-f]{9} head=[0-9a-f]{9} rc=0 ts=' <<<"$l60" || _b60="$_b60 a81"
+grep -Eq '^shadow:accept:82 tier=intake selected=6/9 crates=0 .* intake=red gate=red ' <<<"$l60" || _b60="$_b60 a82"
+grep -Eq '^shadow:accept:83 tier=heavy selected=-/9 crates=- .* intake=- gate=green ' <<<"$l60" || _b60="$_b60 a83"
+[ "$(grep -c "^shadow:accept:" <<<"$l60")" -eq 3 ] && grep -Eq "^shadow:tree $TMP/arm60a/shtree size_mb=[0-9]+$" <<<"$l60" && grep -q '^land:81 ' <<<"$out60" && grep -q '^land:83 ' <<<"$out60" && grep -q '^evict:land-queue:82' <<<"$out60" || _b60="$_b60 a-landing"
+[ "$(grep -c 'gates=3 nice=10 clean shared=off$' "$TMP/arm60a/seen")" -eq 3 ] || _b60="$_b60 b-order"
+[ -z "$(git -C "$WORK_DIR" status --porcelain --untracked-files=no)" ] && [ ! -e "$WORK_DIR/dirt-from-shadow" ] && [ ! -e "$WORK_DIR/target/shadow-intake" ] && [ -e "$TMP/arm60a/shtree/.git" ] || _b60="$_b60 b-isolation"
+st60="$(ARM_SHADOW=x ARM_SHADOW_LOG="$TMP/arm60a/shadow.log" run_queue --status)"
+grep -Eq "^queue:shadow-intake log=$TMP/arm60a/shadow.log lines=3$" <<<"$st60" || _b60="$_b60 h-status"
+SH60_CMD="" SH60_LINES=0 arm60 arm60c 1 c81.txt
+[ ! -e "$TMP/arm60c/shadow.log" ] && [ ! -s "$TMP/arm60c/seen" ] && grep -q '^land:81 ' <<<"$out60" && ! grep -q shadow <<<"$out60" || _b60="$_b60 c-off"
+SH60_LINES=2 arm60 arm60d 4 c81.txt c83.txt
+[ "$(grep -c 'gate=green via=train' <<<"$l60")" -eq 2 ] && [ "$(grep -c . "$GATE_LOG")" -eq 1 ] || _b60="$_b60 d-train"
+SH60_RUN_S=0 arm60 arm60e 1 c81.txt
+grep -q '^unmeasured:shadow:81:run-bound gate=green' <<<"$l60" && grep -q '^land:81 ' <<<"$out60" || _b60="$_b60 e-bound"
+SH60_PR_S=1 arm60 arm60f 1 slow.txt
+grep -q 'intake=timeout gate=green .* rc=124 ' <<<"$l60" || _b60="$_b60 f-timeout"
+arm60 arm60g 1 other.txt
+grep -q 'intake=red gate=green ' <<<"$l60" && ls "$TMP/arm60g/logs"/*/shadow-81-false-red.log >/dev/null 2>&1 || _b60="$_b60 g-false-red"
+# (i) a stop request ends it at the next PR, and what it dropped is named; (j) a land
+# run that starts while a shadow holds its lock asks it to stop, and still lands.
+SH60_LINES=2 arm60 arm60i 1 c84.txt other.txt
+grep -q '^shadow:accept:81 .* intake=ok ' <<<"$l60" && grep -q '^unmeasured:shadow:82:stopped gate=green' <<<"$l60" || _b60="$_b60 i-stop"
+# (k) a stop MID-BUILD ends the build's whole process tree and names the PR; (l) the same
+# through the builder wrapper leaves nothing running IN THE TOOLBOX (a named skip where
+# there is no builder). The sleep's duration is its marker, so only it is looked for.
+_m60="86$(( $$ % 100000 ))"
+printf 'sleep %s & sleep %s\n' "$_m60" "$_m60" > "$TMP/mid60.sh"
+printf 'bash "%s" sleep %s\n' "$ROOT/scripts/with-tillandsias-builder.sh" "1$_m60" > "$TMP/mid60tb.sh"
+mid60() { # <name> <stub> <pattern>: run it, stop it once the marker is live, count what is left
+    ( for _w in $(seq 1 300); do pgrep -f "$3" >/dev/null && { sleep 1; : > "$TMP/$1/lock/stop"; break; }; sleep 0.1; done ) &
+    local _sp=$!
+    SH60_CMD="bash $2" arm60 "$1" 1 other.txt; wait "$_sp"
+    grep -q '^unmeasured:shadow:81:stopped-mid-build gate=green' <<<"$l60" || _b60="$_b60 $1-unnamed"
+    for _w in $(seq 1 100); do pgrep -f "$3" >/dev/null || break; sleep 0.1; done
+    pgrep -f "$3" >/dev/null && { _b60="$_b60 $1-survivor"; pkill -f "$3"; }
+}
+mid60 arm60k "$TMP/mid60.sh" "^sleep $_m60\$"
+if command -v toolbox >/dev/null 2>&1 && toolbox list -c 2>/dev/null | grep -q tillandsias-builder; then
+    mid60 arm60l "$TMP/mid60tb.sh" "^sleep 1$_m60\$"
+else echo "skip: ARM 60l — no tillandsias-builder toolbox here"; fi
+sleep 300 & _h60=$!
+mkdir -p "$TMP/arm60j/lock"; echo "$_h60" > "$TMP/arm60j/lock/pid"
+SH60_CMD="" SH60_LINES=0 SH60_J=1 arm60 arm60j 1 c81.txt
+[ -e "$TMP/arm60j/lock/stop" ] && grep -q '^land:81 ' <<<"$out60" || _b60="$_b60 j-signal"
+kill "$_h60" 2>/dev/null; wait "$_h60" 2>/dev/null
+if [ -z "$_b60" ]; then
+    ok "ARM 60: shadow intake logs intake beside the gate after the last gate, in its own tree; off by default, bounded by name, and lands exactly what it would have"
+else
+    bad "ARM 60: failed:$_b60
+$l60
+$out60
+$(cat "$TMP/arm60a/seen")"
 fi
 printf '\n'
 if [ "$fail" -eq 0 ]; then
