@@ -174,7 +174,6 @@ scripts/test-forge-config-trust-cross-platform-parity.sh
 scripts/test-forge-entrypoints-source-agent-profile.sh
 scripts/test-forge-findings-persisted.sh
 scripts/test-forge-git-identity-source.sh
-scripts/test-forge-git-index-materialization.sh
 scripts/test-forge-gitconfig-bidirectional-quarantine.sh
 scripts/test-forge-launch-openspec-init-clean.sh
 scripts/test-forge-liveness-probe.sh

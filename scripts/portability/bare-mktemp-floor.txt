@@ -78,7 +78,6 @@ scripts/test-expire-claims-write-is-opt-in.sh 1
 scripts/test-fake-cloudflare.sh 1
 scripts/test-fixture-git-dir-scope.sh 1
 scripts/test-fleet-msg-store.sh 1
-scripts/test-forge-git-index-materialization.sh 1
 scripts/test-forge-gitconfig-bidirectional-quarantine.sh 1
 scripts/test-forge-launch-openspec-init-clean.sh 1
 scripts/test-forge-runtime-ca-trust.sh 1
