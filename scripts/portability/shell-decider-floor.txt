@@ -365,7 +365,6 @@ scripts/test-pre-push-honours-a-live-freeze.sh
 scripts/test-pre-push-linux-next-merged.sh
 scripts/test-pre-push-main-branch-affordance.sh
 scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh
-scripts/test-pre-push-trailer-states-what-it-saw.sh
 scripts/test-pre-push-version-guard-sigpipe.sh
 scripts/test-pre-push-version-guard.sh
 scripts/test-pre-push-work-ref-lane.sh

@@ -109,7 +109,8 @@ candidate() {
 # this fixture through the gate, and every one-at-a-time arm then ran as a train
 # (macuahuitl run 26: ARM 1b/2/17a/22/30/34 red). Arms set ARM_* instead.
 run_queue() {
-    ( cd "$WORK_DIR" && env \
+    ( cd "$WORK_DIR" && env -u TILLANDSIAS_LAND_QUEUE_BUNDLE_LOG -u TILLANDSIAS_LAND_QUEUE_HEAVY_PROBE \
+        ${ARM_HEAVY_PROBE:+"TILLANDSIAS_LAND_QUEUE_HEAVY_PROBE=$ARM_HEAVY_PROBE"} \
         TILLANDSIAS_LAND_QUEUE_GH="$GH_BIN" \
         TILLANDSIAS_LAND_QUEUE_GATE="bash $GATE_BIN" \
         TILLANDSIAS_LAND_QUEUE_PREFLIGHT="${PREFLIGHT_CMD:-}" \
@@ -2026,6 +2027,56 @@ else
     bad "ARM 56: got rc=$rc56a/$rc56b lock=$_lock56 gates=$(grep -c . "$GATE_LOG") published='$pub56'
 $out56a
 $out56b"
+fi
+# ARM 57 (bundle landing phase 1): every train writes ONE bundles.log line beside
+# trains.log, and heavy= counts members by gate-changed's own answer. (a) landed:
+# one of two members probed heavy; (b) a red train, promoted=-; (c) a gate rc=137
+# is the host's, aborted and never red; (d) a probe that does not answer reads `-`,
+# never 0; (e) the REAL default probe answers in the scratch tree (its empty
+# fixture population is heavy by gate-changed's rule, so 2).
+_p57="$TMP/heavy57.sh"
+cat > "$_p57" <<'PROBE'
+if grep -q heavy <<<"$(git diff --name-only "$1")"; then echo "heavy:guard:x"; else echo "select:intake fixtures=1/9"; fi
+PROBE
+arm57() { # <name> <gate rc on the first gate> <probe> <out var for the line(s)>
+    scaffold "$1"
+    candidate "$1" 1071-aaaa light57.txt A
+    candidate "$1" 1072-bbbb heavy57.txt B
+    cat > "$GH_PRS" <<JSON
+[{"number":71,"headRefName":"work/1071-aaaa","isDraft":false},
+ {"number":72,"headRefName":"work/1072-bbbb","isDraft":false}]
+JSON
+    printf '#!/usr/bin/env bash\n[ -e "%s" ] && exit 0\n: > "%s"\nexit %s\n' "$TMP/$1/once" "$TMP/$1/once" "$2" > "$GATE_BIN"
+    out57="$out57
+$(ARM_BATCH_K=4 ARM_HEAVY_PROBE="$3" ARM_TRAIN_LOG="$TMP/$1/trains.log" run_queue)"
+    printf -v "$4" '%s' "$(cat "$TMP/$1/bundles.log" 2>&1)"
+}
+out57=""
+arm57 arm57a 0 "bash $_p57" l57a; _h57="$(git -C "$REMOTE_DIR" rev-parse linux-next)"
+_t57="$(git -C "$REMOTE_DIR" rev-parse "linux-next^{tree}")"
+arm57 arm57b 1 "bash $_p57" l57b
+arm57 arm57c 137 "bash $_p57" l57c
+arm57 arm57d 0 "false" l57d
+arm57 arm57e 0 "" l57e
+_ok57=1
+grep -Eq "^bundle:green:train-[0-9]+ members=2 heavy=1 base=[0-9a-f]{9} tree=${_t57:0:9} gate_s=[0-9]+ reason=train promoted=${_h57:0:9} cause=landed:${_h57:0:9} ids=#71,#72 ts=[0-9TZ:-]+$" <<<"$l57a" || _ok57="a"
+grep -Eq '^bundle:red:train-[0-9]+ members=2 heavy=1 .* promoted=- cause=red:rc=1 ' <<<"$l57b" || _ok57="$_ok57 b"
+grep -Eq '^bundle:aborted:train-[0-9]+ .* promoted=- cause=red:rc=137 ' <<<"$l57c" || _ok57="$_ok57 c"
+grep -Eq '^bundle:green:train-[0-9]+ members=2 heavy=- ' <<<"$l57d" || _ok57="$_ok57 d"
+grep -Eq '^bundle:green:train-[0-9]+ members=2 heavy=2 ' <<<"$l57e" || _ok57="$_ok57 e"
+[ "$(grep -c . <<<"$l57a$l57b$l57c$l57d$l57e")" -ge 1 ] && for _l in "$l57a" "$l57b" "$l57c" "$l57d" "$l57e"; do
+    [ "$(grep -c . <<<"$_l")" -eq 1 ] || _ok57="$_ok57 not-one-line"
+done
+if [ "$_ok57" = 1 ]; then
+    ok "ARM 57: one bundles.log line per train (green/red/aborted) with members, heavy, base, tree, gate seconds, promoted; an unanswered heavy probe reads '-'"
+else
+    bad "ARM 57: failed: $_ok57
+a=$l57a
+b=$l57b
+c=$l57c
+d=$l57d
+e=$l57e
+$out57"
 fi
 printf '\n'
 if [ "$fail" -eq 0 ]; then
