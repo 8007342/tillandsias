@@ -27,7 +27,7 @@ proc.run({ argv = { "chmod", "+x", WRAP } })
 local MT = tgt .. "/sidecar-wrapper-musl"
 
 local r = proc.run({
-    argv = { "bash", ROOT .. "/" .. BUILD },
+    argv = { require("common.fixture").posix_shell(), ROOT .. "/" .. BUILD },
     env = { RUSTC_WRAPPER = WRAP, TILLANDSIAS_SIDECAR_TARGET_DIR = MT, TILLANDSIAS_SIDECAR_FORCE_REBUILD = "1" },
     timeout_ms = 900000,
 })
