@@ -33,7 +33,7 @@ critical_path:
     # control matters most: every other scenario asserts a refusal, and a
     # resolver that refused everything would satisfy them all while making the
     # daily release unmergeable.
-    command: "scripts/test-resolve-open-pr.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-resolve-open-pr.lua"
     success_pattern: "PASS: open-pr-resolver fixture"
     timeout_ms: 30000
 
@@ -87,5 +87,5 @@ observability:
     artifact: "scripts/resolve-open-pr.sh + scripts/resolve-release-run.sh"
 
 rollback:
-  on_failure: "run scripts/test-resolve-open-pr.sh and scripts/test-resolve-release-run.sh directly; each names the failing scenario"
-  command: "scripts/test-resolve-open-pr.sh; scripts/test-resolve-release-run.sh"
+  on_failure: "run scripts/lua/test-resolve-open-pr.lua and scripts/test-resolve-release-run.sh directly; each names the failing scenario"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-resolve-open-pr.lua; scripts/test-resolve-release-run.sh"
