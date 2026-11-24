@@ -188,7 +188,8 @@ if [[ "\${args[0]:-}" == "run" || "\${args[0]:-}" == "create" ]]; then
     fi
 fi
 
-mkdir -p "\$(dirname "\$calls_file")"
+case "\$calls_file" in /*/*) _dir="\${calls_file%/*}" ;; *) _dir="\$(dirname "\$calls_file")" ;; esac
+[ -d "\$_dir" ] || mkdir -p "\$_dir"
 {
     printf '%s\t' "\$(date -u +%FT%TZ)"
     printf 'podman'
@@ -2130,7 +2131,7 @@ run_litmus_test_file() {
             if [[ "$_lt_retried" -eq 0 && "${LITMUS_TIMEOUT_RETRY:-1}" == 1 \
                   && ( "$exit_code" -eq 124 || "$exit_code" -eq 137 ) && ! -s "$step_capture" ]]; then
                 _lt_retried=1
-                printf ' flaky:%s#%s timed out after %ss with no output (rc=%s); re-running it once\n' \
+                printf ' flaky:%s#%s timed out after %ss with no stdout (rc=%s); re-running it once\n' \
                     "$(basename "${test_file%.yaml}")" "$step_index" "$timeout_sec" "$exit_code" >&2
                 : >"$step_capture"; : >"$step_errcap"
                 continue
