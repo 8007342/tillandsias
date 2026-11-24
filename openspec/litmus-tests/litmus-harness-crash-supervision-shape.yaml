@@ -29,7 +29,7 @@ size: instant
 
 preconditions:
   - workspace contains images/default/harness-supervisor.sh
-  - workspace contains scripts/test-harness-supervisor.sh
+  - workspace contains scripts/lua/test-harness-supervisor.lua
   - bash, grep, pgrep available in PATH
 
 critical_path:
@@ -39,6 +39,6 @@ critical_path:
     expected_behavior: "ok: supervisor-parses"
 
   - step: "hermetic fixture suite passes (crash verdict + evidence + exactly-once, ordered-shutdown silence, external-kill loudness, usage refusal, and the wiring scenario with its stripped-copy negative control)"
-    command: "bash scripts/test-harness-supervisor.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-harness-supervisor.lua 2>&1"
     timeout_ms: 30000
-    expected_behavior: "ok: all harness-supervisor scenarios passed"
+    expected_behavior: "ok:harness-supervisor:7 arms"

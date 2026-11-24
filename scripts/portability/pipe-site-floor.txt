@@ -570,7 +570,6 @@ scripts scripts/test-enclave-proxy-lib.sh 4
 scripts scripts/test-enclave-service-health.sh 102
 scripts scripts/test-ensure-cosign.sh 5
 scripts scripts/test-ensure-toolbox-properties.sh 23
-scripts scripts/test-env-forward-shared.sh 1
 scripts scripts/test-expert-accuracy-record-shape.sh 2
 scripts scripts/test-expire-claims-list-live-rows.sh 8
 scripts scripts/test-expire-claims-reads-the-status-write.sh 9
@@ -582,7 +581,6 @@ scripts scripts/test-fleet-heartbeat-sees-a-ledger-filed-blocker.sh 13
 scripts scripts/test-fleet-msg-mcp.sh 3
 scripts scripts/test-fleet-msg-same-host.sh 5
 scripts scripts/test-fleet-msg-store.sh 3
-scripts scripts/test-forge-clone-wait-is-bounded.sh 1
 scripts scripts/test-forge-gitconfig-bidirectional-quarantine.sh 2
 scripts scripts/test-forge-project-guard-hooks.sh 1
 scripts scripts/test-forge-project-trust-seeds.sh 1

@@ -63,7 +63,9 @@ local function seed(lib, fn, settings, host_kind, overlay_root)
     local e = { PATH = env.get("PATH"), HOME = W, CLAUDE_SETTINGS_FILE = settings }
     if host_kind ~= "" then e.TILLANDSIAS_HOST_KIND = host_kind end
     if overlay_root then e.TILLANDSIAS_CONFIG_OVERLAY_ROOT = overlay_root end
-    local r = proc.run({ argv = { "bash", DRIVER, lib, fn }, env = e, timeout_ms = 30000 })
+    -- 2312-d2gf: proc.run hands a child every TILLANDSIAS_* name, so leaving one
+    -- out of `e` did not unset it, and arm 4 was red inside a forge or a gate.
+    local r = proc.run({ argv = { require("common.fixture").posix_shell(), DRIVER, lib, fn }, env = e, env_unset = { "TILLANDSIAS_*" }, timeout_ms = 30000 })
     if r.code == nil then
         proc.run({ argv = { "rm", "-rf", W }, timeout_ms = 30000 })
         verdict.could_not_run("forge-subagent-worktree-base", "the seed driver did not run: " .. tostring(r.status or r.decision))
