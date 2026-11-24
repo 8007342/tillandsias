@@ -76,15 +76,11 @@ local function mkhome(name)
     return d
 end
 -- bash runs the script from stdin. proc.run passes TILLANDSIAS_* through (a forge
--- exports these), so each is unset unless the arm set it, as the .sh's env -i did.
+-- exports these), so they are dropped unless the arm set them, as the .sh's env -i did.
 local function sh(script, home, extra)
     local e = { HOME = home }
     for k, v in pairs(extra or {}) do e[k] = v end
-    local pre = "unset AGENT_PROFILE\n"
-    for _, v in ipairs({ "TILLANDSIAS_AGENT", "TILLANDSIAS_AGENT_PROFILE_SH", "TILLANDSIAS_SHARED_SKILLS_ROOT" }) do
-        if not e[v] then pre = pre .. "unset " .. v .. "\n" end
-    end
-    local r = T:run{ fixture.posix_shell(), "-s", stdin = pre .. script, env = e, timeout_ms = 30000 }
+    local r = T:run{ fixture.posix_shell(), "-s", stdin = script, env = e, env_unset = { "TILLANDSIAS_*" }, timeout_ms = 30000 }
     return r.code, text.trim(r.stdout or ""), text.trim(r.stderr or "")
 end
 local function linked(d)
