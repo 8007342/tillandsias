@@ -1661,7 +1661,7 @@ not an unqualified PASS (above), so it attests as `fail:signatures-unverified`.
 name as listed in `SHA256SUMS`. Set `SMOKE_REGIME` to this host's regime slug
 (`[A-Za-z0-9._-]+`, e.g. `darwin-arm64`, `linux-x86_64`, `msys-x64`). The
 promote gate's smoke record reads it back from the ref's `regime.txt`
-(2298-ifpm), so it is never retyped.
+(2300-j4cv), so it is never retyped.
 
 **The ref carries DIGESTS ONLY, never the evidence (2299-atdg).** Its tree is
 exactly three files: `SHA256SUMS` (a sha256 per evidence file), `regime.txt` and
@@ -1709,6 +1709,39 @@ The platform is read from the host (`darwin`, `msys`, `linux`). Cite the
 `refused:attest-smoke:<why>` line is a finding about this run: stale evidence,
 or a `pass` without a measured credential step. Never answer it by editing the
 evidence.
+
+### 5b — Record the run for the promote gate (order 2300-j4cv)
+
+`scripts/promote-stable.sh` refuses a tag without a smoke record per platform
+(`scripts/lua/check-promote-gate.lua`). The record is DERIVED from the ref §5a
+pushed, red or green, so **never type a record line**. After §5a's
+`ok:attest-smoke:` line:
+
+```bash
+[ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
+./target/release/tillandsias-plan script run scripts/lua/smoke-record.lua -- \
+    --tag "$SMOKE_TAG" | tee target/smoke-e2e/05-record.txt
+RECORD_RC=${PIPESTATUS[0]}; test -n "$RECORD_RC" && test "$RECORD_RC" -eq 0
+SMOKE_FRAGMENT="$(sed -n 's/^ok:smoke-record://p' target/smoke-e2e/05-record.txt)"
+test -n "$SMOKE_FRAGMENT" && scripts/push-plan-fragments-to-trunk.sh "$SMOKE_FRAGMENT"
+```
+
+```powershell
+.\target\release\tillandsias-plan.exe script run scripts/lua/smoke-record.lua -- `
+    --tag $SmokeTag | Tee-Object target\smoke-e2e\05-record.txt
+if ($LASTEXITCODE -ne 0) { throw "smoke-record refused (rc=$LASTEXITCODE) — read 05-record.txt" }
+$SmokeFragment = (Select-String -Path target\smoke-e2e\05-record.txt -Pattern '^ok:smoke-record:(.+)$').Matches[0].Groups[1].Value
+bash scripts/push-plan-fragments-to-trunk.sh $SmokeFragment
+```
+
+The regime is the one §5a attested. The first host to record a tag also declares
+its `smoke-<tag>` row; two hosts doing so at once write the same one.
+An attestation that says `partial:credential-unmeasured` is recorded as that and
+**blocks**. When the operator has signed in, attest again (§5a) and record again:
+the later record decides. A `refused:smoke-record:<why>` line is a finding about
+this run; never answer it by writing the event by hand.
+
+**Only this skill records.** A local-build smoke installed nothing a tag names.
 
 Each finding becomes a `### Work Packet:` entry so `/advance-work-from-plan` can
 claim and fix it. Append packets to a dated, **host-qualified** smoke report:
