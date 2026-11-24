@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: lcnum-mutants-in-a-scratch-copy
+    order: "2278-x4tw"
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [preflight, fixtures, hygiene]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-awk-float-lc-numeric.sh
+      - scripts/lua/test-awk-float-lc-numeric-signal.lua
+      - scripts/portability/checkout-writers.txt
+    title: "test-awk-float-lc-numeric.sh writes its mutant copies into the live checkout, where another reader sees the tree move"
+    context: |
+      Seen on yoga 2026-11-23 inside relay-preflight's ci-release tier on 32edf1f75. test-preflight-front-door.sh
+      reported that the live checkout moved, its status diff being three untracked .mutant-lcnum-* files under scripts/
+      and scripts/refusal-calibration/. It did not recur when that fixture ran alone on an idle host, and the files were
+      gone afterwards. Other builds were running on the host at the time; what ran the writer beside it is not established.
+      1587-qqzs made the writer signal-safe, 1630-dwab made its door runs serial, and 1611-imnj kept the copies beside
+      their producers because those derive REPO_ROOT from BASH_SOURCE and source siblings by relative path. Serial at
+      the door does not cover a reader outside the door. A scratch copy of the whole scripts tree keeps both relative
+      lookups working without touching the checkout.
+    exit_criteria:
+      - "The fixture creates no file in the checkout: git status --porcelain --untracked-files=all sampled while it runs, and after a KILL mid-run, shows nothing new."
+      - "Its mutation arms keep their teeth: each producer mutant still reds the arm it reds today."
+      - "Its line in scripts/portability/checkout-writers.txt is gone."
+    unscoreable: "unpinnable-until-the-guard-exists: the sampled-status arm is the deliverable"
+    next_action: "Copy scripts/ to scratch, plant the mutants there, and run them with that copy as their root."
+    provenance: "coordinator macuahuitl-fedora 2026-11-23, from yoga's 2276-fnhy preflight"
+    related: [1587-qqzs, 1611-imnj, 1630-dwab, 2272-cuxh]
+    events:
+      - {type: filed, ts: "2026-11-23T21:26:06Z", host: yoga, summary: "filed on the coordinator's request"}

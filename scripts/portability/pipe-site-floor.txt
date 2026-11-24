@@ -679,7 +679,6 @@ scripts scripts/test-loop-status-append-input.sh 6
 scripts scripts/test-loop-status-audit-reads-current-emitter.sh 2
 scripts scripts/test-lww-channel-alias.sh 3
 scripts scripts/test-lww-channel-consumers.sh 2
-scripts scripts/test-macos-model-share-writable.sh 1
 scripts scripts/test-macos-vz-orphan-diagnosis.sh 2
 scripts scripts/test-mcp-plan-resolver-pinning.sh 2
 scripts scripts/test-mcp-run-command-tool.sh 2
@@ -787,7 +786,6 @@ scripts scripts/test-token-instrument.sh 2
 scripts scripts/test-tool-dispatch-lib.sh 18
 scripts scripts/test-tool-materialize-litmus-surfaces-arm.sh 3
 scripts scripts/test-tool-materialize.sh 5
-scripts scripts/test-toolbox-refusal-wsl-exception.sh 3
 scripts scripts/test-trace-coverage.sh 4
 scripts scripts/test-tracked-files-unwritten-guard.sh 2
 scripts scripts/test-tray-asset-placeholder-refused.sh 1
