@@ -628,6 +628,10 @@ impl KeyEngine for PodmanKey {
             .map_err(|e| format!("engine_failed: podman run: {e}"))?;
         if !out.status.success() {
             let err = String::from_utf8_lossy(&out.stderr);
+            if let Some(refusal) = crate::gpu_fallback::corridorkey_refusal(out.status.code(), &err)
+            {
+                return Err(refusal);
+            }
             let tail: Vec<&str> = err
                 .lines()
                 .rev()
