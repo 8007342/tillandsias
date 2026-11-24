@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: keep-going-fixture-mutant-in-scratch
+    order: "2287-vcfj"
+    status: implemented
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [preflight, fixtures, hygiene]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-gate-keep-going.lua
+    title: "test-gate-keep-going.lua wrote its mutant build.sh at the repo root, and a KILLed run left it in the live checkout"
+    context: |
+      Seen on yoga twice, 2026-11-23 (ENOSPC) and 2026-11-24 (left by a relay-preflight suite run), as an untracked
+      build-keep-going-mutant.sh. The mutant is now in scratch with its SCRIPT_DIR and _BUILDER_DIR lines pinned to the
+      real root. The same class as 2278-x4tw.
+    exit_criteria:
+      - "scripts/lua/test-gate-keep-going.lua is 5 arms green and writes nothing at the repo root."
+    unscoreable: "fixture-scored: gate step 980 runs the fixture"
+    provenance: "yoga, found in 2278-zhqb's preflight"
+    related: [2253-iher, 2278-x4tw]
+    events:
+      - {type: implemented, ts: "2026-11-24T07:20:01Z", host: yoga, summary: "implemented on work/2287-vcfj; 5 arms"}
