@@ -60,18 +60,22 @@ HOOK_LOG="${TILLANDSIAS_HOOK_LOG:-/tmp/tillandsias-hooks.log}"
 # compares a fingerprint of the chunk corpus + embedding model, so it decides
 # for itself whether anything changed.
 #
-# COLD-BUILD COST IS A PROPERTY OF THE ENDPOINT, NOT OF THIS HOOK, and it varies
-# by more than an order of magnitude:
-#   yoga (CPU embed)          0.05s warm / 12m19s cold, 9909 chunks
-#   macuahuitl (GPU embed)    0.08s warm /     43s cold, 9910 chunks
+# COLD-BUILD COST IS A PROPERTY OF THE ENDPOINT AND THE CORPUS, NOT OF THIS HOOK,
+# and it varies by more than an order of magnitude. Read the RATE: the corpus
+# was 9,909 chunks at the first two figures and 34,099 on 2026-11-24.
+#   yoga (CPU embed)          12m19s cold, 9,909 chunks (~13 chunks/s)
+#   macuahuitl (GPU embed)    43s cold, 9,910 chunks (~230 chunks/s)
+#   macbookair (Metal)        11m31s cold, 34,079 chunks (~49 chunks/s)
+#   lenovinha (CPU embed)     28,544 of 34,099 chunks in 75 min (~6.3 chunks/s,
+#                             ~8 cores throughout): about 90 min in all
 # The macuahuitl figure is with nomic-embed-text fully VRAM-resident on an RTX
-# A5000; the same host served the 12-minute class before the GPU lane was
-# plugged into the dev inference container. Assume the slow number when
-# reasoning about a fleet host, because most of them are the slow case.
+# A5000. Assume the slow number when reasoning about a fleet host.
 #
-# That cost is exactly why this is forked and never awaited: a commit must not
-# wait twelve minutes for an embedding pass. The script takes its own lock, so
-# a burst of commits during a spec change starts one builder, not six.
+# That cost is exactly why this is forked and never awaited. The script takes its
+# own lock, so a burst of commits during a spec change starts one builder, not
+# six. And it YIELDS (2286-5agy): between batches it waits while a build.sh gate
+# or preflight runs here. The embedder's load is in its container, so the nice
+# below covers only this script's own jq and awk.
 #
 # Order 801-a2by: the index now lands in the DURABLE tier (a podman named
 # volume, content-addressed by that same fingerprint) rather than in tmpfs, so
@@ -86,7 +90,7 @@ if [ -x "$REPO_ROOT/scripts/spec-index-ensure.sh" ]; then
         # "directory on THIS host, and re-run." as its status. Keep them apart:
         # verdict for the machine, explanation appended for the human.
         _si_err="$(mktemp "${TMPDIR:-/tmp}/spec-index-hook.XXXXXX")"
-        _si_out="$(bash "$REPO_ROOT/scripts/spec-index-ensure.sh" 2>"$_si_err" | tail -1)"
+        _si_out="$(TILLANDSIAS_SPEC_INDEX_YIELD=1 nice -n 19 bash "$REPO_ROOT/scripts/spec-index-ensure.sh" 2>"$_si_err" | tail -1)"
         case "$_si_out" in
             ok:spec-index:fresh:*) : ;;  # the common path; silence is correct
             *)
