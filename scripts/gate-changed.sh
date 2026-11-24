@@ -523,6 +523,44 @@ case "$_plan" in ./*) _plan="$ROOT/${_plan#./}" ;; esac
 . "$ROOT/scripts/timing-log.sh" 2>/dev/null || true
 _now() { if command -v timing_now_ms >/dev/null 2>&1; then timing_now_ms; else echo $(( $(date +%s) * 1000 )); fi; }
 _t0="$(_now)"; _fail=0; _ran=0
+
+# ORDER 2256-mvmy — A PLAN-ONLY DIFF GOES TO THE PLAN LANE. Operator-approved
+# 2026-11-20: plan changes get the plan-lane checks, never a build-check; at
+# intake a plan-only follow-up took 247 s and 91 fixtures (2249-tif9 sample).
+# The lane's own validators, each over this diff: `check --strict-fragments`
+# and the fragment deciders the pre-push plan-only lane runs (its Lua port
+# where one exists). One route:plan-lane line, then their verdicts.
+if [ "$INTAKE" = 1 ] && ! grep -qvE '^plan/' "$WORK/changed"; then
+    echo "route:plan-lane changed=$CHANGED_N (every path under plan/)"
+    _ps="$(_now)"
+    if [ -z "$_plan" ]; then
+        echo "fail:gate-changed:plan-lane:no-plan-binary"; exit 1
+    fi
+    if ! _o="$("$_plan" check --strict-fragments 2>&1)"; then
+        printf '%s\n' "$_o" | tail -n 20; echo "fail:gate-changed:plan-lane:check-strict-fragments"; _fail=$((_fail + 1))
+    else
+        echo "ok:gate-changed:plan-lane:check-strict-fragments"
+    fi
+    for _pd in check-added-fragments-parse check-scorable-obligation-added check-fragment-status-loss \
+               check-fragment-ts-skew check-issue-citation-convention check-mo-full-attestations; do
+        if [ -f "$ROOT/scripts/lua/$_pd.lua" ]; then
+            _o="$(TILLANDSIAS_GATE_DIFF_BASE="$BASE" TILLANDSIAS_SCRIPT_RUNNER_BIN="$_plan" "$_plan" script run "$ROOT/scripts/lua/$_pd.lua" 2>&1)"; _rc=$?
+        elif [ -f "$ROOT/scripts/$_pd.sh" ]; then
+            _o="$(TILLANDSIAS_GATE_DIFF_BASE="$BASE" bash "$ROOT/scripts/$_pd.sh" 2>&1)"; _rc=$?
+        else
+            echo "skip:gate-changed:plan-lane:$_pd:absent"; continue
+        fi
+        if [ "$_rc" -ne 0 ]; then
+            printf '%s\n' "$_o" | tail -n 20; echo "fail:gate-changed:plan-lane:$_pd rc=$_rc"; _fail=$((_fail + 1))
+        else
+            echo "ok:gate-changed:plan-lane:$_pd"
+        fi
+    done
+    echo "phase:plan-lane ms=$(( $(_now) - _ps ))"
+    if [ "$_fail" -gt 0 ]; then echo "fail:gate-changed:intake:plan-lane $_fail-failed ms=$(( $(_now) - _t0 ))"; exit 1; fi
+    echo "ok:gate-changed:intake:plan-lane ms=$(( $(_now) - _t0 ))"
+    exit 0
+fi
 if [ "$PKG_N" -gt 0 ]; then
     _pk=(); while IFS= read -r _p; do _pk+=(-p "$_p"); done < "$WORK/pkg-sel"
     _tr="$ROOT/target/test-transcript-changed.log"; mkdir -p "$ROOT/target"
@@ -531,6 +569,14 @@ if [ "$PKG_N" -gt 0 ]; then
     if [ "$INTAKE" = 1 ] && [ "${TILLANDSIAS_GATE_NEXTEST:-auto}" != 0 ]; then
         _nx="$(cargo nextest --version 2>/dev/null)" || _nx=""
         _nx="${_nx%%$'\n'*}"
+    fi
+    # 2256-mvmy: the build is its own phase, so the breakdown can say which
+    # part of intake to cut (the test runs below then start from warm binaries).
+    if [ "$INTAKE" = 1 ]; then
+        _bs="$(_now)"
+        cargo test --no-run "${_pk[@]}" --manifest-path "$ROOT/Cargo.toml" > "$WORK/build.log" 2>&1 || true
+        echo "phase:cargo-build ms=$(( $(_now) - _bs ))"
+        _s="$(_now)"
     fi
     if [ -n "$_nx" ]; then
         # The crates that CHANGED, each with its reverse-dep closure, as one
@@ -550,6 +596,21 @@ if [ "$PKG_N" -gt 0 ]; then
         else
             cp "$WORK/nextest.log" "$_tr"
         fi
+        echo "phase:nextest ms=$(( $(_now) - _s ))"
+        # 2256-mvmy: nextest runs no doctests, and the gate adds them after the
+        # converted log (build.sh, 2243-urcy); those `test result:` lines are
+        # what check-test-baseline counts. Without them a green nextest run
+        # read as no-test-results. Only crates with a lib target have any.
+        _ds="$(_now)"; _dk=()
+        while IFS= read -r _d; do
+            [ -f "$ROOT/$_d/src/lib.rs" ] || continue
+            _n="$(awk -F'\t' -v d="$_d" '$1 == d { print $2 }' "$WORK/crates")"
+            [ -n "$_n" ] && _dk+=(-p "$_n")
+        done < "$WORK/crate-sel"
+        if [ "${#_dk[@]}" -gt 0 ]; then
+            cargo test --doc --no-fail-fast "${_dk[@]}" --manifest-path "$ROOT/Cargo.toml" >> "$_tr" 2>&1 || _crc=$?
+        fi
+        echo "phase:doctests ms=$(( $(_now) - _ds )) crates=$(( ${#_dk[@]} / 2 ))"
     else
         if [ "$INTAKE" = 1 ]; then
             if [ "${TILLANDSIAS_GATE_NEXTEST:-auto}" = 0 ]; then echo "runner:cargo-test:forced-by-TILLANDSIAS_GATE_NEXTEST=0"
@@ -557,6 +618,7 @@ if [ "$PKG_N" -gt 0 ]; then
         fi
         cargo test --no-fail-fast "${_pk[@]}" --manifest-path "$ROOT/Cargo.toml" > "$_tr" 2>&1
         _crc=$?
+        [ "$INTAKE" = 1 ] && echo "phase:cargo-test ms=$(( $(_now) - _s ))"
     fi
     if ! _v="$(bash scripts/check-test-baseline.sh --from "$_tr")"; then
         tail -n 40 "$_tr"; echo "$_v"; echo "fail:gate-changed:cargo-test rc=$_crc transcript=$_tr"; _fail=$((_fail + 1))
@@ -614,7 +676,14 @@ _fx_one() { # _fx_one <n> <runner> <path> <args> <adv>
     case "$5" in skip=*) [ "$_rc" = "${5#skip=}" ] && _rc=0 ;; 1) _rc=0 ;; esac
     echo "$(( $(_now) - _s ))" > "$_o.ms"; echo "$_rc" > "$_o.rc"
 }
-: > "$WORK/fx.order"
+: > "$WORK/fx.order"; : > "$WORK/fx.serial"
+# 2256-mvmy: the loop reads a FILE, never a process substitution. A serial
+# row calls `wait`, and on the real tree (population > the 64 KB pipe buffer)
+# that wait sat on the `tr` feeding the loop while `tr` blocked writing to the
+# pipe only the waiting loop drains: measured on lenovinha, the intake run in
+# do_wait for 46 min with tr in anon_pipe_write and no fixture started.
+tr '\t' '\037' < "$WORK/pop" > "$WORK/pop.us"
+_fxs="$(_now)"
 while IFS=$'\037' read -r _id _runner _path _args _adv _desc _rest; do
     grep -qxF -- "$_id${_args:+ $_args}" "$WORK/fx-sel.ids" || continue
     _ran=$((_ran + 1))
@@ -623,14 +692,37 @@ while IFS=$'\037' read -r _id _runner _path _args _adv _desc _rest; do
         echo "could-not-run:gate-changed:no-plan-binary:$_path" > "$WORK/fx.$_ran.out"
         echo 127 > "$WORK/fx.$_ran.rc"; echo 0 > "$WORK/fx.$_ran.ms"; continue
     fi
-    if [ -n "$(sed -n '1,40{/^# preflight: serial/p;/^-- preflight: serial/p;}' "$ROOT/$_path" 2>/dev/null | head -n 1)" ]; then
+    # 2256-mvmy: at intake, run serially everything --check never runs beside
+    # another fixture: an inline build.sh block (serial by construction; such a
+    # row names no .step file) and a .step declaring STEP_SERIAL. Only an
+    # undeclared .step is known pool-safe — it is what the gate-steps pool
+    # already runs concurrently. Measured on 10 landed-green merges: the pool
+    # ran these side by side and every scoped run reported 7-13 false reds.
+    # (Without --intake the loop keeps its header-only rule; legacy --changed
+    # has the same defect and is a developer loop, so it is left as it was.)
+    _ser=0
+    [ -n "$(awk 'NR > 40 { exit } /^(#|--) preflight: serial/ { print; exit }' "$ROOT/$_path" 2>/dev/null)" ] && _ser=1
+    if [ "$INTAKE" = 1 ]; then
+        _sf="${_rest%%$'\037'*}"
+        if [ -z "$_sf" ]; then _ser=1
+        elif grep -q '^STEP_SERIAL=' "$ROOT/$_sf" 2>/dev/null; then _ser=1; fi
+    fi
+    if [ "$_ser" = 1 ]; then
+        printf '%s\n' "$_ran" >> "$WORK/fx.serial"
         wait; _fx_one "$_ran" "$_runner" "$_path" "$_args" "$_adv"
     else
         _fx_wait_below "$_jobs"
         _fx_one "$_ran" "$_runner" "$_path" "$_args" "$_adv" &
     fi
-done < <(tr '\t' '\037' < "$WORK/pop")
+done < "$WORK/pop.us"
 wait
+if [ "$INTAKE" = 1 ]; then
+    _sms=0; _sn=0
+    while IFS= read -r _n; do _sms=$(( _sms + $(cat "$WORK/fx.$_n.ms" 2>/dev/null || echo 0) )); _sn=$((_sn + 1)); done < "$WORK/fx.serial"
+    _fxw=$(( $(_now) - _fxs ))
+    echo "phase:serial-fixtures ms=$_sms n=$_sn"
+    echo "phase:pool ms=$(( _fxw > _sms ? _fxw - _sms : 0 )) n=$(( _ran - _sn ))"
+fi
 while IFS=$'\t' read -r _n _path; do
     _rc="$(cat "$WORK/fx.$_n.rc" 2>/dev/null || echo 125)"; _ms="$(cat "$WORK/fx.$_n.ms" 2>/dev/null || echo 0)"
     if [ "$_rc" -ne 0 ]; then
