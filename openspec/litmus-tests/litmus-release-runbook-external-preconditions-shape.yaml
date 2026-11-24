@@ -34,7 +34,7 @@ critical_path:
     # resolver that refused everything would satisfy them all while making the
     # daily release unmergeable.
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-resolve-open-pr.lua"
-    success_pattern: "PASS: open-pr-resolver fixture"
+    success_pattern: "ok:resolve-open-pr:6 arms"
     timeout_ms: 30000
 
   - step: "RELEASE RUN: the same four outcomes for the workflow-run resolver"
