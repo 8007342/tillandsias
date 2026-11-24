@@ -362,7 +362,6 @@ scripts/test-relay-preflight.sh
 scripts/test-release-asset-integrity.sh
 scripts/test-release-tier-freshness-reads-ci-full.sh
 scripts/test-release-tier-freshness.sh
-scripts/test-release-tier-timer-render.sh
 scripts/test-reopen-is-history-not-loss.sh
 scripts/test-repeat-model-flag.sh
 scripts/test-requirement-ids.sh
