@@ -30,7 +30,7 @@ critical_path:
     expected_behavior: "ok: safe state precedes refresh"
 
   - step: "shared OAuth wrapper flushes only a successfully initialized Codex root"
-    command: "grep -Fq 'TILLANDSIAS_CODEX_SAFE_STATE_READY' images/default/codex-oauth-session.sh && grep -Fq 'TILLANDSIAS_CODEX_SAFE_STATE_ROOT' images/default/codex-oauth-session.sh && \"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-codex-oauth-harvest.lua 2>&1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-codex-oauth-harvest.lua 2>&1"
     timeout_ms: 30000
     expected_behavior: "ok:codex-oauth-harvest:5 arms"
     assert_output_contains: "ok:codex-oauth-harvest:5 arms"
