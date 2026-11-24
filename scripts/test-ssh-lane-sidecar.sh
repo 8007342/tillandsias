@@ -100,7 +100,7 @@ grep -q "ok:ssh-lane-sidecar:ready fingerprint=SHA256:" /tmp/fx/out || { echo "i
 grep -q "mirror='"$MID"'" /tmp/fx/out || { echo "inner:no-mirror-in-ready"; exit 91; }
 [ -S "$SOCK" ] || { echo "inner:no-socket"; exit 92; }
 LISTING="$(SSH_AUTH_SOCK=$SOCK ssh-add -l 2>&1)" || { echo "inner:agent-list-failed:$LISTING"; exit 93; }
-echo "$LISTING" | grep -q "til-lane-'"$MID"'" || { echo "inner:key-not-served:$LISTING"; exit 94; }
+grep -q <<<"$LISTING" "til-lane-'"$MID"'" || { echo "inner:key-not-served:$LISTING"; exit 94; }
 kill $SIDEPID 2>/dev/null
 echo inner:ready-and-served'
 
@@ -179,14 +179,14 @@ echo inner:m2-exact-path-403'
 
 scenario_ready() {
     out="$(run_inner "$INNER_READY")"
-    echo "$out" | grep -q '^inner:ready-and-served$' \
+    grep -q <<<"$out" '^inner:ready-and-served$' \
         && echo "ok:lane-fixture:ready-fingerprint-socket-and-agent-serving" \
         || { echo "fail:lane-fixture:ready ($out)"; return 1; }
 }
 
 scenario_negatives() {
     out="$(run_inner "$INNER_NEGATIVES")"
-    echo "$out" | grep -q '^inner:negatives-refused$' \
+    grep -q <<<"$out" '^inner:negatives-refused$' \
         && echo "ok:lane-fixture:host-type+two-principal+wrong-principal-all-refused" \
         || { echo "fail:lane-fixture:negatives ($out)"; return 1; }
 }
@@ -207,7 +207,7 @@ scenario_renewal() {
 
 scenario_m2() {
     out="$(run_inner "$INNER_M2")"
-    echo "$out" | grep -q '^inner:m2-exact-path-403$' \
+    grep -q <<<"$out" '^inner:m2-exact-path-403$' \
         && echo "ok:lane-fixture:m2-own-path-signs-other-path-403" \
         || { echo "fail:lane-fixture:m2 ($out)"; return 1; }
 }

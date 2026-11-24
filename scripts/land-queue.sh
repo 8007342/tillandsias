@@ -741,15 +741,56 @@ next_candidate() {
 # leaves the queue exactly as it was.
 BATCH_K="${TILLANDSIAS_LAND_QUEUE_BATCH_K:-1}"
 TRAIN_LOG="${TILLANDSIAS_LAND_QUEUE_TRAIN_LOG:-$_LOGROOT/trains.log}"
+# bundles.log (bundle landing phase 1): the successor line, beside trains.log, one
+# per train. `heavy=` counts members whose own diff gate-changed cannot scope (its
+# exit-10 rule, printed `heavy:` by --list --intake; no second path list). A probe
+# that does not answer makes it `-`, never a 0 nobody measured. `cause=` is the
+# trains.log result. green = the gate was green (promoted= says whether it landed);
+# red = the gate answered rc=1; aborted = any other rc, the host's state and never a
+# verdict on the tree (2234-a964); abandoned = the train stopped at a named door.
+BUNDLE_LOG="${TILLANDSIAS_LAND_QUEUE_BUNDLE_LOG:-$(dirname "$TRAIN_LOG")/bundles.log}"
+HEAVY_PROBE="${TILLANDSIAS_LAND_QUEUE_HEAVY_PROBE-timeout 60 bash \"$_SELF_DIR/gate-changed.sh\" --list --intake}"
+heavy_probe() { # <base> -> heavy | light | unknown, of the worktree against base
+    local _o
+    [ -n "$HEAVY_PROBE" ] || { echo unknown; return; }
+    _o="$(TILLANDSIAS_GATE_CHANGED_ROOT="$ROOT"; export TILLANDSIAS_GATE_CHANGED_ROOT; eval "$HEAVY_PROBE \"\$1\"" </dev/null 2>/dev/null)"
+    if grep -q '^heavy:' <<<"$_o"; then echo heavy
+    elif grep -q '^select:intake ' <<<"$_o"; then echo light
+    else echo unknown; fi
+}
+# HEAVY_MAX (2281-xx62, phase 2): a train takes at most this many members the probe
+# does not answer `light` for; a further one is put back for the one-at-a-time loop,
+# exactly like a conflicting member, and the next light candidate may still join.
+# `unknown` counts toward the cap: nobody measured it light. 0 = no heavy member.
+# A value that is not a whole number falls back to 2, said aloud.
+HEAVY_MAX="${TILLANDSIAS_BUNDLE_HEAVY_MAX:-2}"
+[[ "$HEAVY_MAX" =~ ^[0-9]{1,4}$ ]] || { [ "$BATCH_K" -ge 2 ] 2>/dev/null && say "train:heavy-max-unreadable:'$HEAVY_MAX' — using 2"; HEAVY_MAX=2; }
+HEAVY_MAX=$((10#$HEAVY_MAX))
+bundle_log() { # <base> <union> <result> <gate_s>; try_batch's nums/heavy_n/t_id are in scope
+    local _v _p=- _t
+    case "$3" in
+        landed:*) _v=green; _p="${3#landed:}" ;;
+        green:*) _v=green ;;
+        red:rc=1) _v=red ;;
+        red:*) _v=aborted ;;
+        *) _v=abandoned ;;
+    esac
+    _t="$(git rev-parse --short=9 "$2^{tree}" 2>/dev/null)"
+    printf 'bundle:%s:%s members=%s heavy=%s base=%s tree=%s gate_s=%s reason=train promoted=%s cause=%s ids=%s ts=%s\n' \
+        "$_v" "$t_id" "${#nums[@]}" "$heavy_n" "${1:0:9}" "${_t:--}" "$4" "$_p" "${3// /_}" "$ids" \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$BUNDLE_LOG" 2>/dev/null || true
+}
 train_log() { # <members> <base> <union> <result> <gate_s>
     mkdir -p "$(dirname "$TRAIN_LOG")" 2>/dev/null
     printf '%s members=%s base=%s union=%s result=%s gate_s=%s\n' \
         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "${2:0:9}" "${3:0:9}" "$4" "$5" >> "$TRAIN_LOG" 2>/dev/null || true
+    bundle_log "$2" "$3" "$4" "$5"
 }
 try_batch() {
     [ "$BATCH_K" -ge 2 ] 2>/dev/null || return 0
     [ "$DRY_RUN" -eq 1 ] && return 0
     local base union n h hs lm mb pre ids="" carried="" out err rc key t0 gs c now
+    local heavy_n=0 heavy_cap=0 tier t_id; t_id="train-$(date +%s)"
     local -a nums=() heads=() parents=()
     git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null || return 0
     base="$(git rev-parse "$REMOTE/$TRUNK" 2>/dev/null)" || return 0
@@ -767,7 +808,22 @@ try_batch() {
         pre="$(git rev-parse HEAD)"
         if git -c user.name=land-queue -c user.email=land-queue@localhost \
                 merge --no-ff -q --no-edit -m "train: #$n $h" "$hs" >/dev/null 2>&1; then
+            tier="$(heavy_probe "$pre")"
+            if [ "$tier" != light ]; then
+                if [ "$heavy_cap" -ge "$HEAVY_MAX" ]; then
+                    say "train:heavy-deferred:#$n tier=$tier max=$HEAVY_MAX — goes one at a time"
+                    git reset -q --hard "$pre"
+                    continue
+                fi
+                heavy_cap=$((heavy_cap + 1))
+            fi
             nums+=("$n"); heads+=("$hs"); ids="$ids#$n,"
+            say "train:accept:#$n tier=$tier"
+            case "$tier" in
+                heavy) say "train:heavy:#$n"; [ "$heavy_n" = - ] || heavy_n=$((heavy_n + 1)) ;;
+                light) ;;
+                *) say "train:heavy-unknown:#$n"; heavy_n=- ;;
+            esac
         else
             git merge --abort >/dev/null 2>&1 || true
             git reset -q --hard "$pre"

@@ -116,7 +116,7 @@ _pre_fix_has 737bd10c5 scripts/test-plan-binary-freshness.sh \
 for f in audit-guard-activation.sh check-cheatsheet-refs.sh \
          test-gate-stamp-does-not-memoize-guard-owned-paths.sh \
          test-plan-binary-freshness.sh; do
-    if printf '%s\n' "$OUT" | grep -q "$f"; then
+    if grep -q <<<"$OUT" "$f"; then
         bad "HALF 2: $f still flagged after its fix"
     else
         ok "HALF 2: $f clean"
@@ -128,7 +128,7 @@ done
 # reading the guard's own output. They are pinned because the cheapest way to
 # "improve" a pattern is to loosen it, and each returns the moment someone does.
 
-printf '%s\n' "$OUT" | grep -q 'diagnose-macos-provision.sh:159' \
+grep -q <<<"$OUT" 'diagnose-macos-provision.sh:159' \
     && bad "NEGATIVE CONTROL: flagged a correct same-line BSD-first fallback chain" \
     || ok "NEGATIVE CONTROL: same-line fallback chains not flagged"
 
@@ -137,11 +137,11 @@ printf '%s\n' "$OUT" | grep -q 'diagnose-macos-provision.sh:159' \
 # recommendation rather than a flag — this arm failed while the guard was
 # correct. A test that mistakes its own subject's advice for a finding is the
 # same false-accusation shape the guard is built to avoid, one level up.
-printf '%s\n' "$OUT" | grep -qE 'litmus-stdlib\.sh:[0-9]+' \
+grep -qE <<<"$OUT" 'litmus-stdlib\.sh:[0-9]+' \
     && bad "NEGATIVE CONTROL: flagged the repo's own GNU/BSD absorption layer" \
     || ok "NEGATIVE CONTROL: fallbacks across a line continuation not flagged"
 
-printf '%s\n' "$OUT" | grep -qE 'help-(de|es|fr|ja)\.sh' \
+grep -qE <<<"$OUT" 'help-(de|es|fr|ja)\.sh' \
     && bad "NEGATIVE CONTROL: flagged help TEXT as an rg invocation" \
     || ok "NEGATIVE CONTROL: usage lines not flagged"
 
@@ -151,7 +151,7 @@ printf '%s\n' "$OUT" | grep -qE 'help-(de|es|fr|ja)\.sh' \
 # `0,/re/` ADDRESS, measured here as a SILENT NO-OP (exit 0, file unchanged).
 # So flagging it would have invited a "fix" that removed the warning and left
 # the real defect.
-printf '%s\n' "$OUT" | grep -qE 'bump-version\.sh:[0-9]+' \
+grep -qE <<<"$OUT" 'bump-version\.sh:[0-9]+' \
     && bad "DIALECT BRANCH: flagged an idiom whose file already branches on dialect" \
     || ok "DIALECT BRANCH: an idiom inside an explicit GNU/BSD branch is not flagged"
 
@@ -169,7 +169,7 @@ mkdir -p "$_dw/scripts"
 printf '#!/usr/bin/env bash\nsed -%s "s/a/b/" "$1"\n' "$_I" > "$_dw/scripts/bare-idiom.sh"
 _dout="$(TILLANDSIAS_PORTABILITY_ROOT="$_dw" run_guard 2>&1)"
 rm -rf "$_dw"
-printf '%s\n' "$_dout" | grep -qE 'bare-idiom\.sh:[0-9]+' \
+grep -qE <<<"$_dout" 'bare-idiom\.sh:[0-9]+' \
     && ok "DIALECT BRANCH control: a bare idiom with no nearby probe IS still flagged (constructed tree)" \
     || bad "DIALECT BRANCH control: the window is swallowing unguarded code (constructed bare-idiom.sh not named)"
 
@@ -188,7 +188,7 @@ for _cf in manage-cache.sh test-forge-liveness-probe.sh \
     # tests-that-contain-their-subject, caught for containing its subject. The
     # assertion is unchanged; only the spelling in this file is.
     _d_idiom="date -${_D}"
-    printf '%s\n' "$OUT" | grep -qE "${_cf}:[0-9]+.*${_d_idiom}" \
+    grep -qE <<<"$OUT" "${_cf}:[0-9]+.*${_d_idiom}" \
         && bad "COUNTERPART: flagged a correct GNU-first date fallback in ${_cf}" \
         || ok "COUNTERPART: ${_cf}'s GNU-first date chain is not flagged"
 done
@@ -196,7 +196,7 @@ done
 # AND THE CONTROL: a `date -d` with NO counterpart must still be named.
 # test-check-bash-dialect.sh:77 writes one into a fixture as its SUBJECT — the
 # same self-flagging shape as this file's own HALF-1 lines, and correct.
-printf '%s\n' "$OUT" | grep -qE 'test-check-bash-dialect\.sh:[0-9]+' \
+grep -qE <<<"$OUT" 'test-check-bash-dialect\.sh:[0-9]+' \
     && ok "COUNTERPART control: a bare GNU date idiom IS still flagged" \
     || bad "COUNTERPART control: the date fallback rule is swallowing bare idioms"
 
@@ -205,7 +205,7 @@ printf '%s\n' "$OUT" | grep -qE 'test-check-bash-dialect\.sh:[0-9]+' \
 # CONTAINER — correct there, and the guard reaches it TRANSITIVELY (podman runs
 # $_script, $_script is built from $_NB_POPULATE_SNIPPET, 35 lines apart; a
 # one-hop rule flagged it and two cuts of this guard did exactly that).
-printf '%s\n' "$OUT" | grep -qE 'with-nix-builder\.sh:[0-9]+' \
+grep -qE <<<"$OUT" 'with-nix-builder\.sh:[0-9]+' \
     && bad "REMOTE CONTEXT: flagged an idiom executed inside a Linux container" \
     || ok "REMOTE CONTEXT: a remotely-dispatched string is not flagged"
 
@@ -213,11 +213,11 @@ printf '%s\n' "$OUT" | grep -qE 'with-nix-builder\.sh:[0-9]+' \
 # idioms. plan-binary-probe.sh:291 has `readlink -f` in ordinary host code and
 # MUST still be named — without this arm, widening the remote rule would go
 # unnoticed and the class would become an exemption list with a hole.
-printf '%s\n' "$OUT" | grep -qE 'plan-binary-probe\.sh:[0-9]+' \
+grep -qE <<<"$OUT" 'plan-binary-probe\.sh:[0-9]+' \
     && ok "REMOTE CONTEXT control: a bare idiom outside a dispatch IS still flagged" \
     || bad "REMOTE CONTEXT control: the remote-context rule is swallowing host code"
 
-printf '%s\n' "$OUT" | grep -q 'check-plan-ledger-readers.sh' \
+grep -q <<<"$OUT" 'check-plan-ledger-readers.sh' \
     && bad "NEGATIVE CONTROL: flagged grep -r over the CANONICAL skills/ tree" \
     || ok "NEGATIVE CONTROL: the canonical tree is not a symlink farm"
 

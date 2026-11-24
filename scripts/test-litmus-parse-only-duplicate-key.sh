@@ -171,7 +171,7 @@ if [ "$live_hits" -ge 1 ] && [ "$mut_hits" -eq 0 ] \
    && [ "$live_load" -ge 1 ] && [ "$mut_load" -eq 0 ]; then
     prefix_out="$(run_runner bash "$PREFIX_RUNNER" --parse-only "$TMP/dup-assert.yaml" 2>&1)"
     prefix_rc=$?
-    if [ "$prefix_rc" -eq 0 ] && printf '%s' "$prefix_out" | grep -Fq "$OK_PARSEABLE"; then
+    if [ "$prefix_rc" -eq 0 ] && grep -Fq <<<"$prefix_out" "$OK_PARSEABLE"; then
         ok "ARM 1: PRE-FIX the duplicate is reported parseable and exits 0 — the defect reproduces on demand"
     else
         bad "ARM 1: pre-fix copy did NOT reproduce the false green (rc=$prefix_rc) — the arm is not exercising the defect"
@@ -189,8 +189,8 @@ for probe in dup-assert:assert_output_contains dup-timeout:timeout_ms dup-comman
     out="$(run_runner bash "$RUNNER" --parse-only "$TMP/$f.yaml" 2>&1)"
     rc=$?
     if [ "$rc" -ne 0 ] \
-       && printf '%s' "$out" | grep -Fq "$f.yaml" \
-       && printf '%s' "$out" | grep -Fq "$key"; then
+       && grep -Fq <<<"$out" "$f.yaml" \
+       && grep -Fq <<<"$out" "$key"; then
         ok "ARM: duplicated '$key' refused, exit $rc, refusal names the file and the key"
     else
         bad "ARM: duplicated '$key' not refused as required (rc=$rc): $(printf '%s' "$out" | tail -1)"
@@ -202,7 +202,7 @@ done
 # false green with a false red.
 out="$(run_runner bash "$RUNNER" --parse-only "$TMP/clean.yaml" 2>&1)"
 rc=$?
-if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -Fq "${OK_PARSEABLE}"; then
+if [ "$rc" -eq 0 ] && grep -Fq <<<"$out" "${OK_PARSEABLE}"; then
     ok "ARM 5: a clean probe still reports parseable with its step count, exit 0"
 else
     bad "ARM 5: clean probe no longer passes (rc=$rc) — false green traded for false red"
@@ -333,7 +333,7 @@ fi
 "$READER" validate-yaml "$TMP/merged.yaml" >/dev/null 2>&1
 rc_merged_yaml=$?
 out="$(run_runner bash "$RUNNER" --parse-only "$TMP/merged.yaml" 2>&1)"
-if [ "$rc_merged_yaml" -eq 0 ] && ! printf '%s' "$out" | grep -Fq 'duplicated mapping key'; then
+if [ "$rc_merged_yaml" -eq 0 ] && ! grep -Fq <<<"$out" 'duplicated mapping key'; then
     ok "ARM 8: a merged '- name:' item is NOT reported as a duplicated key — a YAML loader accepts that file, so a duplicate refusal there is a false red"
 elif [ "$rc_merged_yaml" -ne 0 ]; then
     bad "ARM 8: premise gone — the loader now rejects the merged-item probe (rc=$rc_merged_yaml), so this arm no longer tests a false positive"

@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-23 (bundle landing phase 1, coordinator queue item 1).
+packets:
+  - packet_id: land-queue-bundles-log
+    order: "2276-fnhy"
+    status: implemented
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [land-queue, observability]
+    estimated_hours: 2
+    owned_files:
+      - scripts/land-queue.sh
+      - scripts/test-land-queue.sh
+      - scripts/lua/test-pre-push-trailer-states-what-it-saw.lua
+    title: "land-queue.sh writes one bundles.log line per train: verdict, members, heavy, base, tree, gate seconds, promoted, cause"
+    context: |
+      trains.log records members, base, union, result and gate seconds. Bundle landing needs verdict, heavy count, gated
+      tree and promoted sha per train to compute lands/day, gates/day, residual p and culprit-search rate.
+      bundles.log sits beside trains.log. heavy= is gate-changed --list --intake's own answer per member, so there is no
+      second path list; an unanswered probe reads "-". green means the gate was green and promoted= says whether it
+      landed; red means rc=1; aborted is any other rc (the host's state, 2234-a964); abandoned stopped at a named door.
+      Nothing about what lands changes. trains.log is unchanged.
+    exit_criteria:
+      - "scripts/test-land-queue.sh ARM 57 green: one line per train for landed, red, host-aborted, an unanswered heavy probe and the real default probe; the heavy-zero and aborted-as-red mutants red it."
+    unscoreable: "fixture-scored: scripts/test-land-queue.sh ARM 57 is the pin; no litmus covers the land queue"
+    provenance: "coordinator macuahuitl-fedora queue 2026-11-23, bundle-landing design phase 1"
+    events:
+      - type: implemented
+        ts: "2026-11-23T20:39:51Z"
+        host: yoga
+        summary: "implemented on work/2276-fnhy; test-land-queue 75/75, both mutants red"
