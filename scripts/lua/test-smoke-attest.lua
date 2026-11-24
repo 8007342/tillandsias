@@ -11,8 +11,14 @@
 --   5 a platform with no ref blocks (msys=missing)
 --   6 a ref copied under another sha's name does not count for that sha
 --   7 --version <tag> resolves to the RC commit
+--   8 a token planted in a lane log reaches no object reachable from the ref (2299-atdg)
+--   9 the tree is exactly SHA256SUMS, regime.txt, verdict.txt, with right digests
+--  10 a round archived inside the evidence dir is neither stale nor digested
+--  11 a raw-tree attest in the ref's history is refused (it would ride along on --push)
+--  12 an evidence file whose NAME is unsafe is refused without echoing it
+--  13 --regime is what regime.txt says; a regime that is not a slug is refused
 --
--- GRAMMAR ok:smoke-attest:7 | violation:smoke-attest:<n>-failed
+-- GRAMMAR ok:smoke-attest:13 | violation:smoke-attest:<n>-failed
 
 local top = proc.run({ argv = { "git", "rev-parse", "--show-toplevel" }, timeout_ms = 30000 })
 local ROOT = text.trim(top.stdout or "")
@@ -108,6 +114,86 @@ arm("6 a ref copied under another sha's name does not count", c2 == 1 and text.c
 c2, o2 = script("check-smoke-attested.lua", "--version", "v0.0.1-rc", "--platforms", "darwin")
 arm("7 --version resolves to the RC commit", c2 == 0 and text.contains(o2, "ok:smoke-attested:" .. RC), "rc=" .. c2 .. " " .. o2)
 
+-- ── 2299-atdg: the tree is digests only ─────────────────────────────────────
+-- Every arm below uses a FRESH platform name, so each ref starts empty.
+local TOKEN = "ghp_" .. "FAKEtoken0123456789abcdefABCDEF0123"
+local function objects_hold(ref, needle)
+    -- EVERY object reachable from the ref, not only the tip tree: commits,
+    -- trees and blobs of the whole chain.
+    local _, list = sh({ "git", "-C", R, "rev-list", "--objects", ref })
+    for _, l in ipairs(text.lines(list)) do
+        local id = l:match("^(%x+)")
+        if id then
+            local _, body = sh({ "git", "-C", R, "cat-file", "-p", id })
+            if text.contains(body, needle) then return true end
+        end
+    end
+    return false
+end
+local function attest_as(plat, v, ...) return script("attest-smoke.lua", "--sha", RC, "--tag", "v0.0.1-rc",
+    "--asset-sha256", ASSET, "--verdict", v, "--dir", E, "--platform", plat, ...) end
+
+-- 8 TOKEN: a lane log holding a token, attested; no reachable object holds it.
+evidence("unmeasured: operator has not signed in " .. TOKEN)
+fs.write(REL .. "/04-lane.log", "device code url https://example.invalid/?code=" .. TOKEN .. "\n")
+c, o = attest_as("tokenarm", "partial:credential-unmeasured")
+local REF8 = "refs/attest/smoke/tokenarm/" .. RC
+local leaked = c == 0 and objects_hold(REF8, TOKEN)
+-- Control: the needle search can see the token where it really is.
+local _, rawblob = sh({ "git", "-C", R, "hash-object", E .. "/04-lane.log" })
+arm("8 a token in a lane log reaches no object reachable from the ref", c == 0 and not leaked
+    and select(2, sh({ "git", "-C", R, "cat-file", "-t", rawblob })) ~= "blob",
+    "rc=" .. c .. " leaked=" .. tostring(leaked) .. " " .. o)
+
+-- 9 SHAPE: exactly three names; SHA256SUMS digests every evidence file, right.
+local _, names = sh({ "git", "-C", R, "ls-tree", "--name-only", REF8 })
+local _, sums = sh({ "git", "-C", R, "show", REF8 .. ":SHA256SUMS" })
+local _, reg = sh({ "git", "-C", R, "show", REF8 .. ":regime.txt" })
+local _, ver = sh({ "git", "-C", R, "show", REF8 .. ":verdict.txt" })
+local _, want = sh({ BIN, "hash", "sha256", E .. "/04-lane.log" })
+arm("9 the tree is SHA256SUMS, regime.txt, verdict.txt and the digests are right",
+    names == "SHA256SUMS\nregime.txt\nverdict.txt" and reg == "tokenarm" and ver == "partial:credential-unmeasured"
+    and text.contains(sums, (want:match("^(%x+)") or "?") .. "  04-lane.log") and text.contains(sums, "  credential-step.txt")
+    and not text.contains(ver, "operator"),
+    names .. " / " .. sums .. " / " .. reg .. " / " .. ver)
+
+-- 10 ARCHIVED: a previous round archived INSIDE the dir is neither stale nor digested.
+evidence("unmeasured: operator has not signed in")
+sh({ "mkdir", "-p", E .. "/_archived-20200101t000000z" }, ROOT)
+fs.write(REL .. "/_archived-20200101t000000z/03-old.log", "old round\n")
+sh({ "touch", "-t", "201901010000", E .. "/_archived-20200101t000000z/03-old.log" }, ROOT)
+c, o = attest_as("archarm", "partial:credential-unmeasured")
+local _, sums10 = sh({ "git", "-C", R, "show", "refs/attest/smoke/archarm/" .. RC .. ":SHA256SUMS" })
+arm("10 an archived round inside the evidence dir is neither stale nor digested",
+    c == 0 and not text.contains(sums10, "_archived") and text.contains(sums10, "03-diagnose-exit.txt"), "rc=" .. c .. " " .. o .. " / " .. sums10)
+
+-- 11 HISTORY: an old raw-tree attest in the chain is refused, nothing written.
+evidence("unmeasured: operator has not signed in")
+local REF11 = "refs/attest/smoke/histarm/" .. RC
+local rawtree = git("write-tree")   -- the scratch repo's own tree: not the digest shape
+local rawc = git("commit-tree", rawtree, "-m", "old raw-tree attest")
+git("update-ref", REF11, rawc)
+c, o = attest_as("histarm", "partial:credential-unmeasured")
+arm("11 a raw-tree commit in the ref's history is refused and the ref is unmoved",
+    c == 2 and text.contains(o, "refused:attest-smoke:raw-tree-in-history:") and git("rev-parse", REF11) == rawc,
+    "rc=" .. c .. " " .. o)
+
+-- 12 NAME: an evidence file whose NAME is unsafe is refused, and not echoed.
+evidence("unmeasured: operator has not signed in")
+fs.write(REL .. "/code " .. "SECRETNAME.txt", "x\n")
+c, o = attest_as("namearm", "partial:credential-unmeasured")
+arm("12 an unsafe evidence file name is refused without echoing it",
+    c == 2 and text.contains(o, "refused:attest-smoke:unsafe-evidence-name") and not text.contains(o, "SECRETNAME"),
+    "rc=" .. c .. " " .. o)
+
+-- 13 REGIME: --regime is what regime.txt says, and a regime that is not a slug is refused.
+evidence("unmeasured: operator has not signed in")
+c, o = attest_as("regarm", "partial:credential-unmeasured", "--regime", "darwin-arm64")
+local _, reg13 = sh({ "git", "-C", R, "show", "refs/attest/smoke/regarm/" .. RC .. ":regime.txt" })
+local cb, ob = attest_as("regarm2", "partial:credential-unmeasured", "--regime", "bad regime")
+arm("13 --regime is written to regime.txt and a non-slug regime is refused",
+    c == 0 and reg13 == "darwin-arm64" and cb == 2 and text.contains(ob, "refused:attest-smoke:"), "rc=" .. c .. " " .. reg13 .. " / " .. cb .. " " .. ob)
+
 proc.run({ argv = { "rm", "-rf", S }, timeout_ms = 60000 })
 if #failed > 0 then verdict.emit("violation:smoke-attest:" .. #failed .. "-failed", 1) end
-verdict.ok("smoke-attest", "7")
+verdict.ok("smoke-attest", "13")
