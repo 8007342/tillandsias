@@ -493,6 +493,8 @@ mod tests {
             assert(not pcall(proc.chain, {[1]={argv={'true'}},[3]={argv={'true'}}}))
             for _, later in ipairs({
                 {argv={}}, {argv={'true'},env={BAD={}}},
+                {argv={'true'},env_unset='X'}, {argv={'true'},env_unset={'*'}},
+                {argv={'true'},env_unset={X=1}},
                 {argv={'true'},cwd='relative'}, {argv={'true'},timeout_ms=-1},
                 {argv={'true'},group=false}, {argv={'true'},capture_bytes=0},
                 {argv={'true'},detach='yes'}, {argv={'true'},group=false,detach=true},

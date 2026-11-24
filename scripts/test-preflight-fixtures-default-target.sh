@@ -36,6 +36,10 @@
 # ARM 9  NEGATIVE CONTROL for 8: the absolutising Lua fixture is admitted
 #        and counted. Arms 8-9 need a REAL runner (a stub cannot run Lua), so
 #        they copy the caller's plan binary and skip by name without one.
+# ARM 10 (2305-zm8j) A Lua fixture whose subject reads an exported gate variable
+#        is refused as gate-env.  PRE-FIX RESULT: FAILS, it was admitted.
+# ARM 11 NEGATIVE CONTROL for 10: the same subject with env_unset is admitted.
+#        Skips by name on a plan binary with no env_unset.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEC="$ROOT/scripts/preflight-fixtures-default-target.sh"
@@ -236,6 +240,26 @@ EOS
         ok "ARM 9 the absolutising Lua fixture is admitted and counted"
     else
         bad "ARM 9 expected the absolutising Lua fixture admitted (rc=$rc9): $(printf '%s' "$o9" | tail -2 | tr '\n' ';')"
+    fi
+    printf '[ -z "${TILLANDSIAS_FORGE_SEED_BRANCH:-}" ] && [ -z "${CARGO_TARGET_DIR:-}" ]\n' > "$L/scripts/reads-gate.sh"
+    for k in leaks drops; do
+        u=""; [ "$k" = leaks ] || u=', env_unset = { "TILLANDSIAS_*", "CARGO_TARGET_DIR" }'
+        printf 'local r = proc.run{ argv = { "bash", "scripts/reads-gate.sh" }%s }\nif r.ok then verdict.ok("lua-%s") end\nverdict.refused("lua-%s")\n' "$u" "$k" "$k" > "$L/scripts/lua/test-$k.lua"
+    done
+    o10="$(by_lpath scripts/lua/test-leaks.lua)"; rc10=$?
+    if [ "$rc10" -ne 0 ] && [[ "$o10" == *"refused:fixture-default-target:gate-env:scripts/lua/test-leaks.lua"* ]]; then
+        ok "ARM 10 a Lua fixture red only under a gate's variables is refused"
+    else
+        bad "ARM 10 expected the leaking Lua fixture refused as gate-env (rc=$rc10): $(printf '%s' "$o10" | tail -2 | tr '\n' ';')"
+    fi
+    o11="$(by_lpath scripts/lua/test-drops.lua)"; rc11=$?
+    if [[ "$o11" == *"unknown field 'env_unset'"* ]]; then
+        echo "skip:arm-11:plan-binary-without-env_unset"
+    elif [ "$rc11" -eq 0 ] && [ "$(printf '%s' "$o11" | tail -1)" = "ok:fixture-default-target:1 checked" ] \
+       && [[ "$o11" != *"note:fixture-default-target"* ]]; then
+        ok "ARM 11 the same subject with env_unset is admitted"
+    else
+        bad "ARM 11 expected the env_unset fixture admitted (rc=$rc11): $(printf '%s' "$o11" | tail -2 | tr '\n' ';')"
     fi
 fi
 
