@@ -13,10 +13,13 @@
 -- Verdict: ok:build-floor:5-arms (0) | violation:build-floor:<arm>:<why> (1)
 local BIN = env.get("TILLANDSIAS_PLAN_BIN")
 if BIN == nil or BIN == "" then BIN = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN") end
-if BIN == nil or BIN == "" then verdict.could_not_run("build-floor", "no-plan-binary — set TILLANDSIAS_PLAN_BIN") end
-
 local function run(argv, ms) return proc.run{ argv = argv, timeout_ms = ms or 60000 } end
 local root = text.trim(run({ "git", "rev-parse", "--show-toplevel" }, 5000).stdout or "")
+-- Run bare, fall back to the checkout's own build (as check-stale-ready-rows does).
+if (BIN == nil or BIN == "") and root ~= "" and run({ "test", "-x", root .. "/target/release/tillandsias-plan" }, 5000).ok then
+    BIN = root .. "/target/release/tillandsias-plan"
+end
+if BIN == nil or BIN == "" then verdict.could_not_run("build-floor", "no-plan-binary — set TILLANDSIAS_PLAN_BIN or cargo build --release -p tillandsias-plan") end
 local FLOOR = root .. "/scripts/lua/build-floor.lua"
 local stamp = time.iso_utc():gsub("%W", "") .. "-" .. tostring(math.random(100000, 999999))
 local S = root .. "/target/plan-scratch/build-floor-" .. stamp

@@ -61,7 +61,12 @@ if fmt == "pending" then
         verdict.emit("could-not-run:floor:cargo-fmt-unavailable", 2)
     else
         local files = {}
-        for l in ((r.stdout or "") .. "\n"):gmatch("Diff in ([^\n]-) at line") do files[l] = true end
+        -- rustfmt names a file as `Diff in <path>:<line>:` (older) or
+        -- `Diff in <path> at line <n>:` (newer); read both, as check-rust-lints does.
+        for _, l in ipairs(text.lines(r.stdout or "")) do
+            local p = l:match("^Diff in (.-):%d+:%s*$") or l:match("^Diff in (.-) at line %d+:%s*$")
+            if p then files[p] = true end
+        end
         local names = {}
         for f in pairs(files) do names[#names + 1] = f end
         table.sort(names)
