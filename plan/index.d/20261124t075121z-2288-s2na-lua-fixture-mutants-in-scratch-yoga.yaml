@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: lua-fixture-mutants-leave-the-live-scripts-dir
+    order: "2288-s2na"
+    status: implemented
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [preflight, fixtures, hygiene, land-queue]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-fixtures-ignore-inherited-git-dir.lua
+      - scripts/lua/test-litmus-verdict-reads-stdout-only.lua
+    title: "Two Lua fixtures wrote mutant scripts into the live scripts/ dir, where concurrent guards read them as new code"
+    context: |
+      PR 1464 was evicted twice in queue run 42 by violation:bare-mktemp:new-site:scripts/.mutant-gitdir-2224.sh, written
+      by test-fixtures-ignore-inherited-git-dir.lua (2224-gdir, calmecacpilli, offline; adopted by yoga on the
+      coordinator's word). test-litmus-verdict-reads-stdout-only.lua wrote scripts/.fx87-mutant-runner-*.sh the same way.
+      The git-dir mutant, which has its protections removed on purpose, runs in a scratch tree that is its own git
+      repository; the litmus-runner mutant is a scratch copy with PROJECT_ROOT pinned.
+      check-checkout-writers scans only .sh, so no Lua writer was ever counted; that scan is not changed here.
+    exit_criteria:
+      - "Both fixtures are green with their mutation arms red, and git status sampled while they run shows no untracked file."
+    unscoreable: "fixture-scored: gate step 347 runs the first; the second is the fixture its own gate call runs"
+    provenance: "coordinator macuahuitl-fedora 2026-11-24, from PR 1464's evictions"
+    related: [2224-gdir, 2278-x4tw, 2287-vcfj]
+    events:
+      - {type: claimed, ts: "2026-11-24T07:51:21Z", host: yoga, summary: "adopted from calmecacpilli (offline) on the coordinator's word"}
+      - {type: implemented, ts: "2026-11-24T07:51:21Z", host: yoga, summary: "implemented on work/2287-vcfj; 4 and 5 arms, no untracked file seen"}

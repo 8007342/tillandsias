@@ -130,7 +130,6 @@ scripts/test-credential-channel-survives-a-killed-probe.sh
 scripts/test-credential-cold-state-probe.sh
 scripts/test-credential-verdict-script.sh
 scripts/test-cycle-checkout-lock.sh
-scripts/test-cycle-claims-report.sh
 scripts/test-cycle-driver.sh
 scripts/test-cycle-flow-emit-idempotency.sh
 scripts/test-cycle-lock-attested-release.sh
@@ -174,7 +173,6 @@ scripts/test-forge-config-trust-cross-platform-parity.sh
 scripts/test-forge-entrypoints-source-agent-profile.sh
 scripts/test-forge-findings-persisted.sh
 scripts/test-forge-git-identity-source.sh
-scripts/test-forge-git-index-materialization.sh
 scripts/test-forge-gitconfig-bidirectional-quarantine.sh
 scripts/test-forge-launch-openspec-init-clean.sh
 scripts/test-forge-liveness-probe.sh
@@ -290,7 +288,6 @@ scripts/test-litmus-scalar-unescape.sh
 scripts/test-litmus-stdin-does-not-eat-the-spec-list.sh
 scripts/test-litmus-step-model.sh
 scripts/test-litmus-step-pipefail.sh
-scripts/test-litmus-steps-can-fail.sh
 scripts/test-litmus-structured-assert.sh
 scripts/test-litmus-terminal-verdict.sh
 scripts/test-litmus-test-selector.sh
@@ -352,7 +349,6 @@ scripts/test-podman-mock-secret-lifecycle.sh
 scripts/test-podman-sync-budgets.sh
 scripts/test-populate-hot-paths-negative-control.sh
 scripts/test-portability-idioms.sh
-scripts/test-pre-push-deletion-only.sh
 scripts/test-pre-push-empty-ref-list.sh
 scripts/test-pre-push-honours-a-live-freeze.sh
 scripts/test-pre-push-linux-next-merged.sh

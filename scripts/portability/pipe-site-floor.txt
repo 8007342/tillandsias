@@ -565,7 +565,6 @@ scripts scripts/test-credential-channel-host-push-lane.sh 1
 scripts scripts/test-credential-channel-names-a-locked-keyring.sh 6
 scripts scripts/test-credential-cold-state-probe.sh 2
 scripts scripts/test-cycle-checkout-lock.sh 9
-scripts scripts/test-cycle-claims-report.sh 1
 scripts scripts/test-cycle-driver.sh 3
 scripts scripts/test-cycle-metrics-recurrence.sh 1
 scripts scripts/test-cycle-preflight-cargo-resolution.sh 3
@@ -712,7 +711,6 @@ scripts scripts/test-plan-orders-fragment-fold.sh 7
 scripts scripts/test-podman-mock-refusal.sh 4
 scripts scripts/test-podman-mock-secret-lifecycle.sh 4
 scripts scripts/test-portability-idioms.sh 13
-scripts scripts/test-pre-push-deletion-only.sh 1
 scripts scripts/test-pre-push-empty-ref-list.sh 6
 scripts scripts/test-pre-push-honours-a-live-freeze.sh 11
 scripts scripts/test-pre-push-linux-next-merged.sh 3

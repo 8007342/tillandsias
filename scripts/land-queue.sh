@@ -199,6 +199,7 @@ LIMIT=0
 DRY_RUN=0
 DAILY_FULL=0
 STATUS=0
+STATUS_PR=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --limit)   LIMIT="${2:-0}"; shift 2 ;;
@@ -208,6 +209,10 @@ while [ $# -gt 0 ]; do
         --dry-run) DRY_RUN=1; shift ;;
         --daily-full) DAILY_FULL=1; shift ;;
         --status) STATUS=1; shift ;;
+        --pr)      # read-only: it always implies --status, and never runs the queue
+            STATUS=1; STATUS_PR="${2:-}"; STATUS_PR="${STATUS_PR#\#}"
+            [[ "$STATUS_PR" =~ ^[0-9]{1,7}$ ]] || { echo "fail:land-queue:pr-needs-a-number:${2:-}" >&2; exit 1; }
+            shift 2 ;;
         *) echo "fail:land-queue:unknown-argument:$1" >&2; exit 1 ;;
     esac
 done
@@ -380,12 +385,42 @@ _lq_render() { # <stored line with started=<epoch>> -> the line with elapsed=<s>
     [ -n "$_st" ] || { printf '%s\n' "$1"; return; }
     printf '%s\n' "$1" | sed "s/ started=[0-9]*/ elapsed=$(( $(date +%s) - _st ))/"
 }
-_lq_publish() { # <line>
+_lq_publish() { # <line> [more lines, as the commit's body]
     [ "${TILLANDSIAS_LAND_QUEUE_STATUS_PUBLISH:-1}" = 1 ] && [ "${DRY_RUN:-0}" -eq 0 ] || return 0
     local _t _c
     _t="$(git hash-object -t tree -w /dev/null 2>/dev/null)" || return 0
-    _c="$(printf '%s\n' "$1" | git -c user.name=land-queue -c user.email=land-queue@localhost commit-tree "$_t" 2>/dev/null)" || return 0
+    _c="$(printf '%s\n' "$1" ${2:+"" "$2"} | git -c user.name=land-queue -c user.email=land-queue@localhost commit-tree "$_t" 2>/dev/null)" || return 0
     timeout 20 git push -q "$REMOTE" "+$_c:refs/tillandsias/queue/status" </dev/null >/dev/null 2>&1 || true
+}
+# The lines after the first (2288-vx6k): what `--status` adds and the published commit's body
+# carries. They READ files only: $_RUNDIR/next (the queue order left, one number a
+# line), $_RUNDIR/bundle (the open train), bundles.log, and the shadow's own lock dir.
+_lq_more() { # <run dir or empty> -> queue:next, queue:bundle, queue:shadow
+    local _d="$1" _l _n _p _pr _bl="${TILLANDSIAS_LAND_QUEUE_BUNDLE_LOG:-$(dirname "${TILLANDSIAS_LAND_QUEUE_TRAIN_LOG:-$_LQ_LOGROOT0/trains.log}")/bundles.log}"
+    local _sk="${TILLANDSIAS_LAND_QUEUE_SHADOW_LOCK:-${XDG_RUNTIME_DIR:-$_LQ_LOGROOT0}/tillandsias-shadow.lock}" _sl="${TILLANDSIAS_LAND_QUEUE_SHADOW_LOG:-$_LQ_LOGROOT0/shadow-intake.log}"
+    _n=""; [ -z "$_d" ] || _n="$(tr '\n' ',' < "$_d/next" 2>/dev/null)"
+    [ -z "$_d" ] || printf 'queue:next %s\n' "${_n:+#${_n%,}}" | sed 's/,/,#/g; s/ $/ -/'
+    if [ -n "$_d" ] && [ -s "$_d/bundle" ]; then _lq_render "$(cat "$_d/bundle")"
+    else
+        _l="$(grep '^bundle:' "$_bl" 2>/dev/null | tail -n 1)"
+        printf 'queue:bundle open=- last=%s\n' "${_l:--}"
+    fi
+    _p="$(cat "$_sk/pid" 2>/dev/null)"; _pr="$(cat "$_sk/current" 2>/dev/null)"
+    if [ -n "$_p" ] && kill -0 "$_p" 2>/dev/null; then
+        _l=running; [ ! -e "$_sk/stop" ] || _l=stopping
+        printf 'queue:shadow %s pr=%s' "$_l" "${_pr:+#$_pr}" | sed 's/pr=$/pr=-/'
+    else printf 'queue:shadow idle pr=-'; fi
+    printf ' log=%s lines=%s\n' "$_sl" "$(grep -c '^shadow:accept:' "$_sl" 2>/dev/null || [ -e "$_sl" ] || echo 0)"
+}
+_lq_pr() { # <run dir or empty> <pr> -> one line: is MY PR gating?
+    local _cur _i
+    _cur="$(cat "$1/current" 2>/dev/null)"
+    case "$_cur" in "queue:gating:#$2 "*) printf 'queue:pr:#%s gating %s\n' "$2" "$(_lq_render "$_cur" | sed 's/^[^ ]* //')"; return ;; esac
+    case ",$(sed -n 's/.* train=\([^ ]*\).*/\1/p' <<<"$_cur")," in *",#$2,"*) printf 'queue:pr:#%s gating in-train %s\n' "$2" "$(_lq_render "$_cur" | sed 's/^[^ ]* //')"; return ;; esac
+    _i="$(grep -nxF -- "$2" "$1/next" 2>/dev/null | cut -d: -f1)"; _i="${_i%%$'\n'*}"
+    if [ -n "$_i" ]; then printf 'queue:pr:#%s waiting position=%s of=%s\n' "$2" "$_i" "$(grep -c . "$1/next")"
+    elif [ -n "$_cur" ]; then printf 'queue:pr:#%s not-in-this-run (read once per candidate; landed, evicted, held, a draft, or opened since)\n' "$2"
+    else printf 'queue:pr:#%s idle (no run is holding the queue)\n' "$2"; fi
 }
 _lq_phase() { # <num> <ref> <phase> [train members]
     local _w _line
@@ -393,14 +428,25 @@ _lq_phase() { # <num> <ref> <phase> [train members]
     _line="queue:gating:#$1 $2 phase=$3 started=$(date +%s) train=${4:--} waiting=$_w"
     printf '%s\n' "$_line" > "$_RUNDIR/current" 2>/dev/null || true
     printf '%s\n' "$_RUNDIR" > "$_LOGROOT/current-run" 2>/dev/null || true
-    _lq_publish "$(_lq_render "$_line")"
+    # The numbers still to come, in queue order: read-only for --status. Not the one gating,
+    # not the train's members, not what this run already took.
+    printf '%s' "${_cands:-}" | cut -f1 | while IFS= read -r _w; do
+        case " ${_seen:-} $1 " in *" $_w "*) continue ;; esac
+        case ",${4:-}," in *",#$_w,"*) continue ;; esac
+        [ -n "$_w" ] && printf '%s\n' "$_w"
+    done > "$_RUNDIR/next" 2>/dev/null || true
+    if [ -n "${4:-}" ]; then printf 'queue:bundle open=%s members=%s heavy=%s base=%s phase=%s started=%s\n' "${t_id:--}" "$4" "${heavy_n:--}" "${base:0:9}" "$3" "$(date +%s)" > "$_RUNDIR/bundle" 2>/dev/null || true
+    else rm -f "$_RUNDIR/bundle" 2>/dev/null; fi
+    _lq_publish "$(_lq_render "$_line")" "$(_lq_more "$_RUNDIR" | sed "s/ log=[^ ]*//")"
 }
 _lq_idle() {
     local _line; _line="$(_lq_idle_line)"
     rm -f "$_LOGROOT/current-run" 2>/dev/null || true
-    _lq_publish "$_line"
+    _lq_publish "$_line" "$(_lq_more "" | sed "s/ log=[^ ]*//")"
 }
 if [ "$STATUS" -eq 1 ]; then
+    _sd=""; _lock_holder >/dev/null && _sd="$(cat "$_LQ_LOGROOT0/current-run" 2>/dev/null)"
+    if [ -n "$STATUS_PR" ]; then _lq_pr "$_sd" "$STATUS_PR"; exit 0; fi
     if _h0="$(_lock_holder)"; then
         _cur="$(cat "$(cat "$_LQ_LOGROOT0/current-run" 2>/dev/null)/current" 2>/dev/null)"
         if [ -n "$_cur" ]; then _lq_render "$_cur"
@@ -408,6 +454,7 @@ if [ "$STATUS" -eq 1 ]; then
     else
         _lq_idle_line
     fi
+    _lq_more "$_sd"
     exit 0
 fi
 if _h0="$(_lock_holder)"; then
@@ -739,6 +786,35 @@ next_candidate() {
 # measured before K is widened (coordinator 2026-11-20).
 # BATCH_K < 2 (the default until the coordinator sets it: 4 for full trains)
 # leaves the queue exactly as it was.
+# ── SHADOW INTAKE (bundle landing phase 0): INTAKE'S VERDICT BESIDE THE GATE'S ──
+# Off unless TILLANDSIAS_LAND_QUEUE_SHADOW_INTAKE names the command (run in a shadow
+# tree as `<cmd> <base>`, e.g. `./build.sh --intake --changed`). Each gated candidate
+# is remembered (number, base, head, the gate's verdict) and scripts/lua/shadow-
+# intake.lua measures them DETACHED after this run ends: its own lock, worktree and
+# target dir, low priority, bounded. A land run that starts meanwhile asks it to stop
+# at its next PR. It changes, delays and evicts nothing (coordinator 2026-11-24).
+SHADOW_INTAKE="${TILLANDSIAS_LAND_QUEUE_SHADOW_INTAKE:-}"
+SHADOW_LOG="${TILLANDSIAS_LAND_QUEUE_SHADOW_LOG:-$_LOGROOT/shadow-intake.log}"
+SHADOW_LOCK="${TILLANDSIAS_LAND_QUEUE_SHADOW_LOCK:-${XDG_RUNTIME_DIR:-$_LOGROOT}/tillandsias-shadow.lock}"
+SHADOW_TREE="${TILLANDSIAS_LAND_QUEUE_SHADOW_TREE:-${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/shadow-intake/$(basename "$ROOT")}"
+_shadow_q=()
+[ ! -d "$SHADOW_LOCK" ] || : > "$SHADOW_LOCK/stop" 2>/dev/null || true
+shadow_note() { # <num> <base> <head> <gate verdict> <via>
+    [ -n "$SHADOW_INTAKE" ] && [ "$DRY_RUN" -eq 0 ] || return 0
+    _shadow_q+=("$1:$2:$3:$4:$5")
+}
+shadow_launch() {
+    [ "${#_shadow_q[@]}" -gt 0 ] || return 0
+    local _pri=()
+    command -v nice >/dev/null 2>&1 && _pri=(nice -n 10)
+    command -v ionice >/dev/null 2>&1 && _pri+=(ionice -c3)
+    command -v setsid >/dev/null 2>&1 && _pri+=(setsid)  # its own session: it outlives a parent that is killed
+    mkdir -p "$(dirname "$SHADOW_LOG")" 2>/dev/null
+    ( trap '' HUP; trap - EXIT; exec env SHADOW_CMD="$SHADOW_INTAKE" SHADOW_TREE="$SHADOW_TREE" SHADOW_LOG="$SHADOW_LOG" SHADOW_LOCK="$SHADOW_LOCK" SHADOW_KEEP="$_RUNDIR" SHADOW_PLAN="$PLAN" \
+        SHADOW_PR_S="${TILLANDSIAS_LAND_QUEUE_SHADOW_PR_S:-1200}" SHADOW_RUN_S="${TILLANDSIAS_LAND_QUEUE_SHADOW_RUN_S:-1200}" \
+        ${_pri[@]+"${_pri[@]}"} "$PLAN" script run "$_SELF_DIR/lua/shadow-intake.lua" -- "${_shadow_q[@]}" ) </dev/null >"$_RUNDIR/shadow.out" 2>&1 &
+    say "shadow-intake: ${#_shadow_q[@]} candidate(s) handed to a detached run, log $SHADOW_LOG"
+}
 BATCH_K="${TILLANDSIAS_LAND_QUEUE_BATCH_K:-1}"
 TRAIN_LOG="${TILLANDSIAS_LAND_QUEUE_TRAIN_LOG:-$_LOGROOT/trains.log}"
 # bundles.log (bundle landing phase 1): the successor line, beside trains.log, one
@@ -936,6 +1012,7 @@ try_batch() {
     for n in "${nums[@]}"; do
         say "land:$n tier=full gate=green train=${c:0:9} base=${base:0:9} head=${heads[$i]:0:9}"
         not_run_line "$_RUNDIR/train-gate.log"
+        shadow_note "$n" "$base" "${heads[$i]}" green train
         landed=$((landed + 1)); _seen="$_seen$n "; i=$((i + 1))
     done
     git checkout -q --detach "$c" 2>/dev/null
@@ -1313,6 +1390,7 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
     # 859-4jny bug one layer over.
     # 2174-dail: the class selector may skip unchanged steps only against a daily proof.
     gate_env_for "$base_sha"
+    _sh_base="$base_sha"
     _gcmd="$GATE"
     [ "$_lane" = plan-only ] && _gcmd="$PLAN_LANE_CHECK"
     ( _gate_clean_env; eval "$_gcmd" ) < /dev/null > "$_glog" 2>&1
@@ -1395,6 +1473,7 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
                         [ "$_tr_verdict" = "red $_flaky_test" ] && _trunk_red="$_flaky_test"
                     fi
                     if [ -n "$_trunk_red" ]; then
+                        shadow_note "$num" "$_sh_base" "$head_sha" trunk-red single
                         say "hold:trunk-red:$_trunk_red — trunk ${base_sha:0:9} fails it too; #$num is not evicted; the queue holds until trunk is fixed (full log: $_glog)"
                         rm -f "$_glog.rerun"
                         _held=1
@@ -1405,6 +1484,12 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
                 rm -f "$_glog.rerun"
             fi
         fi
+    fi
+    if [ "$_lane" = full ]; then
+        if [ "$_grc" -eq 0 ]; then _sh_g=green; [ -z "$_flaky_test" ] || _sh_g=flaky
+        elif grep -q '^flaky:' "$_glog" 2>/dev/null; then _sh_g=flaky
+        elif [ "$_grc" -eq 1 ]; then _sh_g=red; else _sh_g=aborted; fi
+        shadow_note "$num" "$_sh_base" "$head_sha" "$_sh_g" single
     fi
     if [ "$_grc" -ne 0 ]; then
         # ORDER 1765-q7rg: A flaky:<step>:<verdicts> line is the step runner's
@@ -1557,6 +1642,7 @@ The queue will re-gate on its next pass."
 done
 done
 
+shadow_launch
 if [ "$_held" -eq 1 ]; then
     say "hold:land-queue:$_n landed=$landed evicted=$evicted requeued=$requeued skipped=$skipped — held on a trunk red (2118-tpmy)"
     exit 4

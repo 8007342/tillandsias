@@ -20,7 +20,7 @@
 --              guard, 2244-crgd) the victim IS rewritten (proves arm 1 can fail).
 --   4 GUARD    with only the unset gone, the guard alone leaves it untouched.
 -- There is no mutant without the guard and with the unset: its stray writes
--- would land in the REAL checkout, not in a victim.
+-- would land wherever its own ROOT is, not in a victim.
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-fixtures-ignore-inherited-git-dir.lua
 -- Verdict: ok:fixtures-ignore-inherited-git-dir:<n> | violation:fixtures-ignore-inherited-git-dir:<n>-failed
@@ -79,8 +79,14 @@ end
 if found then ok("2 DOOR build.sh clears GIT_DIR and its siblings before the toolbox re-exec")
 else bad("2 DOOR build.sh no longer clears GIT_DIR in its first 80 lines") end
 
--- The mutants sit beside the fixture so its relative sources still resolve.
-local MUT = "scripts/.mutant-gitdir-2224.sh"
+-- THE MUTANTS LIVE IN A SCRATCH TREE (2288-s2na), never in the live scripts/: a guard
+-- reading the checkout saw scripts/.mutant-gitdir-2224.sh and evicted #1464 twice. The
+-- tree is a copy of scripts/, so relative sources still resolve, and is its OWN git
+-- repository, so a stray write of an unprotected mutant cannot walk up to this one.
+local TREE = W .. "/tree"
+run({ "git", "init", "-q", TREE })
+run({ "cp", "-R", root .. "/scripts", TREE .. "/scripts" }, nil, 120000)
+local MUT = REL .. "/tree/scripts/mutant-gitdir.sh"
 local BITES = "# ── 2244-crgd: THE GUARD BITES"
 local function mutant(name, drop_guard)
     local p = victim(name)
@@ -108,7 +114,6 @@ local function mutant(name, drop_guard)
     fs.write(MUT, table.concat(keep, "\n") .. "\n")
     local b4 = state(p)
     run({ BASH, root .. "/" .. MUT }, { GIT_DIR = p .. "/.git" }, 300000)
-    proc.run({ argv = { "rm", "-f", root .. "/" .. MUT }, timeout_ms = 10000 })
     return b4, state(p)
 end
 

@@ -84,14 +84,16 @@ local cut = '_kg_note "${_step_file##*/}" "$_step_rc" && return 0'
 if not src:find(cut, 1, true) then
     T:arm("5 MUTANT premise: the record-and-continue line is in build.sh", false, "not found")
 else
-    local MREL = "build-keep-going-mutant.sh"
-    -- A run killed between write and rm (ENOSPC, yoga 2026-11-23) leaves this
-    -- at the repo root; clear any leftover first so debris never accumulates.
-    proc.run({ argv = { "rm", "-f", ROOT .. "/" .. MREL } })
-    fs.write(MREL, (src:gsub(cut:gsub("%p", "%%%0"), ":", 1)))  -- the repo root, so build.sh's own SCRIPT_DIR resolves
-    rc, o = gate(ROOT .. "/" .. MREL, mixed, { kg = true })
-    proc.run({ argv = { "rm", "-f", ROOT .. "/" .. MREL } })
+    -- The mutant lives in SCRATCH, never at the repo root: a run KILLed between write
+    -- and rm left it in the live checkout (yoga 2026-11-23 and 2026-11-24). Its one
+    -- SCRIPT_DIR line is pinned to the real root, so it reads what build.sh reads.
+    local mut, nd = src:gsub('\nSCRIPT_DIR=[^\n]*', function() return '\nSCRIPT_DIR="' .. ROOT .. '"' end, 1)
+    local nc
+    mut = mut:gsub('\n_BUILDER_DIR=[^\n]*', function() return '\n_BUILDER_DIR="' .. ROOT .. '"' end, 1)
+    mut, nc = mut:gsub(cut:gsub("%p", "%%%0"), ":", 1)
+    fs.write(S.rel .. "/mutant-build.sh", mut)
+    rc, o = gate(S.abs .. "/mutant-build.sh", mixed, { kg = true })
     T:arm("5 MUTANT without record-and-continue only a is named: arm 2 has teeth",
-        rc ~= 0 and not has(o, "red-step:300-c.step"), "rc=" .. tostring(rc) .. "\n" .. o)
+        nd == 1 and nc == 1 and rc ~= 0 and has(o, "step-a-ran") and not has(o, "red-step:300-c.step"), "nd=" .. nd .. " nc=" .. nc .. " rc=" .. tostring(rc) .. "\n" .. o)
 end
 T:finish()
