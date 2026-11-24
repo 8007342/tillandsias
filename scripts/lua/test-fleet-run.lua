@@ -30,7 +30,15 @@
 --  14 the extract has a target/ dir, so the scratch door admits a step's scratch
 --     (RED before 2266-acwj: scratch.declare refused target/plan-scratch)
 --
--- GRAMMAR ok:fleet-run-shape:14 | violation:fleet-run-shape:<n>-failed
+--  15 the ref's build.sh has --gate-step: ONE step runs over the INTACT tree
+--     (native Windows: mode=direct, which never deletes; elsewhere mode=select),
+--     mode=select (RED before round 4: the other step files were deleted, so a
+--     fixture reading scripts/gate-steps.d/ went red: 746, 764)
+--  16 a red step's stdout verdict beats the door's stderr note: (RED before: the
+--     scan ran into stderr and reported note:)
+--  17 `PASS: ...` is a verdict (RED before: "(no verdict line)")
+--
+-- GRAMMAR ok:fleet-run-shape:17 | violation:fleet-run-shape:<n>-failed
 
 local top = proc.run({ argv = { "git", "rev-parse", "--show-toplevel" }, timeout_ms = 30000 })
 local ROOT = text.trim(top.stdout or "")
@@ -71,8 +79,13 @@ local T = fixture.new("fleet-run-shape")
 local R = T:git_repo("fr")
 fs.mkdir(R.rel .. "/scripts/gate-steps.d"); fs.mkdir(R.rel .. "/target/release"); fs.mkdir(R.rel .. "/lib/lua/common")
 fs.write(R.rel .. "/.gitignore", "/target/\n/marker\n")
-fs.write(R.rel .. "/build.sh", 'set -u\n. "$2"/scripts/gate-steps.d/*.step\necho "[build] $STEP_DESC..."\n'
-    .. 'bash "$STEP_SCRIPT"; rc=$?\necho "[build] done"\nexit $rc\n')
+-- Like the real door: --gate-step selects one step file; a red step's closing
+-- door lines go to STDERR, and the door's own note: lines (its frozen diff
+-- base) are on STDERR from the START, before the step's output.
+fs.write(R.rel .. "/build.sh", 'set -u\nonly="*"\ncase "${3:-}" in --gate-step) only="$4" ;; esac\n'
+    .. 'for f in "$2"/scripts/gate-steps.d/$only-*.step; do . "$f"; done\necho "note:door:base-frozen-at-start" >&2\necho "[build] $STEP_DESC..."\n'
+    .. 'bash "$STEP_SCRIPT"; rc=$?\n'
+    .. 'if [ $rc -eq 0 ]; then echo "[build] done"; else echo "[build] failed" >&2; fi\nexit $rc\n')
 local function step(n, body)
     fs.write(R.rel .. "/scripts/gate-steps.d/" .. n .. "-x.step",
         'STEP_DESC="scratch step ' .. n .. '"\nSTEP_SCRIPT="scripts/s' .. n .. '.sh"\n')
@@ -88,6 +101,12 @@ step(4, 'b="${TILLANDSIAS_GATE_DIFF_BASE:-}"\n'
     .. 'echo ok:scratch-added:0\n')
 step(5, "echo skip:scratch:nothing-to-judge\n")
 step(6, "if [ -d target ]; then echo ok:scratch:1; else echo violation:scratch:no-target-dir; exit 1; fi\n")
+-- 15: every step file is still there when one step runs (select mode).
+step(7, 'n=$(ls scripts/gate-steps.d/*.step | wc -l); if [ $n -gt 1 ]; then echo ok:scratch:steps-intact; else echo violation:scratch:steps-deleted; exit 1; fi\n')
+-- 16: a red step's stdout verdict, with the door's note: after it on stderr.
+step(8, "echo violation:scratch:8\nexit 1\n")
+-- 17: a PASS: line is a verdict.
+step(9, "echo 'PASS: scratch 3/3'\n")
 for _, f in ipairs({ "fixture", "verdict" }) do
     fs.write(R.rel .. "/lib/lua/common/" .. f .. ".lua", fs.read("lib/lua/common/" .. f .. ".lua"))
 end
@@ -134,6 +153,16 @@ arm2("13 a skip is reported as a skip, never ok", c == 0 and text.contains(o, ":
 c, o = fr(6)
 arm2("14 the extract has a target dir for the scratch door", c == 0 and text.contains(o, "verdict=ok:scratch:1"),
     "rc=" .. tostring(c) .. " " .. o)
+c, o = fr(7)
+-- Native Windows runs the step directly (mode=direct), never through build.sh.
+local WANT_MODE = (fixture.posix_shell() ~= "bash") and "direct" or "select"
+arm2("15 one step runs over the intact tree (mode=" .. WANT_MODE .. ")", c == 0 and text.contains(o, ":mode=" .. WANT_MODE .. ":")
+    and text.contains(o, "verdict=ok:scratch:steps-intact"), "rc=" .. tostring(c) .. " " .. o)
+c, o = fr(8)
+arm2("16 a red step's stdout verdict beats the door's stderr note:", c == 1
+    and text.contains(o, "verdict=violation:scratch:8") and not text.contains(o, "verdict=note:"), "rc=" .. tostring(c) .. " " .. o)
+c, o = fr(9)
+arm2("17 a PASS: line is a verdict", c == 0 and text.contains(o, "verdict=PASS: scratch 3/3"), "rc=" .. tostring(c) .. " " .. o)
 T:run{ fixture.posix_shell("/bin/bash"), "-s", stdin = "sleep 8\n" }
 arm2("10 the step's child is killed with it", not fs.exists(R.rel .. "/marker"), "the child outlived the step")
 local left = T:run{ "find", R.abs .. "/target/work/fleet-run", "-mindepth", "1", "-maxdepth", "1", "-type", "d", "-not", "-name", "cargo-target*" }
@@ -141,4 +170,4 @@ arm2("11 no extract is left behind", left.code == 0 and text.trim(left.stdout or
 T:cleanup()
 
 if #failed > 0 then verdict.emit("violation:fleet-run-shape:" .. #failed .. "-failed", 1) end
-verdict.ok("fleet-run-shape", "14")
+verdict.ok("fleet-run-shape", "17")

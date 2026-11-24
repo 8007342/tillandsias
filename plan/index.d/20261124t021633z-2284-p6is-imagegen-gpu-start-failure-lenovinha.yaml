@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: imagegen-containers-fail-when-the-gpu-cannot-be-mounted
+    order: 2284-p6is
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [rust, podman, imagegen]
+    estimated_hours: 4
+    title: |
+      The imagegen containers attach nvidia.com/gpu=all under keep-id, as inference did, so on a host whose CDI mount crun refuses they fail at start with no fallback and no named cause.
+    context: |
+      Sibling of 2283-u8m6 (#1455), read from source at c7fce5891. Three sites, three right answers: imagegen_studio::start already builds a no-GPU argv (whether ComfyUI then works on CPU is unread); imagegen_tool::sandbox_args (the one-shot sd-cli and the resident sd-server) already falls to /dev/dri when there is no CDI spec; studio_key::run_args (CorridorKey) is CUDA-only and refuses corridorkey_needs_cuda by name, so a CPU retry is wrong there. The bare-podman repro on lenovinha covers the flags; none of the three has been run on the failing driver yet.
+    exit_criteria:
+      - "studio start and the one-shot/resident tool: one retry without the CDI GPU, one status line with the cause; a failure without a GPU is unchanged"
+      - "CorridorKey: a GPU mount failure is refused by name, never retried on CPU"
+      - "red-first on lenovinha's real driver for each path that can run here"
+    unscoreable: "unpinnable-until-the-guard-exists: the real-driver runs are the deliverable."
+    next_action: "After #1455 lands: reuse argv_carries_gpu / withhold_inference_gpu's pattern per site; first check that the studio image serves on CPU."
+    provenance: coordinator direction (macuahuitl-fedora, 2026-11-24); filed by lenovinha.
+    related: [2283-u8m6]
+    events:
+      - {type: filed, ts: '2026-11-24T02:16:33Z', host: lenovinha, summary: imagegen GPU start failure filed}

@@ -54,15 +54,15 @@ run_id_case() {
         failures+=("$name: refusal leaked stdout '$out' — a refused id must print NOTHING a claim could use")
         return 0
     fi
-    if [ "$want_out_re" != "-" ] && ! printf '%s' "$out" | grep -qE "$want_out_re"; then
+    if [ "$want_out_re" != "-" ] && ! grep -qE <<<"$out" "$want_out_re"; then
         failures+=("$name: stdout '$out' !~ $want_out_re")
         return 0
     fi
-    if [ "$want_err_re" != "-" ] && ! printf '%s' "$err" | grep -qE "$want_err_re"; then
+    if [ "$want_err_re" != "-" ] && ! grep -qE <<<"$err" "$want_err_re"; then
         failures+=("$name: stderr '$err' !~ $want_err_re")
         return 0
     fi
-    if [ "$want_rc" -eq 0 ] && ! printf '%s' "$out" | grep -qE "$ID_RE"; then
+    if [ "$want_rc" -eq 0 ] && ! grep -qE <<<"$out" "$ID_RE"; then
         failures+=("$name: id '$out' violates the sanitized-id grammar $ID_RE")
         return 0
     fi
@@ -124,7 +124,7 @@ run_id_case "launch-workstation-wins" 0 \
 argout=""
 argrc=0
 argout="$(cd "$work/cwd" && env -i PATH="$NOPATH" TILLANDSIAS_HOST_KIND=forge HOSTNAME=forge-tillandsias TILLANDSIAS_AGENT=codex "$BASH_BIN" "$HELPER" id claude 2>"$work/err")" || argrc=$?
-if [ "$argrc" -ne 0 ] || ! printf '%s' "$argout" | grep -qE "^forge-forge-tillandsias-claude-${TS_RE}\$"; then
+if [ "$argrc" -ne 0 ] || ! grep -qE <<<"$argout" "^forge-forge-tillandsias-claude-${TS_RE}\$"; then
     failures+=("backend-arg-wins: rc=$argrc out='$argout' expected ^forge-forge-tillandsias-claude-<ts>\$")
 fi
 

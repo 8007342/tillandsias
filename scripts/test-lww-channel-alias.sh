@@ -14,7 +14,13 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "$ROOT/scripts/plan-binary-probe.sh"
-BIN="$(resolve_plan_binary)" || BIN=""
+# 1401-x76w: resolve from the CHECKOUT, not the caller's cwd, and make it
+# absolute (pattern of 84f37ff24): the probe's fallback is cwd-relative.
+if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
+    BIN="$(resolve_plan_binary)" || BIN=""
+else
+    BIN="$(cd "$ROOT" && _p="$(resolve_plan_binary 2>/dev/null)" && case "$_p" in (/*) printf '%s' "$_p" ;; (*) printf '%s/%s' "$PWD" "${_p#./}" ;; esac)" || BIN=""
+fi
 if [ -z "$BIN" ]; then
     echo "skip:no-plan-binary"
     exit 0
@@ -57,7 +63,7 @@ seed
 { entry fields; printf 'status:\n  - packet_id: fixture-642\n    field: pickup_role\n    value: windows\n    ts: "2026-08-26T00:00:00Z"\n    host: h1\n'; } \
     > "$W/plan/index.d/both.yaml"
 BOTH="$(fold)"
-if printf '%s' "$BOTH" | grep -q 'v0.9'; then
+if grep -q <<<"$BOTH" 'v0.9'; then
     # pickup_role is not in the query projection; assert it through the ledger
     # integrity read instead of asserting nothing.
     "$BIN" --index "$W/plan/index.yaml" check >/dev/null 2>&1 \
@@ -85,7 +91,7 @@ seed
 printf 'fields:\n  - packet_id: no-such-packet\n    field: desired_release\n    value: v9.9\n    ts: "2026-08-26T00:00:00Z"\n    host: h1\n' \
     > "$W/plan/index.d/orphan.yaml"
 OUT="$("$BIN" --index "$W/plan/index.yaml" check 2>&1)"
-printf '%s' "$OUT" | grep -qi 'no-such-packet' \
+grep -qi <<<"$OUT" 'no-such-packet' \
     && ok "an orphaned fields: entry is NAMED, not silently discarded" \
     || bad "orphaned fields: entry vanished without a gap report: [$OUT]"
 

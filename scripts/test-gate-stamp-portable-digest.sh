@@ -60,7 +60,7 @@ git -C "$REPO" commit -qm seed
 # ── S1: baseline digest with the normal PATH ─────────────────────────────────
 D1="$(cd "$REPO" && bash "$STAMP" compute 2>/dev/null)"
 rc=$?
-[ "$rc" -eq 0 ] && printf '%s' "$D1" | grep -qE '^[0-9a-f]{64}$'
+[ "$rc" -eq 0 ] && grep -qE <<<"$D1" '^[0-9a-f]{64}$'
 check "S1-compute-succeeds-on-full-path" "$?"
 
 # ── Farm PATH: everything gate-stamp needs, minus sha256sum ──────────────────

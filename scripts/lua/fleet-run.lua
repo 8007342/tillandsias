@@ -99,10 +99,13 @@ if not COMMIT then refuse("unknown-ref:" .. REF) end
 local _, TREE = run({ "git", "-C", ROOT, "rev-parse", COMMIT .. "^{tree}" })
 
 local BASE = ROOT .. "/target/work/fleet-run"
-D = BASE .. "/" .. COMMIT
+-- A SHORT name (round 4): msys hits MAX_PATH on a fixture repo nested under a
+-- 40-char dir (yolanda, step 750 "Filename too long"). 12 hex is unique here.
+D = BASE .. "/" .. COMMIT:sub(1, 12)
 local _, old = run({ "find", BASE, "-maxdepth", "1", "-type", "d", "-mmin", "+240" })
 for _, l in ipairs(text.lines(old)) do
-    if l:match("/%x+$") and #l:match("[^/]+$") == 40 then run({ "rm", "-rf", l }, { timeout_ms = 300000 }) end
+    local nm = l:match("/(%x+)$")
+    if nm and (#nm == 12 or #nm == 40) then run({ "rm", "-rf", l }, { timeout_ms = 300000 }) end
 end
 run({ "rm", "-rf", D }, { timeout_ms = 300000 })
 if run({ "mkdir", "-p", D }) ~= 0 then cnr("mkdir") end
@@ -181,11 +184,20 @@ end
 -- One step: the extracted tree IS the --gate-steps root (step paths resolve
 -- against it), with every other step file removed AFTER the tree assertion
 -- (not on Windows, where the step is run directly over the exact tree).
-local _, all = dgit("ls-files", "--", "scripts/gate-steps.d/*.step")
-for _, l in ipairs(text.lines(all)) do
-    if not WINDOWS and l ~= "" and l ~= "scripts/gate-steps.d/" .. steps[1] then run({ "rm", "-f", D .. "/" .. l }) end
+-- MODE (round 4). A ref whose build.sh has --gate-step runs ONE step over the
+-- INTACT tree ("select"): a fixture that reads scripts/gate-steps.d/ sees every
+-- step (746 and 764 were red with them deleted, green direct). An older ref
+-- falls back to deleting the other step files ("alone"), named in the regime line.
+local DREL = "target/work/fleet-run/" .. COMMIT:sub(1, 12)
+local MODE = text.contains(fs.read(DREL .. "/build.sh") or "", "--gate-step)") and "select" or "alone"
+if WINDOWS then MODE = "direct" end
+if MODE == "alone" then
+    local _, all = dgit("ls-files", "--", "scripts/gate-steps.d/*.step")
+    for _, l in ipairs(text.lines(all)) do
+        if l ~= "" and l ~= "scripts/gate-steps.d/" .. steps[1] then run({ "rm", "-f", D .. "/" .. l }) end
+    end
 end
-local step_text = "\n" .. (fs.read("target/work/fleet-run/" .. COMMIT .. "/scripts/gate-steps.d/" .. steps[1]) or "")
+local step_text = "\n" .. (fs.read(DREL .. "/scripts/gate-steps.d/" .. steps[1]) or "")
 local function field(k) return step_text:match("\n" .. k .. '="([^"\n]*)"') or "" end
 local desc = field("STEP_DESC")
 local benv = { TILLANDSIAS_PLAN_BIN = BIN, TILLANDSIAS_SCRIPT_RUNNER_BIN = BIN, CARGO_TARGET_DIR = CTD }
@@ -195,6 +207,7 @@ local _, DTOP = dgit("rev-parse", "--show-toplevel")
 benv.TILLANDSIAS_GATE_DIFF_BASE = DIFF_BASE
 benv.TILLANDSIAS_GATE_DIFF_BASE_ROOT = (DIFF_BASE ~= "") and DTOP or ""
 local argv = { BASH, "./build.sh", "--gate-steps", D }
+if MODE == "select" then argv[#argv + 1] = "--gate-step"; argv[#argv + 1] = STEP end
 if WINDOWS then
     benv.TILLANDSIAS_SKIP_WSL2 = "1"   -- a step that runs build.sh must not re-exec into WSL
     local lua, script = field("STEP_LUA"), field("STEP_SCRIPT")
@@ -212,17 +225,31 @@ fs.write("target/work/fleet-run/" .. COMMIT .. "-" .. STEP .. ".log", o)
 -- The step's last verdict-shaped line (<word>:<word>...), read only AFTER the
 -- step's own STEP_DESC line and before the door's next [build] line, so setup
 -- and housekeeping lines never stand in for it.
-local vline = "(no verdict line)"
-local started, done = (desc == ""), false
--- Run directly (Windows), the verdict is on stdout; a stderr note is not one.
-for _, l in ipairs(text.lines(WINDOWS and (r.stdout or "") or o)) do
-    local t = text.trim((l:gsub("\27%[[%d;]*m", "")))
-    if done then
-    elseif not started then
-        if text.contains(t, desc) then started = true end
-    elseif t:match("^%[build%]") then done = true -- the next door line ends the step
-    elseif t:match("^[%a][%w-]*:[%w]") and not t:match("^regime:") then vline = t end
+-- STDOUT FIRST (round 4): a red step's door lines go to stderr, so a scan over
+-- stdout..stderr ran past the step into the door's own note: lines and reported
+-- note:gate-diff-base instead of the step's violation: (746, 764). stderr is read
+-- only when stdout has no verdict at all. `PASS: ...` and `ok: <text>` count
+-- (754, 756, 758 read "(no verdict line)").
+local function verdict_shaped(t)
+    return (t:match("^[%a][%w-]*:[%w]") or t:match("^[%a][%w-]*: %S")) and not t:match("^regime:")
 end
+local function scan(textblob, windowed)
+    local found
+    local started, done = (desc == "" or not windowed), false
+    for _, l in ipairs(text.lines(textblob)) do
+        local t = text.trim((l:gsub("\27%[[%d;]*m", "")))
+        if done then
+        elseif not started then
+            if text.contains(t, desc) then started = true end
+        elseif t:match("^%[build%]") then done = true -- the next door line ends the step
+        elseif verdict_shaped(t) then found = t end
+    end
+    return found
+end
+local vline = scan(r.stdout or "", true)
+-- Run directly (Windows), the verdict is on stdout; a stderr note is not one.
+if not vline and not WINDOWS then vline = scan(r.stderr or "", false) end
+vline = vline or "(no verdict line)"
 -- A step that did not exit (killed, timed out, never started) has no result:
 -- could-not-run, never ok: (calmecacpilli 2026-11-23).
 local ended = r.status == "exited"
@@ -231,7 +258,7 @@ drop()
 -- result= is the verdict's kind (ok, skip, violation, advisory, ...), so a skip
 -- is never read as evidence; base= is the diff base the step was given.
 local kind = vline:match("^([%a][%w-]*):") or "none"
-out.line("regime:" .. PLATFORM .. ":step=" .. STEP .. ":rc=" .. src .. ":result=" .. kind
+out.line("regime:" .. PLATFORM .. ":step=" .. STEP .. ":rc=" .. src .. ":result=" .. kind .. ":mode=" .. MODE
     .. ":base=" .. (DIFF_BASE ~= "" and DIFF_BASE or "none") .. ":sha=" .. TREE .. ":verdict=" .. vline)
 if not ended then cnr("step-did-not-exit:" .. tostring(r.status)) end
 if src ~= 0 then verdict.emit("violation:fleet-run:step=" .. STEP .. ":rc=" .. src
