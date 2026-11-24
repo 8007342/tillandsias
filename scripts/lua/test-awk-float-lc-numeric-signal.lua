@@ -127,7 +127,7 @@ fs.write(REL .. "/bin/sed", table.concat({
     "",
 }, "\n"))
 proc.run({ argv = { "chmod", "+x", ROOT .. "/" .. REL .. "/bin/sed" }, timeout_ms = 5000 })
-local hr, pidr = spawn_until_pidfile({ "bash", ROOT .. "/" .. SUBJECT }, REL .. "/real.pid",
+local hr, pidr = spawn_until_pidfile({ require("common.fixture").posix_shell(), ROOT .. "/" .. SUBJECT }, REL .. "/real.pid",
     { PATH = ROOT .. "/" .. REL .. "/bin:" .. ORIG_PATH, TMPDIR = ROOT .. "/" .. REL .. "/tmp" })
 -- 1612-jp94 (red 3/3 in Windows' WSL builder guest: "no pid file within
 -- 10 s"). The subject writes its pid at START and <pid>.ready once its mutants
@@ -169,7 +169,7 @@ else
     arm("3 CHECKOUT its status did not change while the mutants existed", during == BEFORE, "before [" .. BEFORE .. "] during [" .. during .. "]")
     -- A KILL runs no trap: the mutants leak into TMPDIR (the door deletes a guard's), never here.
     proc.run({ argv = { "rm", "-f", ROOT .. "/" .. REL .. "/real.pid.ready", ROOT .. "/" .. REL .. "/real.pid" }, timeout_ms = 5000 })
-    local hk, pidk = spawn_until_pidfile({ "bash", ROOT .. "/" .. SUBJECT }, REL .. "/real.pid",
+    local hk, pidk = spawn_until_pidfile({ require("common.fixture").posix_shell(), ROOT .. "/" .. SUBJECT }, REL .. "/real.pid",
         { PATH = ROOT .. "/" .. REL .. "/bin:" .. ORIG_PATH, TMPDIR = ROOT .. "/" .. REL .. "/tmp" })
     for _ = 1, 1200 do if not pidk or fs.exists(REL .. "/real.pid.ready") or not alive(pidk) then break end pause("0.1") end
     hk:kill()
