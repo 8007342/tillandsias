@@ -25,6 +25,17 @@
 local fixture = require "common.fixture"
 local T = fixture.new("smoke-record-fixture")
 local PLAN = fixture.plan_binary()
+-- A native Windows spawn cannot start the extensionless #!/bin/sh `gh` stub, and C:/… on
+-- PATH splits at the drive (yolanda 2026-11-24). There, and only there, the COPY of the gate
+-- names the stub through a shell. Never an env override in the gate itself: a promotion gate
+-- does not take its gh from the environment.
+local function gate_source(r)
+    local src = fs.read("scripts/lua/check-promote-gate.lua")
+    local to = '{ "' .. fixture.posix_shell() .. '", "' .. r.abs .. '/bin/gh", '
+    local win, n = src:gsub('{ "gh", ', function() return to end)
+    if n ~= 3 then T:refuse("setup-failed", "the gate calls gh at " .. n .. " sites, not 3") end
+    return r.abs:match("^%a:/") and win or src
+end
 local TAG, ASSET = "v1.2.3.4", string.rep("ab", 32)
 local GENV = { PATH = env.get("PATH"), GIT_AUTHOR_NAME = "f", GIT_AUTHOR_EMAIL = "f@x", GIT_COMMITTER_NAME = "f", GIT_COMMITTER_EMAIL = "f@x",
     GIT_CONFIG_GLOBAL = "/dev/null", GIT_CONFIG_NOSYSTEM = "1", TILLANDSIAS_SMOKE_HOST = "fxhost", TILLANDSIAS_PLAN_BIN = PLAN }
@@ -51,7 +62,7 @@ local function world()
     T:must{ "git", "init", "-q", "--bare", r.origin }
     git(r, "remote", "add", "origin", r.origin)
     for _, f in ipairs{ "attest-smoke.lua", "smoke-record.lua", "check-promote-gate.lua" } do
-        fs.mkdir(r.rel .. "/scripts/lua"); fs.write(r.rel .. "/scripts/lua/" .. f, fs.read("scripts/lua/" .. f))
+        fs.mkdir(r.rel .. "/scripts/lua"); fs.write(r.rel .. "/scripts/lua/" .. f, f == "check-promote-gate.lua" and gate_source(r) or fs.read("scripts/lua/" .. f))
     end
     fs.mkdir(r.rel .. "/plan/index.d"); fs.mkdir(r.rel .. "/bin"); fs.mkdir(r.rel .. "/ev")
     fs.write(r.rel .. "/plan/index.yaml", "packets: []\n")
