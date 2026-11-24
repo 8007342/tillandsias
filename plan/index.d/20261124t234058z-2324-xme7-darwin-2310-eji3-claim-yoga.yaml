@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: litmus-steps-cannot-depend-on-a-tillandsias-plan-that-happens-to-be-on-path
+    field: status
+    value: in_progress
+    ts: "2026-11-24T23:40:58Z"
+    host: yoga
+events:
+  - packet_id: lww-alias-item-opener-and-land-notice-fixtures-ported-to-lua
+    event: {type: note, ts: "2026-11-24T23:40:58Z", host: yoga, summary: "darwin (macbookair, relayed) at f13433492: step 390 5 arms, step 411 4 arms, both rc 0"}
+  - packet_id: litmus-steps-cannot-depend-on-a-tillandsias-plan-that-happens-to-be-on-path
+    event: {type: claimed, ts: "2026-11-24T23:40:58Z", host: yoga, summary: "claimed; work ref work/2310-eji3"}
