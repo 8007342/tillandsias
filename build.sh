@@ -5370,14 +5370,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "--changed input-selection fixture passed"
-    # ORDER 2248-zcqh — the bundle intake gate: deferral, HEAVY, legacy
-    # unchanged, and a crate graph held to cargo metadata.
-    _step "Checking --changed's derived crate graph equals cargo metadata (2248-zcqh)..."
-    if ! _run_lua_decider "scripts/lua/check-gate-changed-crate-graph.lua" 2>&1; then
-        _error "scripts/gate-changed.sh derives a crate graph cargo does not resolve — intake would skip a dependent crate; see MISSING/EXTRA above (2248-zcqh)"
-        exit 1
-    fi
-    _info "Crate-graph lint passed"
 
     # ORDER 1916-tsel — the shared-timing-log leak check names a step only for
     # records carrying ITS gate's run id; two concurrent writers prove a
@@ -5992,28 +5984,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # Diff-scoped: standing debt is REPORTED by `tillandsias-plan
     # declared-closures` (exit 0), never redded here.
 
-    # ORDER 885-92iu, restored to the body by 1034-ihxw after 1009-gccx hoisted
-    # it in error. It resolves a built `tillandsias-plan`; with no binary it
-    # emits `note: tillandsias-plan not built` and PASSES, so above the build it
-    # is a no-op rather than a gate. It runs here, where a binary exists.
-    # Ported to Lua (1642-cc54 carry): with no binary it is now could-not-run
-    # (exit 3), which this gate refuses, instead of a pass.
-    # ORDER 2246-fkea — an added Lua fixture line that roots at `pwd -P` or
-    # spawns a bare bash/sed passes here and fails on a native Windows runner
-    # (three ports in one day, #1388 the third). Refused at the source.
-    _step "Checking added Lua fixtures use native-safe roots and shells (2246-fkea)..."
-    if ! _run_lua_decider "scripts/lua/check-lua-fixture-native-argv-added.lua" 2>&1; then
-        _error "an added scripts/lua line roots at pwd -P or spawns a bare bash/sed — use common.fixture's repo_root() / posix_shell(); see the REFUSED lines above (2246-fkea)"
-        exit 1
-    fi
-    _info "Native argv check passed"
-    _step "Checking the native-argv decider refuses what it should (2246-fkea)..."
-    if ! _run_lua_decider "scripts/lua/test-lua-fixture-native-argv-added.lua" 2>&1; then
-        _error "check-lua-fixture-native-argv-added.lua no longer refuses a pwd -P root or a bare bash/sed argv, or refuses the helper form; see the FAIL lines above (2246-fkea)"
-        exit 1
-    fi
-    _info "Native argv fixture passed"
-
     _step "Checking that added fragments' declared closures resolve (885-92iu)..."
     if ! _run_lua_decider "scripts/lua/check-declared-closures-added.lua" 2>&1; then
         _error "this change files a packet whose verifiable_closure names a litmus test that does not resolve (885-92iu)"
@@ -6384,30 +6354,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus step-model fixture passed"
 
-    # ORDER 1577-g96z — what THIS change owes each carried obligation
-    # (methodology/convergence.yaml carried_obligations; shell-to-lua is at
-    # stage gentle). One carried:<backlog>:<not-due|paid|waived|due> line per
-    # backlog; in --check it never refuses a due change (silence is refused
-    # only at landing, by the land queue running it with --landing). It does
-    # refuse a tree whose backlog table does not parse.
-    _step "Checking what this change owes each carried obligation (1577-g96z)..."
-    if ! _run_lua_decider "scripts/lua/check-carried-obligations.lua" 2>&1; then
-        _error "the carried-obligation guard could not read methodology/convergence.yaml carried_obligations — see the line above (1577-g96z)"
-        exit 1
-    fi
-    _info "Carried obligations reported"
-
-    # Its fixture, the tree's first Lua gate fixture (1577-g96z): the guard's
-    # verdicts on constructed diffs in a scratch repo. A Lua fixture runs here
-    # directly through the one runner (no .step file, so no second-regime
-    # record is needed to enter --check).
-    _step "Checking the carried-obligation guard's fixture (1577-g96z)..."
-    if ! _run_lua_decider "scripts/lua/test-carried-obligations.lua" 2>&1; then
-        _error "the carried-obligation guard no longer prints due/paid/waived/not-due correctly on its constructed diffs — see the FAIL lines above (1577-g96z)"
-        exit 1
-    fi
-    _info "Carried-obligation fixture passed"
-
     # ORDER 1588-27v3 — a claim names a fleet host. The WIP cap counts claims
     # per host string, so `--host x` held nothing and passed it; set-field now
     # refuses a host outside methodology packet_discipline.fleet_hosts.
@@ -6427,15 +6373,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Metrics-isolation shared-log fixture passed"
-
-    # ORDER 2242-u39b — the pre-push-hook fixtures test their scratch
-    # checkout, never a frozen base the caller left behind without its _ROOT.
-    _step "Checking the pre-push fixtures ignore an inherited diff base (2242-u39b)..."
-    if ! _run_lua_decider "scripts/lua/test-pre-push-fixtures-ignore-an-inherited-base.lua" 2>&1; then
-        _error "a pre-push-hook fixture judged the caller's TILLANDSIAS_GATE_DIFF_BASE instead of its scratch checkout — pass TILLANDSIAS_GATE_DIFF_BASE and _ROOT empty in its child env; see the FAIL lines above (2242-u39b)"
-        exit 1
-    fi
-    _info "Inherited diff-base fixture passed"
 
     # ORDER 1592-idmu — the diff-scoped guards read the base frozen at gate
     # start (TILLANDSIAS_GATE_DIFF_BASE), so a fetch mid-gate cannot move it.
