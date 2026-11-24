@@ -13,7 +13,7 @@
 --   5 trailing-newline-tolerated "<id>\n"   -> ok:release-run:<id>
 --   6 no-tag-given               no argument -> blocked:release-run:no-tag-given, non-zero
 --
--- GRAMMAR ok:release-run-resolver:6 arms | violation:release-run-resolver:<n>-failed
+-- GRAMMAR ok:release-run-resolver:7 arms | violation:release-run-resolver:<n>-failed
 
 local fixture = require "common.fixture"
 local T = fixture.new("release-run-resolver")
@@ -21,13 +21,13 @@ local ROOT = fixture.repo_root()
 local SH = fixture.posix_shell()
 local W = T:scratch()
 local TAG = "v0.4.260813.1"
-fs.write(W.rel .. "/gh", "#!/usr/bin/env bash\ncat \"$STUB_OUT\"\nexit \"$STUB_RC\"\n")
+fs.write(W.rel .. "/gh", "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" > \"$STUB_ARGV\"\ncat \"$STUB_OUT\"\nexit \"$STUB_RC\"\n")
 T:must{ "chmod", "+x", W.abs .. "/gh" }
 
 local function resolve(out, rc, ...)
     fs.write(W.rel .. "/out", out)
     local r = proc.run{ argv = { SH, ROOT .. "/scripts/resolve-release-run.sh", ... }, timeout_ms = 30000,
-        env = { GH = W.abs .. "/gh", STUB_OUT = W.abs .. "/out", STUB_RC = tostring(rc) } }
+        env = { GH = W.abs .. "/gh", STUB_OUT = W.abs .. "/out", STUB_RC = tostring(rc), STUB_ARGV = W.abs .. "/argv" } }
     return (r.status == "exited") and r.code or -1, text.trim((r.stdout or "") .. (r.stderr or ""))
 end
 local function case(name, out, rc, want_rc, want)
@@ -39,7 +39,13 @@ case("1 no-run-empty-output", "", 0, 1, "blocked:release-run:no-run-for-tag:" ..
 case("2 no-run-null-output", "null", 0, 1, "blocked:release-run:no-run-for-tag:" .. TAG)
 case("3 gh-failed", "", 1, 1, "blocked:release-run:gh-failed:" .. TAG)
 case("4 run-resolves", "17482930571", 0, 0, "ok:release-run:17482930571")
-case("5 trailing-newline-tolerated", "17482930571\n", 0, 0, "ok:release-run:17482930571")
+-- 5: $(...) already strips a trailing LF, so "id\n" passed with the tr removed (2292-62a5's note on
+-- the open-PR twin). Leading space and CR survive the substitution: only tr clears them.
+case("5 surrounding-whitespace-tolerated", " 17482930571\r\n", 0, 0, "ok:release-run:17482930571")
+local argv = fs.read(W.rel .. "/argv") or ""
+T:arm("7 the stub was asked for release.yml workflow_dispatch runs on main",
+    text.contains(argv, "--workflow=release.yml") and text.contains(argv, "--event=workflow_dispatch")
+        and text.contains(argv, "--branch=main"), "argv=" .. argv)
 local code, got = resolve("", 0)
 T:arm("6 no-tag-given", code ~= 0 and got == "blocked:release-run:no-tag-given", "exit=" .. code .. " out='" .. got .. "'")
 T:finish()
