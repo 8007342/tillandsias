@@ -272,7 +272,6 @@ scripts/test-litmus-item-opener-refused.sh
 scripts/test-litmus-kill-adjudicator.sh
 scripts/test-litmus-missing-bound-test-reds.sh
 scripts/test-litmus-mutation-arm-guard.sh
-scripts/test-litmus-no-plan-binary.sh
 scripts/test-litmus-parse-instruments-agree.sh
 scripts/test-litmus-parse-only-duplicate-key.sh
 scripts/test-litmus-podman-preflight-diagnosis.sh

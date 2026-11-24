@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-24, on the coordinator's (macuahuitl-fedora) ruling: attest --push publishes no raw evidence.
+packets:
+- packet_id: attest-smoke-pushes-digests-never-raw-evidence
+  order: 2299-atdg
+  status: implemented
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [release, smoke, security, attest]
+  size: M
+  implementer_tier: opus
+  estimated_hours: 3
+  title: 'attest-smoke.lua committed the whole smoke evidence dir as the attest tree, so --push would publish lane and init logs; make the tree digests only'
+  context: >-
+    Ruling 2026-11-24: --push publishes the verdict, the regime line and sha256 digests only. Lane and init logs can carry a sign-in URL or a token,
+    and a pushed secret is not undone by deleting the ref. attest-smoke.lua (#1398, 2252-ck7h) ran write-tree over the evidence dir.
+    Now the tree is SHA256SUMS (digest per evidence file, through tillandsias-plan hash sha256, so no host tool is needed on msys), regime.txt and verdict.txt.
+    Each blob is composed by the script; nothing from the evidence's contents is stored.
+    yoga's traps, both covered. (1) A re-attest parents on the previous commit, so an old raw-tree attest would ride along as an ancestor on --push:
+    a chain holding any other tree shape is refused (raw-tree-in-history). (2) The skill archives rounds inside the evidence dir, so the recursive stale check
+    refused every second round: _archived-* is pruned from the stale check and from SHA256SUMS.
+    Also from yoga: an unsafe file NAME is refused and never echoed; verdict.txt never copies credential-step.txt's free text; the token arm checks every object reachable from the ref.
+  exit_criteria:
+  - 'No object reachable from refs/attest/smoke/<platform>/<sha> holds evidence content.'
+  - 'A raw-tree commit in the chain is refused; an archived round is neither stale nor digested; an unsafe name is refused unechoed.'
+  - 'The checker (check-smoke-attested.lua, which reads only the Smoke: line) is unchanged and its arms stay green.'
+  verifiable_closure: 'scripts/lua/test-smoke-attest.lua 13 arms (gate step 968); arms 8-13 red against the raw-tree attest-smoke, each for its own reason.'
+  unscoreable: 'no litmus names attest-smoke; gate step 968 runs its fixture.'
+  next_action: >-
+    Implemented on work/2299-atdg. Darwin: ok:smoke-attest:13. Against trunk's raw-tree attest-smoke, arms 8-13 red, each for its own reason:
+    8 leaked=true, 9 a raw tree, 10 stale-evidence on the archived round, 11 history accepted, 12 unsafe name accepted, 13 --regime unknown.
+    ./build.sh --gate-steps . --gate-step 968 rc 0. Needs a msys run (yolanda's 968 record is at 7 arms). Then #1400's §5a names the digest-only tree
+    and undrafts; yoga's #1482 smoke-record.lua reads verdict.txt and regime.txt. No attest is pushed until this lands.
+  provenance: 'tlatoanis-macbook-air 2026-11-24; ruling by macuahuitl-fedora; traps by yoga-silverblue.'
+  related: [2252-ck7h, 2253-69c5, 2298-ifpm]
+  events:
+  - {type: filed, ts: '2026-11-24T11:19:20Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}
