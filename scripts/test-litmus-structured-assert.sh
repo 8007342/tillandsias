@@ -69,16 +69,19 @@ run_with() { # <runner> -> rc
     bash "$1" znbn-probe >/dev/null 2>&1
 }
 
-# The pre-fix control: HEAD's adjudication, this branch's discovery.
+# The pre-fix control: HEAD's adjudication, this branch's discovery, and no exit
+# rule (2309-fa7q): HEAD carries that rule, and the case's command exits 3.
 git show HEAD:scripts/run-litmus-test.sh \
   | sed 's|^readonly LITMUS_BINDINGS="${PROJECT_ROOT}/openspec/litmus-bindings.yaml"|readonly LITMUS_BINDINGS="${TILLANDSIAS_LITMUS_BINDINGS:-${PROJECT_ROOT}/openspec/litmus-bindings.yaml}"|; s|^readonly LITMUS_TESTS_DIR="${PROJECT_ROOT}/openspec/litmus-tests"|readonly LITMUS_TESTS_DIR="${TILLANDSIAS_LITMUS_TESTS_DIR:-${PROJECT_ROOT}/openspec/litmus-tests}"|' \
-  | sed 's|\$(dirname "\${BASH_SOURCE\[0\]}")|'"$ROOT"'/scripts|g' > "$PREFIX_RUNNER" 2>/dev/null
+  | sed 's|\$(dirname "\${BASH_SOURCE\[0\]}")|'"$ROOT"'/scripts|g; s|elif \[\[ -n "$step_expected" && "$exit_code" -ne 0 \]\]; then|elif false; then # no-exit-rule|' > "$PREFIX_RUNNER" 2>/dev/null
 
 # ── ARM 0: the control is genuinely equalized ───────────────────────────────
 # Asserted BEFORE any verdict is read from it. An unequalized control cannot
 # find the suite and returns 1 for a reason unrelated to adjudication.
 if grep -q 'BASH_SOURCE' "$PREFIX_RUNNER" 2>/dev/null; then
     bad "ARM 0: the control still resolves a path from its own location (BASH_SOURCE), so it cannot run from \$TMP; pin the new lookup"
+elif [ "$(grep -c '# no-exit-rule$' "$PREFIX_RUNNER")" -ne 1 ]; then
+    bad "ARM 0: the control still carries the 2309-fa7q exit rule (its line moved); cut it again"
 elif [ -s "$PREFIX_RUNNER" ] && [ "$(grep -c 'TILLANDSIAS_LITMUS_' "$PREFIX_RUNNER")" -ge 2 ]; then
     write_case "hello" ""
     if run_with "$PREFIX_RUNNER"; then
