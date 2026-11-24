@@ -1,0 +1,12 @@
+# Gate step 2289-umyb — tillandsias-headless refuses host-services for a target
+# that is not unix, in one error, from build.rs.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking host-services names itself unix-only (2289-umyb)"
+STEP_LUA="scripts/lua/test-headless-host-services-unix-only.lua"
+STEP_ERROR="building tillandsias-headless with host-services no longer names itself unix-only, or refuses a target it must build for (2289-umyb) — see the FAIL lines above"
+STEP_OK="host-services unix-only refusal pinned"
+STEP_READS="crates/tillandsias-headless/build.rs crates/tillandsias-headless/src/accel_probe.rs scripts/lua/test-headless-host-services-unix-only.lua"
+STEP_SECOND_REGIME="yolanda 2026-11-24 msys ok:headless-host-services-unix-only:5 arms at dc49470c7 (fleet-run as step 932, renamed to 1020 unchanged: result=ok mode=direct sha def5b6e8)"
+# Linux, for the record: macuahuitl 2026-11-24 ok:headless-host-services-unix-only:5 arms at 697211cc5 (build.sh --gate-step 932, renamed to 1020 unchanged, rc=0)
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:headless-host-services-unix-only:5 arms at 697211cc5 (fleet-run as step 932, renamed to 1020 unchanged: result=ok mode=select base=86a8786c sha df7c248f)"

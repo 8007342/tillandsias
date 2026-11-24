@@ -17,6 +17,7 @@ preconditions:
   - workspace contains scripts/promote-stable.sh
   - workspace contains scripts/lua/test-promote-stable-affordances.lua
   - workspace contains scripts/lua/test-promote-gate.lua
+  - workspace contains scripts/lua/test-smoke-record.lua
 
 critical_path:
   - step: "the caller-error refusals carry why and remedy, and no verdict site lacks an affordance"
@@ -33,6 +34,11 @@ critical_path:
     command: "bash scripts/test-promote-stable-evidence-gate.sh 2>&1"
     timeout_ms: 120000
     success_pattern: "39/39 passed"
+
+  - step: "a smoke record is derived from the pushed attestation, and the gate reads it (2300-j4cv)"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-smoke-record.lua 2>&1"
+    timeout_ms: 120000
+    success_pattern: "ok:smoke-record-fixture:11 arms"
 
 observability:
   traces:

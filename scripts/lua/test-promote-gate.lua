@@ -22,8 +22,18 @@
 local fixture = require "common.fixture"
 local T = fixture.new("promote-gate-fixture")
 local PLAN = fixture.plan_binary()
+-- A native Windows spawn cannot start the extensionless #!/bin/sh `gh` stub, and C:/… on
+-- PATH splits at the drive (yolanda 2026-11-24). There, and only there, the COPY of the gate
+-- names the stub through a shell. Never an env override in the gate itself: a promotion gate
+-- does not take its gh from the environment.
+local function gate_source(r)
+    local src = fs.read("scripts/lua/check-promote-gate.lua")
+    local to = '{ "' .. fixture.posix_shell() .. '", "' .. r.abs .. '/bin/gh", '
+    local win, n = src:gsub('{ "gh", ', function() return to end)
+    if n ~= 3 then T:refuse("setup-failed", "the gate calls gh at " .. n .. " sites, not 3") end
+    return r.abs:match("^%a:/") and win or src
+end
 local TAG, ROW = "v1.2.3.4", "smoke-v1-2-3-4"
-local SUBJECT = fs.read("scripts/lua/check-promote-gate.lua")
 local n = 0
 
 local function rec(p, v, o)
@@ -45,7 +55,7 @@ local function gate(events, o)
     end
     fs.mkdir(r.rel .. "/plan/index.d"); fs.mkdir(r.rel .. "/scripts/lua"); fs.mkdir(r.rel .. "/bin")
     fs.write(r.rel .. "/plan/index.yaml", table.concat(y))
-    fs.write(r.rel .. "/scripts/lua/check-promote-gate.lua", SUBJECT)
+    fs.write(r.rel .. "/scripts/lua/check-promote-gate.lua", gate_source(r))
     local function git(...)
         local a = { "git", "-C", r.abs, "-c", "user.name=t", "-c", "user.email=t@t" }
         for _, x in ipairs{ ... } do a[#a + 1] = x end

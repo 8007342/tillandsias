@@ -75,7 +75,6 @@ scripts/test-bench-prompt-uniqueness.sh
 scripts/test-bound-litmus-is-runnable.sh
 scripts/test-branch-discipline-verb.sh
 scripts/test-brew-shim-reentrancy.sh
-scripts/test-bsd-count-shapes.sh
 scripts/test-build-image-installed-version-alias.sh
 scripts/test-build-sh-ci-full-install-prep.sh
 scripts/test-build-step-timing-attribution.sh
@@ -292,7 +291,6 @@ scripts/test-lua-determinism.sh
 scripts/test-lww-channel-alias.sh
 scripts/test-lww-channel-consumers.sh
 scripts/test-macos-vsock-inference-closure.sh
-scripts/test-macos-vz-orphan-diagnosis.sh
 scripts/test-mcp-plan-resolver-pinning.sh
 scripts/test-mcp-run-command-tool.sh
 scripts/test-mcp-transport-death-trace.sh
