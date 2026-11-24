@@ -39,11 +39,16 @@ exit 7
 T:must{ "chmod", "+x", W.abs .. "/bin/curl" }
 -- PATH is set inside the shell, from the script's own dir: a C:/ dir would
 -- split it on native Windows.
-local HEAD = 'PATH="$(cd "$(dirname "$0")" && pwd)/bin:$PATH"\n. "$LIB"\n'
+-- proc.run passes TILLANDSIAS_* through, so an arm's own values come in as ARM_*
+-- and everything else the library reads is unset.
+local HEAD = 'for v in TILLANDSIAS_EMBED_ENDPOINT TILLANDSIAS_INFERENCE_ENDPOINT TILLANDSIAS_HOST_KIND OLLAMA_HOST; do\n'
+    .. '  unset "$v"; eval "[ -z \\"\\${ARM_$v:-}\\" ] || export $v=\\"\\$ARM_$v\\""\ndone\n'
+    .. 'PATH="$(cd "$(dirname "$0")" && pwd)/bin:$PATH"\n. "$LIB"\n'
 fs.write(W.rel .. "/direct.sh", HEAD .. 'resolve_embed_endpoint >/dev/null 2>&1\nprintf "%s|%s" "${TILLANDSIAS_EMBED_ENDPOINT_VERDICT:-none}" "${TILLANDSIAS_EMBED_ENDPOINT:-unset}"\n')
 fs.write(W.rel .. "/subshell.sh", HEAD .. 'v="$(resolve_embed_endpoint)"\nprintf "%s|%s" "$v" "${TILLANDSIAS_EMBED_ENDPOINT:-unset}"\n')
-local function run(script, e) -- proc.run clears the environment: only e reaches it
-    e.LIB = LIB
+local function run(script, arm)
+    local e = { LIB = LIB, STUB_OK = arm.STUB_OK or "" }
+    for k, v in pairs(arm) do if k ~= "STUB_OK" then e["ARM_" .. k] = v end end
     return T:run{ fixture.posix_shell(), W.abs .. "/" .. script, env = e, timeout_ms = 20000 }.stdout or ""
 end
 local function check(name, want, e)
