@@ -58,7 +58,9 @@ end
 local REL = "target/plan-scratch/preflight-stale-plan-binary-" .. tostring(time.now_ms())
 local W = root .. "/" .. REL
 fs.mkdir(REL)
-local block = { 'SCRIPT_DIR="$1"' }
+-- 2281-k3sn: the block asks the door's own _pf_classify, so it goes with it.
+local classify_fn = (fs.read("build.sh") or ""):match("\n(_pf_classify%(%) {.-\n}\n)") or "exit 98\n"
+local block = { 'SCRIPT_DIR="$1"', classify_fn }
 for i = lb, le do block[#block + 1] = lines[i] end
 block[#block + 1] = 'echo "fell-through"'
 fs.write(REL .. "/block.sh", table.concat(block, "\n") .. "\n")
