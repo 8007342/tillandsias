@@ -14,8 +14,9 @@
 --
 -- WHY A FIXTURE AND NOT A HOST CHECK. Interop is disabled in that distro today,
 -- so a host check would pass for the wrong reason until someone enables it.
--- Both artefacts are SYNTHESISED and runnable here, on any host. The child env
--- is explicit, so an inherited TILLANDSIAS_PLAN_BIN cannot decide (1258-tpkz).
+-- Both artefacts are SYNTHESISED and runnable here, on any host. The probe asks
+-- TILLANDSIAS_PLAN_BIN and CARGO_TARGET_DIR first, and the gate exports them (1258-tpkz;
+-- #1446 evicted on it), so both are planted at a runnable decoy and unset before the probe.
 --
 --   1 NATIVE   both runnable: the probe resolves the extensionless artefact
 --   2 CONTROL  the OLD candidate order picks the .exe on the SAME tree; without
@@ -30,14 +31,17 @@ local T = fixture.new("plan-binary-locus-native")
 local ROOT, SH = fixture.repo_root(), fixture.posix_shell()
 local S = T:scratch()
 local REL = "/target/release/tillandsias-plan"
-local ENV = { PATH = env.get("PATH"), HOME = env.get("HOME") }
+local ENV = { PATH = env.get("PATH"), HOME = env.get("HOME"),
+    TILLANDSIAS_PLAN_BIN = S.abs .. "/decoy/release/tillandsias-plan", CARGO_TARGET_DIR = S.abs .. "/decoy" }
 
 fs.mkdir(S.rel .. "/target/release")
 fs.mkdir(S.rel .. "/crates/tillandsias-plan/src")
 local RUNS = '#!/bin/sh\n[ "$1" = capabilities ] && { echo append-event; exit 0; }\nexit 1\n'
 fs.write(S.rel .. REL, RUNS)
 fs.write(S.rel .. REL .. ".exe", RUNS)
-T:must{ "chmod", "+x", S.abs .. REL, S.abs .. REL .. ".exe" }
+fs.mkdir(S.rel .. "/decoy/release")
+fs.write(S.rel .. "/decoy/release/tillandsias-plan", RUNS)
+T:must{ "chmod", "+x", S.abs .. REL, S.abs .. REL .. ".exe", S.abs .. "/decoy/release/tillandsias-plan" }
 -- Sources NEWER than the .exe, what a `git pull` produces (GNU touch, else BSD).
 local SRC = S.abs .. "/crates/tillandsias-plan/src/main.rs"
 fs.write(S.rel .. "/crates/tillandsias-plan/src/main.rs", "fn main() {}\n")
@@ -47,7 +51,7 @@ local function sh(script)
     local r = proc.run{ argv = { SH, "-s", "--", ROOT, S.abs }, env = ENV, stdin = script, timeout_ms = 60000 }
     return text.trim(r.stdout or "")
 end
-local PROBE = '. "$1/scripts/plan-binary-probe.sh"; cd "$2" || exit 1; resolve_plan_binary 2>/dev/null\n'
+local PROBE = 'unset TILLANDSIAS_PLAN_BIN CARGO_TARGET_DIR; . "$1/scripts/plan-binary-probe.sh"; cd "$2" || exit 1; resolve_plan_binary 2>/dev/null\n'
 local OLD = [[cd "$2" || exit 1
 for c in ./target/release/tillandsias-plan.exe ./target/debug/tillandsias-plan.exe \
          ./target/release/tillandsias-plan ./target/debug/tillandsias-plan; do
