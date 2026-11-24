@@ -316,7 +316,7 @@ _remove_stale_image_tags() {
     local tags old_tag old_tag_normalized
     tags="$("$PODMAN" images --format "{{.Repository}}:{{.Tag}}" | grep "tillandsias-${IMAGE_NAME}:" || true)"
     for old_tag in $tags; do
-        old_tag_normalized="$(echo "$old_tag" | sed 's|^localhost/||')"
+        old_tag_normalized="${old_tag#localhost/}"
         if ! _is_kept_image_tag "$old_tag_normalized"; then
             _verbose_info "Removing stale image tag: $old_tag"
             if _verbose_enabled; then
