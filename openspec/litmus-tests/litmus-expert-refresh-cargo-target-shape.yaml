@@ -38,6 +38,11 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: missing-binary-install-fail-logged"
 
+  - step: "a hook-started spec-index rebuild yields to a running gate or preflight (2286-5agy)"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-spec-index-yields-to-gates.lua 2>&1"
+    timeout_ms: 60000
+    expected_behavior: "ok:spec-index-yields-to-gates:6 arms"
+
 observability:
   traces:
     - "@trace spec:forge-environment-discoverability"
