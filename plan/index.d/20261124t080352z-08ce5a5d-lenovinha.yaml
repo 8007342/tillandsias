@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 699-usxc).
+#
+# two-ungated-fixtures-are-red-and-evict-any-pr-that-touches-them.status was ALREADY 'in_progress', so no field changed — but the caller
+# supplied a note, and discarding it silently is what this packet is about.
+events:
+  - packet_id: two-ungated-fixtures-are-red-and-evict-any-pr-that-touches-them
+    event:
+      type: note
+      ts: "2026-11-24T08:03:52Z"
+      host: lenovinha
+      summary: |-
+        darwin budget arm not yet judged live; waits out its own load since e49301129. Lands on the Mac 465 record (macuahuitl-fedora, 2026-11-24); the live darwin run follows as a separate record. Judged: lenovinha 20/20 (8dcbce824), macuahuitl 20/20 (8dcbce824).
