@@ -47,12 +47,9 @@ fs.mkdir(W.rel .. "/checkout/scripts")
 fs.write(W.rel .. "/checkout/scripts/plan-binary-probe.sh", fs.read("scripts/plan-binary-probe.sh"))
 -- What the resolved binary says: the planted fake is run, not just named.
 local function resolved(code, e)
-    -- proc.run passes TILLANDSIAS_* and CARGO_TARGET_DIR through (a gate exports
-    -- both), so what an arm does not set is unset here.
-    local sh = "set -uo pipefail\n" .. (e.CARGO_TARGET_DIR and "" or "unset CARGO_TARGET_DIR\n")
-        .. (e.TILLANDSIAS_BIN and "" or "unset TILLANDSIAS_BIN\n") .. "ROOT=\"$FAKE_ROOT\"\n" .. code .. '\nprintf "%s|" "$BIN"; "$BIN" --capabilities\n'
+    local sh = "set -uo pipefail\n" .. "ROOT=\"$FAKE_ROOT\"\n" .. code .. '\nprintf "%s|" "$BIN"; "$BIN" --capabilities\n'
     e.FAKE_ROOT = W.abs .. "/checkout"
-    local r = T:run{ fixture.posix_shell(), "-s", stdin = sh, env = e, timeout_ms = 30000 }
+    local r = T:run{ fixture.posix_shell(), "-s", stdin = sh, env = e, env_unset = { "TILLANDSIAS_*", "CARGO_TARGET_DIR" }, timeout_ms = 30000 }
     return text.trim(r.stdout or ""), " rc=" .. tostring(r.code) .. " " .. (r.stderr or ""):sub(1, 200)
 end
 local function says(o, w) return o:match("|(.*)$") == w end

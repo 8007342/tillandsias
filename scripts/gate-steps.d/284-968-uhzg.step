@@ -9,9 +9,9 @@
 # (jq/shell/Rust spellings, marker, constant, floor, diff-scope negative
 # control) and runs the capability probe's own filter on a bumped schema.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking an added exact-version literal is refused unless it says why (968-uhzg)"
-STEP_SCRIPT="scripts/test-exact-version-literal-added.sh"
+STEP_LUA="scripts/lua/test-exact-version-literal-added.lua"
 STEP_ERROR="the exact-version guard no longer refuses a bare-literal version pin, or the capability probe again rejects a bumped schema (968-uhzg); see which arm failed above"
 STEP_OK="exact-version literals refused unless reasoned; capability probe admits a bumped schema"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:exact-version-literal-added-fixture:6/6"
@@ -21,4 +21,4 @@ STEP_LANES="checkout"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/host-capability-probe.sh scripts/lua/check-exact-version-literal-added.lua scripts/plan-binary-probe.sh scripts/test-exact-version-literal-added.sh"
+STEP_READS="scripts/host-capability-probe.sh scripts/lua/check-exact-version-literal-added.lua scripts/plan-binary-probe.sh scripts/lua/test-exact-version-literal-added.lua"

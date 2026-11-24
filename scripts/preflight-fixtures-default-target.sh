@@ -48,10 +48,21 @@
 # A Lua fixture runs as the gate runs STEP_LUA: `<plan> script run <file>`
 # with the checkout as cwd (the runtime's fs.* are repo-relative), so it is NOT
 # run from the scratch cwd. The runner itself is resolved in each regime the
-# way the gate resolves it. The runtime scrubs CARGO_TARGET_DIR from every
-# child, so the masks that matter are a plan binary on PATH and the
-# TILLANDSIAS_PLAN_BIN / TILLANDSIAS_SCRIPT_RUNNER_BIN it passes through; the
-# stripped regime removes all three, as it does for a .sh fixture.
+# way the gate resolves it. The masks that matter are a plan binary on PATH and
+# the CARGO_TARGET_DIR (1593-1ny6), TILLANDSIAS_PLAN_BIN and
+# TILLANDSIAS_SCRIPT_RUNNER_BIN the runtime passes to every child; the stripped
+# regime removes all of them, as it does for a .sh fixture.
+#
+# THE GATE'S OWN VARIABLES (2305-zm8j). The runtime also passes every other
+# TILLANDSIAS_* name, so a Lua fixture whose subject reads one is green on its
+# author's host and red in a gate that exports it: #1488 and #1491 were evicted,
+# #1490 landed with the hole. A Lua fixture green in both regimes above runs a
+# third time with GATE_ENV set: a CARGO_TARGET_DIR that holds a (fake) product
+# binary and the names a gate, a forge lane or a caller exports. Red there is
+# refused. The runner is passed explicitly and a plan binary is in that target
+# dir, so nothing here hides the tools. A deadline there is a note. MEASURED on
+# lenovinha 2026-11-24 over 238 Lua fixtures (no podman, toolbox or cargo
+# build): 226 green both ways, 1 red, 1 past the 60 s bound. A .sh is not run a third time.
 #
 # WINDOWS (MSYS). The stripped regime works the same: the resolver's
 # ./target/release/tillandsias-plan.exe candidate is the default target there.
@@ -67,6 +78,7 @@
 #   skip:fixture-default-target:<reason>
 #   refused:fixture-default-target:<script>   (one per offender, exit 1)
 #   refused:fixture-default-target:ungated-red:<script>   (2262-5kk6, exit 1)
+#   refused:fixture-default-target:gate-env:<script>   (2305-zm8j, exit 1)
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -129,6 +141,16 @@ runner_s="$(env -u CARGO_TARGET_DIR -u TILLANDSIAS_PLAN_BIN -u TILLANDSIAS_SCRIP
 scratch="$(mktemp -d)" || exit 3
 trap 'rm -rf "$scratch"' EXIT
 
+GATE_ENV=()
+_gate_env() { # sets GATE_ENV, once: what a gate exports, with a fake product binary
+    [ "${#GATE_ENV[@]}" -eq 0 ] || return 0
+    local g="$scratch/gate-target"
+    mkdir -p "$g/debug" "$g/release" && cp "$runner_n" "$g/release/${runner_n##*/}" || return 1
+    printf '#!/bin/sh\necho gate-env\n' > "$g/debug/tillandsias" && chmod +x "$g/debug/tillandsias" || return 1
+    GATE_ENV=(CARGO_TARGET_DIR="$g" TILLANDSIAS_SURFACE_ROOT="$ROOT" TILLANDSIAS_BIN="$g/debug/tillandsias"
+        TILLANDSIAS_HOST_KIND=forge TILLANDSIAS_FORGE_SEED_BRANCH=gate-env
+        TILLANDSIAS_EMBED_ENDPOINT=http://gate-env.invalid/v1 TILLANDSIAS_TIMING_RUN_ID=gate-env)
+}
 _bounded() { # run "$@" under the deadline
     "$TIMEOUT_CMD" "$DEADLINE" "$@"
 }
@@ -224,6 +246,20 @@ while IFS= read -r f; do
         echo "  remedy: resolve the plan binary inside the checkout and absolutise it before any cd (see 84f37ff24)" >&2
         echo "refused:fixture-default-target:$f"
         refused=$((refused + 1))
+        continue
+    fi
+    if [ "$kind" = lua ]; then
+        _gate_env || { echo "note:fixture-default-target:no-gate-env-dir:$f" >&2; continue; }
+        under="$(cd "$ROOT" && _bounded env "${GATE_ENV[@]}" TILLANDSIAS_SCRIPT_RUNNER_BIN="$runner_n" "$runner_n" script run "$ROOT/$f" 2>&1)"; rc_g=$?
+        if [ "$rc_g" -eq 124 ]; then
+            echo "note:fixture-default-target:gate-env-no-answer:$f — past ${DEADLINE}s" >&2
+        elif [ "$rc_g" -ne 0 ]; then
+            echo "  $f is green here and red under a gate's own variables (rc=$rc_g): $(_last_word "$under")" >&2
+            echo "  why: the runtime passes TILLANDSIAS_* and CARGO_TARGET_DIR to the fixture's subject" >&2
+            echo "  remedy: drop them on that call: env_unset = { \"TILLANDSIAS_*\", \"CARGO_TARGET_DIR\" }" >&2
+            echo "refused:fixture-default-target:gate-env:$f"
+            refused=$((refused + 1))
+        fi
     fi
 done <<EOF
 $fixtures

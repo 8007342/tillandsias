@@ -49,12 +49,11 @@ fs.write(toml, fs.read(toml) .. "\n# 1925-ided: an older checkout\n")
 T:must{ "cp", BIN, OLD .. "/target/release/tillandsias-plan" }
 
 -- proc.run passes TILLANDSIAS_* through and a gate exports this pin, so an absent
--- pin is unset in the shell that runs the subject.
-fs.write(W.rel .. "/claims.sh", 'unset TILLANDSIAS_SURFACE_ROOT\n[ -z "$ARM_PIN" ] || export TILLANDSIAS_SURFACE_ROOT="$ARM_PIN"\n'
-    .. 'exec bash scripts/test-claims-fleet-visible.sh </dev/null\n')
+-- pin is dropped from the call.
 local function claims(pin)
-    local e = { CARGO_TARGET_DIR = OLD .. "/target", ARM_PIN = pin or "" }
-    local r = T:run{ fixture.posix_shell(), W.abs .. "/claims.sh", cwd = ROOT, env = e, timeout_ms = 180000 }
+    local e = { CARGO_TARGET_DIR = OLD .. "/target", TILLANDSIAS_SURFACE_ROOT = pin }
+    local r = T:run{ fixture.posix_shell(), "scripts/test-claims-fleet-visible.sh", cwd = ROOT, env = e, stdin = "",
+        env_unset = { "TILLANDSIAS_SURFACE_ROOT" }, timeout_ms = 180000 }
     local o = "\n" .. (r.stdout or "") .. "\n" .. (r.stderr or "")
     local last = ""
     for _, l in ipairs(text.lines(o)) do
