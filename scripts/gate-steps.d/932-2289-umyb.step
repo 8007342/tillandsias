@@ -1,0 +1,9 @@
+# Gate step 2289-umyb — tillandsias-headless refuses host-services for a target
+# that is not unix, in one error, from build.rs.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking host-services names itself unix-only (2289-umyb)"
+STEP_LUA="scripts/lua/test-headless-host-services-unix-only.lua"
+STEP_ERROR="building tillandsias-headless with host-services no longer names itself unix-only, or refuses a target it must build for (2289-umyb) — see the FAIL lines above"
+STEP_OK="host-services unix-only refusal pinned"
+STEP_READS="crates/tillandsias-headless/build.rs crates/tillandsias-headless/src/accel_probe.rs scripts/lua/test-headless-host-services-unix-only.lua"
