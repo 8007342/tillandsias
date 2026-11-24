@@ -249,7 +249,6 @@ litmus openspec/litmus-tests/litmus-podman-idiomatic-security-flags.yaml 4
 litmus openspec/litmus-tests/litmus-podman-idiomatic-storage-isolation-runtime.yaml 1
 litmus openspec/litmus-tests/litmus-podman-idiomatic-storage-isolation.yaml 1
 litmus openspec/litmus-tests/litmus-podman-mock-refuses-unknown-invocations.yaml 4
-litmus openspec/litmus-tests/litmus-podman-mock-secret-lifecycle.yaml 1
 litmus openspec/litmus-tests/litmus-podman-secrets-integration-shape.yaml 4
 litmus openspec/litmus-tests/litmus-post-merge-litmus-pass-shape.yaml 1
 litmus openspec/litmus-tests/litmus-pre-push-deletion-only.yaml 1
@@ -703,7 +702,6 @@ scripts scripts/test-plan-fragments-lane-affordance.sh 2
 scripts scripts/test-plan-only-lane-structural.sh 8
 scripts scripts/test-plan-orders-fragment-fold.sh 7
 scripts scripts/test-podman-mock-refusal.sh 4
-scripts scripts/test-podman-mock-secret-lifecycle.sh 4
 scripts scripts/test-portability-idioms.sh 13
 scripts scripts/test-pre-push-empty-ref-list.sh 6
 scripts scripts/test-pre-push-honours-a-live-freeze.sh 11
@@ -726,9 +724,7 @@ scripts scripts/test-relay-preflight.sh 15
 scripts scripts/test-release-asset-integrity.sh 4
 scripts scripts/test-release-tier-freshness-reads-ci-full.sh 4
 scripts scripts/test-release-tier-freshness.sh 2
-scripts scripts/test-release-tier-timer-render.sh 1
 scripts scripts/test-reopen-is-history-not-loss.sh 4
-scripts scripts/test-repeat-model-flag.sh 2
 scripts scripts/test-reset-flags-are-accepted.sh 2
 scripts scripts/test-reset-state-contract.sh 3
 scripts scripts/test-run-verb-agent-door.sh 3

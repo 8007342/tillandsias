@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-24. p-s port range, batch 2 (macuahuitl: take timer-render, prove trunk red first).
+packets:
+- packet_id: port-release-tier-timer-render-with-a-stub-systemctl
+  order: 2303-rttr
+  status: implemented
+  kind: debt
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [shell-to-lua, macos, fixtures, portability]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 1
+  title: 'Port scripts/test-release-tier-timer-render.sh to Lua with a stub systemctl: it read 2/8 on darwin trunk because the installer refuses no-systemctl before rendering'
+  ports: [scripts/test-release-tier-timer-render.sh]
+  context: >-
+    Trunk red, measured first on darwin at origin/linux-next: fail:release-tier-timer-render: 2 passed, 6 failed, every render arm
+    red because scripts/install-release-tier-timer.sh exits fail:install:no-systemctl before writing a unit. The .sh relied on the
+    REAL systemctl failing to enable a sandboxed unit, which also means on Linux it ran a real `systemctl --user daemon-reload`.
+    The port puts a stub systemctl first on PATH (answers show-environment and daemon-reload, logs calls, refuses enable), so the
+    render is reachable on every host and nothing can be armed by construction; a new arm 8 proves the stub, not a real systemctl,
+    was asked. Arm 9 checks the real user session only where systemctl exists. The installer is unchanged.
+  exit_criteria:
+  - 'The .lua is green on darwin; mutants (--phase in the service template, @INTERVAL@ substitution dropped, the placeholder guard removed) each red the arms they target.'
+  - 'litmus-unreferenced-lane-fixtures-run runs the .lua; the .sh and its floor lines are gone.'
+  verifiable_closure: 'Mutant output in the PR; the litmus step green on darwin and Linux.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the mutant parity is the deliverable.'
+  next_action: 'Implemented. Darwin: ok:release-tier-timer-render:9 arms. A Linux run of the litmus step is welcome before landing.'
+  provenance: 'tlatoanis-macbook-air 2026-11-24, on macuahuitl-fedora''s direction.'
+  related: [2302-pspt, 890-27mv, 1174-6r4k]
+  events:
+  - {type: filed, ts: '2026-11-24T13:58:29Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}
