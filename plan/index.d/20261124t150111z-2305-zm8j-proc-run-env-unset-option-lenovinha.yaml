@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-lua-fixture-cannot-drop-the-gate-variables-proc-run-passes-through
+    order: 2305-zm8j
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, testing, build-speed]
+    estimated_hours: 3
+    title: |
+      proc.run passes TILLANDSIAS_* and CARGO_TARGET_DIR to a fixture's subject, and a Lua fixture has no way to drop them
+    context: |
+      Measured 2026-11-24: #1488 and #1491 were green on lenovinha and evicted by macuahuitl's gate. child_env.rs passes CARGO_TARGET_DIR (1593-1ny6) and every TILLANDSIAS_* name by design, and a gate exports both. The .sh originals used `unset`, `env -u` or `env -i`; the ports assumed proc.run had already cleared them. Reproduced with TILLANDSIAS_SURFACE_ROOT exported (gate-pins arm 1) and TILLANDSIAS_BIN exported (envelope arms); which variable hit the envelope arms in the gate itself was not read from its log. Same hole found in embed-endpoint-derivation, forge-seed-branch-resolution and forge-entrypoints-source-agent-profile; the last landed in #1490. The runner refuses `<shell> -c`, so each fix writes a shell prologue with its own unset list.
+      The default must stay: nested runners need CARGO_TARGET_DIR. A per-call opt-in that only REMOVES names cannot widen what a child sees, so it does not touch the 2029-39bt / 2031-dwwy design.
+      Proposed: proc.run/spawn/chain and T:run take `env_unset = { "NAME", "PREFIX_*" }`, applied before the call's own literals. A text decider was considered: it cannot know which variables a subject reads, so a rule on every proc.run call would be mostly noise. A cheaper second guard is to run added fixtures once more in preflight-fixtures-default-target.sh with junk TILLANDSIAS_* values and a CARGO_TARGET_DIR that holds a real binary.
+    exit_criteria:
+      - "proc.run{env_unset=...} drops an exported TILLANDSIAS_ name and CARGO_TARGET_DIR from the child, a literal in env= still wins, and a call without it is byte-identical to today; a unit test fails before the change"
+      - "the fixtures named above use it in place of their shell unset prologue, green with those variables exported to junk"
+      - "an added fixture that is green clean and red under exported gate variables is refused at the door, proven on the 31166babd envelope fixture with TILLANDSIAS_BIN exported"
+    unscoreable: "unpinnable-until-the-option-exists: the closure is the unit test and the door arm this row adds."
+    next_action: "Add env_unset to child_env.rs after step 4 and before step 5, expose it in lua_process.rs and lib/lua/common/fixture.lua, then the door arm."
+    provenance: macuahuitl-fedora asked for the row after runs 47 and 49; filed by lenovinha.
+    related: [2301-2r4s, 2303-h6qe, 2302-yqv5, 2029-39bt, 2031-dwwy, 1593-1ny6]
+    events:
+      - {type: filed, ts: '2026-11-24T15:01:11Z', host: lenovinha, summary: filed as a class after two evictions}
