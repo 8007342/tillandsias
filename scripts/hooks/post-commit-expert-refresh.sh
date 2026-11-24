@@ -65,7 +65,7 @@ HOOK_LOG="${TILLANDSIAS_HOOK_LOG:-/tmp/tillandsias-hooks.log}"
 # was 9,909 chunks at the first two figures and 34,099 on 2026-11-24.
 #   yoga (CPU embed)          12m19s cold, 9,909 chunks (~13 chunks/s)
 #   macuahuitl (GPU embed)    43s cold, 9,910 chunks (~230 chunks/s)
-#   macbookair (Metal)        11m31s cold, chunk count not recorded
+#   macbookair (Metal)        11m31s cold, 34,079 chunks (~49 chunks/s)
 #   lenovinha (CPU embed)     28,544 of 34,099 chunks in 75 min (~6.3 chunks/s,
 #                             ~8 cores throughout): about 90 min in all
 # The macuahuitl figure is with nomic-embed-text fully VRAM-resident on an RTX

@@ -9,6 +9,9 @@
 --   3 BOUND   it stops yielding at the bound, over all batches together
 --   4 GATES   each shape a gate really has counts
 --   5 NOT     a shell whose text names build.sh, a plain build, a grep do not
+--   7 LIVE    real processes under the real ps: a shell whose command line only
+--             mentions a gate (one line or several), this hook, and a sibling
+--             waiter do not count; a running build.sh --check does
 --   6 WIRED   the batch loop calls it, and the hook asks for it
 --
 -- Verdict: ok:spec-index-yields-to-gates:<n> | violation:…
@@ -54,10 +57,50 @@ for _, l in ipairs({ "bash ./build.sh --preflight", "/usr/bin/bash /x/y/build.sh
 end
 T:arm("4 GATES every shape a gate really has counts", #missed == 0, table.concat(missed, " | "))
 for _, l in ipairs({ "/bin/bash -c cd /x && ./build.sh --preflight", "grep -n build.sh --check", "vim build.sh", "bash ./build.sh",
-    "bash ./build.sh --help", "bash my-build.sh --check", "bash scripts/test-land-queue.sh", "tail -f build.sh --test" }) do
+    "bash ./build.sh --help", "bash my-build.sh --check", "bash scripts/test-land-queue.sh", "tail -f build.sh --test",
+    "bash /r/scripts/hooks/post-commit-expert-refresh.sh", "nice -n 19 bash /r/scripts/spec-index-ensure.sh", "bash /r/scripts/spec-index-ensure.sh",
+    "bash -c sleep 30 # build.sh --check", "sh -c : land-queue.sh; sleep 30", "awk { if ($s ~ /build.sh$/) --check }" }) do
     if run({ l .. "\n" }, QUIET) ~= "slept=0 asked=1 yielded=0" then taken[#taken + 1] = l end
 end
 T:arm("5 NOT text that names build.sh, a plain build, or a grep is not a gate", #taken == 0, table.concat(taken, " | "))
+
+-- 7: the ps shim passes the real ps's own formatting, for the decoys' pids only,
+-- so a gate really running on this host cannot answer for them.
+fs.mkdir(W.rel .. "/live/bin"); fs.mkdir(W.rel .. "/live/scripts/hooks")
+fs.write(W.rel .. "/live/fns.sh", fns)
+for _, f in ipairs({ "build.sh", "scripts/spec-index-ensure.sh", "scripts/hooks/post-commit-expert-refresh.sh" }) do
+    fs.write(W.rel .. "/live/" .. f, "#!/usr/bin/env bash\nsleep 30; :\n")
+end
+fs.write(W.rel .. "/live/go.sh", [[
+D="$(cd "$(dirname "$0")" && pwd)"; cd "$D"
+printf '#!/usr/bin/env bash\nexec "%s" -o args= -p "$(cat "%s/pids")"\n' "$(command -v ps)" "$D" > bin/ps; chmod +x bin/ps
+. ./fns.sh
+ask() { # label, then the decoy's argv
+    local n="$1" p; shift
+    "$@" >/dev/null 2>&1 & p=$!
+    sleep 0.5; echo "$p" > pids
+    if [ -z "$(PATH="$D/bin:$PATH" ps)" ]; then echo "$n=no-process"; elif PATH="$D/bin:$PATH" _gate_running; then echo "$n=gate"; else echo "$n=no"; fi
+    kill "$p" 2>/dev/null; wait "$p" 2>/dev/null
+}
+ask oneline bash -c 'sleep 30 # build.sh --check
+:'
+ask comment bash -c 'sleep 30; : build.sh --check'
+ask multiline bash -c 'sleep 30
+./build.sh --check
+bash ./build.sh --preflight
+bash scripts/land-queue.sh'
+ask queue sh -c 'sleep 30; : scripts/land-queue.sh'
+ask hook bash scripts/hooks/post-commit-expert-refresh.sh
+ask waiter nice -n 19 bash scripts/spec-index-ensure.sh
+ask gate bash ./build.sh --check
+]])
+local live = T:run{ SH, W.abs .. "/live/go.sh", timeout_ms = 30000 }
+local lo = text.trim(live.stdout or ""):gsub("%s+", " ")
+if lo:find("gate=no-process", 1, true) then
+    -- msys: its ps has no -o args. Nothing yields there, and nothing is judged.
+    out.line("not-judged: 7 LIVE this host's ps answers nothing for -o args=")
+else T:arm("7 LIVE only the running build.sh --check counts",
+    lo == "oneline=no comment=no multiline=no queue=no hook=no waiter=no gate=gate", lo) end
 
 local loop = SRC:match('for part in "%$work"/b/part%-%*; do\n(.-)want=') or ""
 local hook = fs.read("scripts/hooks/post-commit-expert-refresh.sh") or ""
