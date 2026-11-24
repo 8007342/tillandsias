@@ -15,6 +15,7 @@ STEP_LUA="scripts/lua/test-plan-binary-probe-release-over-debug.lua"
 STEP_ERROR="the plan-binary probe again answers a debug build ahead of the release .exe on MSYS, or its Linux order changed (1508-7s4w); see which arm failed above"
 STEP_OK="plan-binary probe answers the release .exe on MSYS and keeps its Linux order"
 STEP_SECOND_REGIME="yolanda 2026-11-24 msys ok:plan-binary-probe-release-over-debug:4 arms"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:plan-binary-probe-release-over-debug:1 arms"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="builds with cargo into the shared target"
 STEP_LANES="cargo"
