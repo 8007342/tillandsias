@@ -11,7 +11,7 @@ STEP_DESC="Checking the push token is GitHub-https-only and the permissive proxy
 STEP_LUA="scripts/lua/test-credential-and-proxy-confinement.lua"
 STEP_ERROR="a GitHub token can reach a non-GitHub host or travel over http, or the permissive proxy port is reachable from the enclave again (1118-bscs) — see the verdict line above"
 STEP_OK="Credential and proxy confinement passed"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   CONTROL: the strict port 3128 still binds for the enclave (confinement did not break the allowlisted pat"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:credential-and-proxy-confinement:9 arms (2320-b5vv @f03fae8d7, Lua port)"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
