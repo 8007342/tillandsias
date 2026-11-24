@@ -14,6 +14,7 @@
 #        arm 1 and the lane would be unusable.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT" || exit 1  # 2285-cbtf: the probe answers for the checkout, not the caller's cwd
 CHECK="$ROOT/scripts/check-append-vs-origin-fold.sh"
 [ -f "$CHECK" ] || { echo "skip:append-vs-origin-fixture:checker-absent"; exit 0; }
 # shellcheck source=scripts/plan-binary-probe.sh

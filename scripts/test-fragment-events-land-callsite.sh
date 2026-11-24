@@ -28,7 +28,7 @@
 #
 # Prints one PASS/FAIL summary line and exits 0/1.
 set -uo pipefail
-ROOT="$(git rev-parse --show-toplevel)" || exit 1
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exit 1
 cd "$ROOT" || exit 1
 
 pass=0
