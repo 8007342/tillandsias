@@ -9,5 +9,6 @@ STEP_DESC="Checking the preflight front door's own fixture (1305-udgs, daily-ful
 STEP_SCRIPT="scripts/test-preflight-front-door.sh"
 STEP_ERROR="the preflight front door's fixture is red — see the FAIL lines above"
 STEP_OK="preflight front-door fixture passed, or named not-run"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin not-run:preflight-front-door at 8dcbce824 (the gate's path; live there: 19/19, budget arm not-judged)"
 STEP_SERIAL="runs the preflight door several times; a busy pool skews its deadlines and its wall-clock arm"
 STEP_READS="build.sh scripts/** scripts/test-preflight-front-door.sh"

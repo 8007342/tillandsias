@@ -444,7 +444,20 @@ judge_settled_budget() {  # _budget_door runs one door and prints its output
     else _BUDGET_NOTE=" door=1 benched=${_n:-?} contention=$_c"; fi
     judge_budget "$_o"
 }
-_budget_door() { TILLANDSIAS_PREFLIGHT_BENCH=on TILLANDSIAS_PREFLIGHT_BENCH_FILE="$_BUDGET_BENCH" ./build.sh --preflight 2>&1; }
+# Where the door can read only its START load (no /proc), the door before it is
+# still in that number: a Mac's third door read 33 % with nothing else running
+# (macbookair 2026-11-24), so it could never bench. Wait it out, at most 300 s; a
+# host that stays loaded is then judged contended, as it is.
+_settle_start_load() {  # $1 = seconds allowed
+    local _l _n _i=0
+    [ ! -r "${_SETTLE_PROC:-/proc/stat}" ] || return 0
+    while [ "$_i" -lt "$1" ]; do
+        _l="$(LC_ALL=C sysctl -n vm.loadavg 2>/dev/null)" && _n="$(sysctl -n hw.ncpu 2>/dev/null)" || return 0
+        if LC_ALL=C awk -v l="$_l" -v n="$_n" 'BEGIN { split(l, a, " "); if (a[2] !~ /^[0-9.]+$/ || n + 0 <= 0) exit 0; exit !(int(100 * a[2] / n) <= 15) }' /dev/null; then return 0; fi
+        sleep 10; _i=$((_i + 10))
+    done
+}
+_budget_door() { _settle_start_load 300; TILLANDSIAS_PREFLIGHT_BENCH=on TILLANDSIAS_PREFLIGHT_BENCH_FILE="$_BUDGET_BENCH" ./build.sh --preflight 2>&1; }
 _BUDGET_BENCH="$(mktemp -d "${TMPDIR:-/tmp}/front-door-bench.XXXXXX")/record.tsv"
 judge_settled_budget
 rm -rf "${_BUDGET_BENCH%/*}"

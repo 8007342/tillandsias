@@ -156,6 +156,25 @@ arm("5c CONTENDED only an over-budget door with nothing benched on a contended h
         and has(s6, "OK ") and has(s7, "BAD "),
     s5 .. " | " .. s6 .. " | " .. s7)
 
+-- ── 5d where only the start load can be read, a door waits out the one before it
+local settle_fn = extract(fd, "_settle_start_load")
+if settle_fn == "" then verdict.emit("violation:preflight-regime-budget:no-subject:_settle_start_load", 1, "test-preflight-front-door.sh has no _settle_start_load") end
+fs.mkdir(REL .. "/mac")
+fs.write(REL .. "/mac/sysctl", '#!/bin/sh\ncase "$2" in hw.ncpu) echo 10; exit 0 ;; esac\nn=$(( $(cat "$D/n") + 1 )); echo $n > "$D/n"\n' ..
+    '[ "$LC_ALL" = C ] || { echo "{ 0,10 0,10 0,10 }"; exit 0; }\n[ "$n" -gt "$CALM" ] && echo "{ 1.20 2.00 2.00 }" || echo "{ 3.30 2.00 2.00 }"\n')
+fs.write(REL .. "/mac/sleep", "#!/bin/sh\nexit 0\n")
+proc.run({ argv = { "chmod", "+x", ROOT .. "/" .. REL .. "/mac/sysctl", ROOT .. "/" .. REL .. "/mac/sleep" }, timeout_ms = 10000 })
+fs.write(REL .. "/settle.sh", settle_fn .. '\n_settle_start_load 60; echo "reads=$(cat "$D/n")"\n')
+local function settle_reads(calm, procfile)
+    fs.write(REL .. "/mac/n", "0")
+    return text.trim(proc.run({ argv = { require("common.fixture").posix_shell(), ROOT .. "/" .. REL .. "/settle.sh" },
+        env = { D = ROOT .. "/" .. REL .. "/mac", CALM = calm, _SETTLE_PROC = procfile, LC_ALL = "fr_CH.UTF-8",
+            PATH = ROOT .. "/" .. REL .. "/mac:/usr/bin:/bin" }, timeout_ms = 20000 }).stdout or "")
+end
+local w1, w2, w3 = settle_reads("2", "/nonexistent"), settle_reads("99", "/nonexistent"), settle_reads("99", ROOT .. "/build.sh")
+arm("5d SETTLE it waits until the load drains, gives up at its bound, and never waits where /proc answers",
+    w1 == "reads=3" and w2 == "reads=6" and w3 == "reads=0", w1 .. " | " .. w2 .. " | " .. w3)
+
 -- ── 6 the clock, observed ──────────────────────────────────────────────────
 if now_fn == "" then
     arm("6 CLOCK premise: build.sh has _pf_now (1614-5x7m)", false, "no _pf_now")
@@ -207,4 +226,4 @@ proc.run({ argv = { "rm", "-rf", ROOT .. "/" .. REL }, timeout_ms = 30000 })
 if #failed > 0 then
     verdict.emit("violation:preflight-regime-budget:" .. #failed .. "-failed", 1)
 end
-verdict.ok("preflight-regime-budget", "9 arms")
+verdict.ok("preflight-regime-budget", "10 arms")
