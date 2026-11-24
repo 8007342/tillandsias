@@ -34,6 +34,8 @@
 -- KILL to the pid (and its group), and the guard's TMPDIR is deleted.
 --  10 PRE-FIX    the copy is left in scripts/ (the defect)
 --  11 POST-FIX   nothing is left in the checkout
+--  10b NO-SHIM   a shim the door cannot find answers shim=no at once, so 10 and 11
+--                refuse as setup-failed instead of reading as red (2290-xbx8)
 -- THE CONTROL SENDS KILL DIRECTLY, standing in for the door's KILL landing.
 -- KILL cannot be caught, so no trap runs on any OS: the pre-fix EXIT trap never
 -- removes the copy, and the post-fix copy is in the deleted TMPDIR. The door
@@ -214,7 +216,10 @@ local pre, n_pre = pinned(pre_src.stdout or "")
 local post, n_post = pinned(fs.read(GUARD))
 fs.write(REL .. "/has-timeout.sh", "command -v timeout\n")
 local ht = proc.run({ argv = { "bash", ROOT .. "/" .. REL .. "/has-timeout.sh" }, timeout_ms = 10000 })
-if pre_src.code ~= 0 or n_pre ~= 1 or n_post ~= 1 then
+local has_pre = proc.run({ argv = { "git", "cat-file", "-e", PRE_REV .. "^{commit}" }, cwd = ROOT, timeout_ms = 30000 })
+if has_pre.code ~= 0 then
+    out.line("not run: 10-11 need " .. PRE_REV .. " in this clone (a shallow or one-commit tree lacks it)")
+elseif pre_src.code ~= 0 or n_pre ~= 1 or n_post ~= 1 then
     arm("10/11 DOOR premise: both versions of " .. GUARD .. " found and pinned", false,
         "git show rc=" .. tostring(pre_src.code) .. " pinned pre=" .. n_pre .. " post=" .. n_post)
 elseif ht.code ~= 0 then
@@ -232,6 +237,7 @@ else
         "set -m",
         "G=\"$1\"; ROOT=\"$2\"; SHIM=\"$3\"; MODE=\"$4\"",
         "GT=\"$(mktemp -d \"${TMPDIR:-/tmp}/checkout-writers-door.XXXXXX\")\"",
+        "[ \"$(PATH=\"$SHIM:$PATH\"; command -v timeout)\" = \"$SHIM/timeout\" ] || { echo shim=no; rm -rf \"$GT\"; exit 0; }",
         "REAL_TIMEOUT=\"$(command -v timeout)\"; HOLD_MARK=\"$GT.hold\"; export REAL_TIMEOUT HOLD_MARK",
         "( export TMPDIR=\"$GT\" PATH=\"$SHIM:$PATH\"; exec bash \"$G\" ) >/dev/null 2>&1 &",
         "pid=$!",
@@ -248,15 +254,29 @@ else
         "rm -rf \"$GT\" \"$HOLD_MARK\"",
         "if [ -e \"$pre\" ]; then echo \"left=$pre\"; rm -f \"$pre\"; else echo left=none; fi",
         "" }, "\n"))
-    local function door(which, mode)
+    -- door.sh puts the shim on a colon-separated PATH, which splits C:/... at the
+    -- drive, so on native Windows it is handed over as /c/... (2290-xbx8).
+    local SHIM = (ROOT .. "/" .. REL .. "/shim"):gsub("^(%a):/", function(d) return "/" .. d:lower() .. "/" end)
+    local function door(which, mode, shim)
         local r = proc.run({ argv = { "bash", ROOT .. "/" .. REL .. "/door.sh", ROOT .. "/" .. REL .. "/" .. which .. ".sh",
-            ROOT, ROOT .. "/" .. REL .. "/shim", mode or "kill" }, cwd = ROOT, timeout_ms = 180000 })
+            ROOT, shim or SHIM, mode or "kill" }, cwd = ROOT, timeout_ms = 180000 })
         return text.trim(r.stdout or ""):gsub("\n", " ")
     end
-    local pre_out = door("pre")
+    -- A guard that was never held says nothing about the door.
+    local function held(which)
+        local o_ = door(which)
+        if not o_:find("held=yes", 1, true) then
+            proc.run({ argv = { "rm", "-rf", ROOT .. "/" .. REL }, timeout_ms = 30000 })
+            verdict.emit("refused:checkout-writers-fixture:setup-failed", 1, which .. ".sh was never held: " .. o_)
+        end
+        return o_
+    end
+    local ns = door("pre", "kill", SHIM .. "-absent")
+    arm("10b NO-SHIM a shim that is not there answers shim=no and nothing is held", ns == "shim=no", ns)
+    local pre_out = held("pre")
     arm("10 PRE-FIX (" .. PRE_REV .. ") held in ARM 3 and killed: its runner copy is left in scripts/ (the defect)",
         pre_out:find("held=yes", 1, true) ~= nil and pre_out:find("left=" .. ROOT .. "/scripts/.wka4-prefix-runner.", 1, true) ~= nil, pre_out)
-    local post_out = door("post")
+    local post_out = held("post")
     arm("11 POST-FIX held in ARM 3 and killed: nothing is left in the checkout",
         post_out:find("held=yes", 1, true) ~= nil and post_out:find("left=none", 1, true) ~= nil, post_out)
     local os_ = text.trim(proc.run({ argv = { "uname", "-s" }, timeout_ms = 10000 }).stdout or "")
