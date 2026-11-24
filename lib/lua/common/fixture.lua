@@ -157,7 +157,12 @@ function T:arm(name, cond, got)
         self.passed = self.passed + 1
         out.line("ok:   " .. name)
     else
-        out.line("FAIL: " .. name .. " — got: " .. tostring(got))
+        -- ORDER 2322-a756: a diagnostic cut at a byte count can end inside a UTF-8 character,
+        -- and out.line refuses it: the arm's failure became a script error naming no arm.
+        local line = "FAIL: " .. name .. " — got: " .. tostring(got)
+        if not pcall(out.line, line) then
+            out.line("FAIL: " .. name .. " — got: " .. (tostring(got):gsub("[\128-\255]", "?")))
+        end
         self.failed[#self.failed + 1] = name
     end
     return cond

@@ -38,7 +38,7 @@ STEP_OK="The evidence-debt census counts admissions and its count is shown to mo
 # tool and no network: it plants a two-file scratch repo, commits with a pinned
 # author date, and reads ages back through git blame. Nothing in it is
 # platform-conditional, which is why its number is identical on both regimes.
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:census-admitted-missing-evidence-fixture:8"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:census-admitted-missing-evidence:8 arms (2320-b5vv @f03fae8d7, Lua port)"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.

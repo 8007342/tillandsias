@@ -218,7 +218,6 @@ scripts/test-land-queue.sh
 scripts/test-land-verdict-through-a-pipe.sh
 scripts/test-ledger-node-claim-resolution.sh
 scripts/test-ledger-prose-roundtrip.sh
-scripts/test-ledger-ts-guard.sh
 scripts/test-ledger-write-reaches-its-reader.sh
 scripts/test-litmus-binding-truth.sh
 scripts/test-litmus-bindings.sh
@@ -236,16 +235,13 @@ scripts/test-litmus-parse-instruments-agree.sh
 scripts/test-litmus-parse-only-duplicate-key.sh
 scripts/test-litmus-podman-preflight-diagnosis.sh
 scripts/test-litmus-podman-preflight-trigger.sh
-scripts/test-litmus-retired-phase-skip.sh
 scripts/test-litmus-runner-reads-without-jq.sh
 scripts/test-litmus-runner-reports-rc.sh
 scripts/test-litmus-scalar-unescape.sh
-scripts/test-litmus-stdin-does-not-eat-the-spec-list.sh
 scripts/test-litmus-step-model.sh
 scripts/test-litmus-step-pipefail.sh
 scripts/test-litmus-structured-assert.sh
 scripts/test-litmus-terminal-verdict.sh
-scripts/test-litmus-test-selector.sh
 scripts/test-litmus-tracked-file-kill-safety.sh
 scripts/test-long-running-view-refuses-at-completion.sh
 scripts/test-loop-status-append-input.sh

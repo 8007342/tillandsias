@@ -17,6 +17,7 @@
 --  11 plan_binary is absolute, native, and runs
 --  12 which finds a spawnable tool on PATH, nil when absent (2257-qnt7)
 --  13 is_abs accepts /x, C:/x and C:\x, and nothing relative
+--  14 a failing arm is named even when its diagnostic was cut inside a character (2322-a756)
 --   9 posix_shell is Git's bash.exe on native Windows, else the caller's default ("bash" when none)
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-common-fixture.lua
@@ -132,5 +133,16 @@ T:arm("13 is_abs takes /x and a drive path C:/x or C:\\x, and nothing relative",
         and not fixture.is_abs("a/b") and not fixture.is_abs("./a") and not fixture.is_abs("C:a")
         and not fixture.is_abs("") and not fixture.is_abs(nil),
     "is_abs(C:/a)=" .. tostring(fixture.is_abs("C:/a")))
+
+-- 14 ORDER 2322-a756: a failing arm is named even when its diagnostic was cut inside a UTF-8
+-- character. In a child, so its FAIL line is never this fixture's own output.
+do
+    local w = T:scratch("cut")
+    fs.write(w.rel .. "/cut.lua", 'local T = require("common.fixture").new("cut")\nT:arm("named", false, ("caf\\195\\169"):sub(1, 4))\nT:finish()\n')
+    local r = proc.run{ argv = { fixture.plan_binary(), "script", "run", w.rel .. "/cut.lua" }, cwd = root, timeout_ms = 60000 }
+    local o = (r.stdout or "") .. (r.stderr or "")
+    T:arm("14 a failing arm is named even when its diagnostic ends inside a UTF-8 character",
+        r.code == 1 and text.contains(o, "FAIL: named") and text.contains(o, "caf?") and text.contains(o, "violation:cut:1-failed"), tostring(r.code) .. " " .. o:gsub("[\128-\255]", "?"))
+end
 
 T:finish()
