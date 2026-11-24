@@ -8,3 +8,5 @@ STEP_LUA="scripts/lua/test-cheatsheet-hook-phases-scoped.lua"
 STEP_ERROR="the pre-commit cheatsheet phases ran for an unrelated commit, or not for a cheatsheet/policy one (2083-6k44) — see the FAIL lines above"
 STEP_OK="Cheatsheet hook scope fixture passed"
 STEP_SECOND_REGIME="yolanda 2026-11-14 msys ok:cheatsheet-hook-scope-fixture:3 arms — native Windows runner over Git Bash; the pre-fix hook failed arm 1 with 2 calls on the same host (2083-6k44)"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY.
+STEP_READS="scripts/lua/test-cheatsheet-hook-phases-scoped.lua scripts/hooks/pre-commit-openspec.sh lib/lua/common/**"
