@@ -8,4 +8,4 @@ STEP_ERROR="--changed --intake no longer defers whole-tree/slow fixtures by name
 STEP_OK="--changed --intake fixture passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin ok:gate-changed-intake:12 arms at 213905e79 (run directly; fleet-run reds it because it deletes the other .step files the fixture reads)"
 STEP_READS="scripts/lua/test-gate-changed-intake.lua"
-STEP_SECOND_REGIME="yolanda 2026-11-23 msys ok:gate-changed-intake:12 arms at c9f4464cb (fleet-run)"
+STEP_SECOND_REGIME="yolanda 2026-11-23 msys ok:gate-changed-intake:13 arms at d4c5f4880 (fleet-run)"
