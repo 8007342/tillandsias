@@ -1211,7 +1211,7 @@ impl Engine for PodmanSdCli {
         let mut last = None;
         let t0 = std::time::Instant::now();
         let mut stamped: Vec<(u64, String)> = Vec::new();
-        imagegen_models::run_streamed(&args, &mut |row| {
+        imagegen_models::run_engine_streamed(&args, &mut |row| {
             stamped.push((t0.elapsed().as_millis() as u64, row.to_string()));
             if let Some(s) = step_from_row(row)
                 && last != Some(s)
