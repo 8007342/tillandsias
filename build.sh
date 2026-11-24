@@ -6505,6 +6505,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Relay-preflight derived-checks fixture passed"
 
+    # ORDER 2285-jvg6 — at intake, a green nextest run reads green, and a result
+    # log that could not be converted is named with its reason.
+    _step "Checking intake judges nextest's own results (2285-jvg6)..."
+    if ! _run_lua_decider "scripts/lua/test-gate-changed-nextest-transcript.lua" 2>&1; then
+        _error "gate-changed --intake misreads a nextest run, or hides why its log could not be converted — see the FAIL lines above (2285-jvg6)"
+        exit 1
+    fi
+    _info "Intake nextest transcript fixture passed"
+
     # ORDER 1597-rrku — the mirror's discipline parser and its fixture probe
     # ruby by running it: a forge's `ruby` is a Homebrew shim that exits 127.
     _step "Checking the discipline parser probes ruby by running it (1597-rrku)..."

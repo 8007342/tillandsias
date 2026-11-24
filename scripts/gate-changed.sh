@@ -541,14 +541,18 @@ if [ "$PKG_N" -gt 0 ]; then
             [ -n "$_n" ] && _fs="${_fs:+$_fs | }rdeps($_n)"
         done < "$WORK/crate-hit"
         echo "runner:nextest:${_nx#cargo-nextest } filter=$_fs"
-        cargo nextest run --workspace --no-fail-fast -E "$_fs" --manifest-path "$ROOT/Cargo.toml" > "$WORK/nextest.log" 2>&1
+        # Under target/, never $WORK in /tmp: the converter reads only inside the
+        # repository, and a refused read made every green run here read red (2285-jvg6).
+        _nx_log="$ROOT/target/nextest-changed.log"
+        cargo nextest run --workspace --no-fail-fast -E "$_fs" --manifest-path "$ROOT/Cargo.toml" > "$_nx_log" 2>&1
         _crc=$?
         # The baseline check reads cargo test's transcript shape.
-        if [ -n "$_plan" ]; then
-            ( cd "$ROOT" && "$_plan" script run --helper scripts/lua/nextest-to-libtest.lua -- "$WORK/nextest.log" ) > "$_tr" 2>/dev/null \
-                || cp "$WORK/nextest.log" "$_tr"
-        else
-            cp "$WORK/nextest.log" "$_tr"
+        _conv_bad=1
+        _conv="no plan binary with \`script run\` resolves"
+        if [ -n "$_plan" ] && ( cd "$ROOT" && "$_plan" script run --helper scripts/lua/nextest-to-libtest.lua -- "$_nx_log" ) > "$_tr" 2> "$WORK/conv.err"; then
+            _conv_bad=0
+        elif [ -n "$_plan" ]; then
+            _conv="$(cat "$WORK/conv.err" "$_tr")"; _conv="${_conv:-the converter failed and printed nothing}"
         fi
     else
         if [ "$INTAKE" = 1 ]; then
@@ -558,7 +562,11 @@ if [ "$PKG_N" -gt 0 ]; then
         cargo test --no-fail-fast "${_pk[@]}" --manifest-path "$ROOT/Cargo.toml" > "$_tr" 2>&1
         _crc=$?
     fi
-    if ! _v="$(bash scripts/check-test-baseline.sh --from "$_tr")"; then
+    if [ "${_conv_bad:-0}" = 1 ]; then
+        echo "fail:gate-changed:nextest-transcript log=$_nx_log rc=$_crc — the result log could not be converted, so the tests were not judged"
+        printf '%s\n' "$_conv" | sed 's/^/  /'
+        _fail=$((_fail + 1))
+    elif ! _v="$(bash scripts/check-test-baseline.sh --from "$_tr")"; then
         tail -n 40 "$_tr"; echo "$_v"; echo "fail:gate-changed:cargo-test rc=$_crc transcript=$_tr"; _fail=$((_fail + 1))
     else
         echo "ok:gate-changed:cargo-test packages=$PKG_N ms=$(( $(_now) - _s ))"
