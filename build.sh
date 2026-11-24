@@ -5960,7 +5960,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # SET" on a run where the check never executed. A test that checked only the
     # code would have stayed green through the whole incident.
     _step "Checking a check that could not run never claims what it would have found (965-sxec)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-archiver-could-not-run-verdict.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-archiver-could-not-run-verdict.lua" 2>&1; then
         _error "the archiver's could-not-run path regressed (965-sxec) — a gate that cannot RUN a check must never assert what the check would have FOUND"
         exit 1
     fi
