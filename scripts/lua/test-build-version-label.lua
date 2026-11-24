@@ -36,9 +36,11 @@ local function root(version)
     fs.write(d.rel .. "/VERSION", version .. "\n")
     return d
 end
+-- "" and not nil: proc.run passes the caller's TILLANDSIAS_* through (2305-zm8j), and both
+-- readers take "" as unset.
 local function ask(d, s, date, release)
     local r = proc.run{ argv = { SH, d.abs .. "/scripts/" .. s, "--print-version" }, cwd = d.abs, timeout_ms = 60000,
-        env = { PATH = env.get("PATH"), HOME = env.get("HOME"), TILLANDSIAS_BUILD_DATE_OVERRIDE = date, TILLANDSIAS_RELEASE_BUILD = release } }
+        env = { PATH = env.get("PATH"), HOME = env.get("HOME"), TILLANDSIAS_BUILD_DATE_OVERRIDE = date or "", TILLANDSIAS_RELEASE_BUILD = release or "" } }
     return r.code, text.trim(r.stdout or ""), text.trim(r.stderr or "")
 end
 local function all(d, date, good)
