@@ -182,6 +182,14 @@ impl Scope {
         command: Command,
         mode: ObservationMode,
     ) -> Result<Process, ExecError> {
+        // 2294-dtch: detach names a group it does not reap; without a group it
+        // means nothing. Refused as THIS call's spawn failure, never a scope one.
+        if command.detach && !command.group {
+            return Err(ExecError::Spawn {
+                argv: command.argv.clone(),
+                source: std::io::Error::other("detach requires group(true)"),
+            });
+        }
         let mut processes = self.0.processes.lock().unwrap();
         if self.stopped() {
             return Err(scope_error(&command, "script-scope-closed"));
@@ -623,8 +631,12 @@ async fn supervise(
             },
             r = child.wait(), if status.is_none() => {
                 match r { Ok(s) => status = Some(s), Err(e) => { failure = Some(e); break; } }
+                // 2294-dtch: a detached run leaves the group to its caller once
+                // the leader exits; group_cleaned below also skips the final
+                // killpg. A deadline or a cancel never reaches this arm (the
+                // leader has not exited), so those still kill the group.
                 #[cfg(unix)]
-                if let Some(pgid) = pgid { reap_group(pgid as libc::pid_t).await; }
+                if let Some(pgid) = pgid.filter(|_| !command.detach) { reap_group(pgid as libc::pid_t).await; }
                 #[cfg(windows)]
                 if let Some(job) = &job { job.terminate(); }
                 group_cleaned = true;
