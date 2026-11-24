@@ -33,6 +33,9 @@ local ALLOWLIST = {
     -- 2118-9awa: this port names the path in its own rules, as the .sh did
     -- through its grep; it reads no ledger.
     ["scripts/lua/check-plan-ledger-readers.lua"] = "base-only-reason: the scanner itself; it names plan/index.yaml only as the token it looks for",
+    -- 2301-4bgh: a git-ignored build artefact (build-forge-plan-bin.sh stages it); its sources
+    -- under crates/ are scanned. The string table of a built binary is not a reader.
+    ["images/default/policy-bin/tillandsias-plan"] = "base-only-reason: staged build artefact; its sources in crates/ are scanned",
 }
 
 local SIGNALS = { "yq", "awk", "YAML.load", "File.read", "File.readlines", "read_to_string", "ruby -ryaml" }
