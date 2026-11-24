@@ -72,7 +72,7 @@ local r = proc.run({ argv = { "/bin/bash", "./build.sh", "--preflight" }, cwd = 
     -- this run's own scratch dir, never the checkout's .cache/metrics, so the
     -- step holds no timing lane and runs in the gate pool. The replaced roster
     -- also skips the door's origin fetch (build.sh), its one .git write.
-    env = { TILLANDSIAS_PREFLIGHT_ROSTER_FILE = ROOT .. "/" .. REL .. "/roster",
+    env = { TILLANDSIAS_PREFLIGHT_BENCH = "off", TILLANDSIAS_PREFLIGHT_ROSTER_FILE = ROOT .. "/" .. REL .. "/roster",
             TILLANDSIAS_TIMING_LOG = ROOT .. "/" .. REL .. "/tillandsias-timing.jsonl",
             TILLANDSIAS_EXPERT_USAGE_LOG = ROOT .. "/" .. REL .. "/forge-expert-usage.jsonl",
             LITMUS_STEP_TIMING_LOG = ROOT .. "/" .. REL .. "/litmus-step-timing.jsonl" } })

@@ -408,6 +408,7 @@ if [ "$STATUS" -eq 1 ]; then
     else
         _lq_idle_line
     fi
+    [ -z "${TILLANDSIAS_LAND_QUEUE_SHADOW_INTAKE:-}" ] || say "queue:shadow-intake log=${TILLANDSIAS_LAND_QUEUE_SHADOW_LOG:-$_LQ_LOGROOT0/shadow-intake.log} lines=$(grep -c '^shadow:accept:' "${TILLANDSIAS_LAND_QUEUE_SHADOW_LOG:-$_LQ_LOGROOT0/shadow-intake.log}" 2>/dev/null || true)"
     exit 0
 fi
 if _h0="$(_lock_holder)"; then
@@ -739,6 +740,35 @@ next_candidate() {
 # measured before K is widened (coordinator 2026-11-20).
 # BATCH_K < 2 (the default until the coordinator sets it: 4 for full trains)
 # leaves the queue exactly as it was.
+# ── SHADOW INTAKE (bundle landing phase 0): INTAKE'S VERDICT BESIDE THE GATE'S ──
+# Off unless TILLANDSIAS_LAND_QUEUE_SHADOW_INTAKE names the command (run in a shadow
+# tree as `<cmd> <base>`, e.g. `./build.sh --intake --changed`). Each gated candidate
+# is remembered (number, base, head, the gate's verdict) and scripts/lua/shadow-
+# intake.lua measures them DETACHED after this run ends: its own lock, worktree and
+# target dir, low priority, bounded. A land run that starts meanwhile asks it to stop
+# at its next PR. It changes, delays and evicts nothing (coordinator 2026-11-24).
+SHADOW_INTAKE="${TILLANDSIAS_LAND_QUEUE_SHADOW_INTAKE:-}"
+SHADOW_LOG="${TILLANDSIAS_LAND_QUEUE_SHADOW_LOG:-$_LOGROOT/shadow-intake.log}"
+SHADOW_LOCK="${TILLANDSIAS_LAND_QUEUE_SHADOW_LOCK:-${XDG_RUNTIME_DIR:-$_LOGROOT}/tillandsias-shadow.lock}"
+SHADOW_TREE="${TILLANDSIAS_LAND_QUEUE_SHADOW_TREE:-${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/shadow-intake/$(basename "$ROOT")}"
+_shadow_q=()
+[ ! -d "$SHADOW_LOCK" ] || : > "$SHADOW_LOCK/stop" 2>/dev/null || true
+shadow_note() { # <num> <base> <head> <gate verdict> <via>
+    [ -n "$SHADOW_INTAKE" ] && [ "$DRY_RUN" -eq 0 ] || return 0
+    _shadow_q+=("$1:$2:$3:$4:$5")
+}
+shadow_launch() {
+    [ "${#_shadow_q[@]}" -gt 0 ] || return 0
+    local _pri=()
+    command -v nice >/dev/null 2>&1 && _pri=(nice -n 10)
+    command -v ionice >/dev/null 2>&1 && _pri+=(ionice -c3)
+    command -v setsid >/dev/null 2>&1 && _pri+=(setsid)  # its own session: it outlives a parent that is killed
+    mkdir -p "$(dirname "$SHADOW_LOG")" 2>/dev/null
+    ( trap '' HUP; trap - EXIT; exec env SHADOW_CMD="$SHADOW_INTAKE" SHADOW_TREE="$SHADOW_TREE" SHADOW_LOG="$SHADOW_LOG" SHADOW_LOCK="$SHADOW_LOCK" SHADOW_KEEP="$_RUNDIR" SHADOW_PLAN="$PLAN" \
+        SHADOW_PR_S="${TILLANDSIAS_LAND_QUEUE_SHADOW_PR_S:-1200}" SHADOW_RUN_S="${TILLANDSIAS_LAND_QUEUE_SHADOW_RUN_S:-1200}" \
+        ${_pri[@]+"${_pri[@]}"} "$PLAN" script run "$_SELF_DIR/lua/shadow-intake.lua" -- "${_shadow_q[@]}" ) </dev/null >"$_RUNDIR/shadow.out" 2>&1 &
+    say "shadow-intake: ${#_shadow_q[@]} candidate(s) handed to a detached run, log $SHADOW_LOG"
+}
 BATCH_K="${TILLANDSIAS_LAND_QUEUE_BATCH_K:-1}"
 TRAIN_LOG="${TILLANDSIAS_LAND_QUEUE_TRAIN_LOG:-$_LOGROOT/trains.log}"
 # bundles.log (bundle landing phase 1): the successor line, beside trains.log, one
@@ -936,6 +966,7 @@ try_batch() {
     for n in "${nums[@]}"; do
         say "land:$n tier=full gate=green train=${c:0:9} base=${base:0:9} head=${heads[$i]:0:9}"
         not_run_line "$_RUNDIR/train-gate.log"
+        shadow_note "$n" "$base" "${heads[$i]}" green train
         landed=$((landed + 1)); _seen="$_seen$n "; i=$((i + 1))
     done
     git checkout -q --detach "$c" 2>/dev/null
@@ -1313,6 +1344,7 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
     # 859-4jny bug one layer over.
     # 2174-dail: the class selector may skip unchanged steps only against a daily proof.
     gate_env_for "$base_sha"
+    _sh_base="$base_sha"
     _gcmd="$GATE"
     [ "$_lane" = plan-only ] && _gcmd="$PLAN_LANE_CHECK"
     ( _gate_clean_env; eval "$_gcmd" ) < /dev/null > "$_glog" 2>&1
@@ -1395,6 +1427,7 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
                         [ "$_tr_verdict" = "red $_flaky_test" ] && _trunk_red="$_flaky_test"
                     fi
                     if [ -n "$_trunk_red" ]; then
+                        shadow_note "$num" "$_sh_base" "$head_sha" trunk-red single
                         say "hold:trunk-red:$_trunk_red — trunk ${base_sha:0:9} fails it too; #$num is not evicted; the queue holds until trunk is fixed (full log: $_glog)"
                         rm -f "$_glog.rerun"
                         _held=1
@@ -1405,6 +1438,12 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
                 rm -f "$_glog.rerun"
             fi
         fi
+    fi
+    if [ "$_lane" = full ]; then
+        if [ "$_grc" -eq 0 ]; then _sh_g=green; [ -z "$_flaky_test" ] || _sh_g=flaky
+        elif grep -q '^flaky:' "$_glog" 2>/dev/null; then _sh_g=flaky
+        elif [ "$_grc" -eq 1 ]; then _sh_g=red; else _sh_g=aborted; fi
+        shadow_note "$num" "$_sh_base" "$head_sha" "$_sh_g" single
     fi
     if [ "$_grc" -ne 0 ]; then
         # ORDER 1765-q7rg: A flaky:<step>:<verdicts> line is the step runner's
@@ -1557,6 +1596,7 @@ The queue will re-gate on its next pass."
 done
 done
 
+shadow_launch
 if [ "$_held" -eq 1 ]; then
     say "hold:land-queue:$_n landed=$landed evicted=$evicted requeued=$requeued skipped=$skipped — held on a trunk red (2118-tpmy)"
     exit 4
