@@ -75,7 +75,7 @@ should fail loudly instead of falling back to embedded assets.
 ## Validation
 
 ```bash
-bash scripts/test-install-path.sh
+tillandsias-plan script run scripts/lua/test-install-path.lua
 cargo test -p tillandsias-headless --bin tillandsias runtime_assets --features tray
 ```
 

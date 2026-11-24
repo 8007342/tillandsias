@@ -34,12 +34,12 @@ critical_path:
     # resolver that refused everything would satisfy them all while making the
     # daily release unmergeable.
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-resolve-open-pr.lua"
-    success_pattern: "ok:open-pr-resolver:5 arms"
+    success_pattern: "ok:open-pr-resolver:6 arms"
     timeout_ms: 30000
 
   - step: "RELEASE RUN: the same four outcomes for the workflow-run resolver"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-resolve-release-run.lua"
-    success_pattern: "ok:release-run-resolver:6 arms"
+    success_pattern: "ok:release-run-resolver:7 arms"
     timeout_ms: 30000
 
   - step: "GRAMMAR: each resolver emits exactly one line and separates gh-failure from nothing-to-say"

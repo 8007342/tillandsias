@@ -12,20 +12,20 @@
 --   4 pr-resolves                POSITIVE CONTROL: 81 -> ok:open-pr:81
 --   5 trailing-newline-tolerated "81\n"       -> ok:open-pr:81
 --
--- GRAMMAR ok:open-pr-resolver:5 arms | violation:open-pr-resolver:<n>-failed
+-- GRAMMAR ok:open-pr-resolver:6 arms | violation:open-pr-resolver:<n>-failed
 
 local fixture = require "common.fixture"
 local T = fixture.new("open-pr-resolver")
 local ROOT = fixture.repo_root()
 local SH = fixture.posix_shell()
 local W = T:scratch()
-fs.write(W.rel .. "/gh", "#!/usr/bin/env bash\ncat \"$STUB_OUT\"\nexit \"$STUB_RC\"\n")
+fs.write(W.rel .. "/gh", "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" > \"$STUB_ARGV\"\ncat \"$STUB_OUT\"\nexit \"$STUB_RC\"\n")
 T:must{ "chmod", "+x", W.abs .. "/gh" }
 
 local function case(name, out, rc, want_rc, want)
     fs.write(W.rel .. "/out", out)
     local r = proc.run{ argv = { SH, ROOT .. "/scripts/resolve-open-pr.sh", "main", "linux-next" }, timeout_ms = 30000,
-        env = { GH = W.abs .. "/gh", STUB_OUT = W.abs .. "/out", STUB_RC = tostring(rc) } }
+        env = { GH = W.abs .. "/gh", STUB_OUT = W.abs .. "/out", STUB_RC = tostring(rc), STUB_ARGV = W.abs .. "/argv" } }
     local got = text.trim((r.stdout or "") .. (r.stderr or ""))
     local code = (r.status == "exited") and r.code or -1
     T:arm(name, code == want_rc and got == want, "exit=" .. code .. " expected=" .. want_rc .. " out='" .. got .. "'")
@@ -35,5 +35,10 @@ case("1 no-pr-null-output", "null", 0, 1, "blocked:open-pr:none-open:linux-next-
 case("2 no-pr-empty-output", "", 0, 1, "blocked:open-pr:none-open:linux-next->main")
 case("3 gh-failed", "", 1, 1, "blocked:open-pr:gh-failed:linux-next->main")
 case("4 pr-resolves", "81", 0, 0, "ok:open-pr:81")
-case("5 trailing-newline-tolerated", "81\n", 0, 0, "ok:open-pr:81")
+-- 5: the command substitution already strips a trailing LF, so a bare "81\n" passed with the
+-- resolver's tr removed (lenovinha, 2292-62a5). Leading space and CR survive $(...): only tr clears them.
+case("5 surrounding-whitespace-tolerated", " 81\r\n", 0, 0, "ok:open-pr:81")
+local argv = fs.read(W.rel .. "/argv") or ""
+T:arm("6 the stub was asked for base main and head linux-next",
+    text.contains(argv, "--base main ") and text.contains(argv, "--head linux-next "), "argv=" .. argv)
 T:finish()
