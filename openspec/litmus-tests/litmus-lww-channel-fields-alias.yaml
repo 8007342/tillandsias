@@ -34,10 +34,10 @@ preconditions:
   - workspace contains plan/index.d/README.md
 
 critical_path:
-  - step: "the fixture parses, is executable, and all five hermetic scenarios pass"
-    command: "bash -n scripts/test-lww-channel-alias.sh && test -x scripts/test-lww-channel-alias.sh && out=$(bash scripts/test-lww-channel-alias.sh 2>&1) && printf '%s' \"$out\" | grep -qE '^(ok:lww-channel-alias:[0-9]+|skip:no-plan-binary)$' && echo 'ok: scenarios-pass' || { bash scripts/test-lww-channel-alias.sh; exit 1; }"
+  - step: "all five hermetic scenarios pass"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-lww-channel-alias.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "ok: scenarios-pass"
+    expected_behavior: "ok:lww-channel-alias:5 arms"
 
   # FRESHNESS AUDIT 2026-09-05 (lenovinha): THIS ARM WAS MISNAMED AND THE NAME
   # CLAIMED MORE THAN THE COMMAND DOES. It read "MUTATION: with the alias
