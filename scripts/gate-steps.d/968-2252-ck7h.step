@@ -9,4 +9,4 @@ STEP_ERROR="a smoke attestation was written or counted without its evidence, or 
 STEP_OK="Smoke attestation refs gate promotion on a PASS per platform"
 STEP_READS="scripts/lua/attest-smoke.lua scripts/lua/check-smoke-attested.lua scripts/lua/test-smoke-attest.lua"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:smoke-attest:13 (2299-atdg: the digest-only tree; arms 8-13 red against the raw-tree attest-smoke, each for its own reason)"
-STEP_SECOND_REGIME="yolanda 2026-11-23 msys ok:smoke-attest:7 (at 4aa181124; at d12924486 red, C:/ read as relative)"
+STEP_SECOND_REGIME="yolanda 2026-11-24 msys ok:smoke-attest:13 at be9f0270c (fleet-run 968: result=ok mode=direct base=c0cc0a43 sha b943148c)"
