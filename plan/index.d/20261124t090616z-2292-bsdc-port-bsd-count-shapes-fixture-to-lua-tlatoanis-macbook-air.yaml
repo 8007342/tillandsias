@@ -22,6 +22,7 @@ packets:
   - 'Lua and shell print the same arms, verdict and rc, green and against the pre-fix grep -lc yaml.'
   - 'Step 278 runs the .lua; the .sh and its shell-decider and pipe-site floor lines are gone.'
   verifiable_closure: 'Parity in the PR; ./build.sh --gate-steps . --gate-step 278 green on darwin.'
+  unscoreable: 'no litmus names this fixture: it is bound as gate step 278 (1454-ssg3), whose rc is the check; the port changes the runner, not the claim.'
   next_action: >-
     Implemented. Measured on darwin: Lua ok:bsd-count-shapes:4/4 rc 0, shell 4/4 rc 0; with the litmus yaml mutated back to grep -lc,
     both print fail:bsd-count-shapes:2/4 (arms 2 and 3, FAIL:consumers=4) rc 1. ./build.sh --gate-steps . --gate-step 278: rc 0.
