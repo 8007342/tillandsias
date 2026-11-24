@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: relay-preflight-runs-every-decider-whose-inputs-the-diff-touches
+    field: status
+    value: implemented
+    ts: "2026-11-24T02:24:02Z"
+    host: yoga
+
+events:
+  - packet_id: relay-preflight-runs-every-decider-whose-inputs-the-diff-touches
+    event:
+      type: implemented
+      ts: "2026-11-24T02:24:02Z"
+      host: yoga
+      summary: |-
+        implemented on work/2282-asxn. Replayed in the builder on 3df889a8a: 5ff23c074 reds check-gate-step-inputs, 0b5c866c3 reds check-lua-fixture-native-argv-added, 27a73ca19 reds check-shell-ratchet, one red each in about 35 s; fixed heads cf6ee3b3e and d6e024ee2 pass. Fixture 7 arms.

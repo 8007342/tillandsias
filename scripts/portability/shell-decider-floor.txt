@@ -375,7 +375,6 @@ scripts/test-precommit-zero-trace-scan-scope.sh
 scripts/test-preflight-fixtures-default-target.sh
 scripts/test-preflight-front-door.sh
 scripts/test-preflight-scratch-is-off-checkout.sh
-scripts/test-preflight-setsid-probe.sh
 scripts/test-preflight-verdict-categories.sh
 scripts/test-pretooluse-command-policy.sh
 scripts/test-probe-refuses-stale-candidate.sh

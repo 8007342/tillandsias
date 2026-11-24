@@ -6502,6 +6502,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Relay-preflight tray trigger check passed"
 
+    # ORDER 2282-asxn — relay-preflight runs every check-* decider the diff
+    # touches, derived by gate-changed.sh --checks (#1109, #1135 and #1190 were
+    # evicted on deciders its hand-kept list lacked).
+    _step "Checking relay-preflight's derived decider phase (2282-asxn)..."
+    if ! _run_lua_decider "scripts/lua/test-relay-preflight-derived-checks.lua" 2>&1; then
+        _error "relay-preflight no longer runs the check-* deciders the diff touches, or runs none when it cannot scope the change — see the FAIL lines above (2282-asxn)"
+        exit 1
+    fi
+    _info "Relay-preflight derived-checks fixture passed"
+
     # ORDER 1597-rrku — the mirror's discipline parser and its fixture probe
     # ruby by running it: a forge's `ruby` is a Homebrew shim that exits 127.
     _step "Checking the discipline parser probes ruby by running it (1597-rrku)..."
