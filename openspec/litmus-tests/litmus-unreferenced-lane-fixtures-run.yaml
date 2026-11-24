@@ -46,10 +46,10 @@ critical_path:
     assert_output_contains: "PASS: order-citations-resolve"
     timeout_ms: 120000
   - step: "a failing compiler wrapper does not red the plan binary refresh"
-    command: "bash scripts/test-plan-binary-survives-wrapper.sh 2>&1"
-    expected_behavior: "ok: arm3"
+    command: "P=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) && TILLANDSIAS_PLAN_BIN=\"$P\" \"$P\" script run scripts/lua/test-plan-binary-survives-wrapper.lua 2>&1"
+    expected_behavior: "ok:plan-binary-survives-wrapper:3 arms"
     assert_exit: 0
-    assert_output_contains: "ok: arm3"
+    assert_output_contains: "ok:plan-binary-survives-wrapper:3 arms"
     timeout_ms: 120000
   - step: "a path deleted on both sides is agreement in the plan lane"
     command: "bash scripts/test-plan-lane-agreeing-deletion.sh 2>&1"
@@ -70,7 +70,7 @@ critical_path:
     assert_output_contains: "ok:repeat-model-flag:"
     timeout_ms: 120000
   - step: "shared target dir lock and freshness guard"
-    command: "bash scripts/test-shared-target.sh 2>&1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-shared-target.lua 2>&1"
     expected_behavior: "ok: arm8"
     assert_exit: 0
     assert_output_contains: "ok: arm8"

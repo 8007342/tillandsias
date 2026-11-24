@@ -23,3 +23,7 @@ STEP_OK="SIGPIPE verdict guard path/continuation check passed"
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="scripts/check-sigpipe-verdict-pipelines-added.sh is absent, so neither escape could be exercised"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   C2 (negative control): a pipeline with no branch on its status is NOT flagged — the guard tests for a ve"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="openspec/specs/** scripts/check-sigpipe-verdict-pipelines-added.sh scripts/test-sigpipe-guard-sees-paths-and-continuations.sh"

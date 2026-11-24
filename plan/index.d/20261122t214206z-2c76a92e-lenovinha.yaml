@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: preflight-door-garbles-a-declarations-reason-under-the-c-locale
+    field: status
+    value: blocked
+    ts: "2026-11-22T21:42:06Z"
+    host: lenovinha
+
+events:
+  - packet_id: preflight-door-garbles-a-declarations-reason-under-the-c-locale
+    event:
+      type: note
+      ts: "2026-11-22T21:42:06Z"
+      host: lenovinha
+      summary: |-
+        queued for landing as PR #1362 (21f4c8f24), stacked on #1355

@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-22: operator approval relayed by the coordinator.
+packets:
+  - packet_id: land-gates-skip-unchanged-steps-against-a-daily-full-run-proof
+    order: "2174-dail"
+    status: in_progress
+    kind: perf
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, land-queue, class-selector]
+    estimated_hours: 4
+    owned_files:
+      - scripts/land-queue.sh
+      - scripts/change-class.sh
+      - scripts/test-land-queue.sh
+    title: "Land gates skip unchanged steps against a daily full-run proof"
+    context: |
+      Operator, 2026-11-22 (relayed by macuahuitl-fedora): "I approve the small gates piggybacking into a
+      daily run for proof." `land-queue.sh --daily-full` gates the trunk tip with the class selector OFF and
+      publishes refs/attest/daily-full/<epoch> (green) or refs/attest/daily-red/<epoch> (red). A land gate
+      exports TILLANDSIAS_CLASS_BASE=<proved commit> and a marker holding the proof's epoch, so the selector
+      (STEP_INPUTS only) diffs against the proved tree and reads the proof's age as the last full gate. No
+      proof, a proof over 24 h old, a red newer than it, a proof not on the trunk, or a main/release trunk:
+      the marker points at nothing and every step runs. Each land's not-run: line names every skipped step.
+    exit_criteria:
+      - "test-land-queue ARM 50a-d and 51: fresh proof reaches the gate and the skip is named; stale or red forces full; --daily-full publishes green/red refs; against a proof a changed declared input RUNS, a docs-only change SKIPS, a stale proof RUNS. Mutations (ignore red; ignore TILLANDSIAS_CLASS_BASE) each red an arm."
+      - "With a daily run scheduled on macuahuitl, a docs or Lua-only PR lands in under 5 min."
+    unscoreable: "land wall time on macuahuitl is the measure"
+    provenance: "operator approval 2026-11-22 via the coordinator."
+    events:
+      - type: filed
+        ts: "2026-11-22T02:58:55Z"
+        host: yoga
+        summary: "filed and claimed"

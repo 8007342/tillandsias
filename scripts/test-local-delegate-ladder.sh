@@ -2,7 +2,7 @@
 # @trace order:1834-ujsf, spec:local-coding-delegation
 #
 # Fixture for the local-delegate outcome token and the rung aggregator
-# (scripts/delegate-outcome.sh local-record, scripts/local-delegate-ladder.sh,
+# (scripts/delegate-outcome.sh local-record, scripts/lua/local-delegate-ladder.lua aggregate,
 # scripts/lua/local-delegate-ladder.lua). Ledgers are generated: a sequence
 # string of A (accepted) / R (rejected) / V (reverted), one token per outcome.
 #
@@ -26,7 +26,6 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DO="$ROOT/scripts/delegate-outcome.sh"
-LADDER="$ROOT/scripts/local-delegate-ladder.sh"
 pass=0; ran=0
 ok()  { echo "PASS: $1"; pass=$((pass+1)); ran=$((ran+1)); }
 bad() { echo "FAIL: $1"; ran=$((ran+1)); }
@@ -38,6 +37,9 @@ if [ -z "$_plan" ]; then
     exit 0
 fi
 export TILLANDSIAS_PLAN_BIN="$_plan"
+# ORDER 2216-27ki: the scripts/local-delegate-ladder.sh shim is gone; the
+# decider is called the way the shim called it.
+LADDER() { TILLANDSIAS_REPO_ROOT="$ROOT" "$_plan" script run "$ROOT/scripts/lua/local-delegate-ladder.lua" -- aggregate --repo "$ROOT" "$@"; }
 
 _tmpbase="$ROOT/target/plan-scratch"; mkdir -p "$_tmpbase" 2>/dev/null || _tmpbase="${TMPDIR:-/tmp}"
 W="$(mktemp -d "$_tmpbase/local-delegate-ladder.XXXXXX")"
@@ -58,7 +60,7 @@ gen() {
 }
 
 # line <ledger-file> -> the single aggregator line
-agg() { "$LADDER" --ledger "$1" 2>/dev/null | sed -n '1p'; }
+agg() { LADDER --ledger "$1" 2>/dev/null | sed -n '1p'; }
 expect() { # expect <label> <ledger> <substring>...
     local label="$1" f="$2" l; shift 2
     l="$(agg "$f")"
@@ -126,7 +128,7 @@ expect "6 later reverted supersedes accepted" "$f" outcomes=20 reverted=1 accept
 # ---- 7 determinism and grouping
 f="$W/g.yaml"; : > "$f"
 gen "$f" zeta Q4 "$(rep A 20)" 0 z; gen "$f" alpha Q8 "$(rep A 20)" 0 a; gen "$f" alpha Q4 "$(rep A 5)" 0 b
-"$LADDER" --ledger "$f" > "$W/o1" 2>/dev/null; "$LADDER" --ledger "$f" > "$W/o2" 2>/dev/null
+LADDER --ledger "$f" > "$W/o1" 2>/dev/null; LADDER --ledger "$f" > "$W/o2" 2>/dev/null
 cmp -s "$W/o1" "$W/o2" && ok "7a two runs identical" || bad "7a nondeterministic"
 heads="$(sed -n 's/^\(model=[^ ]* quant=[^ ]*\) .*/\1/p' "$W/o1" | tr '\n' ',')"
 [ "$heads" = "model=alpha quant=Q4,model=alpha quant=Q8,model=zeta quant=Q4," ] && ok "7b sorted per model+quant" || bad "7b: $heads"

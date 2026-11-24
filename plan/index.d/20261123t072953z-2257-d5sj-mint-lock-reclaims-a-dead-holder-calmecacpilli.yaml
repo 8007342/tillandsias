@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: requested by macuahuitl-fedora 2026-11-22 (known limit of 2258-sr65, #1409).
+packets:
+  - packet_id: mint-lock-reclaims-a-dead-holder
+    order: "2257-d5sj"
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [rust, headless, ca, vault, locks]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/vault_bootstrap.rs
+    title: "A minter killed while holding the CA or Vault TLS mkdir lock wedges every later minter until a human removes it"
+    context: |
+      acquire_generation_lock (2258-sr65, #1409) is a bare mkdir. A holder that dies leaves the directory, and every later
+      minter waits 30 s and errs. Record the holder's pid and process start time in the lock directory, and let a waiter
+      reclaim it when that process is gone.
+      Design constraints: the holder releases with remove_dir, which fails once the directory holds a file, so release
+      must remove the record too. An older binary still leaves a bare directory: no record means unknown, never dead. A
+      pid means something only on the same host and pid namespace (guest, container, host), so record that identity and
+      never reclaim when it differs or cannot be read. Two waiters must not both reclaim (rename the directory aside, and
+      only the one whose rename succeeded goes on). The start time guards against a reused pid.
+    exit_criteria:
+      - "An arm kills a holder mid-mint (SIGKILL) and a later minter mints without a human, for both locks."
+      - "Arms: a live holder is never reclaimed; a record-less directory, a foreign pid namespace and a reused pid (other start time) are handled as above; two waiters reclaim once."
+    unscoreable: "fixture-scored: the new unit tests are the pin; they do not exist yet"
+    next_action: "Implement after #1409 lands."
+    provenance: "macuahuitl-fedora 2026-11-22."
+    events:
+      - type: filed
+        ts: "2026-11-23T07:29:53Z"
+        host: calmecacpilli
+        summary: "filed: known limit of 2258-sr65"

@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: port-check-committable-branch-sh-to-lua-and-repoint-its-skills-litmus-host-tools-row-and-the-rust-text-that-names-it
+    field: next_action
+    value: |-
+      Re-list the callers, write the parity fixture red, port, delete the .sh, repoint the 7 callers, and lower the floors.
+
+
+      [2026-11-19T23:46:29Z calmecacpilli] STALE PATH (triage 2026-11-19): scripts/check-committable-branch.sh is now scripts/lua/check-committable-branch.lua (665868237). Re-read the criterion against the new path before claiming.
+    ts: "2026-11-19T23:46:29Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: port-check-committable-branch-sh-to-lua-and-repoint-its-skills-litmus-host-tools-row-and-the-rust-text-that-names-it
+    event:
+      type: note
+      ts: "2026-11-19T23:46:29Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli): cited file deleted on trunk

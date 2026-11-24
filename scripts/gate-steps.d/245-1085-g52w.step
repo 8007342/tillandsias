@@ -11,3 +11,7 @@ STEP_SCRIPT="scripts/test-reopen-is-history-not-loss.sh"
 STEP_ERROR="a reopen is refused as status loss (no host can land a correction), or an unapplied closure is now accepted (the guard lost its subject) (1085-g52w) — see the verdict line above"
 STEP_OK="Reopen-is-history check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   ARM 3: a terminal event NEWER than the transition is refused (a race, not history)"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="plan/index.d/** plan/index.yaml scripts/lib/** scripts/lib/tool-dispatch.sh scripts/lua/check-fragment-status-loss.lua scripts/plan-binary-probe.sh scripts/test-reopen-is-history-not-loss.sh"

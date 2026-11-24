@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-20: landing-pipeline packet P1 (coordinator; operator 2026-11-20 rulings).
+packets:
+  - packet_id: land-queue-rereads-the-queue-per-candidate-honours-priority-and-hold-labels-and-skips-rather-than-ends-on-host-state
+    order: 2143-z5uj
+    status: in_progress
+    kind: improvement
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [landing, land-queue, gate]
+    estimated_hours: 5
+    owned_files:
+      - scripts/land-queue.sh
+      - scripts/test-land-queue.sh
+      - methodology/multi-host-development.yaml
+    title: "land-queue re-reads the queue per candidate, lands land:priority first, honours land:hold, skips a candidate on host state, re-runs an untouched red once, and lands plan-ledger-only PRs on the plan-lane checks"
+    context: |
+      The operator called the landing queue an unacceptable bottleneck (2026-11-20): one PR per ~20-min full gate, strict
+      number order, evictions burning gates (8 SIGPIPE-flake evictions that day). Operator rulings 2026-11-20 (relayed by
+      the coordinator): plan-ledger-only PRs land through the plan-lane checks with no build-check; batch trains gate the
+      union tree once (P7); --floor replaces the worker-side --preflight for work refs. Verdict vocabulary agreed fleet-wide:
+      could-not-run:host:<reason> > hold:<...> > evicted:<test> > flaky:<test>.
+    exit_criteria:
+      - "A PR labelled land:priority while candidate 1 gates is gated next (fixture arm; FAILS on trunk, which reads the list once)."
+      - "A land:hold PR is skipped and named; a stale plan binary emits could-not-run:host:plan-binary-stale and the run continues to the next candidate."
+      - "A red whose failing line names a test the PR's diff did not touch is re-gated once on the identical tree: green prints flaky:<test> and lands, red prints evicted:<test>."
+      - "A plan-ledger-only PR lands with zero gate invocations (fixture counts the stub gate's calls), behind TILLANDSIAS_LAND_QUEUE_PLAN_ONLY_LANE defaulting on."
+    unscoreable: "fixture arms are the measure"
+    provenance: "coordinator packet P1 2026-11-20; operator rulings 2026-11-20."
+    events:
+      - type: filed
+        ts: "2026-11-20T20:23:51Z"
+        host: yoga
+        summary: "filed and claimed (coordinator P1)"

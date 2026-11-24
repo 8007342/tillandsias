@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Input-scoped land gates (coordinator direction, 2026-11-22).
+packets:
+  - packet_id: two-inline-gate-checks-become-pooled-step-files
+    order: 2185-inst
+    status: ready
+    kind: chore
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 3
+    title: |
+      Move the inline build.sh checks for the missing-ruby could-not-run channel (965-sxec, ~103 s) and the pre-commit spec-sweep scope (734-sjb3, ~54 s) into scripts/gate-steps.d, where they run in the step pool, with STEP_INPUTS only where an atime trace closes the read set.
+    context: |
+      Coordinator: the inline blocks cannot be pooled or input-scoped. The archiver ready-set block (831-ezea) carries a memo and a forge-only exit-3 rule that the step format cannot express, so it is not in this row. The salvage audit is yoga's (#1289).
+    exit_criteria:
+      - 'both checks run as pooled gate steps and the inline blocks are gone; any STEP_INPUTS is proven by test-gate-step-inputs.lua; each new step carries a darwin and an msys STEP_SECOND_REGIME record'
+    unscoreable: 'unpinnable-until-the-guard-exists: check-gate-step-regimes and test-gate-step-inputs are the proof and are recorded in the PR.'
+    next_action: 'Move both, trace inputs, open the PR as a draft pending the darwin and msys records.'
+    provenance: coordinator direction; filed by lenovinha.
+    depends_on: []
+    related: [965-sxec, 734-sjb3, 2155-gpar, 2118-tnut, 2184-sinp]
+    events:
+      - {type: filed, ts: '2026-11-22T03:47:44Z', host: lenovinha, summary: filed moving two inline gate checks into pooled step files}

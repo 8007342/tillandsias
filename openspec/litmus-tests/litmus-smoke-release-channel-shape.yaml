@@ -110,9 +110,9 @@ critical_path:
   # BOUND HERE because an unbound fixture runs in no suite and is as inert as a
   # missing one (885-92iu): the guard existed and the gate never called it.
   - step: "install-macos.sh announces a pinned base as a pin, not as a channel it did not resolve (1280-58kq)"
-    command: "bash scripts/test-install-macos-announces-its-pin.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-install-macos-announces-its-pin.lua 2>&1"
     timeout_ms: 30000
-    expected_behavior: "PASS: install-macos-announces-its-pin 6/6 (1280-58kq)"
+    expected_behavior: "ok:install-macos-announces-its-pin:7"
 
 observability:
   traces:

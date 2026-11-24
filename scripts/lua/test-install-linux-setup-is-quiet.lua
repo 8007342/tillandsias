@@ -3,7 +3,7 @@
 -- test-install-linux-setup-is-quiet.lua — install.sh runs the SOFT reset and
 -- only the SOFT reset, keeps the binary's reset output in the setup log, and
 -- prints no power-user text. The Linux twin of
--- scripts/test-install-macos-setup-is-quiet.sh (1437-8c6p).
+-- scripts/lua/test-install-macos-setup-is-quiet.lua (1437-8c6p).
 --
 -- Operator ruling 2026-10-08, verbatim: "SOFT reset is the default only and
 -- forever. ... we do not need to print any power user messages during install,

@@ -16,16 +16,16 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-no-fixture-writes-live-ledger.sh
+  - workspace contains scripts/lua/test-no-fixture-writes-live-ledger.lua
 
 critical_path:
   - step: "fixture parses and is executable"
-    command: "bash -n scripts/test-no-fixture-writes-live-ledger.sh && test -x scripts/test-no-fixture-writes-live-ledger.sh && echo 'ok: parse'"
+    command: "test -f scripts/lua/test-no-fixture-writes-live-ledger.lua && ! test -e scripts/test-no-fixture-writes-live-ledger.sh && echo 'ok: parse'"
     timeout_ms: 2000
     expected_behavior: "ok: parse"
 
   - step: "live-write shapes flagged, scaffold idioms accepted, the whole corpus clean"
-    command: "bash scripts/test-no-fixture-writes-live-ledger.sh 2>&1 | tail -n 1"
+    command: "PB=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; \"$PB\" script run scripts/lua/test-no-fixture-writes-live-ledger.lua 2>&1 | grep '^PASS:\\|^FAIL:'"
     timeout_ms: 60000
     expected_behavior: "PASS: no-fixture-writes-live-ledger"
 

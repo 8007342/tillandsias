@@ -51,7 +51,7 @@ else
     bad "only ${n:-0} phases reported; a partial table is what sent two hosts to copy the hook"
 fi
 # NON-VACUITY: a table of names with no numbers would satisfy the count above.
-if printf '%s\n' "$out" | grep -qE 'OpenSpec phase:.*[0-9]+ms.*budget.*[0-9]+\.[0-9]+x'; then
+if grep -qE 'OpenSpec phase:.*[0-9]+ms.*budget.*[0-9]+\.[0-9]+x' <<<"$out"; then
     ok "the reported lines carry elapsed, budget and the multiple"
 else
     bad "the table has no usable numbers"

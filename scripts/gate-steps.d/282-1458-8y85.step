@@ -11,3 +11,7 @@ STEP_SCRIPT="scripts/test-append-vs-origin-fold.sh"
 STEP_ERROR="the origin-fold drop guard admits an unacknowledged or stale drop, or refuses an acknowledged deliberate replace (1458-8y85, 1261-bn7v) — see the FAIL lines above"
 STEP_OK="Origin-fold drop guard passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:append-vs-origin:refused-drop:1:admitted-current:1:scoped:3"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="plan/index.d/** plan/index.yaml scripts/check-append-vs-origin-fold.sh scripts/plan-binary-probe.sh scripts/test-append-vs-origin-fold.sh"

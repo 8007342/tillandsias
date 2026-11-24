@@ -32,6 +32,7 @@
 #      marker push the remote refuses names git's own refusal, not a bare
 #      "could not push".
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GUARD="$ROOT/scripts/hooks/pre-push-local-gate.sh"
 FREEZE="$ROOT/scripts/release-freeze.sh"
@@ -50,7 +51,7 @@ done
 
 _tmpbase="$ROOT/target/plan-scratch"; mkdir -p "$_tmpbase" 2>/dev/null || _tmpbase="${TMPDIR:-/tmp}"
 W="$(mktemp -d "$_tmpbase/live-freeze.XXXXXX")"
-trap 'rm -rf "$W"' EXIT INT TERM
+scratch_trap 'rm -rf "$W"'
 export GIT_TERMINAL_PROMPT=0
 G() { git -c user.email=t@t -c user.name=t "$@"; }
 
@@ -175,8 +176,22 @@ fi
 printf 'packets: []\n' > plan/index.d/20200101t000001z-fixture.yaml
 G add -A >/dev/null; G commit -q -m "plan(fixture): a second ledger record, no stamp"
 rm -f "$(git rev-parse --absolute-git-dir)/tillandsias-gate-stamp"
+# 2160-mhsm: A STALE VALIDATOR IS HOST STATE, NOT A PROPERTY OF THE CHANGE.
+# The lane refuses a binary whose embedded validator-surface hash does not
+# match this tree ("the resolved plan binary is STALE (full gate required)"),
+# which is correct for the lane and says nothing about the freeze. Measured on
+# macbookair and linux-next: arm 3b went red on exactly that and evicted an
+# innocent candidate. Ask the binary the lane's own first question, in the
+# checkout it is measured against, and skip by name when it answers stale.
+_validator_stale=""
+if [ -n "$_validator" ]; then
+    _vs="$(cd "$ROOT" && "$_validator" validator-surface-hash --check 2>&1)"
+    case "$_vs" in stale:validator-surface*) _validator_stale="${_vs%%$'\n'*}" ;; esac
+fi
 if [ -z "$_validator" ]; then
     skip "ARM 3b: no runnable tillandsias-plan on this host, so the plan-only lane cannot validate fragments and the stamp-free route cannot be constructed here — the lane is stamp-free, NOT validator-free (1124-7f3u). Build one: cargo build --release -p tillandsias-plan"
+elif [ -n "$_validator_stale" ]; then
+    skip "ARM 3b: the resolved tillandsias-plan ($_validator) is stale for this tree ($_validator_stale), so the plan-only lane would refuse it before reaching the freeze — host state, not this change (2160-mhsm). Rebuild: cargo build --release -p tillandsias-plan"
 else
     before="$(tip linux-next)"
     rc=0; out="$(G push origin linux-next 2>&1)" || rc=$?
@@ -272,7 +287,7 @@ printf '#!/bin/sh\nwhile read o n r; do case "$r" in refs/tillandsias/*) echo "f
 chmod +x "$W/bare.git/hooks/pre-receive"
 # Pin the scratch remote to its OWN hooks: a global core.hooksPath (a forge sets
 # one) would otherwise make the bare repo ignore hooks/ and the push succeed.
-git -C "$W/bare.git" config core.hooksPath "$W/bare.git/hooks"
+scratch_git "$W/bare.git" config core.hooksPath "$W/bare.git/hooks"
 out="$(freeze set linux-next 2>/dev/null | tail -1)"
 case "$out" in
     "refused:freeze:unreachable:could not push the marker to origin:"*"fixture-hook: markers refused here"*)
@@ -280,7 +295,7 @@ case "$out" in
     *) bad "ARM 7b: the refusal does not carry git's reason: '$out'" ;;
 esac
 rm -f "$W/bare.git/hooks/pre-receive"
-git -C "$W/bare.git" config --unset core.hooksPath
+scratch_git "$W/bare.git" config --unset core.hooksPath
 
 total=$((pass+fail))
 [ "$skipped" -gt 0 ] && echo "note: $skipped arm(s) skipped by name — see the skip: lines above"

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: affordance-slice-windows-installer-fatal-messages-say-what-the-user-can-do-next
+    field: status
+    value: completed
+    ts: "2026-11-19T23:18:49Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: affordance-slice-windows-installer-fatal-messages-say-what-the-user-can-do-next
+    event:
+      type: completed
+      ts: "2026-11-19T23:18:49Z"
+      host: calmecacpilli
+      summary: |-
+        status 'completed' with evidence_refs: 6f3fb9f20a ok:installer-fatal-next-step:9 arms (pre-fix 20960e4c2 refused 1 of 9)
+  - packet_id: affordance-slice-windows-installer-fatal-messages-say-what-the-user-can-do-next
+    event:
+      type: note
+      ts: "2026-11-19T23:18:49Z"
+      host: calmecacpilli
+      summary: |-
+        triage: exit criteria verified on trunk

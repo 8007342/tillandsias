@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: assigned by macuahuitl-fedora 2026-11-22.
+packets:
+  - packet_id: retire-regenerate-source-index-rust-caller
+    order: "2218-rsix"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [rust, cleanup, shell-to-lua]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-policy/src/main.rs
+      - scripts/regenerate-source-index.sh
+    title: "Retire tillandsias-policy's call to the regenerate-source-index.sh tombstone, then delete the script"
+    context: |
+      scripts/regenerate-source-index.sh is a tombstone (prints @tombstone obsolete:cheatsheet-source-layer, exits 0).
+      crates/tillandsias-policy/src/main.rs (around line 4121) still runs it after fetching a cheatsheet source and warns
+      when it is missing, so deleting the script alone would turn a silent no-op into a warning. Remove the Rust call
+      (and the INDEX.json regeneration it stands for, already superseded by build-time baking), then delete the script.
+    exit_criteria:
+      - "tillandsias-policy no longer names regenerate-source-index.sh; cargo test -p tillandsias-policy passes."
+      - "scripts/regenerate-source-index.sh is deleted and git grep finds no live caller."
+    unscoreable: "unpinnable-until-the-guard-exists: the implementer names the fixture with the change"
+    next_action: "Pick up."
+    provenance: "macuahuitl-fedora 2026-11-22: file a row to retire the Rust caller first."
+    events:
+      - type: filed
+        ts: "2026-11-22T13:01:42Z"
+        host: calmecacpilli
+        summary: "filed"

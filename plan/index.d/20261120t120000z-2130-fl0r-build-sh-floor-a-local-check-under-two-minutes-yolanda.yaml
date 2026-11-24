@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed and taken by yolanda 2026-11-20 at macuahuitl-fedora's direction (landing-queue packet 3; P1 ahead of the tray work).
+packets:
+  - packet_id: build-sh-floor-runs-fmt-lua-parse-and-the-packets-own-litmus-in-under-two-minutes
+    order: 2130-fl0r
+    status: claimed
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [gate, build, lua]
+    estimated_hours: 3
+    title: "./build.sh --floor: a local check under 2 minutes (fmt, Lua parse, and the changed packet's own closure litmus) for memory-limited hosts"
+    context: |
+      Operator: the landing queue is an unacceptable bottleneck. Adopted proposal (yolanda): the full local
+      preflight cannot finish on a 15 GB Windows host (WSL2 balloons; the harness reaps build.sh under ~2.5 GB free),
+      and the queue re-runs it anyway. A cheap floor replaces it locally. Whether --floor REPLACES the preflight
+      requirement for work/* pushes is an operator ruling the coordinator has asked for; this row builds the flag only.
+    exit_criteria:
+      - "./build.sh --floor prints ok:floor in under 120 s on yolanda. Pre-fix: FAILS (unknown flag)."
+      - "A changed .rs that is not rustfmt-clean, or a changed .lua that does not parse, makes it print violation:floor:<what> and exit 1."
+      - "The litmus tests named by the branch's packet (litmus:<name> in its verifiable_closure) and the litmus files the diff touches are run; long ones are reported as skipped by name, never silently."
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture lands as scripts/lua/test-build-floor.lua with litmus-build-floor.yaml in the same commit (1136-n8sh)"
+    provenance: "macuahuitl-fedora routing 2026-11-20 of the operator's landing-queue ask; yolanda's adopted proposal."
+    events:
+      - type: filed
+        ts: "2026-11-20T12:00:00Z"
+        host: yolanda
+        summary: "filed at the coordinator's direction"
+      - type: claimed
+        ts: "2026-11-20T12:00:00Z"
+        host: yolanda
+        summary: "claimed by yolanda at P1, coordinator-routed"

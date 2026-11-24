@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-22 at the coordinator's request (fixture audit, indirect class).
+packets:
+  - packet_id: read-each-fixture-that-runs-a-hook-or-decider-against-the-real-checkout-head
+    order: "2196-rdec"
+    status: ready
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixture, audit]
+    estimated_hours: 3
+    owned_files:
+      - plan/issues/fixtures-reading-real-head-2026-11-22-yoga.md
+    title: "Read each fixture that runs a hook or decider against the real checkout's HEAD"
+    context: |
+      The 2195-wlsh class: a fixture runs the pre-push hook / a land or preflight script from the real
+      checkout, so its deciders judge the branch under test. A grep census (a HEAD read plus a hook, land,
+      preflight or build name in the same file) gave 21 candidates. That is an UPPER BOUND on co-occurrence;
+      none is confirmed: claims-fleet-visible, closure-evidence-survives-landing, gate-stamp-scope,
+      gate-step-prefix-allocation, land-push-classification, land-queue, lane-instrument-vs-ledger,
+      native-lint-attested, plan-binary-freshness, plan-binary-remedy-names-only-a-runnable-binary,
+      plan-only-lane-structural, pre-push-honours-a-live-freeze, pre-push-issue-capture-lane,
+      pre-push-plan-lane-after-merge, pre-push-plan-lane-fails-closed-without-binary, salvage-net
+      (scripts/test-*.sh); approval-broker, carried-obligations, gate-diff-base-frozen, rust-lints,
+      studio-grapesjs (scripts/lua/test-*.lua).
+      Calibration: test-pre-push-trailer-states-what-it-saw was flagged as CONFIRMED and was not. Its
+      scripts-only worktree has no methodology/convergence.yaml, so the carried check answers
+      blocked:no-backlog-table and can never refuse there. With #1305's refusing hook on a carried-due
+      probe branch, trunk's fixture stayed green. So prove each one by measurement, not by reading:
+      put a probe branch in the broken state and run the fixture.
+    exit_criteria:
+      - "Each of the 21 is dispositioned as reads-real-HEAD (with the measured red on a broken probe branch) or clean (with the reason), in the issues file; confirmed ones get their own fix rows."
+    unscoreable: "the dispositions are the measure"
+    provenance: "coordinator 2026-11-22; yoga's fixture audit after 2195-wlsh."
+    events:
+      - type: filed
+        ts: "2026-11-22T07:17:51Z"
+        host: yoga
+        summary: "filed"

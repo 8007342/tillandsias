@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: plan-lane-fails-closed-fixture-negative-control-reads-the-hosts-installed-plan-binary
+    order: 2217-ab8h
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixture]
+    estimated_hours: 2
+    title: |
+      test-pre-push-plan-lane-fails-closed-without-binary.sh arm 2 (its negative control) resolves the HOST's installed ~/.local/bin/tillandsias-plan through PATH, so it reds or greens by how fresh that copy is, not by the lane.
+    context: |
+      Measured on lenovinha 2026-11-22 at origin/linux-next 43270640e; macuahuitl's land gate was GREEN at the same commit.
+      Regime: linux-immutable (Fedora 45 Silverblue), hooks tillandsias-pre-push-v9, no CARGO_TARGET_DIR and no TILLANDSIAS_* in the env, no global core.hooksPath, no ~/.cargo/bin copy; ~/.local/bin/tillandsias-plan (11101464 bytes, mtime 2026-11-22 04:33) was built from a work branch, validator surface a0f988e05716467c against trunk's 12c314a955ede6d2.
+      Arm 2 output, verbatim: "plan-only lane: REFUSED — the resolved plan binary is STALE ... resolved: /var/home/lenovinha/.local/bin/tillandsias-plan via: embedded validator-surface hash — built-from=a0f988e05716467c checkout=12c314a955ede6d2". With that copy replaced by a trunk build (surface 12c314a955ede6d2) the fixture is 6/6.
+      How the copy went stale: scripts/check-plan-binary-current.sh installs a fresh build into ~/.local/bin, and it was run on a work branch whose change moved the validator surface (2213-ag5u). Any host that builds a surface-moving branch and then runs this fixture on trunk reproduces it. The host-state leak is the fixture's: the scratch checkout has no target/, so the hook's probe falls through to command -v.
+      The only open work ref touching this fixture is work/2118-jtky.
+    exit_criteria:
+      - "arm 2 hands the hook a plan binary the fixture controls (a current stub planted in the scratch checkout, or PATH stripped of every installed copy), so its verdict no longer depends on ~/.local/bin"
+      - "the fixture is 6/6 with a STALE ~/.local/bin copy on PATH, and its arms still red against the pre-fix hook"
+    unscoreable: "unpinnable-until-the-guard-exists: the stale-copy run is the measure."
+    next_action: "Coordinate with work/2118-jtky's owner, then make arm 2 hermetic."
+    provenance: coordinator direction; filed by lenovinha.
+    depends_on: []
+    related: [2118-jtky, 2213-ag5u, 1129-4su6]
+    events:
+      - {type: filed, ts: '2026-11-22T13:12:35Z', host: lenovinha, summary: arm 2 reads the host's installed plan binary}

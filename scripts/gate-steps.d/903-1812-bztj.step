@@ -6,3 +6,7 @@ STEP_LUA="scripts/lua/test-sccache-long-tmpdir.lua"
 STEP_ERROR="the sccache daemon inherited a deleted TMPDIR and later compiles fail (1812-bztj) — see the FAIL lines above"
 STEP_OK="sccache long-TMPDIR fixture passed"
 STEP_SECOND_REGIME="macbookair 2026-10-23 darwin skip:no-sccache — sccache is not on this regime's build path; scripts/sccache-wrapper.sh execs the bare compiler when sccache is absent, so the defect's subject does not exist here (1812-bztj)"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lua/test-sccache-long-tmpdir.lua scripts/sccache-wrapper.sh"

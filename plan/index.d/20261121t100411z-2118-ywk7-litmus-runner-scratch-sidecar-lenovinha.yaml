@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Story build-speed-lenovinha (coordinator, 2026-11-21).
+packets:
+  - packet_id: a-litmus-runner-start-in-a-scratch-project-no-longer-builds-the-router-sidecar-through-the-enclosing-checkout
+    order: 2118-ywk7
+    status: ready
+    kind: bug
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    story: build-speed-lenovinha
+    capability_tags: [build-speed, litmus, sidecar]
+    estimated_hours: 2
+    title: |
+      One litmus-runner start in a scratch project under target/plan-scratch cost about 20 s (0.5 s under /tmp). 19.5 s of it was the runner's once-per-run sidecar staging: build-sidecar.sh in a tree with no sidecar crate, where cargo walked up to the enclosing checkout's workspace.
+    context: |
+      Profiled 2026-11-21 with bash xtrace timestamps (run-litmus-test.sh:3309). Coordinator ruling: fix it at the root and keep scratch under target/plan-scratch; /tmp is tmpfs under a usrquota and the fs.* sandbox is deliberate.
+    exit_criteria:
+      - 'one runner start under target/plan-scratch costs 1 s or less'
+      - 'build-sidecar.sh refuses by name (exit 3) in a tree without crates/tillandsias-router-sidecar, and the runner only stages in a tree that has that crate'
+      - 'the gate steps affected are counted and timed before and after'
+    unscoreable: 'unpinnable-until-the-guard-exists: a fixture arm is written with the fix.'
+    next_action: 'Land the PR.'
+    provenance: coordinator 2026-11-21; filed by lenovinha.
+    depends_on: []
+    related: [871-wrmv, 2163-paer]
+    events:
+      - {type: filed, ts: '2026-11-21T10:04:11Z', host: lenovinha, summary: filed p0 under build-speed-lenovinha}

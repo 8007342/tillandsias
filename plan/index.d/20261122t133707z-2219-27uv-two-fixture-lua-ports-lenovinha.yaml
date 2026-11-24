@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Tech-debt session (bash→lua), coordinator direction 2026-11-22: the two smallest free scripts/test-*.sh.
+packets:
+  - packet_id: fake-backend-under-remote-podman-and-gate-memory-wsl2-guest-fixtures-become-lua
+    order: 2219-27uv
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      Port test-litmus-fake-backend-under-remote-podman.sh and test-gate-memory-wsl2-guest.sh to scripts/lua, rewire the litmus and gate step 605, delete both .sh.
+    context: |
+      The two smallest scripts/test-*.sh with no open work ref, no background jobs and no sourced library (79 and 82 lines). Open work refs were scanned first.
+    exit_criteria:
+      - "each Lua port prints the same arms as its .sh on this tree and reds on the same mutant; litmus:fake-backend-under-remote-podman-shape and step 605 run the Lua; both .sh and their floor lines are gone"
+    unscoreable: "unpinnable-until-the-guard-exists: the existing step and litmus are the proof and are recorded in the PR."
+    next_action: "Port, compare arm output and mutants, rewire, open the PR."
+    provenance: coordinator direction; filed by lenovinha.
+    depends_on: []
+    related: [798-9xpq, 1337-7jr5]
+    events:
+      - {type: filed, ts: '2026-11-22T13:37:07Z', host: lenovinha, summary: filed two fixture Lua ports}

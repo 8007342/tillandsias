@@ -162,7 +162,7 @@ out="$("$BIN" "${INDEX[@]}" append-event "$ARCHIVED_ORDER" note "append-event-ar
 rc=$?
 if [ "$rc" -eq 0 ]; then
     bad "an archived ref was ACCEPTED (rc=0): $out"
-elif printf '%s' "$out" | grep -qi 'archived'; then
+elif grep -qi 'archived' <<<"$out"; then
     ok "an archived ref is refused and the refusal names it as ARCHIVED"
 else
     bad "archived ref refused but the message does not distinguish it from not-found: $out"
@@ -176,7 +176,7 @@ out2="$("$BIN" "${INDEX[@]}" append-event "999999-zzzzzz" note "append-event-arc
 rc2=$?
 if [ "$rc2" -eq 0 ]; then
     bad "a nonexistent ref was ACCEPTED (rc=0): $out2"
-elif printf '%s' "$out2" | grep -qi 'archived'; then
+elif grep -qi 'archived' <<<"$out2"; then
     bad "a nonexistent ref was reported as ARCHIVED — the two cases must not collapse: $out2"
 else
     ok "a ref matching nothing is refused with a DIFFERENT message than an archived one"

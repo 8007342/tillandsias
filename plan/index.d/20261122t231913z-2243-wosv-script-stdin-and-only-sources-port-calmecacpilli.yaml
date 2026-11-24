@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: assigned by macuahuitl-fedora 2026-11-22 (ruling (a): stdin primitive first, then the port).
+packets:
+  - packet_id: only-sources-verified-port-with-script-stdin
+    order: "2243-wosv"
+    status: claimed
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, rust, script-runner, windows, macos]
+    estimated_hours: 5
+    title: "Port check-windows-only-sources-verified.sh and its macOS wrapper as one item; slice 1 gives the Lua runner a bounded, opt-in stdin read"
+    context: |
+      The checker's `stamp`/`attest --from -` reads a cargo test transcript from stdin, and build.sh's own warning tells
+      operators to pipe into it. The Lua runner could not read its own stdin (probed 2026-11-22: a script running `cat`
+      under `printf x | tillandsias-plan script run` got ""), so a straight port would have dropped that mode.
+      SLICE 1 (this change): `-- @stdin <max-bytes>` in a script header installs `stdin.read()`. Bounded: more than the
+      cap is refused:stdin:too-large:<cap>, never a silent truncation. EOF-safe: a terminal stdin is never read (""), a
+      closed one is EOF (""). Opt-in: with no @stdin there is no `stdin` table, so a decider the preflight door runs
+      cannot block a gate on an inherited stdin unless it declares it. `-- @stdin` with no cap is refused by name.
+      Fixture scripts/lua/test-script-stdin-read.lua (gate step 896), 5 arms.
+      SLICE 2: the whole-file port of check-windows-only-sources-verified.sh with --platform windows|macos replacing the
+      macOS exec wrapper; the stamp digest stays byte-identical so existing stamps and attestations stay valid; yolanda
+      for the msys record.
+      NOTE (coordinator): a stdin primitive likely unlocks other shell-to-lua ports that were skipped because they read
+      a pipe; screen the skipped list for `--from -` / `cat` / `read` on stdin when picking the next items.
+    exit_criteria:
+      - "Slice 1: test-script-stdin-read.lua 5/5 (piped bytes exact, undeclared has no stdin table, over-cap refused by name, closed stdin is \"\" at once, a cap-less @stdin refused); header unit test passes."
+      - "Slice 2: both .sh deleted; build.sh and the litmus run the Lua for windows and macos; test-windows-only-sources-verified passes against the Lua, including `stamp --from -` from a pipe; an existing stamp file still verifies."
+    unscoreable: "pinned-elsewhere: gate step 896 (slice 1) and test-windows-only-sources-verified (slice 2)."
+    next_action: "Land slice 1; then slice 2."
+    provenance: "macuahuitl-fedora 2026-11-22: (a), take it; bounded, EOF-safe, opt-in; note the unlocked ports in the row."
+    events:
+      - type: filed
+        ts: "2026-11-22T23:19:13Z"
+        host: calmecacpilli
+        summary: "filed and claimed; slice 1 implemented in the same change"

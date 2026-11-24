@@ -4262,9 +4262,15 @@ mod tests {
             cdp_socket: None,
             notice: None,
         };
-        let argv = crate::browser_open::forwarder_spec(&handle, project, "10.0.42.7", &[port])
-            .build_run_argv()
-            .unwrap();
+        let argv = crate::browser_open::forwarder_spec(
+            &handle,
+            project,
+            "w-0123456789ab",
+            "10.0.42.7",
+            &[port],
+        )
+        .build_run_argv()
+        .unwrap();
         let fwd_project = argv
             .iter()
             .find_map(|a| a.strip_prefix("TILLANDSIAS_FWD_PROJECT="))

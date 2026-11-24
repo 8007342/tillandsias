@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: ruled by macuahuitl-fedora 2026-11-23.
+packets:
+  - packet_id: builder-shims-and-nextest-follow-their-pins
+    order: "2262-iyyu"
+    status: claimed
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [builder-toolbox, nextest, gate]
+    estimated_hours: 3
+    title: "An edited host-escape shim or a bumped nextest pin never reaches a host whose builder toolbox is already initialised"
+    context: |
+      Shims are installed by the init, which runs only when a tool is missing; _ensure_nextest returned early on any
+      executable cargo-nextest. Stamps: the shim text's digest per toolbox, and the sha of the nextest asset the wrapper
+      installed. A nextest the wrapper did not install is adopted at the pin, else left alone and named.
+    exit_criteria:
+      - "test-builder-installs-follow-their-pins.lua 12 arms; the edited-shim and pin-bump arms fail on the pre-fix behaviour."
+    unscoreable: "pinned-elsewhere: gate step 912-2262-iyyu."
+    next_action: "Land the PR with a darwin record (the fixture skips by name off Linux)."
+    provenance: "macuahuitl-fedora 2026-11-23, from calmecacpilli's reading of with-tillandsias-builder.sh."
+    events:
+      - {type: filed, ts: '2026-11-23T10:19:44Z', host: calmecacpilli, summary: filed and claimed; implemented in the same change}

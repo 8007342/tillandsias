@@ -3281,6 +3281,57 @@ fn validator_surface_drift() -> Option<(String, String)> {
 /// compared mtimes against the whole crate and would have refused every mint
 /// after every rebase — the defect this row is about, reintroduced inside its
 /// own fix.
+/// ORDER 2152-u7s4: the highest order prefix named by a fragment FILE on trunk.
+/// Fragment names are `<YYYYMMDD>t<HHMMSS>z-<order>-<suffix>-<slug>.yaml`;
+/// names of any other shape (hash-named event fragments, README) are skipped.
+fn highest_prefix_in_fragment_names<'a>(names: impl IntoIterator<Item = &'a str>) -> Option<u64> {
+    names
+        .into_iter()
+        .filter_map(|n| {
+            let base = n.rsplit('/').next()?;
+            let mut parts = base.splitn(4, '-');
+            let ts = parts.next()?;
+            let order = parts.next()?;
+            let suffix = parts.next()?;
+            parts.next()?;
+            let ts_ok = ts.len() == 16
+                && ts.as_bytes()[8] == b't'
+                && ts.ends_with('z')
+                && ts[..8].bytes().all(|b| b.is_ascii_digit());
+            let suffix_ok = suffix.len() == 4 && suffix.bytes().all(|b| b.is_ascii_alphanumeric());
+            // At most 6 digits: an EVENT fragment is `<ts>-<8-hex hash>-<host>`,
+            // and a hash that happens to be all digits with a 4-letter host
+            // (`-33163463-yoga-silverblue.yaml`) has exactly an order's shape.
+            if !(ts_ok && suffix_ok)
+                || order.is_empty()
+                || order.len() > 6
+                || !order.bytes().all(|b| b.is_ascii_digit())
+            {
+                return None;
+            }
+            order.parse::<u64>().ok()
+        })
+        .max()
+}
+
+/// The trunk ref to consult (TILLANDSIAS_NEXT_ORDER_TRUNK, default
+/// origin/linux-next) and the highest prefix its fragment names carry.
+/// None when git or the ref is unavailable — the caller keeps the local answer.
+fn next_order_trunk_highest() -> Option<(String, u64)> {
+    let trunk = std::env::var("TILLANDSIAS_NEXT_ORDER_TRUNK")
+        .unwrap_or_else(|_| "origin/linux-next".to_string());
+    let out = std::process::Command::new("git")
+        .args(["ls-tree", "--name-only", &trunk, "plan/index.d/"])
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    highest_prefix_in_fragment_names(text.lines()).map(|h| (trunk, h))
+}
+
 fn plan_binary_currency_complaint() -> Option<String> {
     let (embedded, current) = validator_surface_drift()?;
     let built = if embedded.is_empty() {
@@ -3298,8 +3349,8 @@ fn plan_binary_currency_complaint() -> Option<String> {
          The plan-only lane will refuse the fragment this identifier is for. \
          Rebuild first:\n  \
          cargo build --release -p tillandsias-plan\n  \
-         (or scripts/check-plan-binary-current.sh, which rebuilds and refreshes \
-         the installed copy; 1270-5mz8)\n\
+         (then scripts/check-plan-binary-current.sh to confirm it; that script \
+         measures and does not rebuild; 1270-5mz8, 2068-9789)\n\
          Refusing BEFORE minting on purpose: an identifier handed out by a binary \
          the lane will not accept costs a rebuild, a rebase and a re-push once the \
          row is written, instead of a rebuild now."
@@ -6398,7 +6449,7 @@ fn main() {
                     };
                     eprintln!("stale:validator-surface built-from={built} checkout={cur}");
                     eprintln!(
-                        "  remedy: scripts/check-plan-binary-current.sh (rebuilds and refreshes the installed copy), or cargo build --release -p tillandsias-plan (1270-5mz8)"
+                        "  remedy: cargo build --release -p tillandsias-plan, then scripts/check-plan-binary-current.sh to confirm (it measures; it does not rebuild) (1270-5mz8, 2068-9789)"
                     );
                     std::process::exit(3);
                 }
@@ -7818,6 +7869,30 @@ fn main() {
             // ORDER 1874-4sqt: the token comes FIRST. It used to print after
             // the report below, so in a terminal it was the last line under a
             // list of rows; `--quiet` drops the report and leaves the token.
+            // ORDER 2152-u7s4 (yoga, 2026-11-21): the mint read only THIS checkout's
+            // fold, so a checkout behind trunk minted a prefix trunk already
+            // carried (2149 after 2149-3zy5 had landed). With no explicit
+            // prefix, also read the FRAGMENT NAMES on trunk — one `git ls-tree`,
+            // no blobs — and mint above the higher of the two. An unreadable
+            // trunk leaves the local answer unchanged.
+            let prefix = match prefix {
+                Some(p) => Some(p),
+                None => {
+                    let local = tillandsias_plan::allocate::highest_prefix(&ledger);
+                    match next_order_trunk_highest() {
+                        Some((trunk_ref, remote)) if remote > local => {
+                            if !args.iter().any(|a| a == "--quiet") {
+                                eprintln!(
+                                    "next-order: {trunk_ref} carries prefix {remote}, above this \
+                                     checkout's {local}; minting above trunk (2152-u7s4). Fetch to see those rows."
+                                );
+                            }
+                            Some(remote + 1)
+                        }
+                        _ => None,
+                    }
+                }
+            };
             match tillandsias_plan::allocate::mint_batch(&ledger, prefix, count) {
                 Ok(tokens) => {
                     for t in tokens {
@@ -12115,6 +12190,25 @@ fn read_prose_source(path: &str) -> std::io::Result<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn next_order_reads_prefixes_from_trunk_fragment_names() {
+        // 2152-u7s4: the names trunk carried when yoga was handed 2149 again.
+        let names = [
+            "plan/index.d/20261121t033905z-2149-3zy5-demucs-spec-trace-yoga.yaml",
+            "plan/index.d/20261120t200452z-2118-tnut-declared-inputs-gate-roster-lenovinha.yaml",
+            "plan/index.d/20261119t232820z-39e5e025-calmecacpilli.yaml",
+            // An event fragment whose hash is all digits, from a 4-letter host.
+            "plan/index.d/20260928t130215z-33163463-yoga-silverblue.yaml",
+            "plan/index.d/README.md",
+            "plan/index.d/99999999-not-a-fragment.yaml",
+        ];
+        assert_eq!(super::highest_prefix_in_fragment_names(names), Some(2149));
+        assert_eq!(
+            super::highest_prefix_in_fragment_names(["plan/index.d/README.md"]),
+            None
+        );
+    }
+
     use super::role_satisfies;
 
     /// ORDER 1745-ntuq. A binary under checkout A's target, run from worktree B,

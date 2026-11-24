@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: fleet-run-answers-on-native-windows-from-a-nested-fetch-of-the-ref
+    field: status
+    value: completed
+    ts: "2026-11-23T13:59:11Z"
+    host: yolanda
+
+events:
+  - packet_id: fleet-run-answers-on-native-windows-from-a-nested-fetch-of-the-ref
+    event:
+      type: completed
+      ts: "2026-11-23T13:59:11Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: 8edb70fd1 landed as 171ff6731 (#1417): on msys fleet-run 967 at d74dd5a52 answered sha d0fbc4bb01e9ca7438450020f91ec86096526d76 equal to the ref tree, darwin 11/11 and linux rc 0 on the same sha; test-fleet-run.lua ok:fleet-run-shape:11
+  - packet_id: fleet-run-answers-on-native-windows-from-a-nested-fetch-of-the-ref
+    event:
+      type: note
+      ts: "2026-11-23T13:59:11Z"
+      host: yolanda
+      summary: |-
+        landed; native Windows answers regime lines

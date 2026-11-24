@@ -22,6 +22,17 @@ cd "$ROOT"
 # without touching the tracked file. Production callers pass nothing.
 AUDIT="${TILLANDSIAS_AUDIT_SCRIPT:-scripts/loop-status-metrics-audit.sh}"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+# ORDER 2150-vf2v (priority:build-speed): pin EVERY metrics log cycle-metrics.sh
+# reads to an empty scratch file. Defaulted, they are this host's real
+# .cache/metrics logs; a 95 MB usage log made this fixture 118 s instead of 3 s
+# on macuahuitl. scripts/lua/check-cycle-metrics-fixtures-pin-logs.lua refuses a
+# cycle-metrics fixture that leaves one defaulted.
+for _pin in TILLANDSIAS_EXPERT_USAGE_LOG TILLANDSIAS_CYCLE_FLOW_LOG TILLANDSIAS_EXPERT_HEALTH_LOG; do
+    : > "$TMP/pinned-$_pin.jsonl"; export "$_pin=$TMP/pinned-$_pin.jsonl"
+done
+# 2150-vf2v: no arm here reads the expert_accuracy: line, and the groundtruth
+# grader behind it costs ~7.5 s of every report (10.1 s -> 2.6 s); 1105-h8vr's knob.
+export TILLANDSIAS_CYCLE_METRICS_SKIP_GRADE=1
 pass=0; fail=0
 ok()  { echo "ok:   $*"; pass=$((pass+1)); }
 bad() { echo "FAIL: $*"; fail=$((fail+1)); }

@@ -1,0 +1,16 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (2253-j2at batch 2): as a .step it is no
+# build.sh edit, so it never makes intake HEAVY, and it runs in the pool (a
+# read-only decider: it reads the tree and the diff, writes nothing).
+#
+# Order 1562-tc7p. Every build reads ONE Rust toolchain, pinned in
+# rust-toolchain.toml. v56.10.8.1's macOS job floated to `stable` (rustc
+# 1.99.0) while this host gated on 1.96.1 and the Nix release on 1.98.0, and
+# the cut failed after every gate passed. This refuses a workflow, flake or
+# build script that stops reading the pin.
+STEP_DESC="Checking every build reads the pinned Rust toolchain (1562-tc7p)"
+STEP_LUA="scripts/lua/check-toolchain-pinned.lua"
+STEP_ERROR="a build no longer reads the pinned toolchain in rust-toolchain.toml (1562-tc7p) — see the violation lines above"
+STEP_OK="toolchain pin check passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin ok:toolchain-pinned:1.99.0:workflow-sites=2 at 1af8ff01c (fleet-run)"
+STEP_READS="scripts/lua/check-toolchain-pinned.lua"

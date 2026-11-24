@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-agent-never-starts-a-credential-sign-in-flow-or-relays-its-code-the-operator-signs-in-themselves
+    field: status
+    value: ready
+    ts: "2026-11-19T23:47:19Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: an-agent-never-starts-a-credential-sign-in-flow-or-relays-its-code-the-operator-signs-in-themselves
+    event:
+      type: falsified
+      ts: "2026-11-19T23:47:19Z"
+      host: calmecacpilli
+      summary: |-
+        falsified 'implemented' claim; evidence: 0ff52676ce touches only two SKILL.md files; the command-policy hook fixture named by the closure is absent from origin/linux-next (triage 2026-11-19) — status set to 'ready', new attempt epoch
+  - packet_id: an-agent-never-starts-a-credential-sign-in-flow-or-relays-its-code-the-operator-signs-in-themselves
+    event:
+      type: note
+      ts: "2026-11-19T23:47:19Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage: falsified implemented; coordinator ruling

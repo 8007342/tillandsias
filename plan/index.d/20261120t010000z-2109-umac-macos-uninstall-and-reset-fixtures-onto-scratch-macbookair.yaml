@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macbookair-macos, 2026-11-20, at the coordinator's request (shell-halving drive).
+packets:
+- packet_id: macos-uninstall-reset-and-stock-binary-fixtures-run-on-the-scratch-door-in-lua
+  order: 2109-umac
+  status: in_progress
+  kind: chore
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [lua, shell-burn-down, macos, uninstaller]
+  size: M
+  implementer_tier: sonnet
+  estimated_hours: 3
+  title: 'Five sandboxed macOS fixtures (uninstall preserves VM, sweeps both app dirs, tray stop is macOS-only, reset-state no-HOME refusal, stock binaries) are Lua on scratch.*'
+  context: >-
+    Batch 2 of the $HOME/$TMPDIR darwin fixture ports. It is stacked on work/2108-hmfx (#1171), which is
+    itself stacked on #1156. Each fixture keeps its arms and its controls. Only the code under test is
+    still shell: the uninstaller, its extracted cleanup block and the tray binary. The fixture logic is
+    Lua: seeding, mutation, shims, liveness and assertions. Behaviour changes:
+    - tray-stop's decoy is now proc.spawn of tail -f on a scratch file named with the literal, polled
+      with proc.select instead of kill -0. An ad-hoc pkill -f mutant of uninstall.sh reds ARM 1.
+    - reset-state launches the tray through env -u HOME. The runner's child environment always inherits
+      HOME and the door has no unset; a plain env table left HOME set, and ARM 1 read red.
+    - the stock-binaries fixture asserts every mutation applied, and finds the checkout's plan binary
+      when no runner variable is set.
+    - the inline build.sh sweep step moved to gate step 402-2109-umac as STEP_LUA. Gate step
+      400-1231-cbie now runs the Lua port.
+    The litmus steps in uninstall-preserves-vm-image, macos-stock-binaries-only and reset-state-contract
+    now run the ports. The five .sh files are deleted, along with their floor lines.
+    test-uninstall-matcher-spares-bystanders.sh is left as shell on purpose. Its arms are real
+    pgrep/pkill against real process names, so a port would be proc.run of shell tools only, which the
+    coordinator ruled does not count.
+  exit_criteria:
+  - 'On darwin, each port prints its ok line: uninstall-preserves-vm:7, uninstall-sweeps-both-app-dirs:15, uninstall-tray-stop-is-macos-only:4, reset-state-no-home-refusal:7, check-macos-stock-binaries:7.'
+  - 'The shell originals passed on the same tree before deletion: 7/7, ok, 4/4, PASS (7 arms) and 7/7.'
+  - 'tray-stop ARM 1 reds against a copy of uninstall.sh that pkill -f the literal first.'
+  - 'No floor, litmus, gate step or build.sh line names the five deleted .sh files.'
+  verifiable_closure: 'Measured on tlatoanis-macbook-air 2026-11-20. Each port was run through tillandsias-plan script run, and check-shell-ratchet.lua gave ok (sh=600).'
+  unscoreable: 'none.'
+  next_action: 'Land after #1156 and #1171. Next batch: further $TMPDIR-sandboxed darwin fixtures.'
+  provenance: 'macbookair-macos 2026-11-20, coordinator request (macuahuitl-fedora).'
+  events:
+  - {type: filed, ts: '2026-11-20T01:00:00Z', host: macbookair, summary: 'filed with its PR'}

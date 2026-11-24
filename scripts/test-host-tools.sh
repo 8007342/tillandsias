@@ -429,7 +429,7 @@ if [ -f "$_bmt" ]; then
         | awk -F'|' '$4 ~ /macos/ {print $1}' | sort -u)"
     _undeclared=""
     for _n in $_script_needs $_script_targets; do
-        printf '%s\n' "$_declared_tray" | grep -qx "$_n" || _undeclared="${_undeclared:+$_undeclared,}$_n"
+        grep -qx "$_n" <<<"$_declared_tray" || _undeclared="${_undeclared:+$_undeclared,}$_n"
     done
     if [ -z "$_undeclared" ]; then
         check ok "1004-cp6p: every prerequisite build-macos-tray.sh invokes is declared at tray-build scope"
@@ -440,11 +440,13 @@ else
     check FAIL "1004-cp6p: build-macos-tray.sh is missing, so the anti-drift arm cannot run"
 fi
 
-# 5. The check is wired into the gate.
-if grep -q 'check-host-tools.sh\|test-host-tools.sh' "$ROOT/build.sh"; then
-    check ok "build.sh consults the host-tools check"
+# 5. The check is wired into the gate: inline in build.sh, or (2266-4w3c) as a
+# gate step, which the gate runs from scripts/gate-steps.d/.
+if grep -q 'check-host-tools.sh\|test-host-tools.sh' "$ROOT/build.sh" \
+    || grep -lq 'test-host-tools.sh' "$ROOT"/scripts/gate-steps.d/*.step 2>/dev/null; then
+    check ok "the gate consults the host-tools check (build.sh or a gate step)"
 else
-    check FAIL "build.sh consults the host-tools check"
+    check FAIL "the gate consults the host-tools check (build.sh or a gate step)"
 fi
 
 # 6. EVERY DECLARED PLATFORM, FROM ANY HOST — commissioned by macuahuitl after

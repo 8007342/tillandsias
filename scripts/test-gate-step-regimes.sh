@@ -78,5 +78,29 @@ else
     pass=$((pass + 1)); echo "ok:gate-step-regimes-fixture:arm4-named-skip-counts"
 fi
 
-[ "$rc" -eq 0 ] && echo "ok:gate-step-regimes-fixture:$pass/4" || echo "violation:gate-step-regimes-fixture"
+# ── ARM 5 — a bad SECOND record is refused by name (2221-vjqb) ──────────────
+# The checker read only `head -1`, so a valid darwin line followed by a Linux
+# or malformed line passed. Each sabotaged second line must refuse the step.
+for bad in "lenovinha 2026-11-22 linux ok:probe" "yolanda 22-11-2026 msys ok:probe" "yolanda"; do
+    d="$tmp/a5-$pass"; mk "$d" "100-probe.step" "macneo 2026-09-22 darwin ok:probe-passed"
+    printf 'STEP_SECOND_REGIME="%s"\n' "$bad" >> "$d/100-probe.step"
+    out="$(bash "$CHECK" "$d" 2>&1)"; arc=$?
+    if [ "$arc" -eq 0 ] || ! grep -q 'violation:gate-step-single-regime:100-probe.step:' <<<"$out"; then
+        fail "arm5:a bad second record [$bad] must refuse the step by name (rc=$arc); got: $out"
+    else
+        pass=$((pass + 1)); echo "ok:gate-step-regimes-fixture:arm5-bad-second-record-refused:${bad%% *}"
+    fi
+done
+
+# ── ARM 6 — a darwin AND an msys record pass, and both regimes are reported ─
+d="$tmp/a6"; mk "$d" "100-probe.step" "macneo 2026-09-22 darwin ok:probe-passed"
+printf 'STEP_SECOND_REGIME="yolanda 2026-11-21 msys ok:probe-passed"\n' >> "$d/100-probe.step"
+out="$(bash "$CHECK" "$d" 2>&1)"; arc=$?
+if [ "$arc" -eq 0 ] && grep -q '^ok:gate-step-regimes:1$' <<<"$out" && grep -q 'regimes: darwin=1 msys=1' <<<"$out"; then
+    pass=$((pass + 1)); echo "ok:gate-step-regimes-fixture:arm6-darwin-and-msys-both-reported"
+else
+    fail "arm6:darwin+msys must pass and report both (rc=$arc); got: $out"
+fi
+
+[ "$rc" -eq 0 ] && echo "ok:gate-step-regimes-fixture:$pass/8" || echo "violation:gate-step-regimes-fixture"
 exit $rc

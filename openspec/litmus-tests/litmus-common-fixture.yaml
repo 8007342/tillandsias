@@ -1,0 +1,30 @@
+# @trace order:2158-vrb7
+name: litmus:common-fixture
+spec: ci-release
+phase: pre-build
+description: the shared Lua test kit (lib/lua/common/fixture.lua) resolves through require, refuses a bad module name, gives a valid repo_root cwd, builds a one-commit git repo, hands out scratch .abs paths that git (remote add + push) and rm -rf accept on every host (plain C:/ on Windows, never the \?\ verbatim form), and cleans its scratch
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains lib/lua/common/fixture.lua and scripts/lua/test-common-fixture.lua
+  - git in PATH
+
+critical_path:
+  - step: "eight arms of the fixture kit, including .abs as a git remote and as an rm -rf target"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; \"$MFPLAN\" script run scripts/lua/test-common-fixture.lua"
+    timeout_ms: 300000
+    expected_behavior: "ok:common-fixture:12 arms"
+
+observability:
+  traces:
+    - "@trace order:2158-vrb7"
+  expected_log: "ok:common-fixture:12 arms"
+  log_fields:
+    spec: "ci-release"
+    test: "common-fixture"
+    artifact: "lib/lua/common/fixture.lua + scripts/lua/test-common-fixture.lua"
+
+rollback:
+  on_failure: "read the FAIL line's got: value; arms 6-7 print the .abs path, which must not start with a verbatim prefix"
+  command: "cat lib/lua/common/fixture.lua"

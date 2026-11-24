@@ -217,7 +217,16 @@ fi
 # Lane SPEED is the reason the lane exists (930-i6x4). A fix that refuses
 # everything would pass arm 1 and destroy the lane, so this arm is what makes
 # arm 1 mean something.
-_probe_bin="$(bash -c '. "$1/scripts/plan-binary-probe.sh"; resolve_plan_binary' _ "$ROOT" 2>/dev/null)"
+# ORDER 2217-ab8h: resolve the control binary IN THE CHECKOUT, absolute, and
+# hand it over only if it is CURRENT for this checkout. Resolved from the
+# scratch cwd (no target/) the probe fell through to PATH and judged the lane
+# with the host's ~/.local/bin copy, so this arm went red on a host whose copy
+# was a work-branch build (lenovinha 2026-11-22: built-from a0f988e05716467c,
+# checkout 12c314a955ede6d2) and green elsewhere at the same commit.
+_probe_bin="$(cd "$ROOT" && bash -c '. "$1/scripts/plan-binary-probe.sh"; resolve_plan_binary' _ "$ROOT" 2>/dev/null)"
+case "$_probe_bin" in ./*) _probe_bin="$ROOT/${_probe_bin#./}" ;; esac
+_probe_vs="$( [ -n "$_probe_bin" ] && cd "$ROOT" && "$_probe_bin" validator-surface-hash --check 2>&1)" || true
+case "$_probe_vs" in ok:validator-surface:*) ;; *) [ -n "$_probe_bin" ] && _probe_stale="$_probe_bin"; _probe_bin="" ;; esac
 if [ -n "$_probe_bin" ] && "$_probe_bin" capabilities >/dev/null 2>&1; then
     out2="$(TILLANDSIAS_PLAN_BIN="$_probe_bin" \
         bash scripts/hooks/pre-push-local-gate.sh origin "$W/bare.git" 2>&1 <<< \
@@ -230,7 +239,11 @@ if [ -n "$_probe_bin" ] && "$_probe_bin" capabilities >/dev/null 2>&1; then
         printf '%s\n' "$out2" | sed 's/^/      /' >&2
     fi
 else
-    echo "note:arm2-skipped: no runnable plan binary on this host to drive the control" >&2
+    if [ -n "${_probe_stale:-}" ]; then
+        echo "note:arm2-skipped: the checkout's plan binary $_probe_stale is not current for this checkout (${_probe_vs%%$'\n'*}); the control is not judged with a stale instrument (2217-ab8h)" >&2
+    else
+        echo "note:arm2-skipped: no runnable plan binary on this host to drive the control" >&2
+    fi
 fi
 
 # ── ARM 3: NO fragments in the push, no binary → still accepted ──────────────

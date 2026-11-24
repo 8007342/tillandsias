@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: every-piped-litmus-command-becomes-a-parameterised-lua-decider-call-that-names-its-inputs-never-passes-on-an-empty-population-and-names-what-failed
+    field: next_action
+    value: 'Census today: scripts/lua/census-litmus-pipes.lua prints piped=904 (2026-11-19; was 950 on 2026-10-19). Target: piped=0. Slice (a) 1800-rutz is done; claim the next family, convert its piped litmus commands to litmus-decide.lua deciders, and re-run the census.'
+    ts: "2026-11-19T23:20:19Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: every-piped-litmus-command-becomes-a-parameterised-lua-decider-call-that-names-its-inputs-never-passes-on-an-empty-population-and-names-what-failed
+    event:
+      type: note
+      ts: "2026-11-19T23:20:19Z"
+      host: calmecacpilli
+      summary: |-
+        triage re-shape

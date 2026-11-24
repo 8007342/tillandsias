@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed and taken by yolanda 2026-11-22 at macuahuitl-fedora's direction.
+packets:
+  - packet_id: preflight-rebuild-fixture-spawns-gits-bash-not-slash-bin-bash-on-windows
+    order: 2218-x4s3
+    status: in_progress
+    kind: bug
+    priority: p1
+    labels: [priority:build-speed]
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [lua, fixture, msys, gate]
+    estimated_hours: 1
+    title: "test-preflight-rebuilds-stale-plan-binary.lua (gate step 886) spawns /bin/bash, which a native Windows process cannot resolve; derive Git's bash from git --exec-path"
+    context: |
+      MEASURED 2026-11-22 by yolanda on msys, linux-next @ 1b6994210: step 886-2186-x5kv reads
+      violation:preflight-rebuilds-stale-plan-binary:4-failed, every arm "rc=nil cargo-calls=0 (no verdict)":
+      line 73 spawns argv "/bin/bash" ./build.sh, and the spawn itself fails natively. Every Windows gate reddens on 886.
+    exit_criteria:
+      - "step 886 runs green on msys (all arms), and stays green on Linux/darwin. Pre-fix on msys: FAILS 4/4."
+    unscoreable: "unpinnable-until-the-guard-exists: the guard is gate step 886 itself (scripts/lua/test-preflight-rebuilds-stale-plan-binary.lua), whose msys run is the closure"
+    provenance: "yolanda msys sweep 2026-11-22; routed by macuahuitl-fedora; author of 2186-x5kv is calmecacpilli."
+    related: [2186-x5kv, 2187-sdtz]
+    events: []
