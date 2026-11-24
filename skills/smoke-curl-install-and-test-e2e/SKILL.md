@@ -1625,6 +1625,91 @@ completed cycle** (order 1190-swen), which of these happened:
 **Never report the forge lane from `opencode_exit` alone.** Exit 0 and a
 guard-stop are the same number.
 
+### 5a — Attest the run as a ref (order 2252-ck7h)
+
+The daily release candidate moves to `main` only with a **PASS per platform**,
+read from `refs/attest/smoke/<platform>/<rc-commit-sha>` by
+`scripts/lua/check-smoke-attested.lua`. Every run is attested, red or green.
+Write the attestation AFTER the report lines above, from the same evidence
+directory, in this order:
+
+**1. Record the credential step, as observed.** A reset wipes the Vault, and
+only the operator can sign in again (see *Credentials* above). Write
+`target/smoke-e2e/credential-step.txt`, whose first line is one of:
+
+- `measured: <what you observed>`. Use this only when this round saw the operator's
+  sign-in take effect, for example the forge lane getting past the Credential
+  Channel Guard, or a tray `--diagnose --json` naming the GitHub credential as
+  present after they signed in from the tray.
+- `unmeasured: <why>`. Use this when the operator has not signed in yet, which is
+  the normal state right after §2.
+
+**Never write `measured` for a step you did not see.** `attest-smoke.lua` refuses `pass`
+without it. An unmeasured run attests as `partial:credential-unmeasured`, and
+**a partial blocks promotion.** When the operator has signed in, re-run the
+credential check, rewrite the file as `measured: …`, and attest again on the same sha.
+The new commit sits on top of the partial one, so the history stays.
+
+**2. Pick the verdict.** `pass` means every step was green and the
+credential step was measured. `partial:credential-unmeasured` means every
+other step was green. `fail:<slug>` means anything red, where `<slug>` is the
+§5 finding's short slug, e.g. `fail:init-vault-brick`. A `cosign:could-not-run` round is
+not an unqualified PASS (above), so it attests as `fail:signatures-unverified`.
+
+**3. Write and push the ref.** The RC is the tag's commit. The asset sha256 is the
+`SHA256SUMS` line for the asset that §1 installed. Set `SMOKE_ASSET` to its
+name as listed in `SHA256SUMS`. Set `SMOKE_REGIME` to this host's regime slug
+(`[A-Za-z0-9._-]+`, e.g. `darwin-arm64`, `linux-x86_64`, `msys-x64`). The
+promote gate's smoke record reads it back from the ref's `regime.txt`
+(2298-ifpm), so it is never retyped.
+
+**The ref carries DIGESTS ONLY, never the evidence (2299-atdg).** Its tree is
+exactly three files: `SHA256SUMS` (a sha256 per evidence file), `regime.txt` and
+`verdict.txt`. The logs stay on this host, provable by their digests. Lane and
+init logs can carry a sign-in URL or a token, and a pushed secret is not undone
+by deleting the ref. The script refuses three cases:
+- `raw-tree-in-history:<commit>`: an older attest on the same ref has any other
+  tree shape, from before 2299-atdg. Delete that LOCAL ref as the refusal says;
+  never push it.
+- `unsafe-evidence-name`: a file name outside `[A-Za-z0-9._/-]`, since a name can
+  leak too. Rename the file; the refusal never echoes the name.
+- `stale-evidence`: a file older than `00-run-start.txt`. Previous rounds archived
+  inside the directory (`_archived-<ts>/`, step 4) are skipped, and are neither
+  judged stale nor digested.
+
+```bash
+[ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
+git fetch -q origin "refs/tags/${SMOKE_TAG}:refs/tags/${SMOKE_TAG}"
+SMOKE_RC_SHA="$(git rev-parse "${SMOKE_TAG}^{commit}")"
+SMOKE_ASSET_SHA256="$(gh release download "$SMOKE_TAG" -p SHA256SUMS -O - | awk -v a="$SMOKE_ASSET" '$2 == a || $2 == "*" a { print $1 }')"
+test -n "$SMOKE_RC_SHA" && test -n "$SMOKE_ASSET_SHA256" || { echo 'FAIL: no RC sha or asset sha256 — do not attest'; exit 2; }
+test -n "${SMOKE_REGIME:-}" || { echo 'FAIL: set SMOKE_REGIME (e.g. darwin-arm64) — do not attest'; exit 2; }
+./target/release/tillandsias-plan script run scripts/lua/attest-smoke.lua -- \
+    --sha "$SMOKE_RC_SHA" --tag "$SMOKE_TAG" --asset-sha256 "$SMOKE_ASSET_SHA256" \
+    --verdict "$SMOKE_VERDICT" --regime "$SMOKE_REGIME" --dir target/smoke-e2e --push \
+  | tee target/smoke-e2e/05-attest.txt
+ATTEST_RC=${PIPESTATUS[0]}; test -n "$ATTEST_RC" && test "$ATTEST_RC" -eq 0
+```
+
+```powershell
+git fetch -q origin "refs/tags/${SmokeTag}:refs/tags/${SmokeTag}"
+$SmokeRcSha = (git rev-parse "${SmokeTag}^{commit}").Trim()
+$sums = gh release download $SmokeTag -p SHA256SUMS -O -
+$SmokeAssetSha256 = ($sums | Where-Object { ($_ -split '\s+')[1] -in @($SmokeAsset, "*$SmokeAsset") } | ForEach-Object { ($_ -split '\s+')[0] })
+if (-not $SmokeRcSha -or -not $SmokeAssetSha256) { throw 'no RC sha or asset sha256 — do not attest' }
+if (-not $SmokeRegime) { throw 'set $SmokeRegime (e.g. msys-x64) — do not attest' }
+.\target\release\tillandsias-plan.exe script run scripts/lua/attest-smoke.lua -- `
+    --sha $SmokeRcSha --tag $SmokeTag --asset-sha256 $SmokeAssetSha256 `
+    --verdict $SmokeVerdict --regime $SmokeRegime --dir target/smoke-e2e --push | Tee-Object target\smoke-e2e\05-attest.txt
+if ($LASTEXITCODE -ne 0) { throw "attest-smoke refused (rc=$LASTEXITCODE) — read 05-attest.txt" }
+```
+
+The platform is read from the host (`darwin`, `msys`, `linux`). Cite the
+`ok:attest-smoke:<platform>:<sha>:<verdict>` line in the report. A
+`refused:attest-smoke:<why>` line is a finding about this run: stale evidence,
+or a `pass` without a measured credential step. Never answer it by editing the
+evidence.
+
 Each finding becomes a `### Work Packet:` entry so `/advance-work-from-plan` can
 claim and fix it. Append packets to a dated, **host-qualified** smoke report:
 
