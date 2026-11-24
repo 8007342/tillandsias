@@ -181,7 +181,7 @@ while IFS= read -r f; do
     # Skip this census and its fixture: both necessarily QUOTE the patterns, and
     # an instrument that counts its own definition is measuring itself.
     case "$f" in
-        */census-admitted-missing-evidence.sh|*/test-census-admitted-missing-evidence.sh) continue ;;
+        */census-admitted-missing-evidence.sh) continue ;;
     esac
     while IFS=: read -r lineno text; do
         [ -n "$lineno" ] || continue
