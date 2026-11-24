@@ -580,7 +580,6 @@ scripts scripts/test-enclave-service-health.sh 102
 scripts scripts/test-ensure-cosign.sh 5
 scripts scripts/test-ensure-toolbox-properties.sh 23
 scripts scripts/test-env-forward-shared.sh 1
-scripts scripts/test-expert-accuracy-provenance.sh 2
 scripts scripts/test-expert-accuracy-record-shape.sh 2
 scripts scripts/test-expire-claims-list-live-rows.sh 8
 scripts scripts/test-expire-claims-reads-the-status-write.sh 9
@@ -620,7 +619,6 @@ scripts scripts/test-git-mirror-ref-convergence.sh 1
 scripts scripts/test-git-mirror-relay-token-expiry.sh 6
 scripts scripts/test-git-mirror-vault-agent-auto-auth.sh 18
 scripts scripts/test-github-token-auto-rotation.sh 1
-scripts scripts/test-github-token-rotation-entry-points.sh 3
 scripts scripts/test-groundtruth-corpus-declaration.sh 8
 scripts scripts/test-guest-binaries-nix-lane.sh 9
 scripts scripts/test-hardware-fingerprint.sh 1

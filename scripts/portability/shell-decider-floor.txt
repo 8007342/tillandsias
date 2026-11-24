@@ -154,7 +154,6 @@ scripts/test-env-forward-shared.sh
 scripts/test-envelope-suite-resolves-the-gates-artifact.sh
 scripts/test-exact-version-literal-added.sh
 scripts/test-exec-bits-guard-end-to-end.sh
-scripts/test-expert-accuracy-provenance.sh
 scripts/test-expert-accuracy-record-shape.sh
 scripts/test-expert-capability-behaviour-skew.sh
 scripts/test-expire-claims-list-live-rows.sh
@@ -214,7 +213,6 @@ scripts/test-git-mirror-relay-token-expiry.sh
 scripts/test-git-mirror-relay-verified-ack.sh
 scripts/test-git-mirror-vault-agent-auto-auth.sh
 scripts/test-github-token-auto-rotation.sh
-scripts/test-github-token-rotation-entry-points.sh
 scripts/test-groundtruth-corpus-declaration.sh
 scripts/test-guest-binaries-nix-lane.sh
 scripts/test-guest-crashloop-detection.sh
@@ -288,7 +286,6 @@ scripts/test-litmus-tracked-file-kill-safety.sh
 scripts/test-long-running-view-refuses-at-completion.sh
 scripts/test-loop-status-append-input.sh
 scripts/test-loop-status-audit-reads-current-emitter.sh
-scripts/test-lua-determinism.sh
 scripts/test-lww-channel-alias.sh
 scripts/test-lww-channel-consumers.sh
 scripts/test-macos-vsock-inference-closure.sh
@@ -333,7 +330,6 @@ scripts/test-plan-binary-runnability-precondition.sh
 scripts/test-plan-field-get.sh
 scripts/test-plan-fragments-lane-affordance.sh
 scripts/test-plan-fragments-lane-carries-status.sh
-scripts/test-plan-hash-time-verbs.sh
 scripts/test-plan-lane-agreeing-deletion.sh
 scripts/test-plan-only-lane-structural.sh
 scripts/test-plan-orders-fragment-fold.sh
