@@ -27,6 +27,7 @@
 --
 -- Verdicts: ok:bsd-count-shapes:4/4 (0) | fail:bsd-count-shapes:<p>/4 (1)
 
+local fixture = require "common.fixture"
 local NAME = "bsd-count-shapes"
 local TOTAL = 4
 local BASE = { PATH = env.get("PATH"), HOME = env.get("HOME") }
@@ -97,8 +98,8 @@ local function as_file(cmd)
     fs.write(rel, cmd .. "\n")
     return W .. "/cmd" .. nseq .. ".sh"
 end
-local function bsd(cmd) return trim_nl(run({ "bash", as_file(cmd) }, BSD)) end
-local function host(cmd) return trim_nl(run({ "bash", as_file(cmd) })) end
+local function bsd(cmd) return trim_nl(run({ fixture.posix_shell(), as_file(cmd) }, BSD)) end
+local function host(cmd) return trim_nl(run({ fixture.posix_shell(), as_file(cmd) })) end
 
 local cmd
 do
