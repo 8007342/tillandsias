@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-front-door-litmus-expects-ok-from-a-fixture-that-names-itself-not-run
+    order: 2295-cbia
+    status: ready
+    kind: bug
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [litmus]
+    estimated_hours: 1
+    title: |
+      litmus:preflight-front-door is red on bare trunk since #1443: the fixture prints not-run without TILLANDSIAS_FRONT_DOOR_LIVE=1, the step still expects ok.
+    context: |
+      Reported by yoga and macuahuitl at a91834d0c. Every preflight that selects ci-release is refused. lenovinha landed #1443 without running the fixture's own litmus.
+    exit_criteria:
+      - "the litmus is green on trunk without the live switch and red when the daily-full wiring is removed"
+      - "a live run is not started twice by a daily-full gate"
+    unscoreable: "unpinnable-until-the-guard-exists: the litmus itself is the deliverable."
+    next_action: "Land with land:priority."
+    provenance: coordinator direction (macuahuitl-fedora, 2026-11-24); filed by lenovinha.
+    related: [2272-cuxh, 1305-udgs]
+    events:
+      - {type: filed, ts: '2026-11-24T10:23:21Z', host: lenovinha, summary: front-door litmus red on trunk}

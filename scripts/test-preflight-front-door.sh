@@ -1,11 +1,31 @@
 #!/usr/bin/env bash
-# @trace order:1305-udgs
+# @trace order:1305-udgs, order:2272-cuxh
+# preflight: gate-only — it runs the door itself several times (825 s on lenovinha 2026-11-23)
 #
 # Each arm reproduces a defect this door actually had, measured on pirria
 # 2026-09-20. A front door is a thing people run instead of thinking, so every
 # way it can lie has to be pinned.
 set -uo pipefail
-ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || exit 1
+# 2272-cuxh: 825 s on lenovinha, so a normal gate NAMES it not-run and the land
+# queue's --daily-full gate runs it. The switches are read ONCE and unset: the
+# doors below scan gate-steps.d, and would otherwise inherit them and start
+# this fixture inside itself.
+_fd_live="${TILLANDSIAS_FRONT_DOOR_LIVE:-0}"; _fd_inner="${FRONT_DOOR_SCRATCH:-}"
+unset TILLANDSIAS_FRONT_DOOR_LIVE FRONT_DOOR_SCRATCH
+# 2280-vzsr: the doors below are scratch doors; only the budget arm benches, in a
+# record of its own, never the host's.
+export TILLANDSIAS_PREFLIGHT_BENCH=off
+if [ -z "$_fd_inner" ] && [ "$_fd_live" != 1 ]; then
+    echo "not-run:preflight-front-door — runs on the --daily-full gate; here: TILLANDSIAS_FRONT_DOOR_LIVE=1 bash scripts/test-preflight-front-door.sh (2272-cuxh)"
+    exit 0
+fi
+# 2272-cuxh: ROOT is where this script lives, not where the caller stands. From
+# a directory outside any repository (the 1401-x76w decider starts fixtures
+# there on purpose) the old `git rev-parse || pwd` made ROOT that directory and
+# the fixture died at "cannot create scratch worktree". An inherited GIT_DIR (a
+# hook-launched gate exports one) would redirect every git below.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_PREFIX
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; cd "$ROOT" || exit 1
 # ORDER 1516-wru4: NEVER PLANT IN THE LIVE CHECKOUT. The arms below plant
 # guards and gate steps and append to build.sh; run in place, a concurrent gate
 # or boundary snapshot in this checkout saw them. So the fixture re-execs itself
@@ -15,7 +35,26 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || exit 1
 # overlaid with the live tracked files so uncommitted edits are
 # still what is tested. A sampler watches the live tree the whole run and the
 # outer half refuses if its status or build.sh moved.
-if [ -z "${FRONT_DOOR_SCRATCH:-}" ]; then
+# 2272-cuxh: a signal must END the run. `trap cleanup ... TERM` with no exit ran
+# the cleanup and carried on to the next arm, so a timed-out fixture kept
+# starting nested doors. The exit runs the arm's own EXIT trap.
+_exit_on_signal() {
+    trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP; trap 'exit 141' PIPE
+}
+if [ -z "$_fd_inner" ]; then
+    # 2272-cuxh: the scratch tree has no target/, so its door had no plan binary
+    # to classify with unless one happened to be installed on PATH. On a Mac
+    # with none, 217 of 335 guards read could-not-run:no-classifier, rc 0, and
+    # four arms called the plants invisible (macbookair, trunk and #1443 alike);
+    # Linux passed on ~/.local/bin. The checkout's own binary is copied to the
+    # scratch tree's target/release, where an ordinary checkout has it; not
+    # TILLANDSIAS_PLAN_BIN, which changes what the guards inside the door test.
+    _fd_src="$(. scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _fd_src=""
+    case "$_fd_src" in ""|/*) ;; *) _fd_src="$ROOT/${_fd_src#./}" ;; esac
+    if [ -z "$_fd_src" ] || [ ! -f "$_fd_src" ]; then
+        echo "could-not-run:preflight-front-door:no-plan-binary — the doors below could classify no guard; cargo build --release -p tillandsias-plan, then re-run"
+        exit 2
+    fi
     SCR="$(mktemp -d "${TMPDIR:-/tmp}/front-door.XXXXXX")"
     sampler=""
     # 1600-nn5b: the worktree is removed on EVERY exit, not only after a normal
@@ -26,7 +65,10 @@ if [ -z "${FRONT_DOOR_SCRATCH:-}" ]; then
     }
     trap outer_cleanup EXIT
     trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP
-    git worktree add -q --detach "$SCR" HEAD >/dev/null 2>&1 || { echo "FAIL: cannot create scratch worktree"; exit 1; }
+    _wt_err="$(git worktree add -q --detach "$SCR" HEAD 2>&1)" \
+        || { echo "FAIL: cannot create scratch worktree: $_wt_err"; exit 1; }
+    mkdir -p "$SCR/target/release" && cp -p "$_fd_src" "$SCR/target/release/${_fd_src##*/}" \
+        || { echo "FAIL: cannot place the plan binary in the scratch worktree"; exit 1; }
     git diff --name-only -z HEAD | while IFS= read -r -d '' f; do
         if [ -e "$f" ]; then mkdir -p "$SCR/$(dirname "$f")"; cp -p "$f" "$SCR/$f"; else rm -f "$SCR/$f"; fi
     done
@@ -65,7 +107,10 @@ bad() { fail=$((fail+1)); printf '  [FAIL] %s\n' "$1"; }
 # that no longer works that way.
 _roster_fn="$(awk '/^_preflight_roster\(\) \{/,/^\}/' build.sh)"
 for r in 'FAST REFUSALS' 'gate-steps.d' 'scripts/hooks'; do
-    if printf '%s' "$_roster_fn" | grep -q "$r"; then
+    # 2272-cuxh: grep -q on a here-string, never a pipe: under pipefail its early
+    # exit SIGPIPEs the writer, and a FOUND match reads as absent (yoga: red in
+    # the suite, ok alone).
+    if grep -q "$r" <<<"$_roster_fn"; then
         ok "the roster scans $r"
     else
         bad "the roster does not scan $r"
@@ -73,7 +118,7 @@ for r in 'FAST REFUSALS' 'gate-steps.d' 'scripts/hooks'; do
 done
 # And it must scan, not curate: no list variable may stand between the tier and
 # the door.
-if printf '%s' "$_roster_fn" | grep -q '_fast_refusal_checks'; then
+if grep -q '_fast_refusal_checks' <<<"$_roster_fn"; then
     bad "the roster reads a list variable — the tier's bindings would be invisible to name-based scans (1063-nraf)"
 else
     ok "the roster scans literal bindings, with no list variable to drift from"
@@ -122,12 +167,13 @@ chmod +x "$PLANT"
 STEP=scripts/gate-steps.d/999-zz-1305-planted.step
 printf 'STEP_DESC="planted"\nSTEP_SCRIPT="scripts/check-zz-1305-planted.sh"\nSTEP_ERROR="planted"\nSTEP_OK="planted"\n' > "$STEP"
 cleanup() { rm -f "$PLANT" "$STEP"; }
-trap cleanup EXIT INT TERM HUP PIPE
+trap cleanup EXIT; _exit_on_signal
 out="$(TILLANDSIAS_PREFLIGHT_TIMEOUT=5 ./build.sh --preflight 2>&1)"; rc=$?
-if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'zz-1305-planted'; then
+if [ "$rc" -ne 0 ] && grep -q 'zz-1305-planted' <<<"$out"; then
     ok "a guard wired into gate-steps.d is picked up and refuses (no silent third state)"
 else
-    bad "a newly wired guard was invisible to the front door (rc=$rc)"
+    # Never enumerated, deadline-skipped and could-not-start read alike without this.
+    bad "a newly wired guard was invisible to the front door (rc=$rc, ${#out} bytes): $(grep -aE 'zz-1305|:preflight:ran=' <<<"$out" | tail -n 4 | tr '\n' '|')"
 fi
 # ── ARM 2b (1515-iwb3, 1247-amcu criterion 5): THE REFUSAL'S REMEDY RUNS ─────
 # The per-guard refusal must say why and name the command that reruns that
@@ -171,13 +217,13 @@ chmod +x "$PLANT"
 _bs_backup="$(mktemp "${TMPDIR:-/tmp}/build-sh-1499.XXXXXX")"
 cp -p build.sh "$_bs_backup"
 cleanup() { rm -f "$PLANT" "$PLANT_ARGS"; [ -s "$_bs_backup" ] && cp -p "$_bs_backup" build.sh; rm -f "$_bs_backup"; }
-trap cleanup EXIT INT TERM HUP PIPE
+trap cleanup EXIT; _exit_on_signal
 printf '\n_zz_1499_never_called() {\n    _run bash "$SCRIPT_DIR/scripts/check-zz-1499-planted.sh"\n    _run bash "$SCRIPT_DIR/scripts/check-zz-1499-args.sh" zzmode second 2>&1\n}\n' >> build.sh
 out="$(TILLANDSIAS_PREFLIGHT_TIMEOUT=5 ./build.sh --preflight 2>&1)"; rc=$?
 if [ "$rc" -ne 0 ] && grep -q 'zz-1499-planted' <<< "$out"; then
     ok "a guard build.sh runs inline is picked up and refuses (1499-m9fj)"
 else
-    bad "a guard the gate runs inline was invisible to the front door (rc=$rc)"
+    bad "a guard the gate runs inline was invisible to the front door (rc=$rc, ${#out} bytes): $(grep -aE 'zz-1499|:preflight:ran=' <<<"$out" | tail -n 4 | tr '\n' '|')"
 fi
 if grep -q '^refused:preflight:check-zz-1499-args\[zzmode second\]$' <<< "$out" \
     && grep -q 'violation:planted-mode-guard' <<< "$out"; then
@@ -207,7 +253,7 @@ plant_go "$GO_C" '# preflight: gate-only — a decider claiming it'
 { for p in "$GO_A" "$GO_B" "$GO_C"; do
     printf 'STEP_DESC="planted"\nSTEP_SCRIPT="%s"\nSTEP_ERROR="planted"\nSTEP_OK="planted"\n' "$p"; done; } > "$GO_STEP"
 go_cleanup() { rm -f "$GO_A" "$GO_B" "$GO_C" "$GO_STEP" "$GO_MARK".*; }
-trap go_cleanup EXIT INT TERM HUP PIPE
+trap go_cleanup EXIT; _exit_on_signal
 out="$(TILLANDSIAS_PREFLIGHT_TIMEOUT=5 ./build.sh --preflight 2>&1)"
 if grep -q '^skip:preflight:test-zz-1496-gate-only:gate-only — runs the planted fixture harness end to end$' <<<"$out" \
     && [ ! -e "$GO_MARK.test-zz-1496-gate-only.sh" ]; then
@@ -251,7 +297,7 @@ plant_ser "$SER_C" C ''
 { for p in "$SER_A" "$SER_B" "$SER_C"; do
     printf 'STEP_DESC="planted"\nSTEP_SCRIPT="%s"\nSTEP_ERROR="planted"\nSTEP_OK="planted"\n' "$p"; done; } > "$SER_STEP"
 ser_cleanup() { rm -f "$SER_A" "$SER_B" "$SER_C" "$SER_STEP" "$SER_LOG"; }
-trap ser_cleanup EXIT INT TERM HUP PIPE
+trap ser_cleanup EXIT; _exit_on_signal
 TILLANDSIAS_PREFLIGHT_JOBS=3 TILLANDSIAS_PREFLIGHT_TIMEOUT=5 ./build.sh --preflight >/dev/null 2>&1
 ser="$(tr '\n' ' ' < "$SER_LOG")"
 # overlaps <X> <Y>: 1 when X starts while Y is running or Y starts while X is.
@@ -349,13 +395,72 @@ judge_budget() {  # $1 = the preflight's output; prints one ok/bad line
     if [ -z "$_wall" ]; then
         bad "the verdict does not report its wall clock"
     elif [ "$_wall" -le "$_budget" ]; then
-        ok "the whole run completes inside the budget (${_wall}s <= ${_budget}s, $_from)"
+        ok "the whole run completes inside the budget (${_wall}s <= ${_budget}s, $_from)${_BUDGET_NOTE:-}"
     else
         bad "the run exceeded the budget (${_wall}s > ${_budget}s, $_from) — a guard grew slow, or the budget is wrong"
     fi
 }
-out="$(./build.sh --preflight 2>&1)"; rc=$?
-judge_budget "$out"
+# COORDINATOR RULING (2) 2026-11-23: the budget is judged on the door a host
+# settles into. Door 1 inside its budget passes. Otherwise two more doors run on
+# the same private bench record (a guard over its deadline twice is benched), and
+# door 3 is judged; its ok line carries benched= and door 1's unbenched wall,
+# which is not gated. Budgets stay 150/200. No cap on benched.
+# THE LOAD RULE CAME LATER (2280-vzsr): a contended door records nothing, so an
+# over-budget door 3 with nothing benched on a contended host measured the load.
+# That is named not-judged, never a pass.
+_summary() { printf '%s\n' "$1" | awk '/:preflight:ran=/ { l = $0 } END { print l }'; }
+_contended() {  # $1 = summary line
+    case "$1" in
+        *contention=cpu-some:*) [[ "$1" =~ contention=cpu-some:([0-9]+)%,foreign:([0-9]+)% ]] && { [ "${BASH_REMATCH[1]}" -gt 3 ] || [ "${BASH_REMATCH[2]}" -gt 15 ]; } ;;
+        *contention=start-load:*) [[ "$1" =~ contention=start-load:([0-9]+)% ]] && [ "${BASH_REMATCH[1]}" -gt 20 ] ;;
+        *) return 0 ;;
+    esac
+}
+_over_budget() {  # $1 = summary line: 0 when its wall exceeds its budget
+    local _w="" _b=150
+    if [[ "$1" =~ wall=([0-9]+)s ]]; then _w="${BASH_REMATCH[1]}"; fi
+    if [ -n "${TILLANDSIAS_PREFLIGHT_BUDGET_S:-}" ]; then _b="$TILLANDSIAS_PREFLIGHT_BUDGET_S"
+    elif [[ "$1" =~ budget=([0-9]+)s\ budget-regime= ]]; then _b="${BASH_REMATCH[1]}"; fi
+    [ -n "$_w" ] && [ "$_w" -gt "$_b" ]
+}
+judge_settled_budget() {  # _budget_door runs one door and prints its output
+    local _o _s _first="" _n="" _c="unstated"
+    _BUDGET_NOTE=""
+    _o="$(_budget_door)"; _s="$(_summary "$_o")"
+    if _over_budget "$_s"; then
+        if [[ "$_s" =~ wall=([0-9]+)s ]]; then _first="${BASH_REMATCH[1]}"; fi
+        _budget_door >/dev/null
+        _o="$(_budget_door)"; _s="$(_summary "$_o")"
+        if [[ "$_s" =~ benched=([0-9]+) ]]; then _n="${BASH_REMATCH[1]}"; fi
+        if _over_budget "$_s" && [ "${_n:-0}" = 0 ] && _contended "$_s"; then
+            echo "not-judged:preflight-front-door:budget — every door was contended, so nothing could be benched and the wall measures the load: $_s"
+            return 0
+        fi
+    fi
+    # Always said, so a reader knows which door was judged and on what host.
+    if [[ "$_s" =~ benched=([0-9]+) ]]; then _n="${BASH_REMATCH[1]}"; fi
+    if [[ "$_s" =~ contention=([^ ]+) ]]; then _c="${BASH_REMATCH[1]}"; fi
+    if [ -n "$_first" ]; then _BUDGET_NOTE=" door=3 benched=${_n:-?} unbenched-wall=${_first}s contention=$_c"
+    else _BUDGET_NOTE=" door=1 benched=${_n:-?} contention=$_c"; fi
+    judge_budget "$_o"
+}
+# Where the door can read only its START load (no /proc), the door before it is
+# still in that number: a Mac's third door read 33 % with nothing else running
+# (macbookair 2026-11-24), so it could never bench. Wait it out, at most 300 s; a
+# host that stays loaded is then judged contended, as it is.
+_settle_start_load() {  # $1 = seconds allowed
+    local _l _n _i=0
+    [ ! -r "${_SETTLE_PROC:-/proc/stat}" ] || return 0
+    while [ "$_i" -lt "$1" ]; do
+        _l="$(LC_ALL=C sysctl -n vm.loadavg 2>/dev/null)" && _n="$(sysctl -n hw.ncpu 2>/dev/null)" || return 0
+        if LC_ALL=C awk -v l="$_l" -v n="$_n" 'BEGIN { split(l, a, " "); if (a[2] !~ /^[0-9.]+$/ || n + 0 <= 0) exit 0; exit !(int(100 * a[2] / n) <= 15) }' /dev/null; then return 0; fi
+        sleep 10; _i=$((_i + 10))
+    done
+}
+_budget_door() { _settle_start_load 300; TILLANDSIAS_PREFLIGHT_BENCH=on TILLANDSIAS_PREFLIGHT_BENCH_FILE="$_BUDGET_BENCH" ./build.sh --preflight 2>&1; }
+_BUDGET_BENCH="$(mktemp -d "${TMPDIR:-/tmp}/front-door-bench.XXXXXX")/record.tsv"
+judge_settled_budget
+rm -rf "${_BUDGET_BENCH%/*}"
 
 # ── ARM 7: --full removes the deadline, and says so ────────────────────────
 if grep -q 'FLAG_PREFLIGHT_FULL' build.sh && grep -q 'deadline' build.sh; then
