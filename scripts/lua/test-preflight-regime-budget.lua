@@ -112,6 +112,50 @@ o = judge("last", "note: a guard printed wall=1s in its own output\n" .. SUMMARY
 arm("5 LAST-LINE a guard's own wall=1s before the summary is not the run's wall",
     o:find("380s > 150s", 1, true) ~= nil, o)
 
+-- ── 5b the settled budget (2272-cuxh, coordinator ruling (2) 2026-11-23) ───
+local fd = fs.read("scripts/test-preflight-front-door.sh")
+local settled = { "ok()  { printf 'OK %s\\n' \"$1\"; }", "bad() { printf 'BAD %s\\n' \"$1\"; }", judge_fn }
+for _, n in ipairs({ "_summary", "_contended", "_over_budget", "judge_settled_budget" }) do
+    local fn = extract(fd, n)
+    if fn == "" then
+        -- a one-line function
+        for _, l in ipairs(text.lines(fd)) do if l:sub(1, #n + 2) == n .. "()" then fn = l end end
+    end
+    if fn == "" then verdict.emit("violation:preflight-regime-budget:no-subject:" .. n, 1, "test-preflight-front-door.sh has no " .. n) end
+    settled[#settled + 1] = fn
+end
+settled[#settled + 1] = '_budget_door() { i=$(( $(cat "$D/n") + 1 )); echo $i > "$D/n"; cat "$D/$i"; }'
+settled[#settled + 1] = 'judge_settled_budget; echo "doors=$(cat "$D/n")"'
+fs.write(REL .. "/settled.sh", table.concat(settled, "\n") .. "\n")
+local function door(wall, benched, cont)
+    return "partial:preflight:ran=280 declared-skip=10 skipped-by-deadline=3 benched=" .. benched ..
+        " could-not-run=2 refused=0 sum=339 isolation=session budget=150s budget-regime=floor contention=" .. cont .. " wall=" .. wall .. "s\n"
+end
+local QUIET, LOUD = "cpu-some:0%,foreign:5%", "cpu-some:2%,foreign:54%"
+local function settle(name, d1, d2, d3)
+    local d = REL .. "/settled-" .. name
+    fs.mkdir(d); fs.write(d .. "/n", "0")
+    fs.write(d .. "/1", d1); fs.write(d .. "/2", d2 or ""); fs.write(d .. "/3", d3 or "")
+    return text.trim(proc.run({ argv = { "bash", ROOT .. "/" .. REL .. "/settled.sh" }, env = { D = ROOT .. "/" .. d }, timeout_ms = 10000 }).stdout or "")
+end
+local function has(s, w) return s:find(w, 1, true) ~= nil end
+local s1 = settle("inside", door(140, 0, QUIET))
+local s2 = settle("benched", door(158, 0, QUIET), door(158, 0, QUIET), door(80, 44, QUIET))
+local s3 = settle("slow", door(158, 0, QUIET), door(158, 0, QUIET), door(170, 44, QUIET))
+local s4 = settle("slow-unbenched", door(158, 0, QUIET), door(158, 0, QUIET), door(158, 0, QUIET))
+local s5 = settle("loud", door(184, 0, LOUD), door(182, 0, LOUD), door(182, 0, LOUD))
+local s6 = settle("loud-inside", door(140, 0, LOUD))
+local s7 = settle("loud-benched", door(158, 0, QUIET), door(158, 0, QUIET), door(170, 44, LOUD))
+arm("5b SETTLED door 1 inside passes alone; else door 3 decides, with benched= and the unbenched wall",
+    has(s1, "OK ") and has(s1, "doors=1") and not has(s1, "benched=")
+        and has(s2, "OK ") and has(s2, "80s <= 150s") and has(s2, "benched=44 unbenched-wall=158s") and has(s2, "doors=3")
+        and has(s3, "BAD ") and has(s3, "170s > 150s") and has(s4, "BAD "),
+    s1 .. " | " .. s2 .. " | " .. s3 .. " | " .. s4)
+arm("5c CONTENDED only an over-budget door with nothing benched on a contended host is named not-judged, never ok",
+    has(s5, "not-judged:preflight-front-door:budget") and not has(s5, "OK ") and not has(s5, "BAD ")
+        and has(s6, "OK ") and has(s7, "BAD "),
+    s5 .. " | " .. s6 .. " | " .. s7)
+
 -- ── 6 the clock, observed ──────────────────────────────────────────────────
 if now_fn == "" then
     arm("6 CLOCK premise: build.sh has _pf_now (1614-5x7m)", false, "no _pf_now")
@@ -163,4 +207,4 @@ proc.run({ argv = { "rm", "-rf", ROOT .. "/" .. REL }, timeout_ms = 30000 })
 if #failed > 0 then
     verdict.emit("violation:preflight-regime-budget:" .. #failed .. "-failed", 1)
 end
-verdict.ok("preflight-regime-budget", "7 arms")
+verdict.ok("preflight-regime-budget", "9 arms")

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # @trace spec:git-mirror-service, spec:user-runtime-lifecycle, spec:litmus-framework
+# preflight: gate-only — it builds two images and runs a container (32 s on lenovinha 2026-11-24); killed at the door's 5 s deadline it left tillandsias-git-freshness-fixture behind
 #
 # Fixture for scripts/check-running-image-freshness.sh (order 422).
 #

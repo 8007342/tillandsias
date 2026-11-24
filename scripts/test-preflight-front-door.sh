@@ -12,6 +12,9 @@ set -uo pipefail
 # this fixture inside itself.
 _fd_live="${TILLANDSIAS_FRONT_DOOR_LIVE:-0}"; _fd_inner="${FRONT_DOOR_SCRATCH:-}"
 unset TILLANDSIAS_FRONT_DOOR_LIVE FRONT_DOOR_SCRATCH
+# 2280-vzsr: the doors below are scratch doors; only the budget arm benches, in a
+# record of its own, never the host's.
+export TILLANDSIAS_PREFLIGHT_BENCH=off
 if [ -z "$_fd_inner" ] && [ "$_fd_live" != 1 ]; then
     echo "not-run:preflight-front-door — runs on the --daily-full gate; here: TILLANDSIAS_FRONT_DOOR_LIVE=1 bash scripts/test-preflight-front-door.sh (2272-cuxh)"
     exit 0
@@ -392,13 +395,55 @@ judge_budget() {  # $1 = the preflight's output; prints one ok/bad line
     if [ -z "$_wall" ]; then
         bad "the verdict does not report its wall clock"
     elif [ "$_wall" -le "$_budget" ]; then
-        ok "the whole run completes inside the budget (${_wall}s <= ${_budget}s, $_from)"
+        ok "the whole run completes inside the budget (${_wall}s <= ${_budget}s, $_from)${_BUDGET_NOTE:-}"
     else
         bad "the run exceeded the budget (${_wall}s > ${_budget}s, $_from) — a guard grew slow, or the budget is wrong"
     fi
 }
-out="$(./build.sh --preflight 2>&1)"; rc=$?
-judge_budget "$out"
+# COORDINATOR RULING (2) 2026-11-23: the budget is judged on the door a host
+# settles into. Door 1 inside its budget passes. Otherwise two more doors run on
+# the same private bench record (a guard over its deadline twice is benched), and
+# door 3 is judged; its ok line carries benched= and door 1's unbenched wall,
+# which is not gated. Budgets stay 150/200. No cap on benched.
+# THE LOAD RULE CAME LATER (2280-vzsr): a contended door records nothing, so an
+# over-budget door 3 with nothing benched on a contended host measured the load.
+# That is named not-judged, never a pass.
+_summary() { printf '%s\n' "$1" | awk '/:preflight:ran=/ { l = $0 } END { print l }'; }
+_contended() {  # $1 = summary line
+    case "$1" in
+        *contention=cpu-some:*) [[ "$1" =~ contention=cpu-some:([0-9]+)%,foreign:([0-9]+)% ]] && { [ "${BASH_REMATCH[1]}" -gt 3 ] || [ "${BASH_REMATCH[2]}" -gt 15 ]; } ;;
+        *contention=start-load:*) [[ "$1" =~ contention=start-load:([0-9]+)% ]] && [ "${BASH_REMATCH[1]}" -gt 20 ] ;;
+        *) return 0 ;;
+    esac
+}
+_over_budget() {  # $1 = summary line: 0 when its wall exceeds its budget
+    local _w="" _b=150
+    if [[ "$1" =~ wall=([0-9]+)s ]]; then _w="${BASH_REMATCH[1]}"; fi
+    if [ -n "${TILLANDSIAS_PREFLIGHT_BUDGET_S:-}" ]; then _b="$TILLANDSIAS_PREFLIGHT_BUDGET_S"
+    elif [[ "$1" =~ budget=([0-9]+)s\ budget-regime= ]]; then _b="${BASH_REMATCH[1]}"; fi
+    [ -n "$_w" ] && [ "$_w" -gt "$_b" ]
+}
+judge_settled_budget() {  # _budget_door runs one door and prints its output
+    local _o _s _first="" _n=""
+    _BUDGET_NOTE=""
+    _o="$(_budget_door)"; _s="$(_summary "$_o")"
+    if _over_budget "$_s"; then
+        if [[ "$_s" =~ wall=([0-9]+)s ]]; then _first="${BASH_REMATCH[1]}"; fi
+        _budget_door >/dev/null
+        _o="$(_budget_door)"; _s="$(_summary "$_o")"
+        if [[ "$_s" =~ benched=([0-9]+) ]]; then _n="${BASH_REMATCH[1]}"; fi
+        _BUDGET_NOTE=" benched=${_n:-?} unbenched-wall=${_first}s"
+        if _over_budget "$_s" && [ "${_n:-0}" = 0 ] && _contended "$_s"; then
+            echo "not-judged:preflight-front-door:budget — every door was contended, so nothing could be benched and the wall measures the load: $_s"
+            return 0
+        fi
+    fi
+    judge_budget "$_o"
+}
+_budget_door() { TILLANDSIAS_PREFLIGHT_BENCH=on TILLANDSIAS_PREFLIGHT_BENCH_FILE="$_BUDGET_BENCH" ./build.sh --preflight 2>&1; }
+_BUDGET_BENCH="$(mktemp -d "${TMPDIR:-/tmp}/front-door-bench.XXXXXX")/record.tsv"
+judge_settled_budget
+rm -rf "${_BUDGET_BENCH%/*}"
 
 # ── ARM 7: --full removes the deadline, and says so ────────────────────────
 if grep -q 'FLAG_PREFLIGHT_FULL' build.sh && grep -q 'deadline' build.sh; then
