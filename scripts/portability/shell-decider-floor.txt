@@ -352,7 +352,6 @@ scripts/test-podman-mock-secret-lifecycle.sh
 scripts/test-podman-sync-budgets.sh
 scripts/test-populate-hot-paths-negative-control.sh
 scripts/test-portability-idioms.sh
-scripts/test-pre-push-deletion-only.sh
 scripts/test-pre-push-empty-ref-list.sh
 scripts/test-pre-push-honours-a-live-freeze.sh
 scripts/test-pre-push-linux-next-merged.sh
