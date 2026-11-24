@@ -864,12 +864,72 @@ _pf_tail_fields() {  # $1 = wall s; prints the two summary fields
 # guard starts, and nothing here can refuse. One file per host, beside the common
 # .git, so a fresh worktree starts warm. TILLANDSIAS_PREFLIGHT_BENCH=off disables.
 # Line: path TAB args|- TAB blob TAB times-over TAB bound-s TAB epoch
+# WHO THIS HOST IS. `uname -n` inside a toolbox is "toolbx" on every host
+# (macuahuitl, 2026-11-24: one record name for all of them). The machine id is
+# the host's own; hashed, since it is an identifier. The locus (uname -n) stays
+# as the second half: a toolbox door and a bare one time differently. A container
+# that cannot name its host has no bench.
+_pf_bench_host() {
+    local _f _id="" _root="${TILLANDSIAS_PREFLIGHT_BENCH_HOSTROOT:-}"
+    for _f in "$_root/run/host/etc/machine-id" "$_root/etc/machine-id"; do
+        [ -r "$_f" ] && read -r _id < "$_f" && [ -n "$_id" ] && break
+        _id=""
+    done
+    # An image's own machine-id is not the host's: inside a container only the
+    # bind at /run/host, or a toolbox's link to it, counts.
+    if [ -e "$_root/run/.containerenv" ] && [ ! -r "$_root/run/host/etc/machine-id" ]; then return 1; fi
+    if [ -n "$_id" ]; then
+        _id="$(printf '%s' "$_id" | git hash-object --stdin 2>/dev/null)" || return 1
+        _id="${_id:0:12}"
+    else
+        _id="name"
+    fi
+    printf '%s.%s' "$_id" "$(uname -n)"
+}
+# HOW CONTENDED THE DOOR WAS. Measured on lenovinha (16 cores, 2026-11-24): 8, 16
+# and 32 busy loops gave 10, 33 and 47 guards the 40-skip idle door does not skip;
+# cpu pressure read 2, 29, 91 % against 0-1 idle, so pressure alone cannot see the
+# first. FOREIGN is the cpu other processes used, as a percent of the machine:
+# busy time from /proc/stat less this shell's own and its reaped children's.
+_pf_bench_sample() {  # prints: busy-jiffies total-jiffies own-jiffies cpu-some-us wall-s; nothing where unreadable
+    local _b _t _o _p
+    read -r _b _t <<< "$(awk '/^cpu /{b=$2+$3+$4+$7+$8+$9; print b, b+$5+$6; exit}' /proc/stat 2>/dev/null)"
+    _o="$(sed 's/^.*) //' "/proc/$$/stat" 2>/dev/null | awk '{print $12+$13+$14+$15}')"
+    _p="$(sed -n 's/^some .*total=//p' /proc/pressure/cpu 2>/dev/null)"
+    [ -n "$_b" ] && [ -n "$_t" ] && [ -n "$_o" ] && [ -n "$_p" ] || return 1
+    printf '%s %s %s %s %s' "$_b" "$_t" "$_o" "$_p" "$SECONDS"
+}
+# $1 = sample at start, $2 = at the end: "<cpu-some %> <foreign %>", integers.
+_pf_bench_contention() {
+    awk -v a="$1" -v z="$2" 'BEGIN {
+        if (split(a, s, " ") != 5 || split(z, e, " ") != 5) exit 1
+        w = e[5] - s[5]; t = e[2] - s[2]; if (w <= 0 || t <= 0) exit 1
+        f = (e[1] - s[1]) - (e[3] - s[3]); if (f < 0) f = 0
+        printf "%d %d", 100 * (e[4] - s[4]) / (w * 1000000), 100 * f / t }' /dev/null
+}
+# $1 = cpu-some %, $2 = foreign %: 0 only where an "over" means the guard is slow.
+_pf_bench_quiet() {
+    case "$1$2" in ''|*[!0-9]*) return 1 ;; esac
+    [ "$1" -le "$_PF_BENCH_MAX_SOME" ] && [ "$2" -le "$_PF_BENCH_MAX_FOREIGN" ]
+}
+# Where /proc answers nothing (darwin): the 1-minute load when the door STARTED,
+# in percent of the cores. Coarse, and unmeasured against a loaded Mac; its four
+# quiet doors started at 1.39-1.49.
+_pf_bench_start_load() {
+    local _l _n
+    _l="$(sysctl -n vm.loadavg 2>/dev/null)" && _n="$(sysctl -n hw.ncpu 2>/dev/null)" || return 1
+    awk -v l="$_l" -v n="$_n" 'BEGIN { split(l, a, " "); if (a[2] !~ /^[0-9.]+$/ || n + 0 <= 0) exit 1; printf "%d", 100 * a[2] / n }' /dev/null
+}
+_PF_BENCH_MAX_START_LOAD=20
+_PF_BENCH_MAX_SOME=3
+_PF_BENCH_MAX_FOREIGN=15
 _pf_bench_path() {
-    local _c
+    local _c _h
+    _h="$(_pf_bench_host)" || return 1
     if [ -n "${TILLANDSIAS_PREFLIGHT_BENCH_FILE:-}" ]; then printf '%s' "$TILLANDSIAS_PREFLIGHT_BENCH_FILE"; return 0; fi
     _c="$(git -C "$SCRIPT_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
     [ -n "$_c" ] && [ "${_c##*/}" = .git ] || return 1
-    printf '%s/.cache/metrics/preflight-bench.%s.tsv' "${_c%/.git}" "$(uname -n)"
+    printf '%s/.cache/metrics/preflight-bench.%s.tsv' "${_c%/.git}" "$_h"
 }
 # $1 = work dir (roster in $1/roster; writes $1/blobs): path TAB blob, existing files only
 _pf_bench_blobs() {
@@ -883,10 +943,10 @@ _pf_bench_blobs() {
 # Writes $1/<roster index>.benched ("<bound> <epoch>") for each guard not to start.
 _pf_bench_load() {
     [ -r "$2" ] && [ -s "$1/blobs" ] || return 0
-    awk -F'\t' -v dir="$1" -v dl="$3" -v ddl="$4" -v now="$5" -v host="$(uname -n)" -v bf="$2" '
+    awk -F'\t' -v dir="$1" -v dl="$3" -v ddl="$4" -v now="$5" -v host="$(_pf_bench_host)" -v bf="$2" '
         FILENAME == dir "/blobs" { blob[$1] = $2; next }
         FILENAME == bf {
-            if (FNR == 1) { good = ($0 == "# preflight-bench v1 " host); next }
+            if (FNR == 1) { good = ($0 == "# preflight-bench v2 " host); next }
             if (!good || NF != 6 || $4 !~ /^[0-9]+$/ || $5 !~ /^[0-9]+$/ || $6 !~ /^[0-9]+$/) next
             if ($4 + 0 >= 2 && $6 + 0 <= now + 0 && now - $6 < 86400 && blob[$1] == $3) { b[$1 "\t" $2] = $5; t[$1 "\t" $2] = $6 }
             next
@@ -896,27 +956,29 @@ _pf_bench_load() {
           if ((k in b) && d + 0 <= b[k] + 0) { f = dir "/" i ".benched"; print b[k], t[k] > f; close(f) } }
     ' "$1/blobs" "$2" "$1/roster" 2>/dev/null || { rm -f "$1"/*.benched; return 0; }
 }
-# $1 = work dir ($1/outcomes: path TAB args|- TAB over|done TAB deadline), $2 = bench file, $3 = now
+# $1 = work dir ($1/outcomes: path TAB args|- TAB over|done TAB deadline), $2 = bench file, $3 = now,
+# $4 = 1 when the door was quiet. A contended or unmeasured door records no "over";
+# a finish is still a finish.
 _pf_bench_save() {
     local _tmp
     [ -s "$1/outcomes" ] && [ -s "$1/blobs" ] || return 0
     mkdir -p "${2%/*}" 2>/dev/null || return 0
     _tmp="$2.$$.tmp"
     [ -r "$2" ] && cp "$2" "$1/bench.old" 2>/dev/null || : > "$1/bench.old"
-    awk -F'\t' -v OFS='\t' -v dir="$1" -v now="$3" -v host="$(uname -n)" '
+    awk -F'\t' -v OFS='\t' -v dir="$1" -v now="$3" -v host="$(_pf_bench_host)" -v quiet="$4" '
         FILENAME == dir "/blobs" { blob[$1] = $2; next }
         FILENAME == dir "/bench.old" {
-            if (FNR == 1) { good = ($0 == "# preflight-bench v1 " host); next }
+            if (FNR == 1) { good = ($0 == "# preflight-bench v2 " host); next }
             if (!good || NF != 6 || $4 !~ /^[0-9]+$/ || $5 !~ /^[0-9]+$/ || $6 !~ /^[0-9]+$/) next
             if ($6 + 0 > now + 0 || now - $6 > 604800) next
             k = $1 "\t" $2; h[k] = $3; n[k] = $4; b[k] = $5; t[k] = $6; next
         }
         { k = $1 "\t" $2
           if ($3 == "done") { delete h[k]; next }
-          if ($3 != "over" || blob[$1] == "") next
+          if (quiet != 1 || $3 != "over" || blob[$1] == "") next
           if (!(k in h) || h[k] != blob[$1]) n[k] = 0
           h[k] = blob[$1]; n[k]++; b[k] = $4; t[k] = now }
-        END { print "# preflight-bench v1 " host; for (k in h) print k, h[k], n[k], b[k], t[k] }
+        END { print "# preflight-bench v2 " host; for (k in h) print k, h[k], n[k], b[k], t[k] }
     ' "$1/blobs" "$1/bench.old" "$1/outcomes" > "$_tmp" 2>/dev/null && mv "$_tmp" "$2" 2>/dev/null || rm -f "$_tmp" 2>/dev/null
     return 0
 }
@@ -2036,6 +2098,8 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     _pf_roster="$(_preflight_roster | sort -u)"
     _pf_wall0=$SECONDS
     _PF_REACHED=""  # 2272-cuxh: never an outer door's
+    _pf_load0=""
+    _pf_sample0="$(_pf_bench_sample)" || { _pf_sample0=""; _pf_load0="$(_pf_bench_start_load)" || _pf_load0=""; }
     # 2275-fcpy: the bench, off under --full and an overridden deadline, where
     # "finished" and "over" mean something else.
     _pf_bench_n=0; _pf_bench_names=""; _pf_bench_file=""
@@ -2265,7 +2329,19 @@ PFEOF
     _pf_iso="$_pf_iso $(_pf_tail_fields "$_pf_wall")"
     _pf_counts="ran=$_pf_ran declared-skip=$_pf_declskip skipped-by-deadline=$_pf_deadline_n benched=$_pf_bench_n could-not-run=$_pf_cantrun refused=$_pf_failed"
     _pf_sum=$(( _pf_ran + _pf_declskip + _pf_deadline_n + _pf_bench_n + _pf_cantrun + _pf_failed ))
-    [ -z "$_pf_bench_file" ] || _pf_bench_save "$_pf_dir" "$_pf_bench_file" "$(date +%s)" || true
+    _pf_quiet=0
+    _pf_cont="$(_pf_bench_contention "$_pf_sample0" "$(_pf_bench_sample || true)")" || _pf_cont=""
+    if [ -n "$_pf_cont" ]; then
+        _pf_iso="$_pf_iso contention=cpu-some:${_pf_cont% *}%,foreign:${_pf_cont#* }%"
+        # shellcheck disable=SC2086
+        ! _pf_bench_quiet ${_pf_cont} || _pf_quiet=1
+    elif [ -n "$_pf_load0" ]; then
+        _pf_iso="$_pf_iso contention=start-load:${_pf_load0}%"
+        [ "$_pf_load0" -gt "$_PF_BENCH_MAX_START_LOAD" ] || _pf_quiet=1
+    else
+        _pf_iso="$_pf_iso contention=unmeasured"
+    fi
+    [ -z "$_pf_bench_file" ] || _pf_bench_save "$_pf_dir" "$_pf_bench_file" "$(date +%s)" "$_pf_quiet" || true
     if [ "$_pf_sum" -ne "$_pf_total" ]; then
         # A CATEGORY SET THAT DOES NOT ADD UP CANNOT BE READ AT ALL, and a
         # miscount here would hide exactly what this row exists to surface.
