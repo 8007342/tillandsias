@@ -418,8 +418,7 @@ if [ "$_pg_rc" -ne 0 ] || [[ "$_pg_last" != "ok:promote-gate:$TAG:"* ]]; then
         echo "WARNING: promoting $TAG over the record gate (--force): $_pg_last" >&2
         echo "Record the override as a cycle entry via 'tillandsias-plan loop-status-append' (who/when/why)." >&2
     else
-        _afford "the record gate did not pass: $_pg_last" "clear what it names (its header has the smoke-record grammar), or the operator passes --force"
-        echo "refused:promote-gate:$TAG"; exit 1
+        _afford "the record gate did not pass: $_pg_last" "clear what it names (its header has the smoke-record grammar), or the operator passes --force"; echo "refused:promote-gate:$TAG"; exit 1
     fi
 fi
 
