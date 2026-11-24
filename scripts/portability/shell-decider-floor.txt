@@ -61,24 +61,20 @@ scripts/check-tracked-files-unwritten.sh
 scripts/check-unrunnable-platform-arms.sh
 scripts/check-yaml-reader-availability.sh
 scripts/test-a-claim-names-a-workstation.sh
-scripts/test-agent-identity.sh
 scripts/test-append-event-archived-refusal.sh
 scripts/test-append-vs-origin-fold.sh
 scripts/test-archiver-could-not-run-is-self-naming.sh
 scripts/test-archiver-ruby-could-not-run.sh
 scripts/test-awk-float-lc-numeric.sh
-scripts/test-base-ledger-status-loss.sh
 scripts/test-bash-composition-hazards.sh
 scripts/test-bench-prompt-uniqueness.sh
 scripts/test-bound-litmus-is-runnable.sh
 scripts/test-branch-discipline-verb.sh
-scripts/test-brew-shim-reentrancy.sh
 scripts/test-build-image-installed-version-alias.sh
 scripts/test-build-sh-ci-full-install-prep.sh
 scripts/test-build-step-timing-attribution.sh
 scripts/test-capabilities-envelope-names-its-source.sh
 scripts/test-capability-routing.sh
-scripts/test-capability-row-check.sh
 scripts/test-capture-helper.sh
 scripts/test-census-admitted-missing-evidence.sh
 scripts/test-centicolon-extract.sh
@@ -90,9 +86,7 @@ scripts/test-check-carry-forward.sh
 scripts/test-check-credential-channel.sh
 scripts/test-check-jq-callsite-ratchet.sh
 scripts/test-check-opsx-generated-dirt.sh
-scripts/test-check-stranded-in-progress.sh
 scripts/test-check-test-baseline.sh
-scripts/test-claim-wip-limit.sh
 scripts/test-claims-across-branches.sh
 scripts/test-claims-affordance.sh
 scripts/test-claims-fleet-visible.sh
@@ -108,7 +102,6 @@ scripts/test-codex-mcp-registration.sh
 scripts/test-codex-oauth-harvest.sh
 scripts/test-codex-oauth-restore.sh
 scripts/test-codex-safe-state.sh
-scripts/test-command-policy-audit.sh
 scripts/test-command-policy-consent.sh
 scripts/test-command-policy-evaluator.sh
 scripts/test-compaction-coverage.sh
@@ -131,7 +124,6 @@ scripts/test-daily-maintenance-day-boundary.sh
 scripts/test-decider-retirement.sh
 scripts/test-default-vault-cli-security.sh
 scripts/test-derive-host-identity.sh
-scripts/test-discipline-derive.sh
 scripts/test-discipline-install-hooks.sh
 scripts/test-dispatch-reap.sh
 scripts/test-e2e-preflight-live-runtime.sh
@@ -140,7 +132,6 @@ scripts/test-enclave-proxy-lib.sh
 scripts/test-enclave-service-health.sh
 scripts/test-ensure-cosign.sh
 scripts/test-ensure-toolbox-properties.sh
-scripts/test-env-forward-shared.sh
 scripts/test-exec-bits-guard-end-to-end.sh
 scripts/test-expert-accuracy-record-shape.sh
 scripts/test-expert-capability-behaviour-skew.sh
@@ -154,7 +145,6 @@ scripts/test-fleet-heartbeat-sees-a-ledger-filed-blocker.sh
 scripts/test-fleet-msg-mcp.sh
 scripts/test-fleet-msg-same-host.sh
 scripts/test-fleet-msg-store.sh
-scripts/test-forge-clone-wait-is-bounded.sh
 scripts/test-forge-findings-persisted.sh
 scripts/test-forge-git-identity-source.sh
 scripts/test-forge-gitconfig-bidirectional-quarantine.sh
@@ -207,7 +197,6 @@ scripts/test-harness-affinity-selection.sh
 scripts/test-harness-byte-cheap.sh
 scripts/test-harness-contract-probe.sh
 scripts/test-harness-rollback.sh
-scripts/test-harness-supervisor.sh
 scripts/test-headless-env-lock-is-single.sh
 scripts/test-headless-sidecar-target-gate.sh
 scripts/test-hook-mover-enumeration-is-batched.sh
@@ -350,8 +339,6 @@ scripts/test-reopen-is-history-not-loss.sh
 scripts/test-requirement-ids.sh
 scripts/test-reset-flags-are-accepted.sh
 scripts/test-reset-state-contract.sh
-scripts/test-resolve-open-pr.sh
-scripts/test-resolve-release-run.sh
 scripts/test-resumable-claim-dirt.sh
 scripts/test-run-verb-agent-door.sh
 scripts/test-running-image-freshness.sh
@@ -397,7 +384,6 @@ scripts/test-ssh-lane-sidecar.sh
 scripts/test-status-channel-absent-is-first-class.sh
 scripts/test-stranded-plan-writes.sh
 scripts/test-subdomain-routing.sh
-scripts/test-summarize-pubspec.sh
 scripts/test-sync-image-cheatsheets-for-commit.sh
 scripts/test-timing-clock-resolution.sh
 scripts/test-timing-record-carries-reproduced.sh
