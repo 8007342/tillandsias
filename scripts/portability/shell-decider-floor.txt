@@ -381,7 +381,6 @@ scripts/test-repeat-model-flag.sh
 scripts/test-requirement-ids.sh
 scripts/test-reset-flags-are-accepted.sh
 scripts/test-reset-state-contract.sh
-scripts/test-resolve-open-pr.sh
 scripts/test-resolve-release-run.sh
 scripts/test-resumable-claim-dirt.sh
 scripts/test-run-verb-agent-door.sh
