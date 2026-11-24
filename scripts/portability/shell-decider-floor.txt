@@ -62,7 +62,6 @@ scripts/check-unrunnable-platform-arms.sh
 scripts/check-windows-tray-diagnose-surface.sh
 scripts/check-yaml-reader-availability.sh
 scripts/test-a-claim-names-a-workstation.sh
-scripts/test-added-test-is-referenced.sh
 scripts/test-agent-identity.sh
 scripts/test-append-event-archived-refusal.sh
 scripts/test-append-vs-origin-fold.sh
@@ -126,8 +125,6 @@ scripts/test-credential-channel-survives-a-killed-probe.sh
 scripts/test-credential-cold-state-probe.sh
 scripts/test-credential-verdict-script.sh
 scripts/test-cycle-checkout-lock.sh
-scripts/test-cycle-driver.sh
-scripts/test-cycle-flow-emit-idempotency.sh
 scripts/test-cycle-lock-attested-release.sh
 scripts/test-cycle-metrics-recurrence.sh
 scripts/test-cycle-preflight-cargo-resolution.sh

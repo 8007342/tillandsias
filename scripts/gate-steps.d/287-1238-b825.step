@@ -13,7 +13,7 @@ STEP_DESC="Checking local builds label a stale CalVer date and never write VERSI
 STEP_LUA="scripts/lua/test-build-version-label.lua"
 STEP_ERROR="a local build path again stamps VERSION's stale date silently, writes VERSION, or labels a release build (1238-b825); see which arm failed above"
 STEP_OK="local builds label stale CalVer dates; VERSION untouched; releases verbatim"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:build-version-label-fixture:7/7"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:build-version-label:7 arms (2301-4bgh @072a95607, Lua port)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
 STEP_LANES="checkout"
