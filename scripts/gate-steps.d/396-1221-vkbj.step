@@ -35,7 +35,7 @@ STEP_ERROR="the competing-gate no-answer path regressed (1221-vkbj) — either a
 STEP_OK="competing-gate cause and consumer check passed"
 # Exit 3 means the check script is absent — nothing was examined, and the
 # fixture says so by name rather than passing.
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:no-dispatch-cause:11"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:competing-gate-no-dispatch-cause:11 arms (2314-ktxt @e010f3816, Lua port)"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.

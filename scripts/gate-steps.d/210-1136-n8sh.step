@@ -12,7 +12,7 @@ STEP_DESC="Checking both closure guards name the way out and each other (1136-n8
 STEP_LUA="scripts/lua/test-closure-guards-name-the-way-out.lua"
 STEP_ERROR="a closure guard no longer names the sanctioned exit or its counterpart, so a new-test packet is refused from both sides with no way out stated (1136-n8sh) — see the verdict line above"
 STEP_OK="Closure-guard way-out messages passed"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:closure-guards-name-the-way-out:7 arms (2314-ktxt @e010f3816, Lua port)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="builds with cargo into the shared target"
 STEP_LANES="cargo"
