@@ -53,6 +53,16 @@ check() {
     else fail=$((fail + 1)); printf 'FAIL %s\n' "$2"; [ -n "${3:-}" ] && printf '     %s\n' "$3"; fi
 }
 
+# Put tool $1 in a farm as $2. A symlink, except under MSYS: there `ln -s` COPIES,
+# and a copied .exe cannot load its DLLs from a narrow PATH (rc 127, no output),
+# so it is an exec wrapper instead (2268-kvxh).
+link_tool() {
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*) printf '#!/bin/sh\nexec "%s" "$@"\n' "$1" > "$2" && chmod +x "$2" ;;
+        *) ln -sf "$1" "$2" 2>/dev/null ;;
+    esac
+}
+
 # Build a farm of everything the checks might reach, minus the named tools.
 farm() {
     local dir="$1"; shift
@@ -71,7 +81,7 @@ farm() {
         # from 21/21 to 2/22 red on a Linux host, both failures in the
         # 1004-cp6p tray-build arms, neither of which is about rg.
         for skip in "$@"; do [ "$t" = "$skip" ] && continue 2; done
-        p="$(command -v "$t" 2>/dev/null)" && ln -sf "$p" "$dir/$t" 2>/dev/null
+        p="$(command -v "$t" 2>/dev/null)" && link_tool "$p" "$dir/$t"
     done
 }
 
@@ -223,7 +233,7 @@ mkdir -p "$tmp/offpath" "$tmp/empty"
 _have_all=1
 for _t in $_reqs; do
     _p="$(command -v "$_t" 2>/dev/null)" || { _have_all=0; continue; }
-    ln -sf "$_p" "$tmp/offpath/$_t" 2>/dev/null
+    link_tool "$_p" "$tmp/offpath/$_t"
 done
 if [ "$_have_all" = 1 ]; then
     # POSITIVE: resolvable-but-off-PATH must PASS. PATH deliberately carries
@@ -284,10 +294,10 @@ fi
 #     `brew install coreutils` is advice to install what it has.
 if [ "$_plat" = macos ] && command -v gtimeout >/dev/null 2>&1; then
     mkdir -p "$tmp/gt"; rm -f "$tmp/gt"/*
-    ln -sf "$(command -v gtimeout)" "$tmp/gt/gtimeout"
+    link_tool "$(command -v gtimeout)" "$tmp/gt/gtimeout"
     for _t in $_reqs; do
         [ "$_t" = timeout ] && continue
-        _p="$(command -v "$_t" 2>/dev/null)" && ln -sf "$_p" "$tmp/gt/$_t"
+        _p="$(command -v "$_t" 2>/dev/null)" && link_tool "$_p" "$tmp/gt/$_t"
     done
     farm "$tmp/bare2" $_reqs gtimeout
     out="$(PATH="$tmp/bare2" TILLANDSIAS_HOST_TOOL_PREFIXES="$tmp/gt" "$CHECK" 2>/dev/null)"; rc=$?
@@ -486,6 +496,19 @@ for _p in $(printf '%s\n' "$_spec" | awk -F'|' '{print $4}' | tr ',' '\n' | sort
     fi
     _n_declared="$(printf '%s\n' "$_declared" | grep -c .)"
     _out="$(PATH="$PATH" "$CHECK" --platform "$_p" 2>/dev/null)"
+    # A host without one of $_p's gate tools gets `missing:`, which carries no
+    # present count, so there is no partition to add up. Keep the named tools
+    # (judged for strays below), supply them as stubs, and ask again: a declared
+    # tool the probe dropped is still unaccounted for (2268-kvxh).
+    _named=""
+    case "$_out" in
+        missing:host-tools:$_p:*)
+            _named="$(printf '%s' "$_out" | sed -E 's/^missing:host-tools:[a-z]+:gate://' | tr ',' '\n')"
+            mkdir -p "$tmp/stub-$_p"
+            for _m in $_named; do printf '#!/bin/sh\nexit 0\n' > "$tmp/stub-$_p/$_m"; chmod +x "$tmp/stub-$_p/$_m"; done
+            _out="$(TILLANDSIAS_HOST_TOOL_PREFIXES="$tmp/stub-$_p:${CARGO_HOME:-$HOME/.cargo}/bin:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin" "$CHECK" --platform "$_p" 2>/dev/null)"
+            ;;
+    esac
     # ORDER 1004-cp6p: the verdict now names both scopes, so the partition must
     # add gate + tray-build present counts and pick up a tray-build shortfall as
     # "named but absent". Counting only the gate half would let every tray-build
@@ -505,7 +528,7 @@ for _p in $(printf '%s\n' "$_spec" | awk -F'|' '{print $4}' | tr ',' '\n' | sort
     esac
     # Nothing may be named that the spec did not declare for this platform.
     _stray=""
-    for _m in $_reported_missing; do
+    for _m in $_named $_reported_missing; do
         printf '%s\n' "$_declared" | grep -qx "$_m" || _stray="${_stray:+$_stray,}$_m"
     done
     # present + missing must account for every declared tool, exactly once.

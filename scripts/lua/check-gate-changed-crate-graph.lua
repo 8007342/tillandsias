@@ -66,7 +66,7 @@ end
 
 local cargo = {}
 for _, pkg in ipairs(meta.packages) do
-    local dir = rel((pkg.manifest_path or ""):gsub("/Cargo%.toml$", ""))
+    local dir = rel(pkg.manifest_path):gsub("/Cargo%.toml$", "")
     for _, d in ipairs(pkg.dependencies or {}) do
         if d.path and d.path ~= "" then cargo[dir .. "\t" .. rel(d.path)] = true end
     end
