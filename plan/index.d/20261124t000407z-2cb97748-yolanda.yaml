@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: fleet-run-extract-has-a-target-dir-so-the-scratch-door-admits-it
+    field: status
+    value: completed
+    ts: "2026-11-24T00:04:07Z"
+    host: yolanda
+
+events:
+  - packet_id: fleet-run-extract-has-a-target-dir-so-the-scratch-door-admits-it
+    event:
+      type: completed
+      ts: "2026-11-24T00:04:07Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: 9df9ec67c landed as aece54c41 (#1432): test-fleet-run arm 14, msys and darwin 14/14, mutant no-target-dir reds arm 14 only; fleet-run 926 went from rc 1 to 3 arms ok on msys
+  - packet_id: fleet-run-extract-has-a-target-dir-so-the-scratch-door-admits-it
+    event:
+      type: note
+      ts: "2026-11-24T00:04:07Z"
+      host: yolanda
+      summary: |-
+        landed on linux-next

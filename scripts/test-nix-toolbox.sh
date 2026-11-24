@@ -24,7 +24,7 @@ out="$("$SCRIPT" ensure 2>/dev/null)"
 rc=$?
 lines="$(printf '%s' "$out" | grep -c '')"
 [ "$lines" = 1 ] || failures+=("ensure printed $lines lines, expected 1: $out")
-printf '%s' "$out" | grep -qE '^(ok:nix-toolbox:(daemon|chroot|toolbox)|blocked:nix-toolbox:(no-nix-and-no-toolbox|image-pull-failed|create-failed))$' \
+grep -qE <<<"$out" '^(ok:nix-toolbox:(daemon|chroot|toolbox)|blocked:nix-toolbox:(no-nix-and-no-toolbox|image-pull-failed|create-failed))$' \
     || failures+=("ensure verdict outside the pinned grammar: $out")
 
 # 2. EXIT CODE agrees with the verdict — a blocked rung that exits 0 would let a
@@ -55,7 +55,7 @@ grep -q 'store ping' "$SCRIPT" || failures+=("no store-exercising probe found")
 args="$("$SCRIPT" nix-args 2>/dev/null)"
 argrc=$?
 if [ "$argrc" -eq 0 ]; then
-    printf '%s' "$args" | grep -q 'extra-experimental-features' \
+    grep -q <<<"$args" 'extra-experimental-features' \
         || failures+=("nix-args exited 0 without usable flags: $args")
 fi
 
@@ -172,7 +172,7 @@ cap="$("$SCRIPT" capability 2>/dev/null)"
 caprc=$?
 capl="$(printf '%s' "$cap" | grep -c '')"
 [ "$capl" = 1 ] || failures+=("capability printed $capl lines, expected 1: $cap")
-printf '%s' "$cap" | grep -qE '^(ok:nix-capability:(daemon|chroot|toolbox)|none:nix-capability:no-nix-and-no-toolbox)$' \
+grep -qE <<<"$cap" '^(ok:nix-capability:(daemon|chroot|toolbox)|none:nix-capability:no-nix-and-no-toolbox)$' \
     || failures+=("capability verdict outside the pinned grammar: $cap")
 case "$cap" in
     ok:*)   [ "$caprc" -eq 0 ] || failures+=("capability ok verdict with non-zero exit $caprc") ;;
