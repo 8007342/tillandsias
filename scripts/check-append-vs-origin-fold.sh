@@ -136,7 +136,7 @@ git archive "$TRUNK_REF" plan/ 2>/dev/null | tar -x -C "$TMP" 2>/dev/null || {
 
 if [ "$_narrow" = yes ]; then
     _pair_sources=()
-    for _f in "${_changed[@]}"; do
+    for _f in ${_changed[@]+"${_changed[@]}"}; do
         [ -f "$_f" ] && _pair_sources+=("$_f")
         # Origin's copy too: a pair it named may be one this tree no longer does.
         [ -f "$TMP/$_f" ] && _pair_sources+=("$TMP/$_f")
