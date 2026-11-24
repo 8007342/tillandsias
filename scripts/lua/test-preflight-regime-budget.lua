@@ -147,8 +147,8 @@ local s5 = settle("loud", door(184, 0, LOUD), door(182, 0, LOUD), door(182, 0, L
 local s6 = settle("loud-inside", door(140, 0, LOUD))
 local s7 = settle("loud-benched", door(158, 0, QUIET), door(158, 0, QUIET), door(170, 44, LOUD))
 arm("5b SETTLED door 1 inside passes alone; else door 3 decides, with benched= and the unbenched wall",
-    has(s1, "OK ") and has(s1, "doors=1") and not has(s1, "benched=")
-        and has(s2, "OK ") and has(s2, "80s <= 150s") and has(s2, "benched=44 unbenched-wall=158s") and has(s2, "doors=3")
+    has(s1, "OK ") and has(s1, "doors=1") and has(s1, "door=1 benched=0 contention=cpu-some:0%,foreign:5%")
+        and has(s2, "OK ") and has(s2, "80s <= 150s") and has(s2, "door=3 benched=44 unbenched-wall=158s contention=cpu-some:0%,foreign:5%") and has(s2, "doors=3")
         and has(s3, "BAD ") and has(s3, "170s > 150s") and has(s4, "BAD "),
     s1 .. " | " .. s2 .. " | " .. s3 .. " | " .. s4)
 arm("5c CONTENDED only an over-budget door with nothing benched on a contended host is named not-judged, never ok",

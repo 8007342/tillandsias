@@ -424,7 +424,7 @@ _over_budget() {  # $1 = summary line: 0 when its wall exceeds its budget
     [ -n "$_w" ] && [ "$_w" -gt "$_b" ]
 }
 judge_settled_budget() {  # _budget_door runs one door and prints its output
-    local _o _s _first="" _n=""
+    local _o _s _first="" _n="" _c="unstated"
     _BUDGET_NOTE=""
     _o="$(_budget_door)"; _s="$(_summary "$_o")"
     if _over_budget "$_s"; then
@@ -432,12 +432,16 @@ judge_settled_budget() {  # _budget_door runs one door and prints its output
         _budget_door >/dev/null
         _o="$(_budget_door)"; _s="$(_summary "$_o")"
         if [[ "$_s" =~ benched=([0-9]+) ]]; then _n="${BASH_REMATCH[1]}"; fi
-        _BUDGET_NOTE=" benched=${_n:-?} unbenched-wall=${_first}s"
         if _over_budget "$_s" && [ "${_n:-0}" = 0 ] && _contended "$_s"; then
             echo "not-judged:preflight-front-door:budget — every door was contended, so nothing could be benched and the wall measures the load: $_s"
             return 0
         fi
     fi
+    # Always said, so a reader knows which door was judged and on what host.
+    if [[ "$_s" =~ benched=([0-9]+) ]]; then _n="${BASH_REMATCH[1]}"; fi
+    if [[ "$_s" =~ contention=([^ ]+) ]]; then _c="${BASH_REMATCH[1]}"; fi
+    if [ -n "$_first" ]; then _BUDGET_NOTE=" door=3 benched=${_n:-?} unbenched-wall=${_first}s contention=$_c"
+    else _BUDGET_NOTE=" door=1 benched=${_n:-?} contention=$_c"; fi
     judge_budget "$_o"
 }
 _budget_door() { TILLANDSIAS_PREFLIGHT_BENCH=on TILLANDSIAS_PREFLIGHT_BENCH_FILE="$_BUDGET_BENCH" ./build.sh --preflight 2>&1; }
