@@ -179,6 +179,7 @@ specs:
   - litmus:plan-binary-rebuild-while-running
   - litmus:gate-step-declared-inputs-are-mutation-proven
   - litmus:release-is-one-cloud-build
+  - litmus:build-floor
   - litmus:common-fixture
   - litmus:gate-step-private-metrics-fallback
   - litmus:prebuilt-resolver-refuses-stale
