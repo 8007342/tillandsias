@@ -495,6 +495,7 @@ mod tests {
                 {argv={}}, {argv={'true'},env={BAD={}}},
                 {argv={'true'},cwd='relative'}, {argv={'true'},timeout_ms=-1},
                 {argv={'true'},group=false}, {argv={'true'},capture_bytes=0},
+                {argv={'true'},detach='yes'}, {argv={'true'},group=false,detach=true},
                 {argv={'true'},stdin=''}, {argv={'true'},unexpected=true},
                 {argv={[1]='true',[3]='hole'}},
             }) do

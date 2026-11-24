@@ -124,9 +124,14 @@ T:must{ "git", "-C", R.abs, "add", "added.txt" }
 T:must{ "git", "-C", R.abs, "commit", "-q", "-m", "adds a line" }
 local exe = fixture.posix_shell() ~= "bash" and ".exe" or ""
 T:must{ "cp", BIN .. ((exe ~= "" and not BIN:find("%.exe$")) and exe or ""), R.abs .. "/target/release/tillandsias-plan" .. exe }
-local function fr(n, ms)
+-- `detach` (2294-dtch) for the run arm 10 judges: without it this proc.run
+-- reaps fleet-run's whole group when fleet-run exits, which kills the step's
+-- leaked child for it. Measured: arm 10 stayed green on a fleet-run mutant
+-- whose step runs with group=false, and went red only once this call stopped
+-- reaping. A leak under detach is a `sleep 60` that ends by itself.
+local function fr(n, ms, detach)
     local r = proc.run({ argv = { BIN, "script", "run", "scripts/fleet-run.lua", "--", tostring(n), "HEAD" }, cwd = R.abs,
-        env = { TILLANDSIAS_FLEET_RUN_TIMEOUT_MS = ms }, timeout_ms = 300000 })
+        env = { TILLANDSIAS_FLEET_RUN_TIMEOUT_MS = ms }, timeout_ms = 300000, detach = detach or nil })
     return r.code, (r.stdout or "") .. (r.code == 0 and "" or tostring(r.stderr))
 end
 local function arm2(name, cond, got)
@@ -139,7 +144,7 @@ arm2("7 a green step is ok", c == 0 and text.contains(o, ":rc=0:") and text.cont
 c, o = fr(2)
 arm2("8 a red step is a violation, never ok", c == 1 and text.contains(o, ":step=2:rc=1:")
     and text.contains(o, "violation:fleet-run:step=2:rc=1") and not text.contains(o, "\nok:fleet-run"), "rc=" .. tostring(c) .. " " .. o)
-c, o = fr(3, "2000")
+c, o = fr(3, "2000", true)
 arm2("9 a step that did not exit is could-not-run, never ok", c == 2 and text.contains(o, ":step=3:rc=-1:")
     and text.contains(o, "could-not-run:fleet-run:step-did-not-exit:") and not text.contains(o, "\nok:fleet-run"),
     "rc=" .. tostring(c) .. " " .. o)

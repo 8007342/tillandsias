@@ -163,6 +163,7 @@ pub struct Command {
     timeout: Option<Duration>,
     stdin: Option<Vec<u8>>,
     group: bool,
+    detach: bool,
     capture_bytes: usize,
 }
 
@@ -369,6 +370,7 @@ impl Command {
             timeout: None,
             stdin: None,
             group: false,
+            detach: false,
             capture_bytes: DEFAULT_CAPTURE_BYTES,
         }
     }
@@ -428,12 +430,37 @@ impl Command {
     /// started, not only the child (order 1384-aixy; the 1132-r4mt and
     /// 1305-udgs defect was a killed guard leaving its grandchildren running).
     ///
-    /// Only the timeout path kills the group. A run that completes normally
-    /// leaves nothing to kill on Unix; on Windows the job is created with
-    /// KILL_ON_JOB_CLOSE, so anything still inside it when the run's handle is
-    /// dropped goes too.
+    /// The group is killed when the deadline passes AND reaped (TERM, then
+    /// KILL after GROUP_TERM_GRACE) as soon as the leader exits. This line used
+    /// to say "only the timeout path kills the group", which was not what the
+    /// code did (corrected by 2294-dtch). So nothing the leader leaves behind
+    /// survives the run; `detach(true)` keeps the deadline kill but skips the
+    /// exit reap. On Windows the job is created with KILL_ON_JOB_CLOSE, so
+    /// anything still inside it when the run's handle is dropped goes too.
     pub fn group(mut self, on: bool) -> Self {
         self.group = on;
+        self
+    }
+
+    /// Keep the group's DEADLINE and scope-close kill, but do NOT reap the
+    /// group when the leader EXITS, by itself or by a signal from outside
+    /// (order 2294-dtch). Requires `group(true)`; the managed scope refuses
+    /// `detach` without it.
+    ///
+    /// WHY: a grouped run reaps its group the moment the leader exits, so a
+    /// caller asking "did the subject leave a process behind?" always heard
+    /// "no". The runner had already killed whatever leaked. Measured on darwin
+    /// 2026-11-24: test-fleet-run arm 10 stayed green on a fleet-run mutant
+    /// that leaks its step's child, and a Lua port of
+    /// test-macos-vz-orphan-diagnosis read ok:4 on a helper that outlives a
+    /// SIGKILLed tray.
+    ///
+    /// A detached run's leftovers OUTLIVE THE RUN, so the caller owns killing
+    /// them. Unix only: on Windows the job object still ends every descendant
+    /// when the run's handle drops (KILL_ON_JOB_CLOSE), so `detach` changes
+    /// nothing there.
+    pub fn detach(mut self, on: bool) -> Self {
+        self.detach = on;
         self
     }
 
@@ -599,8 +626,9 @@ impl Command {
                     st = child.wait() => break st?,
                 }
             };
+            // 2294-dtch: a detached run leaves the leader's group to its caller.
             #[cfg(unix)]
-            if let Some(pgid) = group_leader {
+            if let Some(pgid) = group_leader.filter(|_| !self.detach) {
                 reap_group(pgid as libc::pid_t).await;
             }
             #[cfg(windows)]

@@ -25,19 +25,31 @@ description: >
 
   THE WALL-CLOCK BUDGET IS THE CONTRACT. A front door is a thing people run
   instead of thinking, so one that grows slow is one nobody runs; the budget arm
-  makes a guard that grows slow red THIS ARM, with its name, rather than
-  silently making the door useless. The budget is SET from a measurement and the
-  standing no-raise rule applies from the day it lands.
+  makes a guard that grows slow red THAT ARM, with its name, rather than
+  silently making the door useless (it is judged on the --daily-full gate). The budget is SET from a
+  measurement and the standing no-raise rule applies from the day it lands.
 preconditions:
   - workspace contains scripts/test-preflight-front-door.sh
   - build.sh accepts --preflight
 
 critical_path:
-  - step: "the front door enumerates, names every skip, closes stdin, precedes setup, and fits its budget"
-    command: "bash scripts/test-preflight-front-door.sh"
-    timeout_ms: 900000
-    expected_behavior: "ok:preflight-front-door"
-    # size: quick rather than instant — the budget arm runs the real door, which
-    # is the only way to measure the thing the arm asserts. A budget arm that
-    # read a number out of a file instead of taking one would pass on a tree
-    # where the door had become useless.
+  # 2272-cuxh: the fixture runs the door several times (14-44 min by host), so
+  # only the land queue's --daily-full gate runs it LIVE, through gate step 928.
+  # Here the live switch is unset on purpose: under --daily-full it is exported,
+  # and a second live run would outlast this step. What this pins is that the
+  # plain run says so by name (never ok:, never silence) ...
+  - step: "without the live switch the fixture names itself not-run, rc 0"
+    command: "env -u TILLANDSIAS_FRONT_DOOR_LIVE -u FRONT_DOOR_SCRATCH bash scripts/test-preflight-front-door.sh"
+    timeout_ms: 30000
+    expected_behavior: "not-run:preflight-front-door"
+    assert_exit: 0
+    assert_output_contains: "not-run:preflight-front-door"
+
+  # ... and that the gate that does run it live is wired: the step binds the
+  # script, and the daily-full gate's own subshell exports the switch.
+  - step: "the --daily-full gate runs it live through gate step 928"
+    command: "grep -qx 'STEP_SCRIPT=\"scripts/test-preflight-front-door.sh\"' scripts/gate-steps.d/928-*.step && grep -E '^ *export .*TILLANDSIAS_FRONT_DOOR_LIVE=1; eval' scripts/land-queue.sh >/dev/null && echo 'ok: daily-full runs the front door live'"
+    timeout_ms: 5000
+    expected_behavior: "ok: daily-full runs the front door live"
+    assert_exit: 0
+    assert_output_contains: "ok: daily-full runs the front door live"
