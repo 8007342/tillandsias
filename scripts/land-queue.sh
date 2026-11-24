@@ -758,6 +758,14 @@ heavy_probe() { # <base> -> heavy | light | unknown, of the worktree against bas
     elif grep -q '^select:intake ' <<<"$_o"; then echo light
     else echo unknown; fi
 }
+# HEAVY_MAX (2281-xx62, phase 2): a train takes at most this many members the probe
+# does not answer `light` for; a further one is put back for the one-at-a-time loop,
+# exactly like a conflicting member, and the next light candidate may still join.
+# `unknown` counts toward the cap: nobody measured it light. 0 = no heavy member.
+# A value that is not a whole number falls back to 2, said aloud.
+HEAVY_MAX="${TILLANDSIAS_BUNDLE_HEAVY_MAX:-2}"
+[[ "$HEAVY_MAX" =~ ^[0-9]{1,4}$ ]] || { [ "$BATCH_K" -ge 2 ] 2>/dev/null && say "train:heavy-max-unreadable:'$HEAVY_MAX' — using 2"; HEAVY_MAX=2; }
+HEAVY_MAX=$((10#$HEAVY_MAX))
 bundle_log() { # <base> <union> <result> <gate_s>; try_batch's nums/heavy_n/t_id are in scope
     local _v _p=- _t
     case "$3" in
@@ -782,7 +790,7 @@ try_batch() {
     [ "$BATCH_K" -ge 2 ] 2>/dev/null || return 0
     [ "$DRY_RUN" -eq 1 ] && return 0
     local base union n h hs lm mb pre ids="" carried="" out err rc key t0 gs c now
-    local heavy_n=0 t_id; t_id="train-$(date +%s)"
+    local heavy_n=0 heavy_cap=0 tier t_id; t_id="train-$(date +%s)"
     local -a nums=() heads=() parents=()
     git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null || return 0
     base="$(git rev-parse "$REMOTE/$TRUNK" 2>/dev/null)" || return 0
@@ -800,8 +808,18 @@ try_batch() {
         pre="$(git rev-parse HEAD)"
         if git -c user.name=land-queue -c user.email=land-queue@localhost \
                 merge --no-ff -q --no-edit -m "train: #$n $h" "$hs" >/dev/null 2>&1; then
+            tier="$(heavy_probe "$pre")"
+            if [ "$tier" != light ]; then
+                if [ "$heavy_cap" -ge "$HEAVY_MAX" ]; then
+                    say "train:heavy-deferred:#$n tier=$tier max=$HEAVY_MAX — goes one at a time"
+                    git reset -q --hard "$pre"
+                    continue
+                fi
+                heavy_cap=$((heavy_cap + 1))
+            fi
             nums+=("$n"); heads+=("$hs"); ids="$ids#$n,"
-            case "$(heavy_probe "$pre")" in
+            say "train:accept:#$n tier=$tier"
+            case "$tier" in
                 heavy) say "train:heavy:#$n"; [ "$heavy_n" = - ] || heavy_n=$((heavy_n + 1)) ;;
                 light) ;;
                 *) say "train:heavy-unknown:#$n"; heavy_n=- ;;
@@ -1316,6 +1334,18 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
     if [ "$_grc" -eq 1 ] && [ "$_lane" = full ] && ! grep -q '^flaky:' "$_glog" 2>/dev/null; then
         _ftests="$(grep -E '^[[:space:]]*(FAIL|\[FAIL\]|refused:|violation:|blocked:)' "$_glog" 2>/dev/null \
                    | grep -oE 'scripts/[A-Za-z0-9_./-]+\.(sh|lua)|litmus:[A-Za-z0-9_-]+' | sort -u)"
+        # ORDER 2277-7trt: red-twice:<test file>:... is the step runner saying it ran
+        # that step twice on this tree and both were red (2276-5pzy). Its test joins
+        # the named ones, and when EVERY named test is one of those the re-run below
+        # would spend a gate on a question already answered twice. The trunk-red
+        # check after it still runs.
+        _rtwice=""
+        while IFS= read -r _rb; do
+            [ -n "$_rb" ] || continue
+            _rtwice="$_rtwice$(git ls-files -- "scripts/$_rb" "scripts/lua/$_rb" | head -n 1)"$'\n'
+        done <<< "$(sed -n 's/^red-twice:\([A-Za-z0-9_.-]*\):.*/\1/p' "$_glog" 2>/dev/null | sort -u)"
+        _rtwice="$(grep . <<<"$_rtwice")"
+        _ftests="$(printf '%s\n%s\n' "$_ftests" "$_rtwice" | grep . | sort -u)"
         _fdiff="$(git diff --name-only "$base_sha" "$merge_sha" 2>/dev/null)"
         _touched=0
         if [ -n "$_ftests" ]; then
@@ -1328,14 +1358,18 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
             done <<< "$_ftests"
             if [ "$_touched" -eq 0 ]; then
                 _flaky_test="$(head -n 1 <<<"$_ftests")"
-                say "land-queue: #$num red in $_flaky_test, which its diff does not touch — re-running the gate once on the identical tree"
-                ( _gate_clean_env; eval "$_gcmd" ) < /dev/null > "$_glog.rerun" 2>&1
-                _grc=$?
+                if [ -n "$_rtwice" ] && [ -z "$(grep -vxF -- "$_rtwice" <<<"$_ftests")" ]; then
+                    say "land-queue: #$num red-twice in $_flaky_test, already run twice on this tree — not re-running the gate"
+                else
+                    say "land-queue: #$num red in $_flaky_test, which its diff does not touch — re-running the gate once on the identical tree"
+                    ( _gate_clean_env; eval "$_gcmd" ) < /dev/null > "$_glog.rerun" 2>&1
+                    _grc=$?
+                fi
                 if [ "$_grc" -eq 0 ]; then
                     say "flaky:$_flaky_test — #$num red then green on the identical tree ${merge_sha:0:9}; landing"
                     mv -f "$_glog" "$_glog.first-red"
                 else
-                    mv -f "$_glog.rerun" "$_glog"
+                    [ ! -e "$_glog.rerun" ] || mv -f "$_glog.rerun" "$_glog"
                     # ORDER 2118-tpmy: RED TWICE. Is it the trunk's red? The bare
                     # trunk is gated once per base; the same failing test there
                     # holds the queue instead of evicting a candidate for it.
@@ -1351,8 +1385,8 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
                             git checkout -q --detach "$merge_sha" 2>/dev/null
                             _tr_verdict="green"
                             if [ "$_trc" -ne 0 ] \
-                               && grep -E '^[[:space:]]*(FAIL|\[FAIL\]|refused:|violation:|blocked:)' "$_glog.trunk" 2>/dev/null \
-                                  | grep -qF -- "$_flaky_test"; then
+                               && grep -qF -e "$_flaky_test" -e "red-twice:${_flaky_test##*/}:" \
+                                  <<<"$(grep -E '^[[:space:]]*(FAIL|\[FAIL\]|refused:|violation:|blocked:|red-twice:)' "$_glog.trunk" 2>/dev/null)"; then
                                 _tr_verdict="red $_flaky_test"
                             fi
                             printf '%s %s\n' "$base_sha" "$_tr_verdict" > "$TRUNK_RED_MEMO" 2>/dev/null || true
