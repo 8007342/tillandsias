@@ -1,5 +1,4 @@
--- @trace order:2207-v7x2, order:2232-k8jc
--- @env PATH
+-- @trace order:2207-v7x2, order:2232-k8jc, order:2304-hubj
 --
 -- test-live-vault-fixture-is-opt-in.lua — the live vault-shutdown fixture never
 -- touches a container unless TILLANDSIAS_LIVE_VAULT_FIXTURE=1 is set, and the
@@ -23,21 +22,28 @@
 --
 -- Verdict: ok:live-vault-fixture-is-opt-in:4 | violation:live-vault-fixture-is-opt-in:<n>-failed
 
-local root = text.trim(proc.run{ argv = { "pwd", "-P" } }.stdout or "")
+local fixture = require "common.fixture"
+local T = fixture.new("live-vault-fixture-is-opt-in")
+local root = fixture.repo_root()
 local FX = "scripts/test-vault-shutdown-forwards-sigterm.sh"
 local pass, failn = 0, 0
 local function ok(m) out.line("ok:   " .. m); pass = pass + 1 end
 local function bad(m) out.line("FAIL: " .. m); failn = failn + 1 end
 
-local rel = "target/plan-scratch/live-vault-optin-" .. tostring(time.now_ms())
-local W = root .. "/" .. rel
-proc.run{ argv = { "mkdir", "-p", W .. "/bin" } }
-local function cleanup() proc.run{ argv = { "find", W, "-delete" }, timeout_ms = 60000 } end
-fs.write(rel .. "/bin/podman", "#!/usr/bin/env bash\necho \"$*\" >> \"" .. W .. "/podman.calls\"\nexit 1\n")
-proc.run{ argv = { "chmod", "+x", W .. "/bin/podman" } }
+local W = T:scratch()
+local rel = W.rel
+fs.mkdir(rel .. "/bin")
+fs.write(rel .. "/bin/podman", "#!/usr/bin/env bash\necho \"$*\" >> \"" .. W.abs .. "/podman.calls\"\nexit 1\n")
+T:must{ "chmod", "+x", W.abs .. "/bin/podman" }
 
-local PATH = env.get("PATH") or "/usr/bin:/bin"
-local STUBBED = W .. "/bin:" .. PATH
+-- The stub directory is put first INSIDE the shell. An inherited PATH is not
+-- enough on msys: Git's bash.exe prepends its own directories, and C:/ splits a
+-- colon-separated PATH at the drive. The inner `bash` inherits it as set.
+local function run_fixture(env)
+    return T:run{ fixture.posix_shell(), "-s", "--", W.abs .. "/bin", FX, cwd = root, env = env,
+        stdin = 'd="$1"\nif command -v cygpath >/dev/null 2>&1; then d="$(cygpath -u -- "$d")"; fi\n'
+            .. 'export PATH="$d:$PATH"\nexec bash "$2"\n' }
+end
 local function calls()
     if not fs.exists(rel .. "/podman.calls") then return 0 end
     local _, n = fs.read(rel .. "/podman.calls"):gsub("\n", "")
@@ -58,8 +64,7 @@ end
 local before = live()
 
 -- 1
-local r = proc.run{ argv = { "bash", FX }, cwd = root, timeout_ms = 120000,
-    env = { PATH = STUBBED, TILLANDSIAS_LIVE_VAULT_FIXTURE = "", TILLANDSIAS_VAULT_FIXTURE_LIB = "" } }
+local r = run_fixture{ TILLANDSIAS_LIVE_VAULT_FIXTURE = "", TILLANDSIAS_VAULT_FIXTURE_LIB = "" }
 local said = (r.stdout or "") .. (r.stderr or "")
 local n = calls()
 if r.code == 3 and n == 0 and said:find("skip:vault-shutdown:live-fixture-not-opted-in", 1, true) then
@@ -81,10 +86,9 @@ else
 end
 
 -- 3
-if fs.exists(rel .. "/podman.calls") then proc.run{ argv = { "find", W .. "/podman.calls", "-delete" } } end
-proc.run{ argv = { "bash", FX }, cwd = root, timeout_ms = 120000,
-    env = { PATH = STUBBED, TILLANDSIAS_LIVE_VAULT_FIXTURE = "1", TILLANDSIAS_VAULT_FIXTURE_LIB = "",
-        TILLANDSIAS_VAULT_CONTAINER = "no-such-container-2207-v7x2" } }
+if fs.exists(rel .. "/podman.calls") then fs.write(rel .. "/podman.calls", "") end
+run_fixture{ TILLANDSIAS_LIVE_VAULT_FIXTURE = "1", TILLANDSIAS_VAULT_FIXTURE_LIB = "",
+    TILLANDSIAS_VAULT_CONTAINER = "no-such-container-2207-v7x2" }
 n = calls()
 if n > 0 then ok("3 OPT-IN with the opt-in the fixture reaches podman (" .. n .. " stub calls)")
 else bad("3 OPT-IN with the opt-in the fixture never reached podman — arm 1 would pass a fixture that never runs") end
@@ -99,7 +103,7 @@ else
     bad("4 GUARD the @live-fixture marker or the guard's skip for it is missing")
 end
 
-cleanup()
+T:cleanup()
 out.line("live-vault-fixture-is-opt-in: " .. pass .. " passed, " .. failn .. " failed")
 if failn == 0 then verdict.ok("live-vault-fixture-is-opt-in:" .. pass) end
 verdict.emit("violation:live-vault-fixture-is-opt-in:" .. failn .. "-failed", 1)
