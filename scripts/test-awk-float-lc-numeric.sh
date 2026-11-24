@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# preflight: serial — writes .mutant-lcnum-* copies BESIDE three producers in scripts/ (the checkout's own sources), the same paths gate step 455 writes, and tree-scanning guards read them as added code (1630-dwab)
 # @trace order:1254-fdsu
 #
 # test-awk-float-lc-numeric.sh — the measurement producers must emit a DOT
@@ -22,7 +21,7 @@
 # by MEASUREMENT (it must actually make awk print 1,00), never by name: a glibc
 # host without fr_CH/de_DE generated usually still ships en_DK, which is comma.
 #
-# MUTATION ARM, per producer. Each producer is copied beside itself with its
+# MUTATION ARM, per producer. Each producer is copied into a SCRATCH TREE with its
 # LC_ALL=C pins stripped and run the same way; its assertion MUST go red. A
 # guard whose mutant passes only proved some number somewhere had a dot in it.
 #
@@ -68,15 +67,14 @@ fi
 echo "# injected comma locale: $COMMA (awk prints 1,00 under it)"
 inject() { PATH="$SHIM_PATH" LC_ALL="$COMMA" "$@"; }
 
-MUTANTS=()
-cleanup() { rm -rf "$TMP"; for m in ${MUTANTS[@]+"${MUTANTS[@]}"}; do rm -f "$m"; done; }
+cleanup() { rm -rf "$TMP"; }
 trap cleanup EXIT
 
 # ORDER 1587-qqzs. A SIGNAL MUST CLEAN UP BEFORE THE KILL. The preflight door
 # sends TERM, waits 1s, then KILL (no setsid on darwin, so it signals only this
 # pid). Bash defers a trap until the FOREGROUND command returns, and a producer
 # run in $(...) takes seconds, so the EXIT trap had not run when the KILL
-# landed. The mutants beside the originals then leaked into the checkout, where
+# landed. The mutants, then written beside the originals, leaked into the checkout, where
 # diff-scoped guards read them as added code. MEASURED 2026-10-11 on darwin:
 # killing at t=1,3,5,9,11s leaked all three mutants (rc 137), and t=7s, between
 # producers, did not. So every producer runs in the BACKGROUND under `wait`,
@@ -97,13 +95,22 @@ bg() {
     printf -v "$__var" '%s' "$(cat "$TMP/bg.out")"
 }
 
-# make_mutant <script> — copy beside the original (so its relative sourcing
-# still resolves) with every LC_ALL=C pin removed. Runs in THIS shell so the
-# trap knows the copy; mpath prints where it went.
-mpath() { printf '%s/.mutant-lcnum-%s\n' "$(dirname "$1")" "$(basename "$1")"; }
+# ORDER 2278-x4tw — THE MUTANTS LIVE IN $TMP, NEVER IN THE CHECKOUT. They sat beside
+# their producers because a producer roots at ${BASH_SOURCE[0]}/.. and sources siblings
+# by relative path; a reader outside this fixture then saw the tree move
+# (test-preflight-front-door, yoga 2026-11-23, in every suite run). A scratch tree keeps both:
+# a copy of scripts/ (so siblings resolve) beside links to what a producer READS.
+# make_mutant <script> — the copy in the tree with every LC_ALL=C pin removed. Runs in
+# THIS shell; mpath prints where it went.
+TREE="$TMP/tree"
+mkdir -p "$TREE"
+cp -R "$REPO_ROOT/scripts" "$TREE/scripts"
+for e in plan target methodology openspec crates; do
+    [ -e "$REPO_ROOT/$e" ] && ln -s "$REPO_ROOT/$e" "$TREE/$e"
+done
+mpath() { printf '%s/%s\n' "$TREE" "$1"; }
 make_mutant() {
     local dst; dst="$(mpath "$1")"
-    MUTANTS+=("$dst")
     sed 's/LC_ALL=C //g' "$1" >"$dst"; chmod +x "$dst"
     cmp -s "$1" "$dst" && bad "$1 carries no LC_ALL=C pin to strip"
     return 0

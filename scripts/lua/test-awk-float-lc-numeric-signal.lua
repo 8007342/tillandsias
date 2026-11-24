@@ -1,44 +1,43 @@
--- @trace order:1587-qqzs
+-- @trace order:1587-qqzs, order:2278-x4tw
 -- @env PATH
--- preflight: serial — runs scripts/test-awk-float-lc-numeric.sh, which writes .mutant-lcnum-* copies BESIDE three producers in scripts/, the same paths gate step 450 writes, and tree-scanning guards read them as added code (1630-dwab)
+-- preflight: serial — times a 1 s TERM grace, which a guard running beside it can stretch
 --
--- test-awk-float-lc-numeric-signal.lua — a TERM must clean up the lcnum mutants
--- before the preflight door's KILL lands.
+-- test-awk-float-lc-numeric-signal.lua — a TERM cleans up the lcnum mutants before
+-- the preflight door's KILL lands, and no mutant is ever in the checkout (2278-x4tw).
 --
 -- The door (build.sh _pf_run_guard) signals only the guard's pid, since darwin
 -- has no setsid: TERM, a 1 s grace polled in tenths, then KILL.
--- scripts/test-awk-float-lc-numeric.sh writes three mutants BESIDE the
--- producers it copies (scripts/.mutant-lcnum-*), so a kill that skips its
--- cleanup leaks them into the checkout, where diff-scoped guards read them as
--- added code.
+-- scripts/test-awk-float-lc-numeric.sh writes three mutants. They were BESIDE the
+-- producers until 2278-x4tw, so a kill that skipped its cleanup leaked them into the
+-- checkout, where diff-scoped guards read them as added code; they are now in its
+-- own TMPDIR.
 --   1 CONTROL  a constructed script with the pre-fix shape (an EXIT trap only,
 --              in a shell that ignores TERM, so the KILL always lands) still holds its marker file when
 --              TERM arrives, needs the KILL, and leaks. This shows the harness
 --              can see a leak.
 --   2 REAL     the real script, TERMed while its first producer runs (a sed shim
 --              holds it for 5 s once the mutants exist), exits 143 within
---              the grace, without the KILL, and leaves no .mutant-lcnum-* file.
+--              the grace, without the KILL, and leaves nothing in its TMPDIR.
 --              Pre-fix it leaked all three (rc 137) at every kill time measured
 --              on 2026-10-11.
+--
+--   3 CHECKOUT while the mutants exist, and after a KILL that no trap can see, the
+--              checkout's status is exactly what it was before the run
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-awk-float-lc-numeric-signal.lua
 
 local SUBJECT = "scripts/test-awk-float-lc-numeric.sh"
-local MUTANTS = {
-    "scripts/.mutant-lcnum-freshness-inventory.sh",
-    "scripts/.mutant-lcnum-select-work-batch.sh",
-    "scripts/refusal-calibration/.mutant-lcnum-measure-bands.sh",
-}
-for _, m in ipairs(MUTANTS) do
-    if fs.exists(m) then
-        verdict.could_not_run("awk-float-lc-numeric-signal", m .. " already exists before the run, so a leak could not be told from it; delete it and re-run")
-    end
-end
 
 local top = proc.run({ argv = { "git", "rev-parse", "--show-toplevel" }, timeout_ms = 30000 })
 local ROOT = text.trim(top.stdout or "")
 local REL = "target/plan-scratch/awklc-signal-" .. time.iso_utc() .. "-" .. tostring(math.random(100000, 999999))
 fs.mkdir(REL)
+fs.mkdir(REL .. "/tmp")
+local function status()
+    return proc.run({ argv = { "git", "-C", ROOT, "status", "--porcelain", "--untracked-files=all" }, timeout_ms = 60000 }).stdout or "?"
+end
+local BEFORE = status()
+local function left_in_tmp() return text.trim(proc.run({ argv = { "ls", "-A", ROOT .. "/" .. REL .. "/tmp" }, timeout_ms = 10000 }).stdout or "?") end
 
 local function pause(sec) proc.run({ argv = { "sleep", sec }, timeout_ms = 30000 }) end
 local function alive(pid)
@@ -128,8 +127,8 @@ fs.write(REL .. "/bin/sed", table.concat({
     "",
 }, "\n"))
 proc.run({ argv = { "chmod", "+x", ROOT .. "/" .. REL .. "/bin/sed" }, timeout_ms = 5000 })
-local hr, pidr = spawn_until_pidfile({ "bash", ROOT .. "/" .. SUBJECT }, REL .. "/real.pid",
-    { PATH = ROOT .. "/" .. REL .. "/bin:" .. ORIG_PATH })
+local hr, pidr = spawn_until_pidfile({ require("common.fixture").posix_shell(), ROOT .. "/" .. SUBJECT }, REL .. "/real.pid",
+    { PATH = ROOT .. "/" .. REL .. "/bin:" .. ORIG_PATH, TMPDIR = ROOT .. "/" .. REL .. "/tmp" })
 -- 1612-jp94 (red 3/3 in Windows' WSL builder guest: "no pid file within
 -- 10 s"). The subject writes its pid at START and <pid>.ready once its mutants
 -- exist, so this waits for an EVENT, not a fixed time: ready, or the subject
@@ -161,17 +160,27 @@ elseif not ready then
     end
 else
     pause("1")
+    local during, held = status(), left_in_tmp()
     local how, done = door_kill(hr, pidr)
-    local left = {}
-    for _, m in ipairs(MUTANTS) do if fs.exists(m) then left[#left + 1] = m end end
+    local left = left_in_tmp()
     local code = (type(done) == "table" and done.code) or "?"
     arm("2 REAL a TERM ends the script within the grace (no KILL needed)", how == "term", "ended by " .. how .. ", code " .. tostring(code))
-    arm("2 REAL no .mutant-lcnum-* file is left in the checkout", #left == 0, table.concat(left, " "))
-    for _, m in ipairs(left) do proc.run({ argv = { "rm", "-f", ROOT .. "/" .. m }, timeout_ms = 5000 }) end
+    arm("2 REAL nothing is left in its TMPDIR, where the mutants were", left == "" and held ~= "", "held [" .. held .. "] left [" .. left .. "]")
+    arm("3 CHECKOUT its status did not change while the mutants existed", during == BEFORE, "before [" .. BEFORE .. "] during [" .. during .. "]")
+    -- A KILL runs no trap: the mutants leak into TMPDIR (the door deletes a guard's), never here.
+    proc.run({ argv = { "rm", "-f", ROOT .. "/" .. REL .. "/real.pid.ready", ROOT .. "/" .. REL .. "/real.pid" }, timeout_ms = 5000 })
+    local hk, pidk = spawn_until_pidfile({ require("common.fixture").posix_shell(), ROOT .. "/" .. SUBJECT }, REL .. "/real.pid",
+        { PATH = ROOT .. "/" .. REL .. "/bin:" .. ORIG_PATH, TMPDIR = ROOT .. "/" .. REL .. "/tmp" })
+    for _ = 1, 1200 do if not pidk or fs.exists(REL .. "/real.pid.ready") or not alive(pidk) then break end pause("0.1") end
+    hk:kill()
+    local leaked = left_in_tmp()
+    arm("3 CHECKOUT a KILL leaks the mutants into TMPDIR and nothing into the checkout",
+        leaked ~= "" and status() == BEFORE, "tmp [" .. leaked .. "] status [" .. status() .. "]")
+    proc.run({ argv = { "rm", "-rf", ROOT .. "/" .. REL .. "/tmp" }, timeout_ms = 60000 })
 end
 
 if #failed > 0 then
     verdict.emit("violation:awk-float-lc-numeric-signal:" .. #failed .. "-failed", 1)
 end
 if SKIPPED then verdict.skip("awk-float-lc-numeric-signal", SKIPPED) end
-verdict.ok("awk-float-lc-numeric-signal", "3 arms")
+verdict.ok("awk-float-lc-numeric-signal", "5 arms")

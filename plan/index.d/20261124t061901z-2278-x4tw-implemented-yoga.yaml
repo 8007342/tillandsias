@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: lcnum-mutants-in-a-scratch-copy
+    field: status
+    value: implemented
+    ts: "2026-11-24T06:19:01Z"
+    host: yoga
+
+events:
+  - packet_id: lcnum-mutants-in-a-scratch-copy
+    event:
+      type: implemented
+      ts: "2026-11-24T06:19:01Z"
+      host: yoga
+      summary: |-
+        implemented on work/2278-x4tw. Same seven verdicts as before; git status sampled through a run and after a KILL is unchanged, and the pre-fix fixture reds both checks; checkout-writers is at writers=0.

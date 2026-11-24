@@ -531,7 +531,6 @@ scripts scripts/test-bench-prompt-uniqueness.sh 1
 scripts scripts/test-bound-litmus-is-runnable.sh 5
 scripts scripts/test-branch-discipline-verb.sh 1
 scripts scripts/test-brew-shim-reentrancy.sh 2
-scripts scripts/test-brew-shim-tier2-warning.sh 6
 scripts scripts/test-build-sh-ci-full-install-prep.sh 1
 scripts scripts/test-build-step-timing-attribution.sh 1
 scripts scripts/test-capabilities-envelope-names-its-source.sh 4
