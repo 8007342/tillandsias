@@ -570,7 +570,6 @@ scripts scripts/test-decider-retirement.sh 1
 scripts scripts/test-default-vault-cli-security.sh 4
 scripts scripts/test-derive-host-identity.sh 1
 scripts scripts/test-dispatch-reap.sh 4
-scripts scripts/test-embed-endpoint-derivation.sh 1
 scripts scripts/test-enclave-network-internal-discovery.sh 1
 scripts scripts/test-enclave-proxy-lib.sh 4
 scripts scripts/test-enclave-service-health.sh 102
