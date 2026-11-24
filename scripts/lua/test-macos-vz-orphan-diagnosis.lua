@@ -188,7 +188,7 @@ local function start_live_guest()
         .. 'if ($p) { open(my $f, ">", "$d/live.pid") or die; print $f "$p\\n"; close $f; exit 0 }\n'
         .. 'POSIX::setsid(); open(STDIN, "<", "/dev/null"); open(STDOUT, ">", "$d/live.log"); open(STDERR, ">&", \\*STDOUT);\n'
         .. 'exec @cmd or die\' "$1" "$2" --exec-guest "sleep 600"\n')
-    LIVE_H = proc.spawn({ argv = { "bash", WORK .. "/live.sh", WORK, TRAY }, timeout_ms = 900000 })
+    LIVE_H = proc.spawn({ argv = { fixture.posix_shell(), WORK .. "/live.sh", WORK, TRAY }, timeout_ms = 900000 })
     for _ = 1, 60 do
         if not LIVE_PID and fs.exists(WORK_REL .. "/live.pid") then
             LIVE_PID = (fs.read(WORK_REL .. "/live.pid") or ""):match("(%d+)")
