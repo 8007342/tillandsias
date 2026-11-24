@@ -1,6 +1,6 @@
 #!/bin/bash
 # @trace spec:project-summarizers
-# freshness: auditor=forge-forge-tillandsias-codex-20260824t004713z date=2026-08-24 verdict=updated scope=full script; exact section parsing now preserves quoted SDK constraints, counts only direct dependency keys, and detects frameworks by dependency name; pinned by test-summarize-pubspec.sh
+# freshness: auditor=forge-forge-tillandsias-codex-20260824t004713z date=2026-08-24 verdict=updated scope=full script; exact section parsing now preserves quoted SDK constraints, counts only direct dependency keys, and detects frameworks by dependency name; pinned by scripts/lua/test-summarize-pubspec.lua
 
 set -euo pipefail
 

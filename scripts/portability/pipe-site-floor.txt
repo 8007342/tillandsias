@@ -749,7 +749,6 @@ scripts scripts/test-spec-index-repo-relative-rung.sh 3
 scripts scripts/test-spec-index-staging-capacity.sh 4
 scripts scripts/test-ssh-lane-sidecar.sh 6
 scripts scripts/test-status-channel-absent-is-first-class.sh 10
-scripts scripts/test-summarize-pubspec.sh 3
 scripts scripts/test-support/github-login-fake.sh 2
 scripts scripts/test-support/litmus-fake-podman-guard.sh 1
 scripts scripts/test-support/podman-mock.sh 25
