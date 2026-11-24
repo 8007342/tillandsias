@@ -55,6 +55,8 @@
 #      carried-obligation backlog that neither pays nor waives), plus
 #      `tillandsias-plan check --strict-fragments` and `tillandsias-policy
 #      plan-orders` when the diff adds plan/index.d fragments.
+#   3b. every scripts/**/check-* decider gate-changed.sh --checks selects for
+#      the diff (2282-asxn), derived from build.sh and gate-steps.d.
 #   4. `cargo fmt --check` when the diff touches *.rs.
 #   5. Touched fixtures: every scripts/test-*.sh in the diff, plus every
 #      scripts/test-*.sh (excluding scripts/test-support/*) whose bytes name
@@ -462,6 +464,50 @@ for name in $DECIDER_NAMES; do
         [ -n "$FIRST_FAIL_TOKEN" ] || { FIRST_FAIL_TOKEN="deciders:$name"; FIRST_FAIL_RC=1; }
     fi
 done
+
+# BEGIN-DERIVED-CHECKS
+# ORDER 2282-asxn — EVERY check-* DECIDER THE DIFF TOUCHES, DERIVED. The list
+# above is hand-kept, and what it left out was learned from evictions, a full
+# gate each (2026-11-24: check-gate-step-inputs #1109, native-argv-added #1135,
+# check-shell-ratchet #1190). gate-changed derives the population from build.sh
+# and gate-steps.d and the selection from the diff, so a decider wired tomorrow
+# is run with no edit here. A change it cannot scope runs every check-*.
+derived_state="skip"
+if [ "$PLAN_MODE" = 1 ]; then
+    derived_state="plan"
+    TILLANDSIAS_GATE_DIFF_BASE="$BASE" bash "$SELF_DIR/gate-changed.sh" --list --checks "$BASE" 2>/dev/null \
+        | sed -n 's/^select:fixture:\([^ ]*\).*/plan:derived-check:\1/p'
+elif [ "$STUB" = 1 ]; then
+    derived_state="stub"
+    _item derived-checks skip:stub 0
+else
+    _t="$(timing_now_ms)"
+    # Roots by cwd, never by an exported root: check-archive-answerability tests a
+    # COPY of the tree, and an inherited root sent its reads back to this one.
+    _cap env -u TILLANDSIAS_REPO_ROOT -u PROJECT_ROOT TILLANDSIAS_GATE_DIFF_BASE="$BASE" bash "$SELF_DIR/gate-changed.sh" --run --checks "$BASE"
+    _dc_rc=$?
+    _dc_bad="$(sed -n 's/^fail:gate-changed:fixture:\([^ ]*\).*/\1/p' <<<"$_CAP_OUT")"
+    _dc_bad="${_dc_bad%%$'\n'*}"
+    if [ "$_dc_rc" -eq 0 ]; then
+        derived_state="ok"
+        _item derived-checks ok "$_t"
+    else
+        _dc_name="${_dc_bad##*/}"; _dc_name="${_dc_name%.*}"
+        [ -n "$_dc_name" ] || _dc_name="could-not-run:rc=$_dc_rc"
+        _item "derived-checks:$_dc_name" red "$_t"
+        grep -v '^ok:gate-changed:fixture:\|^select:' <<<"$_CAP_OUT" | sed 's/^/  /' >&2
+        if [ "$KEEP_GOING" != 1 ]; then
+            echo "refused:relay-preflight:derived-checks:$_dc_name"
+            _afford "a decider the gate runs on this diff refused on the merged tree (its own output is above)" \
+                "fix what $_dc_name named, commit onto the ref that carries it, and re-run relay-preflight"
+            _restore_clean
+            timing_emit relay-preflight relay "$T0" 1
+            exit 1
+        fi
+        [ -n "$FIRST_FAIL_TOKEN" ] || { FIRST_FAIL_TOKEN="derived-checks:$_dc_name"; FIRST_FAIL_RC=1; }
+    fi
+fi
+# END-DERIVED-CHECKS
 
 # ── phase 4: cargo fmt --check, when *.rs moved ─────────────────────────────
 fmt_state="skip"

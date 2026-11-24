@@ -15,7 +15,7 @@
 # The regression that would recur: someone reads plan/index.yaml with yq/awk/
 # ruby to "get the plan faster", the fragment files stay invisible, and the
 # MCP/expert/drain surfaces quietly diverge. The scan gate
-# (scripts/check-plan-ledger-readers.sh) fails when a NEW direct reader appears
+# (scripts/lua/check-plan-ledger-readers.lua, was the .sh) fails when a NEW direct reader appears
 # (exit criterion 3); the behavioural steps prove the two rerouted surfaces
 # (project-info plan_query, drain-queue) now see a fragment-only packet (exit
 # criterion 2).
@@ -35,17 +35,17 @@ size: quick
 preconditions:
   - cargo toolchain available (the steps execute the real binary, not its source text)
   - repository contains crates/tillandsias-plan/src/main.rs
-  - repository contains scripts/check-plan-ledger-readers.sh
+  - repository contains scripts/lua/check-plan-ledger-readers.lua (ported from the .sh, 2118-9awa)
 
 critical_path:
   # ── (a) the scan gate: every reader is overlay-aware or base-only-with-reason ──
   - step: "GATE: the reader scan passes on a healthy tree (every reader is overlay-aware or base-only-with-reason)"
-    command: "set -e; out=$(bash scripts/check-plan-ledger-readers.sh 2>&1); rc=$?; test $rc -eq 0; printf '%s' \"$out\" | grep -q 'ok: every reader' && echo 'ok: reader-scan-clean'"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; out=$(\"$P\" script run scripts/lua/check-plan-ledger-readers.lua 2>&1); rc=$?; test $rc -eq 0; printf '%s' \"$out\" | grep -q 'ok: every reader' && echo 'ok: reader-scan-clean'"
     timeout_ms: 30000
     expected_behavior: "ok: reader-scan-clean"
 
   - step: "GATE (negative control): the SAME scan FAILS when a new unprotected direct reader appears"
-    command: "W=$(mktemp -d); printf '%s\\n' '#!/usr/bin/env bash' 'result=$(yq -o=json . plan/index.yaml)' 'echo \"$result\"' > \"$W/new-reader.sh\"; cp \"$W/new-reader.sh\" scripts/.probe-new-direct-reader.sh; out=$(bash scripts/check-plan-ledger-readers.sh 2>&1); rc=$?; rm -f scripts/.probe-new-direct-reader.sh; cd /; rm -rf \"$W\"; test $rc -ne 0 && printf '%s' \"$out\" | grep -q 'unprotected direct reader' && echo 'ok: scan-fails-on-new-direct-reader'"
+    command: "W=$(mktemp -d); printf '%s\\n' '#!/usr/bin/env bash' 'result=$(yq -o=json . plan/index.yaml)' 'echo \"$result\"' > \"$W/new-reader.sh\"; cp \"$W/new-reader.sh\" scripts/.probe-new-direct-reader.sh; P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; out=$(\"$P\" script run scripts/lua/check-plan-ledger-readers.lua 2>&1); rc=$?; rm -f scripts/.probe-new-direct-reader.sh; cd /; rm -rf \"$W\"; test $rc -ne 0 && printf '%s' \"$out\" | grep -q 'unprotected direct reader' && echo 'ok: scan-fails-on-new-direct-reader'"
     timeout_ms: 30000
     expected_behavior: "ok: scan-fails-on-new-direct-reader"
 
@@ -96,4 +96,4 @@ observability:
   log_fields:
     spec: "methodology-accountability"
     test: "no-unprotected-plan-ledger-readers"
-    artifact: "scripts/check-plan-ledger-readers.sh + crates/tillandsias-plan/src/main.rs + images/default/config-overlay/mcp/project-info.sh + scripts/drain-queue.sh"
+    artifact: "scripts/lua/check-plan-ledger-readers.lua + crates/tillandsias-plan/src/main.rs + images/default/config-overlay/mcp/project-info.sh + scripts/drain-queue.sh"
