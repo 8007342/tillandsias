@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: preflight-door-with-a-plan-binary-too-old-to-classify-judges-nothing
+    order: 2281-k3sn
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [preflight]
+    estimated_hours: 1
+    title: |
+      A plan binary that resolves but cannot classify a guard's result still lets ./build.sh --preflight run, judge nothing that does not plainly pass, and exit 0.
+    context: |
+      The gap 2279-jbsd (#1449) leaves open on purpose: arm 3 of test-preflight-stale-plan-binary.lua pins that a mute binary (too old to answer validator-surface-hash) is not refused. Coordinator ruling 2026-11-23: close it as a follow-up, by a vocabulary probe and not mtime: ask the binary a question only a current one answers.
+    exit_criteria:
+      - "the door asks the resolved binary to classify a known input once, up front; any answer but the expected word is could-not-run:preflight:no-classifier with the build remedy, exit 3"
+      - "a fixture arm: a mute stub exits 3 (arm 3's reversal named); a current binary falls through; a stub answering the wrong word exits 3"
+      - "nothing is decided by mtime or version string"
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture arms are the deliverable."
+    next_action: "After #1449 lands, pick the classify input and the word it must answer from script_run::classify."
+    provenance: coordinator ruling (macuahuitl-fedora, 2026-11-23); filed by lenovinha.
+    related: [2279-jbsd, 1247-9pr8, 1384-bqhy]
+    events:
+      - {type: filed, ts: '2026-11-23T23:33:33Z', host: lenovinha, summary: door with a mute classifier filed}

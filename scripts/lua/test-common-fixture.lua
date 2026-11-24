@@ -15,6 +15,8 @@
 --  10 native_path: /c/x -> C:/x and \\?\C:\x -> C:/x on native Windows; identity
 --     for /c/x elsewhere (a legal directory there)
 --  11 plan_binary is absolute, native, and runs
+--  12 which finds a spawnable tool on PATH, nil when absent (2257-qnt7)
+--  13 is_abs accepts /x, C:/x and C:\x, and nothing relative
 --   9 posix_shell is Git's bash.exe on native Windows, else the caller's default ("bash" when none)
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-common-fixture.lua
@@ -123,5 +125,12 @@ do
             and tostring(found):find("/only-here-tool", 1, true) ~= nil,
         "bash=" .. tostring(bash) .. " spawn=" .. tostring(ran.status) .. " found=" .. tostring(found))
 end
+
+-- 13 (2253-j2at): is_abs accepts both spellings of an absolute path.
+T:arm("13 is_abs takes /x and a drive path C:/x or C:\\x, and nothing relative",
+    fixture.is_abs("/home/x") and fixture.is_abs("C:/a") and fixture.is_abs("c:\\a")
+        and not fixture.is_abs("a/b") and not fixture.is_abs("./a") and not fixture.is_abs("C:a")
+        and not fixture.is_abs("") and not fixture.is_abs(nil),
+    "is_abs(C:/a)=" .. tostring(fixture.is_abs("C:/a")))
 
 T:finish()

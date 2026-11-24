@@ -693,12 +693,19 @@ Cite the unblock in your commit body (`unblock-noop: <path>:<line>`) so the sibl
 
 ```bash
 cargo fmt --all
-./build.sh --check
+./build.sh --floor                      # REQUIRED before a work/* push: ok:floor (2130-fl0r)
+./build.sh --check                      # where memory allows; the landing queue gates anyway
 cargo test -p <crate-you-touched>      # targeted, fast
 ./build.sh --test                       # cross-cutting changes only
 ```
 
 Hard rules:
+- **`./build.sh --floor` is the required local check before a work/* push
+  (operator 2026-11-20, order 2130-fl0r).** It replaces the worker-side
+  `--preflight` requirement: the landing queue runs the full preflight and
+  gate on arrival and evicts with the log. Push only on `ok:floor:…`; a
+  `violation:floor:<what>` names the fix. Run `--preflight` or `--check` too
+  where memory allows, to catch a red before the queue does.
 - **Detach any gate longer than a couple of minutes from the harness, and
   never launch one by hand inside a WSL distro.** The harness reaps its own
   `run_in_background` waiters under memory pressure: on macuahuitl two

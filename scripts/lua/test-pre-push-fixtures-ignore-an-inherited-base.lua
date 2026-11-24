@@ -12,10 +12,12 @@
 --
 -- Verdict: ok:pre-push-fixtures-ignore-inherited-base:<n> | violation:pre-push-fixtures-ignore-inherited-base:<failed>/<n>
 
-local root = text.trim(proc.run{ argv = { "pwd", "-P" } }.stdout or "")
-local probe = proc.run{ argv = { "bash", "-s" }, cwd = root, timeout_ms = 60000,
-    stdin = '. scripts/plan-binary-probe.sh\np="$(resolve_plan_binary 2>/dev/null)" || p=""\ncase "$p" in ./*) p="$PWD/${p#./}" ;; esac\nprintf "%s" "$p"\n' }
-local PB = text.trim(probe.stdout or "")
+-- 2246-fkea helpers: git's root (C:/... on Windows, never `pwd -P`'s /c/...),
+-- and the plan binary joined and made native in Lua (yolanda, msys: the old
+-- `pwd -P` root + bare bash was a script-error there).
+local fixture = require "common.fixture"
+local root = fixture.repo_root()
+local PB = fixture.plan_binary()
 if PB == "" then verdict.emit("could-not-run:pre-push-fixtures-ignore-inherited-base:no-plan-binary", 3) end
 local head = text.trim(proc.run{ argv = { "git", "rev-parse", "HEAD" }, cwd = root }.stdout or "")
 
@@ -37,7 +39,13 @@ for _, f in ipairs(FIXTURES) do
     if r.code == 0 and last:find(f[2], 1, true) == 1 then
         pass = pass + 1; out.line("ok:   " .. f[1] .. " stays green with an inherited base (" .. last .. ")")
     else
-        failn = failn + 1; out.line("FAIL: " .. f[1] .. " tested the caller's base, not its scratch checkout (rc=" .. tostring(r.code) .. "): " .. last)
+        failn = failn + 1
+        -- A subject that never reached the question is not "tested the
+        -- caller's base" (yolanda, msys: all three died as script-error first).
+        local why = (last:find("^refused:script%-error") or last:find("^could%-not%-run") or last:find("^skip:")
+            or r.status ~= "exited")
+            and "did not run to its verdict" or "tested the caller's base, not its scratch checkout"
+        out.line("FAIL: " .. f[1] .. " " .. why .. " (status=" .. tostring(r.status) .. " rc=" .. tostring(r.code) .. "): " .. last)
     end
 end
 

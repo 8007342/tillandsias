@@ -65,6 +65,11 @@ mkdir -p "$W/scripts/hooks" "$W/scripts/lua" "$W/target/release"
 git init -q "$W"
 cp "$ROOT/$FIXTURE" "$W/scripts/lua/" || exit 2
 cp "$ROOT/scripts/hooks/pre-push-local-gate.sh" "$W/scripts/hooks/" || exit 2
+# The fixture requires common.fixture (2246-fkea), which requires
+# common.verdict: the runner resolves them under the scratch checkout's
+# lib/lua, so seed that library or the fixture dies at require (2253-j2at,
+# evicted in land run 32).
+mkdir -p "$W/lib/lua" && cp -R "$ROOT/lib/lua/common" "$W/lib/lua/" || exit 2
 for f in plan-binary-probe.sh gate-stamp.sh common.sh check-issue-citation-convention.sh; do
     cp "$ROOT/scripts/$f" "$W/scripts/" 2>/dev/null || true
 done
@@ -148,7 +153,7 @@ if [ -z "$ctl_bin" ]; then
     echo "skip: no runnable plan binary on this host, control arm not attempted" >&2
 else
     ctl="$(cd "$ROOT" && "$RUNNER" script run "$ROOT/$FIXTURE" 2>&1)"; ctl_rc=$?
-    if [ "$ctl_rc" -eq 0 ] && printf '%s' "$ctl" | grep -q 'PRECONDITION: the scratch base ledger folds'; then
+    if [ "$ctl_rc" -eq 0 ] && grep -q <<<"$ctl" 'PRECONDITION: the scratch base ledger folds'; then
         ok "CONTROL: a runnable binary still folds the base and runs the ledger arms"
     else
         bad "CONTROL: a runnable binary no longer exercises the ledger arms (rc=$ctl_rc)"
