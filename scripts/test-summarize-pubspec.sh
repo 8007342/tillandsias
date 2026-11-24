@@ -17,7 +17,7 @@ fail() {
 assert_contains() {
   local output="$1"
   local expected="$2"
-  printf '%s\n' "$output" | grep -Fq -- "$expected" \
+  grep -Fq <<<"$output" -- "$expected" \
     || fail "missing output: $expected"
 }
 
@@ -63,10 +63,10 @@ printf '%s\n' \
 dart_output=$("$SUMMARIZER" "$TMP/dart")
 assert_contains "$dart_output" '- Dart SDK (>=3.3.0 <4.0.0)'
 assert_contains "$dart_output" '- Direct pub dependencies (1 total)'
-if printf '%s\n' "$dart_output" | grep -Fq 'Flutter'; then
+if grep -Fq <<<"$dart_output" 'Flutter'; then
   fail "Dart-only manifest was reported as Flutter"
 fi
-if printf '%s\n' "$dart_output" | grep -Fq 'Provider (state management)'; then
+if grep -Fq <<<"$dart_output" 'Provider (state management)'; then
   fail "provider_tools was reported as provider"
 fi
 

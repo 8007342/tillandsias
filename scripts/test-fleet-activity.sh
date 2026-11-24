@@ -88,7 +88,7 @@ fi
 # THE REAL-WORLD ARM. macneo's address ends .local and names its host; the first
 # version of this script bucketed it. A hermetic repo would only have caught
 # this if its author had already thought of the case — which is the point.
-if printf '%s' "$out" | grep -q 'MacBook-Neo'; then
+if grep -q <<<"$out" 'MacBook-Neo'; then
     if printf '%s' "$out" | grep 'MacBook-Neo' | grep -q 'UNATTRIBUTED'; then
         bad "ARM 4: a .local address that names its host was bucketed (the defect this arm exists for)"
     else

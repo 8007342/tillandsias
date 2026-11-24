@@ -368,7 +368,7 @@ fi
 rm -rf "$SD"; mkdir -p "$SD"; touch "$SD/service-hold-tillandsias-proxy"
 export PS_OUT="$OLD_STOP"
 out="$(act_run)"; err="$(cat "$TMP/err")"
-if [ ! -s "$TMP/start.log" ] && printf '%s' "$err" | grep -q "note:enclave-service-held:service=tillandsias-proxy"; then
+if [ ! -s "$TMP/start.log" ] && grep -q <<<"$err" "note:enclave-service-held:service=tillandsias-proxy"; then
     ok "act: hold marker refuses the restart durably"
 else
     bad "act hold: log=$(cat "$TMP/start.log" 2>/dev/null) err=$err"
@@ -380,7 +380,7 @@ rm -rf "$SD"; mkdir -p "$SD"
 export PS_OUT="tillandsias-proxy|exited|0|$((now - 40000))|$((now - 36000))|0
 tillandsias-vault|exited|0|$((now - 40000))|$((now - 36000))|0"
 out="$(act_run)"; err="$(cat "$TMP/err")"
-if [ ! -s "$TMP/start.log" ] && printf '%s' "$err" | grep -q "reason=stack-down"; then
+if [ ! -s "$TMP/start.log" ] && grep -q <<<"$err" "reason=stack-down"; then
     ok "act: whole-stack-down is left alone (deliberate teardown shape)"
 else
     bad "act stack-down: log=$(cat "$TMP/start.log" 2>/dev/null) err=$err"
@@ -393,7 +393,7 @@ rm -rf "$SD"; mkdir -p "$SD"
 printf '%s 3\n' "$now" > "$SD/service-restarts-tillandsias-proxy"
 export PS_OUT="$OLD_STOP"
 out="$(act_run)"; err="$(cat "$TMP/err")"
-if [ ! -s "$TMP/start.log" ] && printf '%s' "$err" | grep -q "fail:enclave-service-flapping:service=tillandsias-proxy:restarts=3:.*action=operator"; then
+if [ ! -s "$TMP/start.log" ] && grep -q <<<"$err" "fail:enclave-service-flapping:service=tillandsias-proxy:restarts=3:.*action=operator"; then
     ok "act: cap reached -> flapping verdict, no further fighting"
 else
     bad "act cap: log=$(cat "$TMP/start.log" 2>/dev/null) err=$err"
@@ -406,7 +406,7 @@ rm -rf "$SD"; mkdir -p "$SD"
 export PS_OUT="$OLD_STOP"
 out="$(START_LOG="$TMP/start.log" TILLANDSIAS_CYCLE_STATE_DIR="$SD" PATH="$BIN:$REALPATH_DIRS" bash "$GUARD" 2>"$TMP/err")"
 err="$(cat "$TMP/err")"
-if [ ! -s "$TMP/start.log" ] && ! printf '%s' "$err" | grep -qE "enclave-service-(grace|held|restarted|flapping|unattended)"; then
+if [ ! -s "$TMP/start.log" ] && ! grep -qE <<<"$err" "enclave-service-(grace|held|restarted|flapping|unattended)"; then
     ok "act: without --act the reporter contract is unchanged (still a reporter)"
 else
     bad "no-act: reporter acted or spoke act classes: $err"

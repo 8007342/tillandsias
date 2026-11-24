@@ -182,7 +182,7 @@ if [ -z "$out" ]; then
     bad "the glob produced NO result line at all (the 888-miiy symptom): $(printf '%s' "$full" | tail -1)"
 elif ! grep -q 'fail=0' <<<"$out"; then
     bad "committed glob not green: $out"
-elif printf '%s' "$out" | grep -q 'skipped=0' && printf '%s' "$out" | grep -q 'stale=0'; then
+elif grep -q <<<"$out" 'skipped=0' && grep -q <<<"$out" 'stale=0'; then
     ok "the committed groundtruth glob grades fail=0 with nothing skipped or stale ($out)"
 elif ! grep -q 'stale=0' <<<"$out"; then
     # ORDER 1229-2862. STALE GETS THE SAME TREATMENT AS A SKIP, and it has to be
@@ -191,16 +191,16 @@ elif ! grep -q 'stale=0' <<<"$out"; then
     # skipped" while two cases went uncertified. Same accounting rule as
     # 888-miiy — named engines in the summary and a per-case line — because it
     # is the same failure it was written against.
-    if printf '%s' "$out" | grep -q 'stale_engines=' \
-       && printf '%s' "$full" | grep -q '^STALE .*NOT VALID in this checkout'; then
+    if grep -q <<<"$out" 'stale_engines=' \
+       && grep -q <<<"$full" '^STALE .*NOT VALID in this checkout'; then
         ok "glob is fail=0 and every stale case is named ($out)"
     else
         bad "the glob had STALE cases WITHOUT accounting for them — a silent green: $out"
     fi
 else
     # Skips are allowed, but never invisible.
-    if printf '%s' "$out" | grep -q 'skipped_engines=' \
-       && printf '%s' "$full" | grep -q '^SKIP  .*NOT GRADED on this host'; then
+    if grep -q <<<"$out" 'skipped_engines=' \
+       && grep -q <<<"$full" '^SKIP  .*NOT GRADED on this host'; then
         ok "glob is fail=0 and every skip is named ($out)"
     else
         bad "the glob skipped cases WITHOUT accounting for them — a silent green: $out"
