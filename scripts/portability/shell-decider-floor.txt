@@ -139,7 +139,6 @@ scripts/test-daily-maintenance-day-boundary.sh
 scripts/test-decider-retirement.sh
 scripts/test-default-vault-cli-security.sh
 scripts/test-derive-host-identity.sh
-scripts/test-dev-inference-start-refusal-names-cause.sh
 scripts/test-discipline-derive.sh
 scripts/test-discipline-install-hooks.sh
 scripts/test-dispatch-reap.sh
@@ -413,7 +412,6 @@ scripts/test-silverblue-update-skew-probe.sh
 scripts/test-skill-canonicalization-remedy.sh
 scripts/test-skills-single-source.sh
 scripts/test-smoke-agent-watch.sh
-scripts/test-smoke-consecutive-lanes.sh
 scripts/test-smoke-evidence-dir-is-fresh.sh
 scripts/test-smoke-forge-lane-cold-host-outcome.sh
 scripts/test-smoke-skill-reset-env-matches-policy.sh
