@@ -1,4 +1,4 @@
--- @trace order:1508-7s4w, order:1680-yf9z, order:1637-arwp
+-- @trace order:1508-7s4w, order:1680-yf9z
 --
 -- On MSYS (Git Bash) an extensionless candidate whose .exe sibling exists IS
 -- that .exe (exe magic). resolve_plan_binary used to try
@@ -37,7 +37,7 @@ local function shell(script, args)
     return T:run(spec)
 end
 
--- 1637-arwp: the resolver answers absolute, in the shell's own spelling of W.
+-- The resolver answers absolute, in the shell's own spelling of W.
 -- 1680-yf9z: the "//" is macOS's TMPDIR spelling, so every host exercises it.
 local function answer(probe)
     local r = shell([=[
