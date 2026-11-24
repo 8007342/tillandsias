@@ -1,7 +1,7 @@
 # Gate step 2272-cuxh — check-running-image-freshness.sh detects a stale running
-# image and never claims staleness without proof (order 422). No LAND gate ran its
-# fixture (its litmus is --ci-full only), so it sat red unseen here (case 3 needed a label only one of the two image
-# builders writes) and evicted whichever PR touched it (#1358).
+# image and never claims staleness without proof (order 422). No LAND gate ran
+# its fixture (its litmus is --ci-full only), so it sat red unseen on a host
+# whose :latest lacked the label case 3 inherited, and evicted #1358.
 # Skips by name without podman or a built git image.
 #
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
