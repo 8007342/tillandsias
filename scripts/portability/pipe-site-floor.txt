@@ -608,7 +608,6 @@ scripts scripts/test-gate-stamp-scope.sh 9
 scripts scripts/test-gate-step-append-no-conflict.sh 11
 scripts scripts/test-gate-step-prefix-allocation.sh 8
 scripts scripts/test-gate-step-skip-exit.sh 3
-scripts scripts/test-gate-thresholds-are-chosen.sh 1
 scripts scripts/test-git-credential-helper.sh 5
 scripts scripts/test-git-mirror-dns-identity.sh 2
 scripts scripts/test-git-mirror-existing-volume-hardening.sh 14
@@ -723,7 +722,6 @@ scripts scripts/test-relay-preflight.sh 15
 scripts scripts/test-release-asset-integrity.sh 4
 scripts scripts/test-release-tier-freshness-reads-ci-full.sh 4
 scripts scripts/test-release-tier-freshness.sh 2
-scripts scripts/test-release-tier-timer-render.sh 1
 scripts scripts/test-reopen-is-history-not-loss.sh 4
 scripts scripts/test-reset-flags-are-accepted.sh 2
 scripts scripts/test-reset-state-contract.sh 3

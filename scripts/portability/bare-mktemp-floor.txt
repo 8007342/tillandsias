@@ -152,7 +152,6 @@ scripts/test-pretooluse-command-policy.sh 1
 scripts/test-provider-device-auth.sh 1
 scripts/test-reclaim-stranded-claims.sh 1
 scripts/test-release-tier-freshness.sh 1
-scripts/test-release-tier-timer-render.sh 2
 scripts/test-requirement-ids.sh 1
 scripts/test-reset-state-contract.sh 2
 scripts/test-resumable-claim-dirt.sh 1
