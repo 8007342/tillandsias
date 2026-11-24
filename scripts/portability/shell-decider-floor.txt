@@ -37,12 +37,10 @@ scripts/check-native-lint-attested.sh
 scripts/check-nix-builder-e2e.sh
 scripts/check-nix-deps-stability.sh
 scripts/check-no-competing-gate.sh
-scripts/check-no-fixture-writes-live-ledger.sh
 scripts/check-no-tracked-binaries.sh
 scripts/check-pickup-role-grammar.sh
 scripts/check-plan-binary-current.sh
 scripts/check-plan-binary-probe-usage.sh
-scripts/check-plan-ledger-readers.sh
 scripts/check-purge-clears-vault-credentials.sh
 scripts/check-refusal-affordance-added.sh
 scripts/check-release-asset-integrity.sh
@@ -265,7 +263,6 @@ scripts/test-land-notice-names-unrun-litmus.sh
 scripts/test-land-push-bounded.sh
 scripts/test-land-queue.sh
 scripts/test-land-verdict-through-a-pipe.sh
-scripts/test-landed-but-open.sh
 scripts/test-ledger-node-claim-resolution.sh
 scripts/test-ledger-prose-roundtrip.sh
 scripts/test-ledger-ts-guard.sh
@@ -370,7 +367,6 @@ scripts/test-precommit-zero-trace-scan-scope.sh
 scripts/test-preflight-fixtures-default-target.sh
 scripts/test-preflight-front-door.sh
 scripts/test-preflight-scratch-is-off-checkout.sh
-scripts/test-preflight-setsid-probe.sh
 scripts/test-preflight-verdict-categories.sh
 scripts/test-pretooluse-command-policy.sh
 scripts/test-probe-refuses-stale-candidate.sh

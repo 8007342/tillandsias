@@ -86,6 +86,7 @@ mod image_build_scope;
 mod memory_protection;
 mod self_exe;
 // @trace order:1874-b9tg: where an sd.cpp run placed the model.
+mod gpu_fallback;
 #[cfg(feature = "host-services")]
 mod imagegen_consent;
 mod imagegen_models;
