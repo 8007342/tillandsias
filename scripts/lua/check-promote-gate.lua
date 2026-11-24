@@ -20,8 +20,12 @@
 --
 -- The LATEST record per platform decides: a later fail cancels an earlier pass, and a
 -- malformed smoke-record on the row refuses (a record nobody can read is not absent).
--- partial:credential-unmeasured is never a pass by itself. It counts only for a platform
--- the promoter NAMES with --allow-unmeasured, and the verdict line names it again.
+-- partial:credential-unmeasured BLOCKS by default (2252-ck7h ruling 2 stands). The override is
+-- --allow-unmeasured <platform>, and it needs the operator's recorded approval, named with
+-- --approval <row>: an `operator-approval` event on that row whose whole summary is
+--   allow-unmeasured <platform> <tag>
+-- for each platform named. The gate prints override:promote-gate:… with the ref, and the
+-- verdict carries it. It cannot prove who wrote the event; it makes the claim citable.
 --
 -- A stale checkout could hide a later fail, so trunk's head must be in HEAD; a local edit
 -- could invent a pass, so plan/ must be clean.
@@ -29,13 +33,14 @@
 --   ok:promote-gate:<tag>:linux=<v>,darwin=<v>,windows=<v>:queue=idle               rc 0
 --   refused:promote-gate:<tag>:<why>[ <why>...]                                     rc 1
 --     <platform>=missing|malformed|<verdict>   queue=<state>   ledger=stale|dirty
+--     approval=missing|no-record:<platform>
 --   refused:promote-gate:usage                                                      rc 2
 --   could-not-run:promote-gate:<why>                                                rc 3
 --
--- Usage: tillandsias-plan script run scripts/lua/check-promote-gate.lua -- <tag> [--allow-unmeasured p1,p2]
+-- Usage: tillandsias-plan script run scripts/lua/check-promote-gate.lua -- <tag> [--allow-unmeasured p1,p2 --approval <row>]
 
 local PLATFORMS = { "linux", "darwin", "windows" }
-local TAG, allow = nil, {}
+local TAG, allow, APPROVAL = nil, {}, nil
 local function usage() verdict.emit("refused:promote-gate:usage", 2) end
 local i = 1
 while i <= #arg do
@@ -45,6 +50,8 @@ while i <= #arg do
             allow[p] = true
         end
         i = i + 1
+    elseif arg[i] == "--approval" and arg[i + 1] and arg[i + 1]:match("^[%w._-]+$") and arg[i + 1]:sub(1, 1) ~= "-" then
+        APPROVAL = arg[i + 1]; i = i + 1
     elseif not TAG and arg[i]:match("^v%d+%.%d+%.%d+%.%d+$") then TAG = arg[i]
     else usage() end
     i = i + 1
@@ -69,6 +76,22 @@ if run({ "git", "merge-base", "--is-ancestor", TRUNK, "HEAD" }) ~= 0 then bad[#b
 local dc, dirty = run({ "git", "status", "--porcelain", "--", "plan" })
 if dc ~= 0 then cnr("git-status") end
 if dirty ~= "" then bad[#bad + 1] = "ledger=dirty" end
+
+-- the operator's approval of each platform the promoter names
+if not table.is_empty(allow) then
+    local _, ap = run({ PLAN, "plan-events", APPROVAL or "-" })
+    for _, p in ipairs(PLATFORMS) do
+        if allow[p] then
+            local found = false
+            for _, l in ipairs(text.lines(APPROVAL and ap or "")) do
+                local ty, _, _, sum = l:match("^([^\t]*)\t([^\t]*)\t([^\t]*)\t(.*)$")
+                if ty == "operator-approval" and sum == "allow-unmeasured " .. p .. " " .. TAG then found = true end
+            end
+            if found then out.line("override:promote-gate:allow-unmeasured:" .. p .. ":" .. TAG .. ":approval=" .. APPROVAL)
+            else allow[p] = nil; bad[#bad + 1] = "approval=" .. (APPROVAL and "no-record:" .. p or "missing") end
+        end
+    end
+end
 
 -- the records
 local ROW = "smoke-" .. TAG:gsub("%.", "-")
@@ -95,7 +118,7 @@ local good = {}
 for _, p in ipairs(PLATFORMS) do
     local g = got[p]
     if g and (g.v == "pass" or (g.v == "partial:credential-unmeasured" and allow[p])) then
-        good[#good + 1] = p .. "=" .. g.v
+        good[#good + 1] = p .. "=" .. g.v .. (g.v == "pass" and "" or "(approval=" .. APPROVAL .. ")")
         out.line("  " .. p .. " " .. g.v .. " (" .. g.host .. " " .. g.ts .. ")")
     else bad[#bad + 1] = p .. "=" .. (g and g.v or "missing") end
 end
@@ -111,7 +134,7 @@ elseif q ~= "queue:idle" then bad[#bad + 1] = "queue=" .. q:sub(7) end
 if #bad > 0 then
     out.line("  why: promotion needs a smoke PASS record per platform for exactly " .. TAG .. " on row " .. ROW .. ", an idle land queue and trunk's own ledger")
     out.line("  remedy: run the missing smoke and append its smoke-record event (grammar in this script's header); update this checkout; wait for the queue. "
-        .. "An unmeasured credential step counts only when named: --allow-unmeasured <platform>")
+        .. "An unmeasured credential step blocks; the override needs the operator's recorded approval: --allow-unmeasured <platform> --approval <row>")
     verdict.emit("refused:promote-gate:" .. TAG .. ":" .. table.concat(bad, " "), 1)
 end
 verdict.ok("promote-gate", TAG .. ":" .. table.concat(good, ",") .. ":queue=idle")

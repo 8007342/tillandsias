@@ -27,7 +27,7 @@ critical_path:
   - step: "promotion asks for a smoke record per platform of the exact tag and an idle queue, and no other answer passes (2296-pn45)"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-promote-gate.lua 2>&1"
     timeout_ms: 120000
-    success_pattern: "ok:promote-gate-fixture:21 arms"
+    success_pattern: "ok:promote-gate-fixture:27 arms"
 
   - step: "promote-stable.sh asks that gate, and its refusal, its silence or its absence refuses (2296-pn45)"
     command: "bash scripts/test-promote-stable-evidence-gate.sh 2>&1"

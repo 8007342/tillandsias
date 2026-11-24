@@ -85,13 +85,24 @@ T:arm("3 LATEST at the same instant the fail stands", refused(c, l, "linux=fail:
 c, l, all = gate(with(rec("linux", "fail:lane", { ts = "2026-11-24T00:30:00Z" })))
 T:arm("3 LATEST an earlier fail does not outlive a later pass", c == 0, c .. " " .. all)
 local PART = { ALL[1], rec("darwin", "partial:credential-unmeasured"), ALL[3] }
+local function appr(p, o) o = o or {}; return { type = o.type or "operator-approval", ts = "2026-11-24T03:00:00Z", sum = "allow-unmeasured " .. p .. " " .. (o.tag or TAG) } end
+local function plus(t, e) local r = {}; for _, x in ipairs(t) do r[#r + 1] = x end; r[#r + 1] = e; return r end
+local NAMED = { TAG, "--allow-unmeasured", "darwin", "--approval", ROW }
 c, l, all = gate(PART)
 T:arm("4 PARTIAL refuses unnamed", refused(c, l, "darwin=partial:credential-unmeasured"), c .. " " .. all)
-c, l, all = gate(PART, { args = { TAG, "--allow-unmeasured", "darwin" } })
-T:arm("4 PARTIAL counts when named, and is named in the verdict", c == 0 and text.contains(l, "darwin=partial:credential-unmeasured"), c .. " " .. all)
-c, l, all = gate(PART, { args = { TAG, "--allow-unmeasured", "linux" } })
+c, l, all = gate(plus(PART, appr("darwin")), { args = NAMED })
+T:arm("4 PARTIAL counts when named with a recorded approval; the override and its ref are printed", c == 0 and text.contains(l, "darwin=partial:credential-unmeasured(approval=" .. ROW .. ")") and text.contains(all, "override:promote-gate:allow-unmeasured:darwin:" .. TAG .. ":approval=" .. ROW), c .. " " .. all)
+c, l, all = gate(plus(PART, appr("darwin")), { args = { TAG, "--allow-unmeasured", "darwin" } })
+T:arm("4 PARTIAL the flag without --approval refuses", refused(c, l, "approval=missing") and text.contains(l, "darwin=partial"), c .. " " .. all)
+for what, e in pairs{ ["none recorded"] = rec("linux", "pass"), ["another platform"] = appr("linux"), ["another tag"] = appr("darwin", { tag = "v1.2.3.5" }), ["a note, not an approval"] = appr("darwin", { type = "note" }) } do
+    c, l, all = gate(plus(PART, e), { args = NAMED })
+    T:arm("4 PARTIAL approval: " .. what .. " refuses", refused(c, l, "approval=no-record:darwin") and not text.contains(all, "override:"), c .. " " .. all)
+end
+c, l, all = gate(plus(PART, appr("darwin")))
+T:arm("4 PARTIAL an approval alone, unnamed by the promoter, does nothing", refused(c, l, "darwin=partial"), c .. " " .. all)
+c, l, all = gate(plus(PART, appr("linux")), { args = { TAG, "--allow-unmeasured", "linux", "--approval", ROW } })
 T:arm("4 PARTIAL naming another platform does not help", refused(c, l, "darwin=partial"), c .. " " .. all)
-c, l, all = gate({ ALL[1], rec("darwin", "fail:lane"), ALL[3] }, { args = { TAG, "--allow-unmeasured", "darwin" } })
+c, l, all = gate({ ALL[1], rec("darwin", "fail:lane"), ALL[3], appr("darwin") }, { args = NAMED })
 T:arm("4 PARTIAL naming a platform never excuses a fail", refused(c, l, "darwin=fail:lane"), c .. " " .. all)
 c, l, all = gate{ ALL[1], ALL[2], rec("windows", "pass", { type = "note" }) }
 T:arm("5 PROSE the same words on a note are no record", refused(c, l, "windows=missing"), c .. " " .. all)

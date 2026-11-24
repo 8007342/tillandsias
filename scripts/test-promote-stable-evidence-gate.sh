@@ -670,8 +670,8 @@ esac
 fresh_root; seed_all_platforms "$VER"
 export PG_ARGV="$WORK/pg.argv"; : > "$PG_ARGV"
 run_case "the record gate's ok promotes" "^would-promote:$VER$"
-run_case "an unmeasured platform is passed on by name" "^would-promote:$VER$" "$VER" --dry-run --allow-unmeasured darwin
-if grep -q "check-promote-gate.lua -- $VER --allow-unmeasured darwin$" "$PG_ARGV"; then
+run_case "an unmeasured platform is passed on by name" "^would-promote:$VER$" "$VER" --dry-run --allow-unmeasured darwin --approval smoke-row
+if grep -q "check-promote-gate.lua -- $VER --allow-unmeasured darwin --approval smoke-row$" "$PG_ARGV"; then
     printf 'ok   %-52s\n' "the gate is asked for this tag and the named platform"; pass=$((pass + 1))
 else printf 'FAIL %-52s -> %s\n' "the gate is asked for this tag and the named platform" "$(tr '\n' ';' < "$PG_ARGV")"; fail=$((fail + 1)); fi
 PG_RC=1 PG_LINE="refused:promote-gate:$VER:linux=missing queue=idle" run_case "its refusal refuses" "^refused:promote-gate:$VER$"
