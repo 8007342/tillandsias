@@ -1,5 +1,5 @@
 -- @trace spec:windows-native-tray, order:624-cf9f, order:2306-3hr6
--- @env TRAY_DIAGNOSE_FIXTURE_FILE OS
+-- @env TRAY_DIAGNOSE_FIXTURE_FILE TRAY_DIAGNOSE_WINDOWS_USERS OS
 -- check-windows-tray-diagnose-surface.lua (ported from the .sh): the Windows tray's diagnostic surface is asserted by
 -- RUNNING its pinned unit tests, not by grepping for their names (a name is
 -- present when the body is emptied, #[ignore]d or red).
@@ -21,7 +21,8 @@
 --     no lib target and every run on every host read as no-test-run)
 --   violation:diagnose-surface:missing-test:<name>            exit 1
 --   violation:diagnose-surface:tests-failed:<name>            exit 1
--- Test seam: TRAY_DIAGNOSE_FIXTURE_FILE names a recorded cargo transcript.
+-- Test seams: TRAY_DIAGNOSE_FIXTURE_FILE names a recorded cargo transcript;
+-- TRAY_DIAGNOSE_WINDOWS_USERS is the only place a Windows cargo is looked for.
 
 -- Ordered by surface area: the FIRST missing/failed one is reported.
 local PINNED_TESTS = {
@@ -44,19 +45,25 @@ local PINNED_TESTS = {
     "first_line_handles_all_cases",
 }
 
+-- Asked of the shell: fs.* refuses a path outside the repository root, and that
+-- refusal was the check's whole verdict on every Linux host (2306-3hr6).
+local function cargo_under(users)
+    local r = proc.run({ argv = { require("common.fixture").posix_shell(), "-s", "--", users }, timeout_ms = 10000,
+        stdin = 'for c in "$1"/*/.cargo/bin/cargo.exe; do [ ! -f "$c" ] || { printf "%s\n" "$c"; break; }; done\n' })
+    local c = text.trim(r.stdout or "")
+    if r.code == 0 and c ~= "" then return c end
+    return nil
+end
+
 local function find_windows_cargo()
+    local seam = env.get("TRAY_DIAGNOSE_WINDOWS_USERS")
+    if seam ~= nil and seam ~= "" then return cargo_under(seam) end
     -- Native Windows: the cargo on PATH is the Windows one.
     if env.get("OS") == "Windows_NT" then return "cargo" end
     -- WSL with interop: the Windows cargo through /mnt/c.
     local onpath = require("common.fixture").which("cargo.exe")
     if onpath then return onpath end
-    if fs.exists("/mnt/c/Users") then
-        for _, u in ipairs(fs.list("/mnt/c/Users") or {}) do
-            local c = "/mnt/c/Users/" .. u .. "/.cargo/bin/cargo.exe"
-            if fs.exists(c) then return c end
-        end
-    end
-    return nil
+    return cargo_under("/mnt/c/Users")
 end
 
 local output
