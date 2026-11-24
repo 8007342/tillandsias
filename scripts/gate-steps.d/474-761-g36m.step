@@ -5,5 +5,6 @@
 STEP_DESC="Checking scripts/ bash dialect (761-g36m)"
 STEP_LUA="scripts/lua/check-bash-dialect.lua"
 STEP_ERROR="a shared script carries an unguarded bash-4-only construct — see the verdict line above (761-g36m)"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:bash-dialect-clean at e1e44ec8b (direct)"
 STEP_OK="Bash dialect gate passed"
 STEP_READS="scripts/lua/check-bash-dialect.lua"

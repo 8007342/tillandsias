@@ -12,6 +12,7 @@
 STEP_DESC="Checking the fleet-activity read (1223-wzc4)"
 STEP_SCRIPT="scripts/test-fleet-activity.sh"
 STEP_ERROR="the fleet-activity read regressed — a working host can again read as silent, or a shared address as a host"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin PASS: fleet-activity 9/9 at e1e44ec8b (direct)"
 STEP_OK="fleet-activity read fixture passed"
 STEP_SERIAL="asserts under 10 s and 20 s timeouts; a busy pool trips them"
 STEP_LANES="timing"

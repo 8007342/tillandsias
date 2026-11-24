@@ -10,5 +10,6 @@
 STEP_DESC="Checking the append-event archived-refusal fixture (896-f8ti)"
 STEP_SCRIPT="scripts/test-append-event-archived-refusal.sh"
 STEP_ERROR="append-event's archive guard regressed — either events are landing on completed work again, or legitimate writes to fragment-only packets are being refused"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:append-event-archived-refusal-fixture:4 at e1e44ec8b (direct)"
 STEP_OK="append-event archived-refusal fixture passed"
 STEP_READS="scripts/test-append-event-archived-refusal.sh"

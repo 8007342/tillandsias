@@ -11,5 +11,6 @@
 STEP_DESC="Checking plan-binary resolution goes through the shared probe (721-nyev)"
 STEP_SCRIPT="scripts/check-plan-binary-probe-usage.sh"
 STEP_ERROR="a script runs tillandsias-plan from a hardcoded target/ path — an executable bit is a claim, running the binary is evidence"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:plan-binary-probe-usage:40 eligible of 1693 scanned at e1e44ec8b (direct)"
 STEP_OK="Plan-binary probe usage check passed"
 STEP_READS="scripts/check-plan-binary-probe-usage.sh"

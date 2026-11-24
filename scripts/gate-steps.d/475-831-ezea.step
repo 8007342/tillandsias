@@ -26,5 +26,6 @@
 STEP_DESC="Checking that open packets carry a next_action (831-ezea, advisory)"
 STEP_SCRIPT="scripts/check-carry-forward.sh"
 STEP_ERROR="the carry-forward advisory could not run — that is a broken checkout, not a clean ledger"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin advisory:carry-forward:4356 of 7351 fragments (rc 0) at e1e44ec8b (direct)"
 STEP_OK="Carry-forward advisory reported"
 STEP_READS="scripts/check-carry-forward.sh"

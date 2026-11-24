@@ -5,5 +5,6 @@
 STEP_DESC="Verifying the skew line can see a behaviour change (984-i4k2)"
 STEP_SCRIPT="scripts/test-expert-capability-behaviour-skew.sh"
 STEP_ERROR="the expert-capability behaviour-skew detector regressed (984-i4k2) — see the failing case above"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok: expert-capability behaviour-skew fixture 5/5 at e1e44ec8b (direct)"
 STEP_OK="Expert-capability behaviour-skew fixture passed"
 STEP_READS="scripts/test-expert-capability-behaviour-skew.sh"

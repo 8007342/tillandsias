@@ -7,5 +7,6 @@
 STEP_DESC="Checking the archiver-check memo keys on the ledger and the instrument (911-m7js)"
 STEP_LUA="scripts/lua/test-archiver-check-memo.lua"
 STEP_ERROR="the archiver-check memo does not miss on a ledger or instrument change (911-m7js) — see the verdict line above"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:archiver-check-memo:11 arms at e1e44ec8b (direct)"
 STEP_OK="Archiver-check memo check passed"
 STEP_READS="scripts/lua/test-archiver-check-memo.lua"
