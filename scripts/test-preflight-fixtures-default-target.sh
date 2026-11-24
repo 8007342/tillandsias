@@ -257,6 +257,17 @@ else
     bad "ARM 6 expected ok:...:1 checked from the added population (rc=$rc6): $(printf '%s' "$o6" | tail -2 | tr '\n' ';')"
 fi
 
+# ARM 10 (2297-vrsa): a red helper under scripts/test-support/ is not a fixture.
+# A case `*` crosses `/`. PRE-FIX RESULT: FAILS, refused as ungated-red.
+mkdir -p "$R/scripts/test-support"
+printf '#!/usr/bin/env bash\necho "helper, not a fixture"; exit 97\n' > "$R/scripts/test-support/mock.sh"
+o10="$(cd "$R" && TILLANDSIAS_DEFAULT_TARGET_BASE= TILLANDSIAS_GATE_DIFF_BASE=refs/remotes/origin/linux-next by_ctd)"; rc10=$?
+if [ "$rc10" -eq 0 ] && [ "$(printf '%s' "$o10" | tail -1)" = "ok:fixture-default-target:1 checked" ]; then
+    ok "ARM 10 a helper in a test-* directory is not counted as a fixture"
+else
+    bad "ARM 10 expected the helper left out (rc=$rc10): $(printf '%s' "$o10" | tail -2 | tr '\n' ';')"
+fi
+
 total=$((pass+fail))
 if [ "$fail" -eq 0 ]; then echo "ok:fixture-default-target-fixture:$pass"; exit 0; fi
 echo "violation:fixture-default-target-fixture:$pass/$total"; exit 1
