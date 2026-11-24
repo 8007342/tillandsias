@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: live-vault-opt-in-fixture-errors-on-msys
+    order: "2304-hubj"
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, lua-first, fixture]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-live-vault-fixture-is-opt-in.lua
+    title: "test-live-vault-fixture-is-opt-in.lua stops on native msys with a script error because its root is a /c/ path"
+    context: |
+      Measured on yolanda 2026-11-24: refused:script-error, line 61, "proc.run: cwd '/c/Users/...' is relative; pass an
+      absolute path". No arm is judged. Same with trunk's copy of scripts/test-vault-shutdown-forwards-sigterm.sh, so it
+      came with the 2232-k8jc port (b409f65c8). Other msys faults may sit behind it: the run uses a bare bash and a PATH
+      of extensionless stubs, neither of which has been reached.
+    exit_criteria:
+      - "The fixture runs every arm on native msys and prints its ok line; Linux and darwin verdicts are unchanged."
+      - "NEGATIVE CONTROL: with the opt-in guard removed from the subject, the fixture is red on msys and no real podman is called."
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture is the guard"
+    next_action: "Take the root from common.fixture.repo_root() and the shell from posix_shell(), then fix what the arms show next."
+    provenance: "coordinator macuahuitl-fedora 2026-11-24, from yolanda's 2301-eny9 run"
+    related: [2232-k8jc, 2207-v7x2, 2301-eny9]
+    events:
+      - {type: filed, ts: '2026-11-24T14:18:42Z', host: yolanda, summary: filed on the request of the coordinator}
