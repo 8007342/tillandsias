@@ -158,6 +158,35 @@ case "$_parsed" in
     *) bad "the parser did not read the winning entry's host" "got [$_parsed]" ;;
 esac
 
+# 2b (2271-5v9r): the parser reads every fragment in ONE awk, so its block state
+# must reset at each FILE, as the old one-awk-per-file loop did. File a ends
+# inside some-packet-name's block; file b opens with status-shaped lines (a
+# newer ts, another host) before any packet_id. Carried across the boundary,
+# b's lines would be read as a's packet and win on ts.
+mkdir -p "$W/tree2/plan/index.d"
+cat > "$W/tree2/plan/index.d/a.yaml" <<'FRAG'
+packets:
+  - packet_id: some-packet-name
+    field: status
+    value: in_progress
+    ts: "2026-01-01T00:00:00Z"
+    host: first-host
+FRAG
+cat > "$W/tree2/plan/index.d/b.yaml" <<'FRAG'
+    field: status
+    ts: "2027-01-01T00:00:00Z"
+    host: leaked-host
+packets:
+  - packet_id: unrelated-packet
+FRAG
+if [ -s "$W/parser.sh" ]; then
+    _parsed2="$( . "$W/parser.sh"; _claim_host_on_branch "$W/tree2" some-packet-name 2>/dev/null )" || true
+    case "$_parsed2" in
+        first-host) ok "the parser's block state resets at each fragment file (no status leaks across files)" ;;
+        *) bad "a status block leaked across a fragment boundary" "got [$_parsed2], want [first-host]" ;;
+    esac
+fi
+
 # 3. THE FALSE NEGATIVE THAT MATTERS. No plan binary means the folds cannot be
 #    read at all. That MUST block: reporting ok would say "nobody holds it"
 #    on the strength of having been unable to look. This is 1024-c3h3's shape,

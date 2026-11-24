@@ -146,6 +146,7 @@ pub const PROC_RUN_FIELDS: &[&str] = &[
     "stdin",
     "timeout_ms",
     "group",
+    "detach",
     "capture_bytes",
 ];
 
@@ -456,6 +457,30 @@ pub(crate) fn validate_proc(
             "group=false is not supported by script-owned {caller}"
         )));
     }
+
+    // ORDER 2294-dtch. `detach = true`: the group is NOT reaped when the
+    // leader exits (by itself or by a kill from the script), so a fixture can
+    // see what its subject left behind. The deadline, `:kill()` and the
+    // script's scope close still end the whole group. Without it every
+    // "nothing survived" arm passes on a subject that leaks, because the
+    // runner reaped the leak first. The caller owns killing what survives.
+    // Unix only: on Windows the job object still ends descendants.
+    let detach = match spec.get::<LuaValue>("detach")? {
+        LuaValue::Nil => false,
+        LuaValue::Boolean(b) => b,
+        other => {
+            return Err(err(format!(
+                "detach must be a boolean, not a {}",
+                other.type_name()
+            )));
+        }
+    };
+    if detach && !group {
+        return Err(err(format!(
+            "detach=true needs group (the default); with group=false there is no group to leave unreaped in {caller}"
+        )));
+    }
+    cmd = cmd.detach(detach);
 
     // Per-fd capture cap (order 1443-esm5). Unset keeps the executor's default
     // (tillandsias_exec::DEFAULT_CAPTURE_BYTES); a clipped capture comes back

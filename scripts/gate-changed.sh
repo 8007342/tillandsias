@@ -53,6 +53,13 @@
 #   * a change that cannot be scoped (exit 10 below) prints `heavy:<reason>`
 #     and runs nothing: the lander marks the member HEAVY rather than
 #     running everything at intake.
+#
+# CHECKS (2282-asxn, relay-preflight). `--checks` keeps only the selected
+# scripts/**/check-* deciders (no test-* fixture, no crate), whole-tree readers
+# included: they are the tree-only answers the queue evicts on. A change that
+# cannot be scoped selects EVERY check-* decider, never none. A header declaring
+# `preflight: gate-only — <reason>` is left out and named on a deferred: line.
+#
 # Without --intake every line and exit code is exactly today's.
 #
 # Usage:
@@ -60,6 +67,7 @@
 #   gate-changed.sh --run  [base]   run the selection (build.sh --changed)
 #   gate-changed.sh --map           print the derived input map
 #   --intake                        the bundle intake gate (see INTAKE above)
+#   --checks                        only the check-* deciders (see CHECKS above)
 #   --crate-graph                   print the derived path-dependency edges
 #                                   (<crate dir> TAB <dep dir>) and exit; the
 #                                   metadata lint compares them to cargo's
@@ -75,17 +83,19 @@ set -uo pipefail
 ROOT="${TILLANDSIAS_GATE_CHANGED_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 MODE="--list"
 INTAKE=0
+CHECKS=0
 BASE=""
 FILES_FROM=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --list|--run|--map|--crate-graph) MODE="$1" ;;
         --intake) INTAKE=1 ;;
+        --checks) CHECKS=1 ;;
         --files) FILES_FROM="${2:-}"; shift ;;
         -h|--help) sed -n '2,75p' "${BASH_SOURCE[0]}"; exit 0 ;;
         -*) echo "refused:gate-changed:unknown-flag:$1" >&2
             echo "  why: an unknown flag would be read as the base ref and diff against nothing meaningful" >&2
-            echo "  remedy: use --list, --run, --map, --crate-graph, --intake or --files <file>, then an optional base ref (see --help)" >&2
+            echo "  remedy: use --list, --run, --map, --crate-graph, --intake, --checks or --files <file>, then an optional base ref (see --help)" >&2
             exit 2 ;;
         *) BASE="$1" ;;
     esac
@@ -313,8 +323,58 @@ elif [ "$CHANGED_N" -eq 0 ]; then
     echo "ok:gate-changed:no-changes base=${BASE:-files} fixtures=0/$POP_N crates=0"
     exit 0
 fi
+# ORDER 2250-gwfy — AT INTAKE, A build.sh EDIT CONFINED TO WIRED FIXTURE
+# BLOCKS IS NOT A GUARD HIT. Most build.sh edits add or change one
+# `_step … if ! _run… ; _error … exit 1 ; fi ; _info …` block inside --check,
+# and the replay (2249-tif9) found build.sh behind 11 of 22 HEAVY heads. The
+# rule is deliberately STRICT: every added or removed line must be a block
+# line (comment, blank, _step, `if ! _run`/`_run_lua_decider`, _error, _warn,
+# exit 1, fi, _info) and lie inside the --check section; anything else (a
+# variable, a trap, the step loop, a multi-line block with its own state)
+# stays heavy:guard:build.sh. The fixtures named on the changed `_run` lines
+# are then SELECTED (because=build.sh-block), alongside every fixture whose
+# declared inputs name build.sh. Without --intake nothing here applies.
+# The diff comes from git (`git diff -U0 <base> -- build.sh`), or, under
+# --files, from TILLANDSIAS_GATE_CHANGED_BUILD_DIFF (the replay supplies it);
+# with neither, build.sh stays a guard.
+: > "$WORK/build-block-fx"
+_build_block_only=0
+if [ "$INTAKE" = 1 ] && grep -qx 'build.sh' "$WORK/changed"; then
+    if [ -n "$FILES_FROM" ]; then
+        _bd="${TILLANDSIAS_GATE_CHANGED_BUILD_DIFF:-}"
+        [ -n "$_bd" ] && [ -f "$_bd" ] && cp "$_bd" "$WORK/build.diff" || : > "$WORK/build.diff"
+    else
+        git diff -U0 "$BASE" -- build.sh > "$WORK/build.diff" 2>/dev/null || : > "$WORK/build.diff"
+    fi
+    _chk_lo="$(grep -n '^if \[\[ "\$FLAG_CHECK" == true \]\]; then' build.sh | head -n 1 | cut -d: -f1)"
+    _chk_hi="$(grep -n '^elif \[\[ "\$FLAG_TEST\$FLAG_CHECK' build.sh | head -n 1 | cut -d: -f1)"
+    if [ -s "$WORK/build.diff" ] && [ -n "$_chk_lo" ] && [ -n "$_chk_hi" ]; then
+        _bb="$(awk -v lo="$_chk_lo" -v hi="$_chk_hi" -v out="$WORK/build-block-fx" '
+            /^@@/ { s = $0; sub(/^@@ -[0-9,]+ \+/, "", s); sub(/[, ].*/, "", s); n = s + 0; next }
+            /^(\+\+\+|---)/ { next }
+            /^[+-]/ {
+                l = substr($0, 2)
+                if (n < lo || n > hi) { bad = 1 }
+                else if (l ~ /^[[:space:]]*(#.*)?$/ || l ~ /^[[:space:]]*_step "/ || l ~ /^[[:space:]]*_error "/ \
+                    || l ~ /^[[:space:]]*_warn "/ || l ~ /^[[:space:]]*_info "/ || l ~ /^[[:space:]]*exit 1$/ || l ~ /^[[:space:]]*fi$/) { }
+                else if (l ~ /^[[:space:]]*if ! _run_lua_decider "scripts\/lua\/[^"]+" 2>&1; then$/) {
+                    f = l; sub(/.*_run_lua_decider "/, "", f); sub(/".*/, "", f); print f > out
+                } else if (l ~ /^[[:space:]]*if ! _run bash "\$SCRIPT_DIR\/scripts\/[^"]+"( [^;]*)? 2>&1; then$/) {
+                    f = l; sub(/.*_run bash "\$SCRIPT_DIR\//, "", f); sub(/".*/, "", f); print f > out
+                } else { bad = 1 }
+                if (substr($0, 1, 1) == "+") n++
+                next
+            }
+            END { print (bad ? "machinery" : "block-only") }' "$WORK/build.diff")"
+        [ "$_bb" = "block-only" ] && _build_block_only=1
+    fi
+fi
 if [ -z "$_why_all" ]; then
-    _g="$(grep -E "$_guard_re" "$WORK/changed" | head -n 1)"
+    if [ "$_build_block_only" = 1 ]; then
+        _g="$(grep -vx 'build.sh' "$WORK/changed" | grep -E "$_guard_re" | head -n 1)"
+    else
+        _g="$(grep -E "$_guard_re" "$WORK/changed" | head -n 1)"
+    fi
     [ -z "$_g" ] && _g="$(grep -F -f "$WORK/plan-closure" "$WORK/changed" | grep -E '^crates/' | head -n 1)"
     [ -n "$_g" ] && _why_all="guard:$_g"
 fi
@@ -348,6 +408,25 @@ END { h = 1; while (h <= t) { c = q[h++]; print c; n = split(R[c], p, " ")
 awk -F'\t' 'NR == FNR { N[$1] = $2; next } ($0 in N) { print N[$0] }' "$WORK/crates" "$WORK/crate-sel" > "$WORK/pkg-sel"
 
 awk -F'\t' '$1 == "sel" && $2 ~ /^fx:/ { sub(/^fx:/, "", $2); print $2 "\t" $3 }' "$WORK/sel" | sort > "$WORK/fx-sel"
+if [ "$CHECKS" = 1 ]; then
+    if [ -n "$_why_all" ]; then
+        echo "select:checks-all reason=$_why_all"
+        awk -F'\t' '{ print $1 ($4 == "" ? "" : " " $4) "\tall" }' "$WORK/pop" > "$WORK/fx-sel"
+        _why_all=""
+    fi
+    : > "$WORK/fx-chk"; : > "$WORK/fx-chk-def"
+    while IFS=$'\t' read -r _u _why; do
+        _fp="${_u%% *}"
+        case "${_fp##*/}" in check-*) ;; *) continue ;; esac
+        if [ -n "$(awk 'NR > 40 { exit } /preflight: gate-only-decider/ { next } /^(#|--) preflight: gate-only/ { print; exit }' "$_fp" 2>/dev/null)" ]; then
+            printf '%s\n' "$_u" >> "$WORK/fx-chk-def"
+        else
+            printf '%s\t%s\n' "$_u" "$_why" >> "$WORK/fx-chk"
+        fi
+    done < "$WORK/fx-sel"
+    sort -u "$WORK/fx-chk" > "$WORK/fx-sel"; : > "$WORK/pkg-sel"; : > "$WORK/crate-hit"
+    [ ! -s "$WORK/fx-chk-def" ] || echo "deferred:checks $(tr '\n' ' ' < "$WORK/fx-chk-def")"
+fi
 FX_N="$(wc -l < "$WORK/fx-sel" | tr -d ' ')"
 PKG_N="$(wc -l < "$WORK/pkg-sel" | tr -d ' ')"
 CRATE_TOTAL="$(wc -l < "$WORK/crates" | tr -d ' ')"
@@ -364,6 +443,40 @@ if [ -n "$_why_all" ]; then
     exit 0
 fi
 
+# 2250-gwfy: the fixtures a block-only build.sh edit wires are selected.
+if [ "$_build_block_only" = 1 ] && [ -s "$WORK/build-block-fx" ]; then
+    sort -u "$WORK/build-block-fx" | while IFS= read -r _bf; do
+        # a REMOVED block names a fixture that may be gone: select only what
+        # the population still runs, or the run loop would count it unrun.
+        awk -F'\t' -v f="$_bf" '$3 == f && $4 == "" { found = 1 } END { exit !found }' "$WORK/pop" || continue
+        grep -q "^$_bf	" "$WORK/fx-sel" 2>/dev/null || printf '%s\tbuild.sh-block\n' "$_bf"
+    done >> "$WORK/fx-sel"
+    sort -o "$WORK/fx-sel" "$WORK/fx-sel"
+    FX_N="$(wc -l < "$WORK/fx-sel" | tr -d ' ')"
+fi
+
+# ORDER 2260-qw67: a guard build.sh declares `gate-context` (its preflight
+# precondition table) answers about a RUNNING gate, not the tree, so a scoped run
+# has no subject for it. It was run anyway, without the arguments its call site
+# passes on a continuation line, and read could-not-run on every sample. Left out
+# of the SELECTION, never of the population: its inputs must stay mapped, or a
+# change to one would select everything. Named; the full gate still runs it.
+awk -F'|' '/^_preflight_preconditions\(\)/ { t = 1; next } t && /^PRECONDS$/ { exit }
+           t && $2 == "gate-context" { print $1 }' build.sh > "$WORK/gate-context"
+if [ -s "$WORK/gate-context" ]; then
+    : > "$WORK/fx-ctx"
+    while IFS=$'\t' read -r _u _why; do
+        _fp="${_u%% *}"
+        if grep -qxF -- "${_fp##*/}" "$WORK/gate-context"; then
+            echo "skip:gate-changed:gate-context:$_fp — build.sh declares it has no subject outside a running gate" >&2
+        else
+            printf '%s\t%s\n' "$_u" "$_why" >> "$WORK/fx-ctx"
+        fi
+    done < "$WORK/fx-sel"
+    mv "$WORK/fx-ctx" "$WORK/fx-sel"
+    FX_N="$(wc -l < "$WORK/fx-sel" | tr -d ' ')"
+fi
+
 # INTAKE: defer whole-tree readers and declared-slow fixtures to the bundle.
 : > "$WORK/fx-deferred"
 if [ "$INTAKE" = 1 ]; then
@@ -372,7 +485,10 @@ if [ "$INTAKE" = 1 ]; then
         _fp="${_u%% *}"
         if [ "$_why" = "*" ]; then
             printf '%s\twhole-tree\n' "$_u" >> "$WORK/fx-deferred"
-        elif [ -n "$(sed -n '1,40{/preflight: gate-only-decider/d;/^\(#\|--\) preflight: gate-only/p;}' "$_fp" 2>/dev/null | head -n 1)" ]; then
+        # awk, not sed: `\(a\|b\)` alternation is GNU-only, and BSD sed matched
+        # nothing, so on darwin no declared-slow fixture was ever deferred
+        # (macbookair, #1402: 974's DEFER-SLOW arm red there and on trunk).
+        elif [ -n "$(awk 'NR > 40 { exit } /preflight: gate-only-decider/ { next } /^(#|--) preflight: gate-only/ { print; exit }' "$_fp" 2>/dev/null)" ]; then
             printf '%s\tslow\n' "$_u" >> "$WORK/fx-deferred"
         else
             printf '%s\t%s\n' "$_u" "$_why" >> "$WORK/fx-keep"
@@ -407,6 +523,44 @@ case "$_plan" in ./*) _plan="$ROOT/${_plan#./}" ;; esac
 . "$ROOT/scripts/timing-log.sh" 2>/dev/null || true
 _now() { if command -v timing_now_ms >/dev/null 2>&1; then timing_now_ms; else echo $(( $(date +%s) * 1000 )); fi; }
 _t0="$(_now)"; _fail=0; _ran=0
+
+# ORDER 2256-mvmy — A PLAN-ONLY DIFF GOES TO THE PLAN LANE. Operator-approved
+# 2026-11-20: plan changes get the plan-lane checks, never a build-check; at
+# intake a plan-only follow-up took 247 s and 91 fixtures (2249-tif9 sample).
+# The lane's own validators, each over this diff: `check --strict-fragments`
+# and the fragment deciders the pre-push plan-only lane runs (its Lua port
+# where one exists). One route:plan-lane line, then their verdicts.
+if [ "$INTAKE" = 1 ] && ! grep -qvE '^plan/' "$WORK/changed"; then
+    echo "route:plan-lane changed=$CHANGED_N (every path under plan/)"
+    _ps="$(_now)"
+    if [ -z "$_plan" ]; then
+        echo "fail:gate-changed:plan-lane:no-plan-binary"; exit 1
+    fi
+    if ! _o="$("$_plan" check --strict-fragments 2>&1)"; then
+        printf '%s\n' "$_o" | tail -n 20; echo "fail:gate-changed:plan-lane:check-strict-fragments"; _fail=$((_fail + 1))
+    else
+        echo "ok:gate-changed:plan-lane:check-strict-fragments"
+    fi
+    for _pd in check-added-fragments-parse check-scorable-obligation-added check-fragment-status-loss \
+               check-fragment-ts-skew check-issue-citation-convention check-mo-full-attestations; do
+        if [ -f "$ROOT/scripts/lua/$_pd.lua" ]; then
+            _o="$(TILLANDSIAS_GATE_DIFF_BASE="$BASE" TILLANDSIAS_SCRIPT_RUNNER_BIN="$_plan" "$_plan" script run "$ROOT/scripts/lua/$_pd.lua" 2>&1)"; _rc=$?
+        elif [ -f "$ROOT/scripts/$_pd.sh" ]; then
+            _o="$(TILLANDSIAS_GATE_DIFF_BASE="$BASE" bash "$ROOT/scripts/$_pd.sh" 2>&1)"; _rc=$?
+        else
+            echo "skip:gate-changed:plan-lane:$_pd:absent"; continue
+        fi
+        if [ "$_rc" -ne 0 ]; then
+            printf '%s\n' "$_o" | tail -n 20; echo "fail:gate-changed:plan-lane:$_pd rc=$_rc"; _fail=$((_fail + 1))
+        else
+            echo "ok:gate-changed:plan-lane:$_pd"
+        fi
+    done
+    echo "phase:plan-lane ms=$(( $(_now) - _ps ))"
+    if [ "$_fail" -gt 0 ]; then echo "fail:gate-changed:intake:plan-lane $_fail-failed ms=$(( $(_now) - _t0 ))"; exit 1; fi
+    echo "ok:gate-changed:intake:plan-lane ms=$(( $(_now) - _t0 ))"
+    exit 0
+fi
 if [ "$PKG_N" -gt 0 ]; then
     _pk=(); while IFS= read -r _p; do _pk+=(-p "$_p"); done < "$WORK/pkg-sel"
     _tr="$ROOT/target/test-transcript-changed.log"; mkdir -p "$ROOT/target"
@@ -415,6 +569,14 @@ if [ "$PKG_N" -gt 0 ]; then
     if [ "$INTAKE" = 1 ] && [ "${TILLANDSIAS_GATE_NEXTEST:-auto}" != 0 ]; then
         _nx="$(cargo nextest --version 2>/dev/null)" || _nx=""
         _nx="${_nx%%$'\n'*}"
+    fi
+    # 2256-mvmy: the build is its own phase, so the breakdown can say which
+    # part of intake to cut (the test runs below then start from warm binaries).
+    if [ "$INTAKE" = 1 ]; then
+        _bs="$(_now)"
+        cargo test --no-run "${_pk[@]}" --manifest-path "$ROOT/Cargo.toml" > "$WORK/build.log" 2>&1 || true
+        echo "phase:cargo-build ms=$(( $(_now) - _bs ))"
+        _s="$(_now)"
     fi
     if [ -n "$_nx" ]; then
         # The crates that CHANGED, each with its reverse-dep closure, as one
@@ -425,15 +587,34 @@ if [ "$PKG_N" -gt 0 ]; then
             [ -n "$_n" ] && _fs="${_fs:+$_fs | }rdeps($_n)"
         done < "$WORK/crate-hit"
         echo "runner:nextest:${_nx#cargo-nextest } filter=$_fs"
-        cargo nextest run --workspace --no-fail-fast -E "$_fs" --manifest-path "$ROOT/Cargo.toml" > "$WORK/nextest.log" 2>&1
+        # Under target/, never $WORK in /tmp: the converter reads only inside the
+        # repository, and a refused read made every green run here read red (2285-jvg6).
+        _nx_log="$ROOT/target/nextest-changed.log"
+        cargo nextest run --workspace --no-fail-fast -E "$_fs" --manifest-path "$ROOT/Cargo.toml" > "$_nx_log" 2>&1
         _crc=$?
         # The baseline check reads cargo test's transcript shape.
-        if [ -n "$_plan" ]; then
-            ( cd "$ROOT" && "$_plan" script run --helper scripts/lua/nextest-to-libtest.lua -- "$WORK/nextest.log" ) > "$_tr" 2>/dev/null \
-                || cp "$WORK/nextest.log" "$_tr"
-        else
-            cp "$WORK/nextest.log" "$_tr"
+        _conv_bad=1
+        _conv="no plan binary with \`script run\` resolves"
+        if [ -n "$_plan" ] && ( cd "$ROOT" && "$_plan" script run --helper scripts/lua/nextest-to-libtest.lua -- "$_nx_log" ) > "$_tr" 2> "$WORK/conv.err"; then
+            _conv_bad=0
+        elif [ -n "$_plan" ]; then
+            _conv="$(cat "$WORK/conv.err" "$_tr")"; _conv="${_conv:-the converter failed and printed nothing}"
         fi
+        echo "phase:nextest ms=$(( $(_now) - _s ))"
+        # 2256-mvmy: nextest runs no doctests, and the gate adds them after the
+        # converted log (build.sh, 2243-urcy); those `test result:` lines are
+        # what check-test-baseline counts. Without them a green nextest run
+        # read as no-test-results. Only crates with a lib target have any.
+        _ds="$(_now)"; _dk=()
+        while IFS= read -r _d; do
+            [ -f "$ROOT/$_d/src/lib.rs" ] || continue
+            _n="$(awk -F'\t' -v d="$_d" '$1 == d { print $2 }' "$WORK/crates")"
+            [ -n "$_n" ] && _dk+=(-p "$_n")
+        done < "$WORK/crate-sel"
+        if [ "${#_dk[@]}" -gt 0 ]; then
+            cargo test --doc --no-fail-fast "${_dk[@]}" --manifest-path "$ROOT/Cargo.toml" >> "$_tr" 2>&1 || _crc=$?
+        fi
+        echo "phase:doctests ms=$(( $(_now) - _ds )) crates=$(( ${#_dk[@]} / 2 ))"
     else
         if [ "$INTAKE" = 1 ]; then
             if [ "${TILLANDSIAS_GATE_NEXTEST:-auto}" = 0 ]; then echo "runner:cargo-test:forced-by-TILLANDSIAS_GATE_NEXTEST=0"
@@ -441,8 +622,13 @@ if [ "$PKG_N" -gt 0 ]; then
         fi
         cargo test --no-fail-fast "${_pk[@]}" --manifest-path "$ROOT/Cargo.toml" > "$_tr" 2>&1
         _crc=$?
+        [ "$INTAKE" = 1 ] && echo "phase:cargo-test ms=$(( $(_now) - _s ))"
     fi
-    if ! _v="$(bash scripts/check-test-baseline.sh --from "$_tr")"; then
+    if [ "${_conv_bad:-0}" = 1 ]; then
+        echo "fail:gate-changed:nextest-transcript log=$_nx_log rc=$_crc — the result log could not be converted, so the tests were not judged"
+        printf '%s\n' "$_conv" | sed 's/^/  /'
+        _fail=$((_fail + 1))
+    elif ! _v="$(bash scripts/check-test-baseline.sh --from "$_tr")"; then
         tail -n 40 "$_tr"; echo "$_v"; echo "fail:gate-changed:cargo-test rc=$_crc transcript=$_tr"; _fail=$((_fail + 1))
     else
         echo "ok:gate-changed:cargo-test packages=$PKG_N ms=$(( $(_now) - _s ))"
@@ -498,7 +684,14 @@ _fx_one() { # _fx_one <n> <runner> <path> <args> <adv>
     case "$5" in skip=*) [ "$_rc" = "${5#skip=}" ] && _rc=0 ;; 1) _rc=0 ;; esac
     echo "$(( $(_now) - _s ))" > "$_o.ms"; echo "$_rc" > "$_o.rc"
 }
-: > "$WORK/fx.order"
+: > "$WORK/fx.order"; : > "$WORK/fx.serial"
+# 2256-mvmy: the loop reads a FILE, never a process substitution. A serial
+# row calls `wait`, and on the real tree (population > the 64 KB pipe buffer)
+# that wait sat on the `tr` feeding the loop while `tr` blocked writing to the
+# pipe only the waiting loop drains: measured on lenovinha, the intake run in
+# do_wait for 46 min with tr in anon_pipe_write and no fixture started.
+tr '\t' '\037' < "$WORK/pop" > "$WORK/pop.us"
+_fxs="$(_now)"
 while IFS=$'\037' read -r _id _runner _path _args _adv _desc _rest; do
     grep -qxF -- "$_id${_args:+ $_args}" "$WORK/fx-sel.ids" || continue
     _ran=$((_ran + 1))
@@ -507,14 +700,37 @@ while IFS=$'\037' read -r _id _runner _path _args _adv _desc _rest; do
         echo "could-not-run:gate-changed:no-plan-binary:$_path" > "$WORK/fx.$_ran.out"
         echo 127 > "$WORK/fx.$_ran.rc"; echo 0 > "$WORK/fx.$_ran.ms"; continue
     fi
-    if [ -n "$(sed -n '1,40{/^# preflight: serial/p;/^-- preflight: serial/p;}' "$ROOT/$_path" 2>/dev/null | head -n 1)" ]; then
+    # 2256-mvmy: at intake, run serially everything --check never runs beside
+    # another fixture: an inline build.sh block (serial by construction; such a
+    # row names no .step file) and a .step declaring STEP_SERIAL. Only an
+    # undeclared .step is known pool-safe — it is what the gate-steps pool
+    # already runs concurrently. Measured on 10 landed-green merges: the pool
+    # ran these side by side and every scoped run reported 7-13 false reds.
+    # (Without --intake the loop keeps its header-only rule; legacy --changed
+    # has the same defect and is a developer loop, so it is left as it was.)
+    _ser=0
+    [ -n "$(awk 'NR > 40 { exit } /^(#|--) preflight: serial/ { print; exit }' "$ROOT/$_path" 2>/dev/null)" ] && _ser=1
+    if [ "$INTAKE" = 1 ]; then
+        _sf="${_rest%%$'\037'*}"
+        if [ -z "$_sf" ]; then _ser=1
+        elif grep -q '^STEP_SERIAL=' "$ROOT/$_sf" 2>/dev/null; then _ser=1; fi
+    fi
+    if [ "$_ser" = 1 ]; then
+        printf '%s\n' "$_ran" >> "$WORK/fx.serial"
         wait; _fx_one "$_ran" "$_runner" "$_path" "$_args" "$_adv"
     else
         _fx_wait_below "$_jobs"
         _fx_one "$_ran" "$_runner" "$_path" "$_args" "$_adv" &
     fi
-done < <(tr '\t' '\037' < "$WORK/pop")
+done < "$WORK/pop.us"
 wait
+if [ "$INTAKE" = 1 ]; then
+    _sms=0; _sn=0
+    while IFS= read -r _n; do _sms=$(( _sms + $(cat "$WORK/fx.$_n.ms" 2>/dev/null || echo 0) )); _sn=$((_sn + 1)); done < "$WORK/fx.serial"
+    _fxw=$(( $(_now) - _fxs ))
+    echo "phase:serial-fixtures ms=$_sms n=$_sn"
+    echo "phase:pool ms=$(( _fxw > _sms ? _fxw - _sms : 0 )) n=$(( _ran - _sn ))"
+fi
 while IFS=$'\t' read -r _n _path; do
     _rc="$(cat "$WORK/fx.$_n.rc" 2>/dev/null || echo 125)"; _ms="$(cat "$WORK/fx.$_n.ms" 2>/dev/null || echo 0)"
     if [ "$_rc" -ne 0 ]; then

@@ -340,10 +340,8 @@ scripts scripts/census-litmus-layer-classification.sh 5
 scripts scripts/census-litmus-step-enforcement.sh 4
 scripts scripts/centicolon-grade.sh 2
 scripts scripts/change-class.sh 3
-scripts scripts/check-added-fragments-parse.sh 3
 scripts scripts/check-added-test-is-referenced.sh 5
 scripts scripts/check-append-vs-origin-fold.sh 15
-scripts scripts/check-approved-ux-strings.sh 5
 scripts scripts/check-archive-answerability.sh 5
 scripts scripts/check-arrival-routing.sh 3
 scripts scripts/check-base-ledger-status-loss.sh 7
@@ -378,7 +376,6 @@ scripts scripts/check-must-ship-rows.sh 5
 scripts scripts/check-nix-builder-e2e.sh 7
 scripts scripts/check-nix-deps-stability.sh 6
 scripts scripts/check-no-competing-gate.sh 6
-scripts scripts/check-no-fixture-writes-live-ledger.sh 16
 scripts scripts/check-no-tracked-binaries.sh 7
 scripts scripts/check-pickup-role-grammar.sh 3
 scripts scripts/check-plan-binary-current.sh 5
@@ -396,13 +393,11 @@ scripts scripts/check-sigpipe-verdict-pipelines-added.sh 15
 scripts scripts/check-skill-canonicalization.sh 4
 scripts scripts/check-skills-single-source.sh 8
 scripts scripts/check-spec-index-resolution-agreement.sh 4
-scripts scripts/check-spec-script-paths.sh 7
 scripts scripts/check-stranded-in-progress.sh 5
 scripts scripts/check-stranded-plan-writes.sh 3
 scripts scripts/check-test-baseline.sh 8
 scripts scripts/check-tracked-files-unwritten.sh 4
 scripts scripts/check-unrunnable-platform-arms.sh 5
-scripts scripts/check-windows-only-sources-verified.sh 12
 scripts scripts/check-windows-tray-diagnose-surface.sh 2
 scripts scripts/claim-ledger-node.sh 6
 scripts scripts/clamp-ca-material.sh 1
@@ -528,7 +523,6 @@ scripts scripts/test-agent-identity.sh 4
 scripts scripts/test-append-event-archived-refusal.sh 4
 scripts scripts/test-append-vs-origin-fold.sh 7
 scripts scripts/test-archiver-could-not-run-is-self-naming.sh 1
-scripts scripts/test-archiver-could-not-run-verdict.sh 2
 scripts scripts/test-archiver-ruby-could-not-run.sh 8
 scripts scripts/test-awk-float-lc-numeric.sh 6
 scripts scripts/test-base-ledger-status-loss.sh 7
@@ -537,7 +531,6 @@ scripts scripts/test-bench-prompt-uniqueness.sh 1
 scripts scripts/test-bound-litmus-is-runnable.sh 5
 scripts scripts/test-branch-discipline-verb.sh 1
 scripts scripts/test-brew-shim-reentrancy.sh 2
-scripts scripts/test-brew-shim-tier2-warning.sh 6
 scripts scripts/test-bsd-count-shapes.sh 6
 scripts scripts/test-build-sh-ci-full-install-prep.sh 1
 scripts scripts/test-build-step-timing-attribution.sh 1
@@ -572,7 +565,6 @@ scripts scripts/test-credential-channel-host-push-lane.sh 1
 scripts scripts/test-credential-channel-names-a-locked-keyring.sh 6
 scripts scripts/test-credential-cold-state-probe.sh 2
 scripts scripts/test-cycle-checkout-lock.sh 9
-scripts scripts/test-cycle-claims-report.sh 1
 scripts scripts/test-cycle-driver.sh 3
 scripts scripts/test-cycle-metrics-recurrence.sh 1
 scripts scripts/test-cycle-preflight-cargo-resolution.sh 3
@@ -643,7 +635,6 @@ scripts scripts/test-hook-phase-instrumentation.sh 5
 scripts scripts/test-host-tools.sh 30
 scripts scripts/test-image-build-convergence.sh 2
 scripts scripts/test-image-usability-check.sh 1
-scripts scripts/test-inference-pull-failure-classification.sh 4
 scripts scripts/test-installer-probes-by-attempt-not-by-help.sh 2
 scripts scripts/test-installers-quiet-progress.sh 3
 scripts scripts/test-join-the-fleet-idempotent.sh 8
@@ -683,8 +674,6 @@ scripts scripts/test-loop-status-append-input.sh 6
 scripts scripts/test-loop-status-audit-reads-current-emitter.sh 2
 scripts scripts/test-lww-channel-alias.sh 3
 scripts scripts/test-lww-channel-consumers.sh 2
-scripts scripts/test-macos-model-share-writable.sh 1
-scripts scripts/test-macos-signing-seam.sh 1
 scripts scripts/test-macos-vz-orphan-diagnosis.sh 2
 scripts scripts/test-mcp-plan-resolver-pinning.sh 2
 scripts scripts/test-mcp-run-command-tool.sh 2
@@ -702,7 +691,6 @@ scripts scripts/test-must-ship-rows.sh 8
 scripts scripts/test-nix-cache-service.sh 1
 scripts scripts/test-nix-toolbox.sh 9
 scripts scripts/test-no-competing-gate.sh 2
-scripts scripts/test-no-fixture-writes-live-ledger.sh 3
 scripts scripts/test-no-stale-base-revert-pre-receive.sh 3
 scripts scripts/test-no-stale-base-revert.sh 4
 scripts scripts/test-nvidia-cdi-stale-hostpath.sh 1
@@ -723,12 +711,10 @@ scripts scripts/test-plan-orders-fragment-fold.sh 7
 scripts scripts/test-podman-mock-refusal.sh 4
 scripts scripts/test-podman-mock-secret-lifecycle.sh 4
 scripts scripts/test-portability-idioms.sh 13
-scripts scripts/test-pre-push-deletion-only.sh 1
 scripts scripts/test-pre-push-empty-ref-list.sh 6
 scripts scripts/test-pre-push-honours-a-live-freeze.sh 11
 scripts scripts/test-pre-push-linux-next-merged.sh 3
 scripts scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh 7
-scripts scripts/test-pre-push-trailer-states-what-it-saw.sh 2
 scripts scripts/test-pre-push-version-guard-sigpipe.sh 3
 scripts scripts/test-pre-push-version-guard.sh 1
 scripts scripts/test-pre-push-work-ref-lane.sh 12
@@ -793,13 +779,11 @@ scripts scripts/test-token-instrument.sh 2
 scripts scripts/test-tool-dispatch-lib.sh 18
 scripts scripts/test-tool-materialize-litmus-surfaces-arm.sh 3
 scripts scripts/test-tool-materialize.sh 5
-scripts scripts/test-toolbox-refusal-wsl-exception.sh 3
 scripts scripts/test-trace-coverage.sh 4
 scripts scripts/test-tracked-files-unwritten-guard.sh 2
 scripts scripts/test-tray-asset-placeholder-refused.sh 1
 scripts scripts/test-tray-surface-parity-gate.sh 1
 scripts scripts/test-unrunnable-platform-arms.sh 9
-scripts scripts/test-unstable-installer-defaults-to-unstable.sh 1
 scripts scripts/test-vault-shutdown-forwards-sigterm.sh 2
 scripts scripts/test-verify-closure.sh 1
 scripts scripts/test-windows-host-lane-refusal.sh 4

@@ -109,7 +109,12 @@ candidate() {
 # this fixture through the gate, and every one-at-a-time arm then ran as a train
 # (macuahuitl run 26: ARM 1b/2/17a/22/30/34 red). Arms set ARM_* instead.
 run_queue() {
-    ( cd "$WORK_DIR" && env \
+    ( cd "$WORK_DIR" && env -u TILLANDSIAS_LAND_QUEUE_BUNDLE_LOG -u TILLANDSIAS_LAND_QUEUE_HEAVY_PROBE \
+        TILLANDSIAS_LAND_QUEUE_SHADOW_INTAKE="${ARM_SHADOW:-}" TILLANDSIAS_LAND_QUEUE_SHADOW_LOG="${ARM_SHADOW_LOG:-$TMP/shadow.$$.log}" \
+        TILLANDSIAS_LAND_QUEUE_SHADOW_LOCK="${ARM_SHADOW_LOCK:-$TMP/shadow.$$.lock}" TILLANDSIAS_LAND_QUEUE_SHADOW_TREE="${ARM_SHADOW_TREE:-$TMP/shadow.$$.tree}" \
+        TILLANDSIAS_LAND_QUEUE_SHADOW_PR_S="${ARM_SHADOW_PR_S:-60}" TILLANDSIAS_LAND_QUEUE_SHADOW_RUN_S="${ARM_SHADOW_RUN_S:-60}" \
+        ${ARM_HEAVY_PROBE:+"TILLANDSIAS_LAND_QUEUE_HEAVY_PROBE=$ARM_HEAVY_PROBE"} \
+        TILLANDSIAS_BUNDLE_HEAVY_MAX="${ARM_HEAVY_MAX:-2}" \
         TILLANDSIAS_LAND_QUEUE_GH="$GH_BIN" \
         TILLANDSIAS_LAND_QUEUE_GATE="bash $GATE_BIN" \
         TILLANDSIAS_LAND_QUEUE_PREFLIGHT="${PREFLIGHT_CMD:-}" \
@@ -1165,6 +1170,7 @@ git -C "$OTHER20" config commit.gpgsign false
 mkdir -p "$WORK_DIR/.git/hooks"
 cat > "$WORK_DIR/.git/hooks/pre-push" <<HOOK
 #!/usr/bin/env bash
+grep -q " refs/heads/linux-next " || exit 0  # 2248-jihs: race the TRUNK push, not the queue-status publish
 [ -e "$TMP/push20b/raced" ] && exit 0
 : > "$TMP/push20b/raced"
 mkdir -p "$OTHER20/plan/index.d"
@@ -1494,6 +1500,44 @@ else
 $out32d"
 fi
 
+# ARM 32e-g (2277-7trt): red-twice:<test>: says the step runner already ran that
+# step twice on this tree. (e) candidate-only red: no identical-tree re-run, the
+# trunk check still gates once and the candidate is evicted (2 gates, not 3).
+# (f) trunk fails it too: the queue holds, nobody is evicted (2 gates). (g)
+# CONTROL: another untouched red beside it still re-runs (3 gates).
+arm32rt() { # <name> <order> <num> <gate body, sees candidate file rt.txt>
+    scaffold "$1"
+    mkdir -p "$WORK_DIR/scripts"; echo "# $1" > "$WORK_DIR/scripts/test-hs.sh"
+    git -C "$WORK_DIR" add -A; git -C "$WORK_DIR" commit -q -m hs; git -C "$WORK_DIR" push -q origin linux-next
+    candidate "$1" "$2" rt.txt A
+    printf '[{"number":%s,"headRefName":"work/%s","isDraft":false}]\n' "$3" "$2" > "$GH_PRS"
+    printf '#!/usr/bin/env bash\necho gated >> "%s"\n%s\nexit 0\n' "$GATE_LOG" "$4" > "$GATE_BIN"
+    out32rt="$(run_queue)"; g32rt="$(grep -c . "$GATE_LOG")"
+}
+_rt="echo 'red-twice:test-hs.sh:rc=1,rc=1'"
+arm32rt arm32e 1325-aaaa 25 "if [ -e rt.txt ]; then $_rt; exit 1; fi"
+if [ "$g32rt" -eq 2 ] && grep -q '^land-queue: #25 red-twice in scripts/test-hs.sh' <<<"$out32rt" \
+    && grep -q '^evict:land-queue:25:gate-failed' <<<"$out32rt" && ! grep -q 're-running the gate once' <<<"$out32rt"; then
+    ok "ARM 32e: a red-twice red is not re-run; the trunk is asked once and the candidate is evicted (2 gates)"
+else
+    bad "ARM 32e: wanted 2 gates, no re-run, evicted; got gates=$g32rt
+$out32rt"
+fi
+arm32rt arm32f 1326-aaaa 26 "$_rt; exit 1"
+if [ "$g32rt" -eq 2 ] && grep -q '^hold:trunk-red:scripts/test-hs.sh ' <<<"$out32rt" && ! grep -q '^evict' <<<"$out32rt"; then
+    ok "ARM 32f: a red-twice red the trunk shares holds the queue and evicts nobody (2 gates)"
+else
+    bad "ARM 32f: wanted 2 gates and hold:trunk-red; got gates=$g32rt
+$out32rt"
+fi
+arm32rt arm32g 1327-aaaa 27 "if [ -e rt.txt ]; then $_rt; echo 'FAIL scripts/test-other.sh: x'; exit 1; fi"
+if [ "$g32rt" -eq 3 ] && grep -q 're-running the gate once' <<<"$out32rt"; then
+    ok "ARM 32g (control): a red-twice beside another untouched red still re-runs once (3 gates)"
+else
+    bad "ARM 32g: wanted 3 gates and a re-run; got gates=$g32rt
+$out32rt"
+fi
+
 # ──────────────────────────────────────────────────────────── ARM 33
 # Operator ruling 2026-11-20: A PLAN-LEDGER-ONLY PR LANDS ON THE PLAN-LANE
 # CHECKS WITH ZERO BUILD-CHECK INVOCATIONS. #1166 took 53 min of full gate.
@@ -1719,7 +1763,8 @@ _t41="$TMP/arm41/trains.log"
 if [ "$(git -C "$REMOTE_DIR" for-each-ref --format='%(objectname)' 'refs/heads/work/*' | sort -u | grep -c .)" -ne 3 ]; then
     bad "ARM 41 premise: three distinct work heads were not pushed"
 else
-    out41="$(ARM_BATCH_K=4 ARM_TRAIN_LOG="$_t41" run_queue)"; rc41=$?
+    # HEAVY_MAX=4: the scratch tree's empty fixture population probes every member heavy.
+    out41="$(ARM_BATCH_K=4 ARM_HEAVY_MAX=4 ARM_TRAIN_LOG="$_t41" run_queue)"; rc41=$?
     _h41="$(git -C "$REMOTE_DIR" rev-parse linux-next)"
     _np41="$(git -C "$REMOTE_DIR" rev-list --parents -n 1 "$_h41" | wc -w)"
     _fp41="$(git -C "$REMOTE_DIR" rev-list --first-parent --count "$_b41..$_h41")"
@@ -2000,6 +2045,272 @@ if grep -q '^train:target-moved:' <<<"$out55b" && ! grep -q '^train:adopt' <<<"$
 else
     bad "ARM 55b: wanted train:target-moved, no adopt, no train= land; got
 $out55b"
+fi
+
+# ARM 56 (2248-jihs): `--status` answers without the lock. (a) no holder: the
+# idle line naming the newest land; (b) a live holder: the running phase from
+# the run dir's `current`, with elapsed rendered; neither gates nor locks; (c) a
+# real run published its last word to refs/tillandsias/queue/status.
+: > "$GATE_LOG"
+out56a="$(run_queue --status)"; rc56a=$?
+sleep 300 & _h56=$!
+_l56="$(cd "$WORK_DIR" && git rev-parse --show-toplevel)/.git/tillandsias-land-queue.lock"
+mkdir -p "$_l56" "$TMP/lq56/run1"; echo "$_h56" > "$_l56/pid"
+echo "$TMP/lq56/run1" > "$TMP/lq56/current-run"
+echo "queue:gating:#7 work/0001-abcd phase=gate started=$(( $(date +%s) - 5 )) train=- waiting=2" > "$TMP/lq56/run1/current"
+out56b="$(LOGDIR_OVERRIDE="$TMP/lq56" run_queue --status)"; rc56b=$?
+kill "$_h56" 2>/dev/null; wait "$_h56" 2>/dev/null
+_lock56=$([ -d "$_l56" ] && echo held); rm -rf "$_l56"
+pub56="$(git -C "$REMOTE_DIR" log -1 --format=%s refs/tillandsias/queue/status 2>/dev/null)"
+if [ "$rc56a" = 0 ] && grep -Eq '^queue:idle last-land=[0-9a-f]{40} [0-9]+s$' <<<"$out56a" \
+    && [ "$rc56b" = 0 ] && grep -Eq '^queue:gating:#7 work/0001-abcd phase=gate elapsed=[5-9] train=- waiting=2$' <<<"$out56b" \
+    && [ "$_lock56" = held ] && [ ! -s "$GATE_LOG" ] && grep -q '^queue:idle last-land=' <<<"$pub56"; then
+    ok "ARM 56: --status says idle/last-land or the live phase with elapsed, takes no lock, gates nothing; a run publishes refs/tillandsias/queue/status (2248-jihs)"
+else
+    bad "ARM 56: got rc=$rc56a/$rc56b lock=$_lock56 gates=$(grep -c . "$GATE_LOG") published='$pub56'
+$out56a
+$out56b"
+fi
+# ARM 57 (bundle landing phase 1): every train writes ONE bundles.log line beside
+# trains.log, and heavy= counts members by gate-changed's own answer. (a) landed:
+# one of two members probed heavy; (b) a red train, promoted=-; (c) a gate rc=137
+# is the host's, aborted and never red; (d) a probe that does not answer reads `-`,
+# never 0; (e) the REAL default probe answers in the scratch tree (its empty
+# fixture population is heavy by gate-changed's rule, so 2).
+_p57="$TMP/heavy57.sh"
+cat > "$_p57" <<'PROBE'
+if grep -q heavy <<<"$(git diff --name-only "$1")"; then echo "heavy:guard:x"; else echo "select:intake fixtures=1/9"; fi
+PROBE
+arm57() { # <name> <gate rc on the first gate> <probe> <out var for the line(s)>
+    scaffold "$1"
+    candidate "$1" 1071-aaaa light57.txt A
+    candidate "$1" 1072-bbbb heavy57.txt B
+    cat > "$GH_PRS" <<JSON
+[{"number":71,"headRefName":"work/1071-aaaa","isDraft":false},
+ {"number":72,"headRefName":"work/1072-bbbb","isDraft":false}]
+JSON
+    printf '#!/usr/bin/env bash\n[ -e "%s" ] && exit 0\n: > "%s"\nexit %s\n' "$TMP/$1/once" "$TMP/$1/once" "$2" > "$GATE_BIN"
+    out57="$out57
+$(ARM_BATCH_K=4 ARM_HEAVY_PROBE="$3" ARM_TRAIN_LOG="$TMP/$1/trains.log" run_queue)"
+    printf -v "$4" '%s' "$(cat "$TMP/$1/bundles.log" 2>&1)"
+}
+out57=""
+arm57 arm57a 0 "bash $_p57" l57a; _h57="$(git -C "$REMOTE_DIR" rev-parse linux-next)"
+_t57="$(git -C "$REMOTE_DIR" rev-parse "linux-next^{tree}")"
+arm57 arm57b 1 "bash $_p57" l57b
+arm57 arm57c 137 "bash $_p57" l57c
+arm57 arm57d 0 "false" l57d
+arm57 arm57e 0 "" l57e
+_ok57=1
+grep -Eq "^bundle:green:train-[0-9]+ members=2 heavy=1 base=[0-9a-f]{9} tree=${_t57:0:9} gate_s=[0-9]+ reason=train promoted=${_h57:0:9} cause=landed:${_h57:0:9} ids=#71,#72 ts=[0-9TZ:-]+$" <<<"$l57a" || _ok57="a"
+grep -Eq '^bundle:red:train-[0-9]+ members=2 heavy=1 .* promoted=- cause=red:rc=1 ' <<<"$l57b" || _ok57="$_ok57 b"
+grep -Eq '^bundle:aborted:train-[0-9]+ .* promoted=- cause=red:rc=137 ' <<<"$l57c" || _ok57="$_ok57 c"
+grep -Eq '^bundle:green:train-[0-9]+ members=2 heavy=- ' <<<"$l57d" || _ok57="$_ok57 d"
+grep -Eq '^bundle:green:train-[0-9]+ members=2 heavy=2 ' <<<"$l57e" || _ok57="$_ok57 e"
+[ "$(grep -c . <<<"$l57a$l57b$l57c$l57d$l57e")" -ge 1 ] && for _l in "$l57a" "$l57b" "$l57c" "$l57d" "$l57e"; do
+    [ "$(grep -c . <<<"$_l")" -eq 1 ] || _ok57="$_ok57 not-one-line"
+done
+if [ "$_ok57" = 1 ]; then
+    ok "ARM 57: one bundles.log line per train (green/red/aborted) with members, heavy, base, tree, gate seconds, promoted; an unanswered heavy probe reads '-'"
+else
+    bad "ARM 57: failed: $_ok57
+a=$l57a
+b=$l57b
+c=$l57c
+d=$l57d
+e=$l57e
+$out57"
+fi
+# ARM 58 (2281-xx62): TILLANDSIAS_BUNDLE_HEAVY_MAX caps a train's non-light members.
+# Queue order heavy, heavy, light. (a) max=1: the second heavy is put back and the
+# light one behind it still joins, so the train is #71,#73 and #72 lands alone;
+# (b) max=2: all three ride; (c) an unanswered probe counts toward the cap, so
+# max=1 leaves one member, which is no train; (d) max=0 takes no heavy member;
+# (e) an unreadable max is said aloud and read as 2.
+arm58() { # <name> <max> <probe> -> o58 (queue output), l58 (bundle lines)
+    scaffold "$1"
+    candidate "$1" 1081-aaaa heavy58a.txt A
+    candidate "$1" 1082-bbbb heavy58b.txt B
+    candidate "$1" 1083-cccc light58.txt C
+    cat > "$GH_PRS" <<JSON
+[{"number":71,"headRefName":"work/1081-aaaa","isDraft":false},
+ {"number":72,"headRefName":"work/1082-bbbb","isDraft":false},
+ {"number":73,"headRefName":"work/1083-cccc","isDraft":false}]
+JSON
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$GATE_BIN"
+    o58="$(ARM_BATCH_K=4 ARM_HEAVY_MAX="$2" ARM_HEAVY_PROBE="$3" ARM_TRAIN_LOG="$TMP/$1/trains.log" run_queue)"
+    l58="$(cat "$TMP/$1/bundles.log" 2>/dev/null)"
+    _n58="$(grep -cE '^land:7[123] .*gate=green' <<<"$o58")"
+}
+_ok58=1
+arm58 arm58a 1 "bash $_p57"; _d58="$o58"
+{ grep -q 'members=2 heavy=1 .* ids=#71,#73 ' <<<"$l58" && grep -q 'train:accept:#71 tier=heavy' <<<"$o58" \
+  && grep -q 'train:accept:#73 tier=light' <<<"$o58" && grep -q 'train:heavy-deferred:#72 tier=heavy max=1' <<<"$o58" \
+  && [ "$_n58" -eq 3 ]; } || _ok58="$_ok58 a"
+arm58 arm58b 2 "bash $_p57"; _d58="$_d58
+$o58"
+{ grep -q 'members=3 heavy=2 .* ids=#71,#72,#73 ' <<<"$l58" && [ "$_n58" -eq 3 ]; } || _ok58="$_ok58 b"
+arm58 arm58c 1 false; _d58="$_d58
+$o58"
+{ [ -z "$l58" ] && grep -q 'train:heavy-deferred:#72 tier=unknown max=1' <<<"$o58" && [ "$_n58" -eq 3 ]; } || _ok58="$_ok58 c"
+arm58 arm58d 0 "bash $_p57"; _d58="$_d58
+$o58"
+{ [ -z "$l58" ] && grep -q 'train:heavy-deferred:#71 tier=heavy max=0' <<<"$o58" && [ "$_n58" -eq 3 ]; } || _ok58="$_ok58 d"
+arm58 arm58e two "bash $_p57"; _d58="$_d58
+$o58"
+{ grep -q "train:heavy-max-unreadable:'two'" <<<"$o58" && grep -q 'members=3 heavy=2 ' <<<"$l58"; } || _ok58="$_ok58 e"
+if [ "$_ok58" = 1 ]; then
+    ok "ARM 58: HEAVY_MAX caps a train's heavy and unmeasured members; the rest go one at a time"
+else
+    bad "ARM 58: failed: $_ok58
+$_d58"
+fi
+# ARM 60 (bundle landing phase 0): SHADOW INTAKE records intake's verdict beside the
+# gate's and changes nothing. One run, three candidates: #81 gate green + intake ok,
+# #82 gate red + intake red, #83 gate green + heavy (rc 10). (b) the stub writes into
+# its own tree and the queue's checkout stays clean; every shadow ran after the last
+# gate. (c) OFF by default: no log. (d) a train's members log via=train. (e) the run
+# bound names what it drops; (f) a per-PR timeout is timeout, never red. (g) a red
+# intake on a green gate (a false red) keeps its log. (h) --status names the log.
+_sh60="$TMP/shadow60.sh"
+cat > "$_sh60" <<'SH'
+[ -e dirt-from-shadow ] && dirty=dirty || dirty=clean
+echo "shadow gates=$(grep -c . "@GATES@") nice=$(nice) $dirty shared=${TILLANDSIAS_SHARED_TARGET:-on}" >> "@SEEN@"
+echo dirt > dirt-from-shadow; echo dirt >> seed-dirt
+if [ -e c83.txt ]; then echo "heavy:guard:x fixtures=9 crates=28 changed=1"; exit 10; fi
+if [ -e c82.txt ]; then echo "select:intake fixtures=6/9 deferred=1 crates=0/28 changed=1 base=x"; exit 1; fi
+if [ -e c84.txt ]; then : > "@LOCK@/stop"; exit 0; fi
+if [ -e c81.txt ]; then echo "select:intake fixtures=5/9 deferred=1 crates=2/28 changed=1 base=x"; exit 0; fi
+if [ -e slow.txt ]; then sleep 30; fi
+exit 1
+SH
+arm60() { # <name> <K> <files...> ; env SH60_* pass through
+    local n="$1" k="$2" i=81 f js="" ; shift 2
+    scaffold "$n"
+    for f in "$@"; do candidate "$n" "10$i-aaaa" "$f" A; js="$js${js:+,}{\"number\":$i,\"headRefName\":\"work/10$i-aaaa\",\"isDraft\":false}"; i=$((i + 1)); done
+    printf '[%s]\n' "$js" > "$GH_PRS"
+    printf '#!/usr/bin/env bash\necho gated >> "%s"\n[ -e c82.txt ] && exit 1\nexit 0\n' "$GATE_LOG" > "$GATE_BIN"
+    : > "$TMP/$n/seen"
+    sed -e "s#@GATES@#$GATE_LOG#; s#@SEEN@#$TMP/$n/seen#; s#@LOCK@#$TMP/$n/lock#" "$_sh60" > "$TMP/$n/stub.sh"
+    out60="$(ARM_BATCH_K="$k" ARM_SHADOW="${SH60_CMD-bash $TMP/$n/stub.sh}" ARM_SHADOW_LOCK="$TMP/$n/lock" ARM_SHADOW_TREE="$TMP/$n/shtree" \
+        ARM_SHADOW_LOG="$TMP/$n/shadow.log" ARM_SHADOW_PR_S="${SH60_PR_S:-60}" ARM_SHADOW_RUN_S="${SH60_RUN_S:-60}" LOGDIR_OVERRIDE="$TMP/$n/logs" run_queue)"
+    [ -d "$WORK_DIR/.git/tillandsias-land-queue.lock" ] && _b60="$_b60 $n-land-lock-held"
+    [ -n "${SH60_J:-}" ] || for _w in $(seq 1 600); do [ "$(grep -cE '^(shadow:accept|unmeasured):' "$TMP/$n/shadow.log" 2>/dev/null || [ -e "$TMP/$n/shadow.log" ] || echo 0)" -ge "${SH60_LINES:-1}" ] && [ ! -d "$TMP/$n/lock" ] && break; sleep 0.1; done
+    l60="$(cat "$TMP/$n/shadow.log" 2>/dev/null)"
+}
+_b60=""
+SH60_LINES=3 arm60 arm60a 1 c81.txt c82.txt c83.txt
+grep -Eq '^shadow:accept:81 tier=intake selected=5/9 crates=2 intake_s=[0-9]+ intake=ok gate=green via=single base=[0-9a-f]{9} head=[0-9a-f]{9} rc=0 ts=' <<<"$l60" || _b60="$_b60 a81"
+grep -Eq '^shadow:accept:82 tier=intake selected=6/9 crates=0 .* intake=red gate=red ' <<<"$l60" || _b60="$_b60 a82"
+grep -Eq '^shadow:accept:83 tier=heavy selected=-/9 crates=- .* intake=- gate=green ' <<<"$l60" || _b60="$_b60 a83"
+[ "$(grep -c "^shadow:accept:" <<<"$l60")" -eq 3 ] && grep -Eq "^shadow:tree $TMP/arm60a/shtree size_mb=[0-9]+$" <<<"$l60" && grep -q '^land:81 ' <<<"$out60" && grep -q '^land:83 ' <<<"$out60" && grep -q '^evict:land-queue:82' <<<"$out60" || _b60="$_b60 a-landing"
+[ "$(grep -c 'gates=3 nice=10 clean shared=off$' "$TMP/arm60a/seen")" -eq 3 ] || _b60="$_b60 b-order"
+[ -z "$(git -C "$WORK_DIR" status --porcelain --untracked-files=no)" ] && [ ! -e "$WORK_DIR/dirt-from-shadow" ] && [ ! -e "$WORK_DIR/target/shadow-intake" ] && [ -e "$TMP/arm60a/shtree/.git" ] || _b60="$_b60 b-isolation"
+st60="$(ARM_SHADOW=x ARM_SHADOW_LOG="$TMP/arm60a/shadow.log" run_queue --status)"
+grep -Eq "^queue:shadow (idle|running) pr=[-#0-9]+ log=$TMP/arm60a/shadow.log lines=3$" <<<"$st60" || _b60="$_b60 h-status"
+SH60_CMD="" SH60_LINES=0 arm60 arm60c 1 c81.txt
+[ ! -e "$TMP/arm60c/shadow.log" ] && [ ! -s "$TMP/arm60c/seen" ] && grep -q '^land:81 ' <<<"$out60" && ! grep -q shadow <<<"$out60" || _b60="$_b60 c-off"
+SH60_LINES=2 arm60 arm60d 4 c81.txt c83.txt
+[ "$(grep -c 'gate=green via=train' <<<"$l60")" -eq 2 ] && [ "$(grep -c . "$GATE_LOG")" -eq 1 ] || _b60="$_b60 d-train"
+SH60_RUN_S=0 arm60 arm60e 1 c81.txt
+grep -q '^unmeasured:shadow:81:run-bound gate=green' <<<"$l60" && grep -q '^land:81 ' <<<"$out60" || _b60="$_b60 e-bound"
+SH60_PR_S=1 arm60 arm60f 1 slow.txt
+grep -q 'intake=timeout gate=green .* rc=124 ' <<<"$l60" || _b60="$_b60 f-timeout"
+arm60 arm60g 1 other.txt
+grep -q 'intake=red gate=green ' <<<"$l60" && ls "$TMP/arm60g/logs"/*/shadow-81-false-red.log >/dev/null 2>&1 || _b60="$_b60 g-false-red"
+# (i) a stop request ends it at the next PR, and what it dropped is named; (j) a land
+# run that starts while a shadow holds its lock asks it to stop, and still lands.
+SH60_LINES=2 arm60 arm60i 1 c84.txt other.txt
+grep -q '^shadow:accept:81 .* intake=ok ' <<<"$l60" && grep -q '^unmeasured:shadow:82:stopped gate=green' <<<"$l60" || _b60="$_b60 i-stop"
+# (k) a stop MID-BUILD ends the build's whole process tree and names the PR; (l) the same
+# through the builder wrapper leaves nothing running IN THE TOOLBOX (a named skip where
+# there is no builder). The sleep's duration is its marker, so only it is looked for.
+_m60="86$(( $$ % 100000 ))"
+printf 'sleep %s & sleep %s\n' "$_m60" "$_m60" > "$TMP/mid60.sh"
+printf 'bash "%s" sleep %s\n' "$ROOT/scripts/with-tillandsias-builder.sh" "1$_m60" > "$TMP/mid60tb.sh"
+mid60() { # <name> <stub> <pattern>: run it, stop it once the marker is live, count what is left
+    ( for _w in $(seq 1 300); do pgrep -f "$3" >/dev/null && { sleep 1; : > "$TMP/$1/lock/stop"; break; }; sleep 0.1; done ) &
+    local _sp=$!
+    SH60_CMD="bash $2" arm60 "$1" 1 other.txt; wait "$_sp"
+    grep -q '^unmeasured:shadow:81:stopped-mid-build gate=green' <<<"$l60" || _b60="$_b60 $1-unnamed"
+    for _w in $(seq 1 100); do pgrep -f "$3" >/dev/null || break; sleep 0.1; done
+    pgrep -f "$3" >/dev/null && { _b60="$_b60 $1-survivor"; pkill -f "$3"; }
+}
+mid60 arm60k "$TMP/mid60.sh" "^sleep $_m60\$"
+if command -v toolbox >/dev/null 2>&1 && toolbox list -c 2>/dev/null | grep -q tillandsias-builder; then
+    mid60 arm60l "$TMP/mid60tb.sh" "^sleep 1$_m60\$"
+else echo "skip: ARM 60l — no tillandsias-builder toolbox here"; fi
+sleep 300 & _h60=$!
+mkdir -p "$TMP/arm60j/lock"; echo "$_h60" > "$TMP/arm60j/lock/pid"
+SH60_CMD="" SH60_LINES=0 SH60_J=1 arm60 arm60j 1 c81.txt
+[ -e "$TMP/arm60j/lock/stop" ] && grep -q '^land:81 ' <<<"$out60" || _b60="$_b60 j-signal"
+kill "$_h60" 2>/dev/null; wait "$_h60" 2>/dev/null
+if [ -z "$_b60" ]; then
+    ok "ARM 60: shadow intake logs intake beside the gate after the last gate, in its own tree; off by default, bounded by name, and lands exactly what it would have"
+else
+    bad "ARM 60: failed:$_b60
+$l60
+$out60
+$(cat "$TMP/arm60a/seen")"
+fi
+# ARM 61 (bundle landing phase 2 prep): `--status` also says what is next, the open
+# train and the shadow, and `--status --pr N` answers "is my PR gating?". Asked from
+# INSIDE a real gate, so it reads what a run really wrote. (a) a train of #91,#92 with
+# #93 left waiting (K=2): bundle open, heavy counted, next, and each PR's own answer;
+# (b) idle: bundle open=- with the last bundles.log line; (c) a live shadow is named,
+# a stop request shows; (d) `--pr` alone never runs the queue, and without a number is
+# refused; (e) the published body carries no local path; (f) the first line is ARM 56's.
+scaffold arm61
+for _i in 1 2 3; do candidate arm61 "109$_i-aaaa" "s61$_i.txt" A; done
+cat > "$GH_PRS" <<JSON
+[{"number":91,"headRefName":"work/1091-aaaa","isDraft":false},
+ {"number":92,"headRefName":"work/1092-aaaa","isDraft":false},
+ {"number":93,"headRefName":"work/1093-aaaa","isDraft":false}]
+JSON
+_st61="$TMP/arm61/st"; mkdir -p "$_st61" "$TMP/arm61/sk"
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+n="\$(grep -c . "$GATE_LOG")"; echo gated >> "$GATE_LOG"
+s() { ( cd "$WORK_DIR" && TILLANDSIAS_LAND_QUEUE_GH="$GH_BIN" TILLANDSIAS_LAND_QUEUE_REMOTE=origin TILLANDSIAS_TRUNK_BRANCH=linux-next TILLANDSIAS_LAND_QUEUE_LOGDIR="$TMP/arm61/logs" TILLANDSIAS_LAND_QUEUE_TRAIN_LOG="$TMP/arm61/trains.log" TILLANDSIAS_LAND_QUEUE_SHADOW_LOCK="$TMP/arm61/sk" TILLANDSIAS_LAND_QUEUE_SHADOW_LOG="$TMP/arm61/shadow.log" bash "$QUEUE" "\$@" 2>&1 ); }
+s --status > "$_st61/status.\$n"; for p in 91 93 99; do s --status --pr "#\$p" > "$_st61/pr\$p.\$n"; done
+git -C "$REMOTE_DIR" log -1 --format=%B refs/tillandsias/queue/status > "$_st61/pub.\$n"
+exit 0
+GATE
+sleep 300 & _h61=$!
+echo "$_h61" > "$TMP/arm61/sk/pid"; printf 88 > "$TMP/arm61/sk/current"
+out61="$(ARM_BATCH_K=2 ARM_HEAVY_PROBE="bash $_p57" ARM_TRAIN_LOG="$TMP/arm61/trains.log" ARM_SHADOW_LOCK="$TMP/arm61/sk" ARM_SHADOW_LOG="$TMP/arm61/shadow.log" LOGDIR_OVERRIDE="$TMP/arm61/logs" run_queue)"
+_b61=""; _s0="$(cat "$_st61/status.0")"; _s1="$(cat "$_st61/status.1")"
+grep -Eq '^queue:gating:#91 train phase=train-gate elapsed=[0-9]+ train=#91,#92 waiting=[0-9]+$' <<<"$_s0" || _b61="$_b61 f-first-line"
+grep -Eq '^queue:bundle open=train-[0-9]+ members=#91,#92 heavy=0 base=[0-9a-f]{9} phase=train-gate elapsed=[0-9]+$' <<<"$_s0" || _b61="$_b61 a-bundle"
+grep -q '^queue:next #93$' <<<"$_s0" || _b61="$_b61 a-next"
+grep -q '^queue:pr:#91 gating in-train .*\|^queue:pr:#91 gating ' "$_st61/pr91.0" || _b61="$_b61 a-pr91"
+grep -q '^queue:pr:#93 waiting position=1 of=1$' "$_st61/pr93.0" || _b61="$_b61 a-pr93"
+grep -q '^queue:pr:#99 not-in-this-run ' "$_st61/pr99.0" || _b61="$_b61 a-pr99"
+grep -Eq '^queue:gating:#93 work/1093-aaaa phase=gate ' <<<"$_s1" && grep -Eq '^queue:bundle open=- last=bundle:green:train-[0-9]+ members=2 ' <<<"$_s1" && grep -q '^queue:next -$' <<<"$_s1" || _b61="$_b61 b-single"
+grep -q '^queue:pr:#93 gating ' "$_st61/pr93.1" || _b61="$_b61 b-pr93"
+# the run asked this live shadow to stop at its start (2285-haa6), so it reads stopping
+grep -q "^queue:shadow stopping pr=#88 log=$TMP/arm61/shadow.log lines=0$" <<<"$_s0" || _b61="$_b61 c-shadow"
+kill "$_h61" 2>/dev/null; wait "$_h61" 2>/dev/null
+grep -q '^queue:bundle open=train-' "$_st61/pub.0" && ! grep -qF "$TMP" "$_st61/pub.0" || _b61="$_b61 e-published"
+_si="$(ARM_SHADOW_LOCK="$TMP/arm61/sk" ARM_TRAIN_LOG="$TMP/arm61/trains.log" LOGDIR_OVERRIDE="$TMP/arm61/logs" run_queue --status)"
+grep -q '^queue:idle last-land=' <<<"$_si" && grep -q '^queue:bundle open=- last=bundle:green:' <<<"$_si" && grep -q '^queue:shadow idle pr=- ' <<<"$_si" && ! grep -q '^queue:next' <<<"$_si" || _b61="$_b61 b-idle"
+_g61="$(grep -c . "$GATE_LOG")"
+_p1="$(LOGDIR_OVERRIDE="$TMP/arm61/logs" run_queue --pr 91)"
+_p3="$(LOGDIR_OVERRIDE="$TMP/arm61/logs" run_queue --status --pr)"; _r3=$?
+[ "$(grep -c . "$GATE_LOG")" -eq "$_g61" ] && grep -q '^queue:pr:#91 idle ' <<<"$_p1" || _b61="$_b61 d-pr-alone"
+[ "$_r3" -ne 0 ] && grep -q 'fail:land-queue:pr-needs-a-number' <<<"$_p3" || _b61="$_b61 d-no-number"
+if [ -z "$_b61" ]; then
+    ok "ARM 61: --status names the open train, what is next and the shadow from inside a real gate, --pr answers for one PR, and neither runs the queue"
+else
+    bad "ARM 61: failed:$_b61
+$_s0
+--
+$_s1
+--
+$_si
+$(head -3 "$_st61"/pr*)
+$_p1
+$_p3"
 fi
 printf '\n'
 if [ "$fail" -eq 0 ]; then

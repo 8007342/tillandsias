@@ -54,7 +54,7 @@ critical_path:
     expected_behavior: "ok: unpushed-claim-refused"
 
   - step: "the gate is wired into the local gate"
-    command: "grep -q 'check-mo-full-attestations.sh' build.sh && echo 'ok: wired-into-build-check'"
+    command: "grep -qE '^STEP_SCRIPT=\"scripts/check-mo-full-attestations\\.sh\"|_run bash \"[^\"]*/scripts/check-mo-full-attestations\\.sh\"' build.sh scripts/gate-steps.d/*.step && echo 'ok: wired-into-build-check'"
     timeout_ms: 3000
     expected_behavior: "ok: wired-into-build-check"
 

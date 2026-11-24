@@ -28,7 +28,7 @@
 #
 # Prints one PASS/FAIL summary line and exits 0/1.
 set -uo pipefail
-ROOT="$(git rev-parse --show-toplevel)" || exit 1
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exit 1
 cd "$ROOT" || exit 1
 
 pass=0
@@ -91,7 +91,7 @@ drive() {   # $1 = exit code the decider returns, $2 = stdout line it prints
 }
 
 # ---- ARM 1: exit 2 is could-not-run, and says so --------------------------
-out2="$(drive 2 'could-not-run:fragment-events-land:compact-did-not-run')"
+out2="$(drive 2 'could-not-run:fragment-events-land:check-did-not-answer')"
 if grep -q 'COULD NOT RUN' <<<"$out2"; then
     ok "exit 2 -> named as could-not-run"
 else
@@ -106,7 +106,7 @@ else
 fi
 
 # The decider's own verdict line must be surfaced, not paraphrased away.
-if grep -q 'compact-did-not-run' <<<"$out2"; then
+if grep -q 'check-did-not-answer' <<<"$out2"; then
     ok "exit 2 surfaces the decider's own verdict line"
 else
     bad "exit 2 hides which could-not-run cause fired; got: $out2"

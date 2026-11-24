@@ -86,6 +86,7 @@ mod image_build_scope;
 mod memory_protection;
 mod self_exe;
 // @trace order:1874-b9tg: where an sd.cpp run placed the model.
+mod gpu_fallback;
 #[cfg(feature = "host-services")]
 mod imagegen_consent;
 mod imagegen_models;
@@ -5808,6 +5809,37 @@ fn refuse_real_home_in_test(certs_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// 2258-sr65: how long a minter waits for another one. A mint is openssl plus a
+/// keyring write; 5 s lost to a loaded host (12 test processes) twice in one day.
+const GENERATION_LOCK_WAIT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// A mkdir lock, removed on drop.
+pub(crate) struct GenerationLock(PathBuf);
+impl Drop for GenerationLock {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir(&self.0);
+    }
+}
+
+pub(crate) fn acquire_generation_lock(
+    lock_dir: &Path,
+    what: &str,
+) -> Result<GenerationLock, String> {
+    let deadline = std::time::Instant::now() + GENERATION_LOCK_WAIT;
+    loop {
+        match std::fs::create_dir(lock_dir) {
+            Ok(()) => return Ok(GenerationLock(lock_dir.to_path_buf())),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                if std::time::Instant::now() >= deadline {
+                    return Err(format!("Timed out waiting for {what}"));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            Err(e) => return Err(format!("Failed to acquire {what}: {e}")),
+        }
+    }
+}
+
 fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     // @trace spec:secret-rotation, spec:reverse-proxy-internal
     let certs_dir = PathBuf::from(ca_dir());
@@ -5862,30 +5894,12 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
 
     if should_refresh {
         refuse_mint_in_read_only_process(read_only_process())?;
-        let lock_dir = certs_dir.join(".ca-generation.lock");
-        let mut acquired_lock = false;
-        for _ in 0..50 {
-            match std::fs::create_dir(&lock_dir) {
-                Ok(()) => {
-                    acquired_lock = true;
-                    break;
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                    std::thread::sleep(std::time::Duration::from_millis(100));
-                }
-                Err(e) => return Err(format!("Failed to acquire CA generation lock: {e}")),
-            }
-        }
-        if !acquired_lock {
-            return Err("Timed out waiting for CA generation lock".to_string());
-        }
-        struct LockDir(PathBuf);
-        impl Drop for LockDir {
-            fn drop(&mut self) {
-                let _ = std::fs::remove_dir(&self.0);
-            }
-        }
-        let _lock = LockDir(lock_dir);
+        // 2258-sr65: asked BEFORE the lock. `podman inspect` may take its whole
+        // 30 s budget on a loaded host, and a second minter was timing out
+        // behind it. Only the warning below uses the answer.
+        let vault_running = vault_bootstrap::container_running_answer("tillandsias-vault");
+        let _lock =
+            acquire_generation_lock(&certs_dir.join(".ca-generation.lock"), "CA generation lock")?;
 
         if !ca_bundle_needs_refresh(&crt, &key) {
             return Ok(certs_dir);
@@ -5906,8 +5920,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
             std::env::current_exe()
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|_| "unknown".into()),
-            vault_bootstrap::container_running_answer("tillandsias-vault")
-                .map_or("unknown", |r| if r { "yes" } else { "no" }),
+            vault_running.map_or("unknown", |r| if r { "yes" } else { "no" }),
         );
         wipe_broken_ca_state(&certs_dir, &crt, &key);
 
@@ -7698,6 +7711,10 @@ fn detect_inference_tier() -> &'static str {
 // @trace spec:accel-capability-probe
 // @trace spec:inference-policy-router: Hardware-aware tier routing and fallback chain.
 fn effective_inference_tier() -> &'static str {
+    // 2283-u8m6: a GPU podman could not hand over is not delivered.
+    if inference_gpu_withheld() {
+        return "cpu";
+    }
     let hardware = detect_inference_tier();
     let delivered = match hardware {
         "gpu-cuda" if !nvidia_cdi_available() => "cpu",
@@ -7709,6 +7726,103 @@ fn effective_inference_tier() -> &'static str {
         Path::new("/dev/dxg").exists(),
         Path::new(WSL_HOST_TREE).exists(),
     )
+}
+
+/// ORDER 2283-u8m6. Set once in this process when the inference container could
+/// not START with a GPU device attached; every later argv, tier report and forge
+/// env then says CPU. Process-scoped on purpose: the next launch tries the GPU
+/// again, so a repaired driver needs no reset.
+#[cfg(not(test))]
+static INFERENCE_GPU_WITHHELD: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+// Tests run beside each other in one process; each sees only its own flag.
+#[cfg(test)]
+thread_local! {
+    static TEST_INFERENCE_GPU_WITHHELD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+fn inference_gpu_withheld() -> bool {
+    #[cfg(test)]
+    return TEST_INFERENCE_GPU_WITHHELD.with(std::cell::Cell::get);
+    #[cfg(not(test))]
+    INFERENCE_GPU_WITHHELD.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+fn withhold_inference_gpu() {
+    #[cfg(test)]
+    TEST_INFERENCE_GPU_WITHHELD.with(|f| f.set(true));
+    #[cfg(not(test))]
+    INFERENCE_GPU_WITHHELD.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Does this argv hand the container an accelerator? `--device <gpu>` in any of
+/// the forms build_inference_run_args emits.
+fn argv_carries_gpu(args: &[String]) -> bool {
+    args.iter().any(|a| {
+        let d = a.strip_prefix("--device=").unwrap_or(a);
+        d.starts_with("nvidia.com/gpu")
+            || d.starts_with("/dev/kfd")
+            || d.starts_with("/dev/dri")
+            || d.starts_with("/dev/dxg")
+    })
+}
+
+/// The one line of a launch failure that names its cause.
+fn launch_failure_cause(err: &str) -> &str {
+    err.lines()
+        .map(str::trim)
+        .find_map(|l| l.strip_prefix("stderr:"))
+        .or_else(|| err.lines().next())
+        .unwrap_or("")
+        .trim()
+}
+
+/// ORDER 2283-u8m6 (coordinator p0, 2026-11-24). Start inference; when it fails
+/// with a GPU device attached, retry ONCE without it and say so in one line.
+/// v56.11.23.1 on lenovinha: crun refused a CDI mount under --userns=keep-id and
+/// the whole lane exited 1 for an optional accelerator. A failure with no GPU in
+/// the argv is returned as it always was. `build` is called again for the retry
+/// so the tier, the engine library and the device agree.
+async fn start_inference_with<B, R, F>(build: B, mut run: R) -> Result<String, String>
+where
+    B: Fn() -> Vec<String>,
+    R: FnMut(Vec<String>) -> F,
+    F: std::future::Future<Output = Result<String, String>>,
+{
+    let args = build();
+    let gpu = argv_carries_gpu(&args);
+    match run(args).await {
+        Err(err) if gpu => {
+            withhold_inference_gpu();
+            eprintln!(
+                "[tillandsias] inference could not start with the GPU ({}); running it on CPU for this session",
+                launch_failure_cause(&err)
+            );
+            run(build()).await.map_err(|cpu_err| {
+                format!(
+                    "{cpu_err}\n(first attempt, with the GPU: {})",
+                    launch_failure_cause(&err)
+                )
+            })
+        }
+        other => other,
+    }
+}
+
+async fn start_inference_container(
+    client: &PodmanClient,
+    stage: &str,
+    container_name: &str,
+    build: impl Fn() -> Vec<String>,
+    debug: bool,
+) -> Result<String, String> {
+    start_inference_with(build, |args| async move {
+        client
+            .run_container_observed(stage, container_name, &args, debug)
+            .await
+    })
+    .await
 }
 
 /// ORDER 793-a8e7: the operator opt-in that turns a WSL2 paravirtual GPU into
@@ -8726,7 +8840,13 @@ fn build_inference_run_args(
     // detect_inference_tier(); deliverability is gated separately (CDI for
     // cuda), and a GPU host without CDI degrades to CPU with a LOUD remedy
     // rather than a silent cpu-tier-in-gpu-clothing.
-    let tier = detect_inference_tier();
+    // 2283-u8m6: once a GPU start has failed, nothing below delivers one.
+    let gpu_withheld = inference_gpu_withheld();
+    let tier = if gpu_withheld {
+        "cpu"
+    } else {
+        detect_inference_tier()
+    };
     match tier {
         "gpu-cuda" => {
             if nvidia_cdi_available() {
@@ -8768,7 +8888,7 @@ fn build_inference_run_args(
     // delivery is orthogonal to the tier, so it is decided on its own
     // evidence.
     args.extend(wsl2_dxg_container_args(
-        Path::new("/dev/dxg").exists(),
+        !gpu_withheld && Path::new("/dev/dxg").exists(),
         Path::new(WSL_HOST_TREE).exists(),
     ));
 
@@ -8820,11 +8940,12 @@ fn build_inference_run_args(
     if let Some(note) = engine_note {
         eprintln!("[tillandsias] WARNING: {note}");
     }
-    let (usable_nodes, unusable_nodes) = if engine == engine_slots::EngineKind::LlamaServer {
-        engine_slots::usable_render_nodes(Path::new("/dev/dri"))
-    } else {
-        (Vec::new(), Vec::new())
-    };
+    let (usable_nodes, unusable_nodes) =
+        if engine == engine_slots::EngineKind::LlamaServer && !gpu_withheld {
+            engine_slots::usable_render_nodes(Path::new("/dev/dri"))
+        } else {
+            (Vec::new(), Vec::new())
+        };
     for node in &unusable_nodes {
         eprintln!(
             "[tillandsias] llama-server slot: render node {} is not readable+writable by this user — not delivered; the slot runs on CPU unless another node is usable (SLOT-5)",
@@ -14832,13 +14953,13 @@ fn run_status_check(debug: bool) -> Result<(), String> {
             // Host-native lane took it. The forwarder claims the `inference`
             // alias, so the container below must NOT also run (830-xsk2).
         } else {
-            client
-                .run_container_observed(
-                    "status-inference",
-                    "tillandsias-inference",
-                    &build_inference_run_args(&certs_dir, &inference_image, true),
-                    debug,
-                )
+            start_inference_container(
+                &client,
+                "status-inference",
+                "tillandsias-inference",
+                || build_inference_run_args(&certs_dir, &inference_image, true),
+                debug,
+            )
                 .await
                 .map_err(|e| e.to_string())?;
         }
@@ -18980,17 +19101,13 @@ fn run_opencode_mode(
         } else if keep_inference {
             // 1968-psy9: the healthy, current one checked above keeps serving.
         } else {
-            client
-                .run_container_observed(
-                    "opencode-inference",
-                    "tillandsias-inference",
-                    &build_inference_run_args(
-                        &certs_dir,
-                        &versioned_image_tag("inference", version),
-                        false,
-                    ),
-                    debug,
-                )
+            start_inference_container(
+                &client,
+                "opencode-inference",
+                "tillandsias-inference",
+                || build_inference_run_args(&certs_dir, &versioned_image_tag("inference", version), false),
+                debug,
+            )
                 .await
                 .map_err(|e| format!("[OpenCode] failed to start inference: {e}"))?;
         }
@@ -20923,19 +21040,21 @@ pub(crate) fn run_opencode_web_mode(
             // Host-native lane took it. The forwarder claims the `inference`
             // alias, so the container below must NOT also run (830-xsk2).
         } else {
-            client
-                .run_container_observed(
-                    "opencode-web-inference",
-                    "tillandsias-inference",
-                    &build_inference_run_args(
+            start_inference_container(
+                &client,
+                "opencode-web-inference",
+                "tillandsias-inference",
+                || {
+                    build_inference_run_args(
                         &certs_dir,
                         &versioned_image_tag("inference", version),
                         false,
-                    ),
-                    debug,
-                )
-                .await
-                .map_err(|e| format!("[OpenCode Web] failed to start inference: {e}"))?;
+                    )
+                },
+                debug,
+            )
+            .await
+            .map_err(|e| format!("[OpenCode Web] failed to start inference: {e}"))?;
             emit_opencode_web_event(
                 project_name,
                 "inference",
@@ -21905,19 +22024,21 @@ async fn ensure_inference_for_launch(
         // Host-native lane took it. The forwarder claims the `inference`
         // alias, so the container below must NOT also run (830-xsk2).
     } else {
-        client
-            .run_container_observed(
-                "forge-launch-inference",
-                "tillandsias-inference",
-                &build_inference_run_args(
+        start_inference_container(
+            client,
+            "forge-launch-inference",
+            "tillandsias-inference",
+            || {
+                build_inference_run_args(
                     certs_dir,
                     &versioned_image_tag("inference", version),
                     false,
-                ),
-                debug,
-            )
-            .await
-            .map_err(|e| format!("[forge-launch] failed to start inference: {e}"))?;
+                )
+            },
+            debug,
+        )
+        .await
+        .map_err(|e| format!("[forge-launch] failed to start inference: {e}"))?;
     }
     Ok(())
 }
@@ -26426,7 +26547,9 @@ mod tests {
             // container_running() checks name the container too.
             let window_start = idx.saturating_sub(400);
             let preceding = &source[window_start..idx];
-            if !preceding.contains("run_container_observed(") {
+            if !preceding.contains("run_container_observed(")
+                && !preceding.contains("start_inference_container(")
+            {
                 continue;
             }
             sites += 1;
@@ -26479,6 +26602,133 @@ mod tests {
         }
         assert_eq!(sites, 1, "the fixture must present one start site");
         assert_eq!(ungated, 1, "an unguarded site must be detected as ungated");
+    }
+
+    /// ORDER 2283-u8m6: an argv like the builder's, GPU unless withheld.
+    fn fake_inference_argv() -> Vec<String> {
+        let mut a: Vec<String> = vec!["--userns=keep-id".into()];
+        if !inference_gpu_withheld() {
+            a.extend(["--device".into(), "nvidia.com/gpu=all".into()]);
+        }
+        a.push("img".into());
+        a
+    }
+
+    const CRUN_REFUSAL: &str = "stage 'x-inference' failed\nstderr: Error: crun: mount_setattr `/run/nvidia-persistenced/socket`: Operation not permitted: OCI permission denied\nstate: created";
+
+    /// Pre-fix: the first failure was the lane's exit 1 (v56.11.23.1, lenovinha).
+    #[tokio::test]
+    async fn a_gpu_that_cannot_start_falls_back_to_cpu_once() {
+        let calls = std::sync::Mutex::new(Vec::new());
+        let out = start_inference_with(fake_inference_argv, |args| {
+            calls.lock().unwrap().push(args.clone());
+            async move {
+                if argv_carries_gpu(&args) {
+                    Err(CRUN_REFUSAL.to_string())
+                } else {
+                    Ok("id".to_string())
+                }
+            }
+        })
+        .await;
+        assert_eq!(out.as_deref(), Ok("id"));
+        let calls = calls.into_inner().unwrap();
+        assert_eq!(calls.len(), 2, "one retry: {calls:?}");
+        assert!(argv_carries_gpu(&calls[0]) && !argv_carries_gpu(&calls[1]));
+        assert_eq!(effective_inference_tier(), "cpu");
+    }
+
+    #[tokio::test]
+    async fn a_start_that_fails_without_a_gpu_is_returned_untouched() {
+        let mut n = 0;
+        let out = start_inference_with(
+            || vec!["img".to_string()],
+            |_| {
+                n += 1;
+                async { Err::<String, _>("no such image".to_string()) }
+            },
+        )
+        .await;
+        assert_eq!(out, Err("no such image".to_string()));
+        assert_eq!(n, 1, "nothing to fall back to: no retry");
+        assert!(!inference_gpu_withheld());
+    }
+
+    #[tokio::test]
+    async fn a_gpu_that_starts_is_not_withheld_and_both_failures_are_named() {
+        let mut n = 0;
+        let ok = start_inference_with(fake_inference_argv, |_| {
+            n += 1;
+            async { Ok::<_, String>("id".to_string()) }
+        })
+        .await;
+        assert_eq!((ok.as_deref(), n), (Ok("id"), 1));
+        assert!(!inference_gpu_withheld());
+        let err = start_inference_with(fake_inference_argv, |args| async move {
+            Err::<String, _>(if argv_carries_gpu(&args) {
+                CRUN_REFUSAL.to_string()
+            } else {
+                "cpu start failed too".to_string()
+            })
+        })
+        .await
+        .unwrap_err();
+        assert!(
+            err.contains("cpu start failed too") && err.contains("crun: mount_setattr"),
+            "{err}"
+        );
+    }
+
+    /// The REAL builder, withheld: no accelerator, and the tier it states (the
+    /// last --env wins) is cpu, with no cuda library pinned.
+    #[test]
+    fn a_withheld_gpu_leaves_no_trace_in_the_real_argv() {
+        withhold_inference_gpu();
+        let args = build_inference_run_args(Path::new("/tmp/ca"), "i:v1", false);
+        assert!(!argv_carries_gpu(&args), "{args:?}");
+        assert!(!args.iter().any(|a| a.contains("cuda")), "{args:?}");
+        assert_eq!(
+            args.iter()
+                .rfind(|a| a.starts_with("TILLANDSIAS_INFERENCE_TIER="))
+                .map(String::as_str),
+            Some("TILLANDSIAS_INFERENCE_TIER=cpu")
+        );
+    }
+
+    /// (sites through the fallback helper, lines that start inference directly).
+    fn inference_start_sites(code: &str) -> (usize, Vec<usize>) {
+        let (mut helped, mut direct) = (0, Vec::new());
+        for (idx, _) in code.match_indices("\"tillandsias-inference\",") {
+            let before: String = code[..idx].chars().rev().take(160).collect();
+            let before: String = before.chars().rev().collect();
+            if before.contains("run_container_observed(") {
+                direct.push(code[..idx].matches('\n').count() + 1);
+            } else if before.contains("start_inference_container(") {
+                helped += 1;
+            }
+        }
+        (helped, direct)
+    }
+
+    /// A start site that bypasses the helper brings the exit 1 back. The source
+    /// is the subject: the failure mode is an ADDED site no unit test calls.
+    #[test]
+    fn every_inference_start_goes_through_the_gpu_fallback() {
+        let dir = std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR");
+        let source = std::fs::read_to_string(Path::new(&dir).join("src/main.rs")).unwrap();
+        let code = source.split("#[cfg(test)]\nmod tests").next().unwrap();
+        let (helped, direct) = inference_start_sites(code);
+        assert!(direct.is_empty(), "direct inference starts at {direct:?}");
+        assert_eq!(helped, 4, "status, OpenCode, OpenCode Web and forge launch");
+    }
+
+    /// NEGATIVE CONTROL: the scan finds a site that bypasses the helper.
+    #[test]
+    fn the_gpu_fallback_scan_can_actually_fail() {
+        let bypass = "client\n    .run_container_observed(\n        \"x\",\n        \"tillandsias-inference\",\n";
+        assert_eq!(inference_start_sites(bypass), (0, vec![4]));
+        let helped = "start_inference_container(\n    &client,\n    \"x\",\n    \"tillandsias-inference\",\n";
+        assert_eq!(inference_start_sites(helped), (1, Vec::new()));
     }
 
     #[test]
@@ -37991,6 +38241,70 @@ esac
             &dir.join("intermediate.crt"),
             &dir.join("intermediate.key")
         ));
+    }
+
+    /// 2258-sr65: a minter holding the lock past the old 5 s limit makes the
+    /// second one wait, not fail.
+    #[test]
+    fn a_second_ca_minter_waits_out_a_slow_first_one() {
+        let _pseam_lock = podman_seam_lock();
+        let _guard = env_lock();
+        let _home = ScratchHome::new();
+        let dir = PathBuf::from(ca_dir());
+        std::fs::create_dir_all(&dir).unwrap();
+        let lock = dir.join(".ca-generation.lock");
+        std::fs::create_dir(&lock).unwrap();
+        let started = std::time::Instant::now();
+        std::thread::scope(|s| {
+            s.spawn(|| {
+                std::thread::sleep(std::time::Duration::from_millis(6000));
+                std::fs::remove_dir(&lock).unwrap();
+            });
+            ensure_ca_bundle(false).expect("the second minter waits for the lock");
+        });
+        assert!(started.elapsed() >= std::time::Duration::from_millis(5900));
+        assert!(!lock.exists(), "the lock is released");
+    }
+
+    /// 2258-sr65: podman is never called with the mint lock held.
+    #[test]
+    #[cfg(unix)]
+    fn the_ca_mint_lock_is_not_held_across_podman() {
+        use std::os::unix::fs::PermissionsExt;
+        let _pseam_lock = podman_seam_lock();
+        let _guard = env_lock();
+        let home = ScratchHome::new();
+        let lock = PathBuf::from(ca_dir()).join(".ca-generation.lock");
+        let (asked, held) = (home.path().join("asked"), home.path().join("held"));
+        let stub = home.path().join("podman-stub");
+        std::fs::write(
+            &stub,
+            format!(
+                "#!/bin/sh\n: > '{}'\n[ -d '{}' ] && : > '{}'\necho 'no such object' >&2\nexit 125\n",
+                asked.display(),
+                lock.display(),
+                held.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let prev = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
+        // SAFETY: serialised by podman_seam_lock and env_lock.
+        unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", &stub) };
+        let minted = ensure_ca_bundle(false);
+        // SAFETY: as above.
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var("TILLANDSIAS_PODMAN_BIN", v),
+                None => std::env::remove_var("TILLANDSIAS_PODMAN_BIN"),
+            }
+        }
+        minted.expect("ensure_ca_bundle");
+        assert!(
+            asked.exists(),
+            "the mint asked podman (the test has a subject)"
+        );
+        assert!(!held.exists(), "podman ran while the mint lock was held");
     }
 
     /// 1898-hyhf exit criterion 1: with HOME and the runtime dir on scratch

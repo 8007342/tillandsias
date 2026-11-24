@@ -468,6 +468,58 @@ _error() { echo -e "${RED}[build]${NC} $*" >&2; }
 # ORDER 1515-iwb3 (1247-amcu): a refusal says the rule that refused and what
 # clears it, in the fleet's why/remedy shape.
 _afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+# ── ORDER 2253-iher: --keep-going — NAME EVERY RED STEP, NOT ONLY THE FIRST ──
+# Opt-in (`--check --keep-going`, or `--gate-steps <root> --keep-going`); the
+# default gate stays fail-fast so a red PR still fails in seconds. The bundle
+# gate and the daily full run use it: a train's culprit search keys on the
+# FAILING STEP, so the gate must name every one (bundle-landing design, phase 1).
+#   - a gate-steps.d step that refuses is recorded and the scheduler (serial,
+#     pool or lanes) carries on: _gs_one returns 0 after recording;
+#   - an inline section's `exit <nonzero>` in the gate's own process is
+#     recorded against the current _step name and execution continues after it;
+#   - a PREREQUISITE phase (a build or the type-check: nothing after it means
+#     anything) stays fatal, and is named as such;
+#   - at the end: `red-steps:<n>` and one `red-step:<name>:rc=<n>` line each,
+#     exit 1, and NO gate stamp is written.
+# LIMIT, stated rather than hidden: build.sh runs under `set -e`, so a bare
+# command failing outside an if/||/&& still aborts the gate; that abort is
+# fatal in either mode (the EXIT trap names the phase in the timing record).
+FLAG_KEEP_GOING="${FLAG_KEEP_GOING:-false}"
+_KG_FILE=""
+_KG_PID=$$
+_KG_FATAL_RE="${TILLANDSIAS_GATE_KEEP_GOING_FATAL:-^(Building |Running clippy|target/debug/tillandsias is absent)}"
+_kg_note() { # <name> <rc> — append one red; safe from pool/lane subshells
+    [ -n "$_KG_FILE" ] || return 1
+    printf 'red-step:%s:rc=%s\n' "$1" "$2" >> "$_KG_FILE"
+}
+_kg_summary() { # prints the reds; rc 0 when there were none
+    [ -n "$_KG_FILE" ] && [ -s "$_KG_FILE" ] || return 0
+    echo "red-steps:$(grep -c . "$_KG_FILE") (keep-going: every refusal below ran to its end)"
+    cat "$_KG_FILE"
+    return 1
+}
+_kg_arm() {
+    [ "$FLAG_KEEP_GOING" = true ] || return 0
+    _KG_FILE="$(mktemp "${TMPDIR:-/tmp}/gate-keep-going.XXXXXX")" || { _error "keep-going: no scratch file"; builtin exit 1; }
+    # bash 3.2 (darwin's /bin/bash) has no BASHPID: an exec'd sh's parent IS
+    # this shell (macbookair 2026-11-23). Inline, never in a helper function:
+    # called as $(helper) it would name the command substitution's pid.
+    _KG_PID="${BASHPID:-$(exec sh -c 'echo "$PPID"')}"
+    echo "keep-going:armed (prerequisites stay fatal: $_KG_FATAL_RE)"
+    exit() {
+        local _rc="${1:-$?}"
+        local _me="${BASHPID:-$(exec sh -c 'echo "$PPID"')}"
+        if [ "$_rc" = 0 ] || [ "$_me" != "$_KG_PID" ] || [ -z "$_KG_FILE" ]; then builtin exit "$_rc"; fi
+        if [[ "${_PHASE_NAME:-}" =~ $_KG_FATAL_RE ]]; then
+            _kg_note "${_PHASE_NAME}" "$_rc (prerequisite: fatal)"
+            _kg_summary
+            builtin exit "$_rc"
+        fi
+        _kg_note "${_PHASE_NAME:-unnamed}" "$_rc"
+        _error "keep-going: recorded red step '${_PHASE_NAME:-unnamed}' (rc=$_rc); continuing"
+        return 0
+    }
+}
 # ── Per-phase timing (order 758-jw6v) ────────────────────────────────────────
 #
 # WHY THIS EXISTS. `./build.sh --check` is the largest fixed cost in a
@@ -834,6 +886,155 @@ _pf_budget() {
     esac
 }
 
+# ORDER 2272-cuxh. WHERE THE DOOR WAS WHEN ITS BUDGET RAN OUT, and how far past
+# it ran. The time is the budget itself, so the reporter's POSITION is what is
+# kept: the first roster guard it was still on. Sets _PF_REACHED once.
+_pf_note_budget() {  # $1 = elapsed s, $2 = roster position, $3 = guard
+    [ -z "${_PF_REACHED:-}" ] || return 0
+    [ "$1" -lt "$_PF_BUDGET" ] || _PF_REACHED="$2:${3##*/}"
+}
+# tail = seconds past the budget (0 inside it). A budget crossed after the last
+# guard was reported (the sweep) reads after-roster, never "never".
+_pf_tail_fields() {  # $1 = wall s; prints the two summary fields
+    local _t=$(( $1 - _PF_BUDGET ))
+    if [ "$_t" -le 0 ]; then
+        printf 'budget-reached-at=never tail=0s'
+    else
+        printf 'budget-reached-at=%s tail=%ss' "${_PF_REACHED:-after-roster}" "$_t"
+    fi
+}
+
+# ORDER 2275-fcpy. THE BENCH. A mid-tier host ran 39 guards to their 5 s deadline
+# on every door and threw the answer away: ~52 s of a 149 s door (lenovinha, six
+# idle doors, 2026-11-23). A guard that outlived its deadline on TWO doors in a
+# row, with the same content, is not started here; it is NAMED with the bound
+# and its date, counted benched=, and counted as unanswered (partial:, never
+# ok:), as the deadline skip it replaces was. Retried when its own file changes,
+# after 24 h, under a longer deadline, or with --full. A guard that finishes is
+# forgotten, so a fast host benches nothing.
+# ADVISORY ONLY: no file, a corrupt one, another host's, an unwritable one: every
+# guard starts, and nothing here can refuse. One file per host, beside the common
+# .git, so a fresh worktree starts warm. TILLANDSIAS_PREFLIGHT_BENCH=off disables.
+# Line: path TAB args|- TAB blob TAB times-over TAB bound-s TAB epoch
+# WHO THIS HOST IS. `uname -n` inside a toolbox is "toolbx" on every host
+# (macuahuitl, 2026-11-24: one record name for all of them). The machine id is
+# the host's own; hashed, since it is an identifier. The locus (uname -n) stays
+# as the second half: a toolbox door and a bare one time differently. A container
+# that cannot name its host has no bench.
+_pf_bench_host() {
+    local _f _id="" _root="${TILLANDSIAS_PREFLIGHT_BENCH_HOSTROOT:-}"
+    for _f in "$_root/run/host/etc/machine-id" "$_root/etc/machine-id"; do
+        [ -r "$_f" ] && read -r _id < "$_f" && [ -n "$_id" ] && break
+        _id=""
+    done
+    # An image's own machine-id is not the host's: inside a container only the
+    # bind at /run/host, or a toolbox's link to it, counts.
+    if [ -e "$_root/run/.containerenv" ] && [ ! -r "$_root/run/host/etc/machine-id" ]; then return 1; fi
+    if [ -n "$_id" ]; then
+        _id="$(printf '%s' "$_id" | git hash-object --stdin 2>/dev/null)" || return 1
+        _id="${_id:0:12}"
+    else
+        _id="name"
+    fi
+    printf '%s.%s' "$_id" "$(uname -n)"
+}
+# HOW CONTENDED THE DOOR WAS. Measured on lenovinha (16 cores, 2026-11-24): 8, 16
+# and 32 busy loops gave 10, 33 and 47 guards the 40-skip idle door does not skip;
+# cpu pressure read 2, 29, 91 % against 0-1 idle, so pressure alone cannot see the
+# first. FOREIGN is the cpu other processes used, as a percent of the machine:
+# busy time from /proc/stat less this shell's own and its reaped children's.
+_pf_bench_sample() {  # prints: busy-jiffies total-jiffies own-jiffies cpu-some-us wall-s; nothing where unreadable
+    local _b _t _o _p
+    read -r _b _t <<< "$(awk '/^cpu /{b=$2+$3+$4+$7+$8+$9; printf "%.0f %.0f", b, b+$5+$6; exit}' /proc/stat 2>/dev/null)"
+    _o="$(sed 's/^.*) //' "/proc/$$/stat" 2>/dev/null | awk '{print $12+$13+$14+$15}')"
+    _p="$(sed -n 's/^some .*total=//p' /proc/pressure/cpu 2>/dev/null)"
+    [ -n "$_b" ] && [ -n "$_t" ] && [ -n "$_o" ] && [ -n "$_p" ] || return 1
+    printf '%s %s %s %s %s' "$_b" "$_t" "$_o" "$_p" "$SECONDS"
+}
+# $1 = sample at start, $2 = at the end: "<cpu-some %> <foreign %>", integers.
+_pf_bench_contention() {
+    awk -v a="$1" -v z="$2" 'BEGIN {
+        if (split(a, s, " ") != 5 || split(z, e, " ") != 5) exit 1
+        w = e[5] - s[5]; t = e[2] - s[2]; if (w <= 0 || t <= 0) exit 1
+        f = (e[1] - s[1]) - (e[3] - s[3]); if (f < 0) f = 0
+        printf "%d %d", 100 * (e[4] - s[4]) / (w * 1000000), 100 * f / t }' /dev/null
+}
+# $1 = cpu-some %, $2 = foreign %: 0 only where an "over" means the guard is slow.
+_pf_bench_quiet() {
+    case "$1$2" in ''|*[!0-9]*) return 1 ;; esac
+    [ "$1" -le "$_PF_BENCH_MAX_SOME" ] && [ "$2" -le "$_PF_BENCH_MAX_FOREIGN" ]
+}
+# Where /proc answers nothing (darwin): the 1-minute load when the door STARTED,
+# in percent of the cores. Coarse, and unmeasured against a loaded Mac; its four
+# quiet doors started at 1.39-1.49. LC_ALL=C: under fr_CH sysctl prints "{ 3,62 ...".
+_pf_bench_start_load() {
+    local _l _n
+    _l="$(LC_ALL=C sysctl -n vm.loadavg 2>/dev/null)" && _n="$(sysctl -n hw.ncpu 2>/dev/null)" || return 1
+    LC_ALL=C awk -v l="$_l" -v n="$_n" 'BEGIN { split(l, a, " "); if (a[2] !~ /^[0-9.]+$/ || n + 0 <= 0) exit 1; printf "%d", 100 * a[2] / n }' /dev/null
+}
+_PF_BENCH_MAX_START_LOAD=20
+_PF_BENCH_MAX_SOME=3
+_PF_BENCH_MAX_FOREIGN=15
+_pf_bench_path() {
+    local _c _h
+    _h="$(_pf_bench_host)" || return 1
+    if [ -n "${TILLANDSIAS_PREFLIGHT_BENCH_FILE:-}" ]; then printf '%s' "$TILLANDSIAS_PREFLIGHT_BENCH_FILE"; return 0; fi
+    _c="$(git -C "$SCRIPT_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
+    [ -n "$_c" ] && [ "${_c##*/}" = .git ] || return 1
+    printf '%s/.cache/metrics/preflight-bench.%s.tsv' "${_c%/.git}" "$_h"
+}
+# $1 = work dir (roster in $1/roster; writes $1/blobs): path TAB blob, existing files only
+_pf_bench_blobs() {
+    cut -f1 "$1/roster" | sort -u | while IFS= read -r _f; do
+        [ ! -f "$SCRIPT_DIR/$_f" ] || printf '%s\n' "$_f"
+    done > "$1/blob-paths"
+    ( cd "$SCRIPT_DIR" && git hash-object --no-filters --stdin-paths ) < "$1/blob-paths" > "$1/blob-ids" 2>/dev/null || return 1
+    paste "$1/blob-paths" "$1/blob-ids" > "$1/blobs"
+}
+# $1 = work dir, $2 = bench file, $3 = door deadline, $4 = decider deadline, $5 = now.
+# Writes $1/<roster index>.benched ("<bound> <epoch>") for each guard not to start.
+_pf_bench_load() {
+    [ -r "$2" ] && [ -s "$1/blobs" ] || return 0
+    awk -F'\t' -v dir="$1" -v dl="$3" -v ddl="$4" -v now="$5" -v host="$(_pf_bench_host)" -v bf="$2" '
+        FILENAME == dir "/blobs" { blob[$1] = $2; next }
+        FILENAME == bf {
+            if (FNR == 1) { good = ($0 == "# preflight-bench v2 " host); next }
+            if (!good || NF != 6 || $4 !~ /^[0-9]+$/ || $5 !~ /^[0-9]+$/ || $6 !~ /^[0-9]+$/) next
+            if ($4 + 0 >= 2 && $6 + 0 <= now + 0 && now - $6 < 86400 && blob[$1] == $3) { b[$1 "\t" $2] = $5; t[$1 "\t" $2] = $6 }
+            next
+        }
+        { i++; k = $1 "\t" (NF > 1 ? $2 : "-")
+          d = ($1 ~ /^scripts\/(lua\/)?check-/) ? ddl : dl
+          if ((k in b) && d + 0 <= b[k] + 0) { f = dir "/" i ".benched"; print b[k], t[k] > f; close(f) } }
+    ' "$1/blobs" "$2" "$1/roster" 2>/dev/null || { rm -f "$1"/*.benched; return 0; }
+}
+# $1 = work dir ($1/outcomes: path TAB args|- TAB over|done TAB deadline), $2 = bench file, $3 = now,
+# $4 = 1 when the door was quiet. A contended or unmeasured door records no "over";
+# a finish is still a finish.
+_pf_bench_save() {
+    local _tmp
+    [ -s "$1/outcomes" ] && [ -s "$1/blobs" ] || return 0
+    mkdir -p "${2%/*}" 2>/dev/null || return 0
+    _tmp="$2.$$.tmp"
+    [ -r "$2" ] && cp "$2" "$1/bench.old" 2>/dev/null || : > "$1/bench.old"
+    awk -F'\t' -v OFS='\t' -v dir="$1" -v now="$3" -v host="$(_pf_bench_host)" -v quiet="$4" '
+        FILENAME == dir "/blobs" { blob[$1] = $2; next }
+        FILENAME == dir "/bench.old" {
+            if (FNR == 1) { good = ($0 == "# preflight-bench v2 " host); next }
+            if (!good || NF != 6 || $4 !~ /^[0-9]+$/ || $5 !~ /^[0-9]+$/ || $6 !~ /^[0-9]+$/) next
+            if ($6 + 0 > now + 0 || now - $6 > 604800) next
+            k = $1 "\t" $2; h[k] = $3; n[k] = $4; b[k] = $5; t[k] = $6; next
+        }
+        { k = $1 "\t" $2
+          if ($3 == "done") { delete h[k]; next }
+          if (quiet != 1 || $3 != "over" || blob[$1] == "") next
+          if (!(k in h) || h[k] != blob[$1]) n[k] = 0
+          h[k] = blob[$1]; n[k]++; b[k] = $4; t[k] = now }
+        END { print "# preflight-bench v2 " host; for (k in h) print k, h[k], n[k], b[k], t[k] }
+    ' "$1/blobs" "$1/bench.old" "$1/outcomes" > "$_tmp" 2>/dev/null && mv "$_tmp" "$2" 2>/dev/null || rm -f "$_tmp" 2>/dev/null
+    return 0
+}
+
 _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, $4 = args
     local _p="$1" _d="$2" _out="$3" _pid _tick
     # ORDER 1499-m9fj: THE GATE'S ARGUMENTS, WORD FOR WORD. A guard run without
@@ -1132,6 +1333,8 @@ _pf_launcher() {  # $1 = work dir, $2 = deadline, $3 = jobs, $4 = decider deadli
             13) continue ;; # own-deadline: _pf_long_lane runs it (1631-6w8z)
             *) echo "not-launched 0" > "$_dir/$_i.rc"; continue ;;
         esac
+        # 2275-fcpy: benched on this host; the reporter names and counts it.
+        if [ -f "$_dir/$_i.benched" ]; then echo "benched 0" > "$_dir/$_i.rc"; continue; fi
         while :; do
             _live=""; _n=0
             for _pid in $_pids; do
@@ -1335,6 +1538,7 @@ FLAG_CHECK=false
 # ORDER 1305-udgs — the fast-refusal front door: runs the tree-only guards and
 # exits, and NEVER compiles.
 FLAG_PREFLIGHT=false
+FLAG_FLOOR=false
 FLAG_PREFLIGHT_FULL=false
 # ORDER 1916-tsel — the warm-forge fast loop; see scripts/gate-changed.sh.
 FLAG_CHANGED=false
@@ -1344,6 +1548,10 @@ FLAG_INTAKE=false
 # scripts/gate-steps.d it reads). The fixture's way into the real loop over a
 # scratch tree; --check calls the same function over the checkout.
 GATE_STEPS_ROOT=""
+# ORDER 2250-44uy round 4 — with --gate-steps, run ONLY the step whose file is
+# <NNN>-*.step, over the INTACT tree (fleet-run; a fixture that reads
+# scripts/gate-steps.d/ must see every step). Without it nothing changes.
+GATE_STEP_ONLY=""
 FLAG_CLEAN=false
 FLAG_INSTALL=false
 FLAG_REMOVE=false
@@ -1365,7 +1573,9 @@ while [[ $# -gt 0 ]]; do
         --release)        FLAG_RELEASE=true ;;
         --test)           FLAG_TEST=true ;;
         --check)          FLAG_CHECK=true ;;
+        --keep-going)     FLAG_KEEP_GOING=true ;;  # ORDER 2253-iher
         --preflight)      FLAG_PREFLIGHT=true ;;
+        --floor)          FLAG_FLOOR=true ;;
         --changed)
             FLAG_CHANGED=true
             if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
@@ -1379,6 +1589,12 @@ while [[ $# -gt 0 ]]; do
         --gate-steps)
             GATE_STEPS_ROOT="${2:-}"
             [ -n "$GATE_STEPS_ROOT" ] || { echo "error: --gate-steps needs a root directory" >&2; exit 2; }
+            shift 2
+            continue
+            ;;
+        --gate-step)
+            GATE_STEP_ONLY="${2:-}"
+            [[ "$GATE_STEP_ONLY" =~ ^[0-9]+$ ]] || { echo "error: --gate-step needs a step number" >&2; exit 2; }
             shift 2
             continue
             ;;
@@ -1748,6 +1964,25 @@ _report_build_root() {
 if [[ "$FLAG_PREFLIGHT" != true ]]; then _report_build_root; fi
 # END-BUILD-ROOT-PLACEMENT
 
+# ORDER 2130-fl0r — `./build.sh --floor`: the required local check before a
+# work/* push (operator 2026-11-20: it replaces the worker-side --preflight
+# requirement; the landing queue runs the full preflight and gate on arrival).
+# fmt, Lua parse, and the packet's own litmus, under two minutes, no build.
+# Dispatched before ALL setup, like --preflight: a check has no side effects.
+if [[ "$FLAG_FLOOR" == true ]]; then
+    git -C "$SCRIPT_DIR" fetch -q origin linux-next 2>/dev/null || true
+    _fl_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _fl_bin=""
+    if [[ -z "$_fl_bin" ]]; then
+        echo "could-not-run:floor:no-plan-binary — cargo build --release -p tillandsias-plan" >&2
+        exit 2
+    fi
+    # A native Windows plan binary resolves a bare `bash` to WSL's bash.exe;
+    # hand it this shell, in a spelling it can execute.
+    _fl_bash="$BASH"; command -v cygpath >/dev/null 2>&1 && _fl_bash="$(cygpath -w "$BASH")"
+    cd "$SCRIPT_DIR" && TILLANDSIAS_FLOOR_BASH="$_fl_bash" TILLANDSIAS_PLAN_BIN="$_fl_bin" \
+        exec "$_fl_bin" script run scripts/lua/build-floor.lua
+fi
+
 # ORDER 1305-udgs — `./build.sh --preflight`: every guard that can refuse a push,
 # before the SHA, in seconds.
 #
@@ -1775,9 +2010,9 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
        && [ "${TILLANDSIAS_SKIP_REMOTE_PROBE:-0}" != 1 ]; then
         _rr_bin="$(. "$SCRIPT_DIR/scripts/plan-binary-probe.sh" && resolve_plan_binary 2>/dev/null || true)"
         if [ -n "$_rr_bin" ]; then
-            _rr_rc=0; _rr_out="$( cd "$SCRIPT_DIR" && "$_rr_bin" script run scripts/lua/probe-remote-reachable.lua 2>&1 )" || _rr_rc=$?  # set -e-safe: a bare capture aborts SILENTLY on rc=1 (2239-rmun)
-            if [ "$_rr_rc" -ne 0 ]; then
-                printf '%s\n' "$_rr_out" >&2
+            _rr_rc=0; ( cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh && . scripts/remote-probe-judge.sh && remote_probe_judge "$_rr_bin" ) || _rr_rc=$?
+            if [ "$_rr_rc" -ne 0 ] && [ "$_rr_rc" -ne 10 ]; then echo "could-not-run:remote-probe:judge-error:rc=$_rr_rc — the remote was not judged (2256-tt3v)" >&2; fi
+            if [ "$_rr_rc" -eq 10 ]; then
                 echo "refused:preflight:remote-unreachable"
                 echo "  why: this host cannot reach the remote, so nothing this gate vouches for can be pushed (2239-rmun)" >&2
                 echo "  remedy: a human restores this host's access (see the probe's remedy above); until then SUSPEND work here — no retries, no backoff" >&2
@@ -1814,6 +2049,16 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
         ""|/*|[A-Za-z]:*) ;;
         *) _pf_plan_bin="$SCRIPT_DIR/${_pf_plan_bin#./}" ;;
     esac
+    # ORDER 2279-jbsd (coordinator ruling 2026-11-23): NO BINARY, NO DOOR. Every
+    # guard that does not plainly pass is classified by this binary, so without
+    # it the door judges none of them and still ended partial:, rc 0. Measured on
+    # macbookair: 217 of 335 could-not-run:no-classifier, refused=0, rc 0, with
+    # two refusing guards planted. 3 is could-not-run: the land queue evicts on 1
+    # only. Deadline skips keep 1353-ryhq's partial: and exit 0.
+    if [ -z "$_pf_plan_bin" ]; then
+        echo "could-not-run:preflight:no-classifier — no runnable tillandsias-plan resolves in this checkout, so no guard's answer could be judged and none was started; remedy: cargo build --release -p tillandsias-plan, then re-run ./build.sh --preflight" >&2
+        exit 3
+    fi
     if [ -n "$_pf_plan_bin" ]; then
         _pf_vs="$(cd "$SCRIPT_DIR" && "$_pf_plan_bin" validator-surface-hash --check 2>&1)" || true
         # ORDER 2186-x5kv — A STALE BINARY IS REBUILT ONCE, THEN RE-ASKED. Every
@@ -1842,6 +2087,18 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
                 echo "  No guard was run. A stale binary says nothing about the tree." >&2
                 exit 1 ;;
         esac
+    fi
+    # ORDER 2281-k3sn (coordinator ruling 2026-11-23): A BINARY THAT CANNOT
+    # CLASSIFY IS NO BINARY. One question, answered from the text and not the rc
+    # (a guard that exits 1 saying could-not-run), so neither a mute binary nor
+    # one that echoes the rc passes. Never mtime, never a version string.
+    _pf_ask="$(mktemp)" || { echo "could-not-run:preflight:no-scratch — mktemp failed, so the classifier could not be asked; remedy: free space in \${TMPDIR:-/tmp}, then re-run ./build.sh --preflight" >&2; exit 3; }
+    echo "could-not-run:preflight-classifier-probe" > "$_pf_ask"
+    _pf_word="$(cd "$SCRIPT_DIR" && _pf_classify 1 "$_pf_ask")" || _pf_word=""
+    rm -f "$_pf_ask"
+    if [ "$_pf_word" != could-not-run ]; then
+        echo "could-not-run:preflight:no-classifier — $_pf_plan_bin cannot classify a guard's result (asked a known one, it answered '${_pf_word%%$'\n'*}'), so none was started; remedy: cargo build --release -p tillandsias-plan, then re-run ./build.sh --preflight" >&2
+        exit 3
     fi
     # END-STALE-PLAN-BINARY-CHECK
 
@@ -1905,6 +2162,24 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     fi
     _pf_roster="$(_preflight_roster | sort -u)"
     _pf_wall0=$SECONDS
+    _PF_REACHED=""  # 2272-cuxh: never an outer door's
+    _pf_load0=""
+    _pf_sample0="$(_pf_bench_sample)" || { _pf_sample0=""; _pf_load0="$(_pf_bench_start_load)" || _pf_load0=""; }
+    # 2275-fcpy: the bench, off under --full and an overridden deadline, where
+    # "finished" and "over" mean something else.
+    _pf_bench_n=0; _pf_bench_names=""; _pf_bench_file=""
+    if [[ "$FLAG_PREFLIGHT_FULL" != true ]] && [ "${TILLANDSIAS_PREFLIGHT_BENCH:-on}" != off ] \
+       && [ -z "${TILLANDSIAS_PREFLIGHT_TIMEOUT:-}" ]; then
+        _pf_bench_file="$(_pf_bench_path)" || _pf_bench_file=""
+    fi
+    if [ -n "$_pf_bench_file" ]; then
+        printf '%s\n' "$_pf_roster" | grep . > "$_pf_dir/roster" || true
+        if _pf_bench_blobs "$_pf_dir"; then
+            _pf_bench_load "$_pf_dir" "$_pf_bench_file" "$_pf_deadline" "$_pf_ddeadline" "$(date +%s)" || true
+        else
+            _pf_bench_file=""
+        fi
+    fi
     # 1631-6w8z: the long lane starts FIRST, so its guards get the most budget.
     _pf_lane_limit=1
     [[ "$FLAG_PREFLIGHT_FULL" != true ]] || _pf_lane_limit=0
@@ -1992,10 +2267,22 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
             fi
             sleep 0.1 2>/dev/null || sleep 1
         done
+        _pf_note_budget $(( SECONDS - _pf_wall0 )) "$_pf_total" "$_pf_path"
         read -r _pf_rc _pf_el < "$_pf_dir/$_pf_i.rc"
         if [ "$_pf_pd" -eq 13 ] && [ -f "$_pf_dir/$_pf_i.lane-deadline" ]; then
             read -r _pf_gdl < "$_pf_dir/$_pf_i.lane-deadline"
-            echo "note:preflight:$_pf_label:own-deadline — ran beside the roster for ${_pf_el}s, deadlined at ${_pf_gdl}s of the door's budget (1631-6w8z)"
+            # 2250-44uy: a lane deadline of 0 is "no limit" (--full), not "0 s".
+            if [ "$_pf_gdl" = 0 ]; then
+                echo "note:preflight:$_pf_label:own-deadline — ran beside the roster for ${_pf_el}s, with no deadline (--full) (1631-6w8z)"
+            else
+                echo "note:preflight:$_pf_label:own-deadline — ran beside the roster for ${_pf_el}s, deadlined at ${_pf_gdl}s of the door's budget (1631-6w8z)"
+            fi
+        fi
+        if [ "$_pf_rc" = "benched" ]; then
+            read -r _pf_bb _pf_bt < "$_pf_dir/$_pf_i.benched"
+            echo "skip:preflight:$_pf_label:benched:over-${_pf_bb}s — outlived its ${_pf_bb}s deadline on two doors in a row on this host, last $(( ( $(date +%s) - _pf_bt ) / 3600 ))h ago (epoch $_pf_bt); not started, retried within 24 h, when its file changes, or with --full; the gate still runs it (2275-fcpy)"
+            _pf_bench_n=$((_pf_bench_n + 1)); _pf_bench_names="$_pf_bench_names $_pf_label"
+            continue
         fi
         if [ "$_pf_rc" = "not-launched" ]; then
             # The launcher and this pass disagreed (or the launcher died): run
@@ -2011,6 +2298,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
         [ ! -s "$_pf_tmp.swept" ] || sed "s|\$| (after $_pf_label)|" "$_pf_tmp.swept"
         if [ "$_pf_rc" -eq 0 ]; then
             _pf_ran=$((_pf_ran + 1))
+            printf '%s\t%s\tdone\t%s\n' "$_pf_path" "${_pf_args:--}" "$_pf_gdl" >> "$_pf_dir/outcomes"
             grep -E '^note:' "$_pf_tmp" || true
         else
             # ORDER 1384-bqhy — ONE CLASSIFIER. This branch used to grep the
@@ -2034,6 +2322,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
                     _pf_cantrun=$((_pf_cantrun + 1)) ;;
                 timed-out)
                     echo "skip:preflight:$_pf_label:deadline:$(( SECONDS - _pf_t0 ))s — outlived the ${_pf_gdl}s front-door deadline; the gate still runs it"
+                    [ "$_pf_pd" -eq 13 ] || printf '%s\t%s\tover\t%s\n' "$_pf_path" "${_pf_args:--}" "$_pf_gdl" >> "$_pf_dir/outcomes"
                     _pf_deadline_n=$((_pf_deadline_n + 1)) ;;
                 cannot-start)
                     # THE RUNNER COULD NOT START IT (macneo 2026-09-22: exec: setsid: not found).
@@ -2047,6 +2336,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
                     echo "could-not-run:preflight:$_pf_label:no-space — runner resource exhaustion (No space left on device); nothing was learned about the tree" >&2 ;;
                 refused)
                     _pf_failed=$((_pf_failed + 1))
+                    printf '%s\t%s\tdone\t%s\n' "$_pf_path" "${_pf_args:--}" "$_pf_gdl" >> "$_pf_dir/outcomes"
                     cat "$_pf_tmp" >&2
                     # 1631-6w8z: a .lua guard is confirmed through its runner, not bash
                     _pf_alone="bash $_pf_path${_pf_args:+ $_pf_args}"
@@ -2101,8 +2391,22 @@ PFEOF
     # the roster, which is true on every host, rather than any number, which is
     # true on none of them for long.
     _pf_wall=$(( SECONDS - _pf_wall0 ))
-    _pf_counts="ran=$_pf_ran declared-skip=$_pf_declskip skipped-by-deadline=$_pf_deadline_n could-not-run=$_pf_cantrun refused=$_pf_failed"
-    _pf_sum=$(( _pf_ran + _pf_declskip + _pf_deadline_n + _pf_cantrun + _pf_failed ))
+    _pf_iso="$_pf_iso $(_pf_tail_fields "$_pf_wall")"
+    _pf_counts="ran=$_pf_ran declared-skip=$_pf_declskip skipped-by-deadline=$_pf_deadline_n benched=$_pf_bench_n could-not-run=$_pf_cantrun refused=$_pf_failed"
+    _pf_sum=$(( _pf_ran + _pf_declskip + _pf_deadline_n + _pf_bench_n + _pf_cantrun + _pf_failed ))
+    _pf_quiet=0
+    _pf_cont="$(_pf_bench_contention "$_pf_sample0" "$(_pf_bench_sample || true)")" || _pf_cont=""
+    if [ -n "$_pf_cont" ]; then
+        _pf_iso="$_pf_iso contention=cpu-some:${_pf_cont% *}%,foreign:${_pf_cont#* }%"
+        # shellcheck disable=SC2086
+        ! _pf_bench_quiet ${_pf_cont} || _pf_quiet=1
+    elif [ -n "$_pf_load0" ]; then
+        _pf_iso="$_pf_iso contention=start-load:${_pf_load0}%"
+        [ "$_pf_load0" -gt "$_PF_BENCH_MAX_START_LOAD" ] || _pf_quiet=1
+    else
+        _pf_iso="$_pf_iso contention=unmeasured"
+    fi
+    [ -z "$_pf_bench_file" ] || _pf_bench_save "$_pf_dir" "$_pf_bench_file" "$(date +%s)" "$_pf_quiet" || true
     if [ "$_pf_sum" -ne "$_pf_total" ]; then
         # A CATEGORY SET THAT DOES NOT ADD UP CANNOT BE READ AT ALL, and a
         # miscount here would hide exactly what this row exists to surface.
@@ -2115,12 +2419,13 @@ PFEOF
     # NOT VOUCHED FOR: a guard cut off by the deadline and a guard the runner
     # could not start are both guards that did not examine this tree. A
     # DECLARED skip is not in this number — that one ran and said so.
-    _pf_unanswered=$(( _pf_deadline_n + _pf_cantrun ))
+    _pf_unanswered=$(( _pf_deadline_n + _pf_bench_n + _pf_cantrun ))
 
     if [ "$_pf_failed" -gt 0 ]; then
         _afford "$_pf_failed guard(s) refused this tree; each is named above as refused:preflight:<guard> with its own why and remedy" \
             "fix each named guard's complaint, then re-run ./build.sh --preflight until refused=0"
         echo "refused:preflight:$_pf_counts sum=$_pf_sum $_pf_iso wall=${_pf_wall}s" >&2
+        echo "benched:preflight:$_pf_bench_n${_pf_bench_names:+ —$_pf_bench_names}" >&2
         exit 1
     fi
     # ORDER 2112-nlrf. On darwin, a tree that changes a cfg-gated crate gets its
@@ -2158,10 +2463,12 @@ PFEOF
         # The exit stays 0 because nothing REFUSED; the token changes because
         # nothing vouched either.
         echo "partial:preflight:$_pf_counts sum=$_pf_sum $_pf_iso wall=${_pf_wall}s"
+        echo "benched:preflight:$_pf_bench_n${_pf_bench_names:+ —$_pf_bench_names}"
         echo "partial:preflight: ${_pf_unanswered} guard(s) did not examine this tree — this run does not vouch for them; the gate still runs them" >&2
         exit 0
     fi
     echo "ok:preflight:$_pf_counts sum=$_pf_sum $_pf_iso wall=${_pf_wall}s"
+    echo "benched:preflight:$_pf_bench_n${_pf_bench_names:+ —$_pf_bench_names}"
     exit 0
 fi
 
@@ -2911,10 +3218,11 @@ _gs_await_step_pipe() {
 }
 
 # _gs_verdict_token <output file> <rc> — the step's verdict as one token for a
-# flaky: line: its last verdict-shaped line's head, else rc=<n>.
+# flaky:/red-twice: line: its last RED verdict line's head, else rc=<n>. Never an
+# ok: line: this is only asked of a step that failed (#1441 read `ok:,ok:`).
 _gs_verdict_token() {
     local _v
-    _v="$(grep -E '^(ok|violation|refused|could-not-run|FAIL|fail)[: ]' "$1" 2>/dev/null | tail -n 1 | cut -d' ' -f1 | cut -c1-80)"
+    _v="$(grep -E '^(violation|refused|could-not-run|FAIL|fail)[: ]' "$1" 2>/dev/null | tail -n 1 | cut -d' ' -f1 | cut -c1-80)"
     printf '%s' "${_v:-rc=$2}" | tr ',' ';'
 }
 
@@ -3050,9 +3358,11 @@ _gs_one() {
     # ORDER 1765-q7rg — A HOST-STATE STEP GETS ONE RETRY, NEVER A SKIP.
     # A step that declares STEP_HOST_STATE (a keyring cold state, a lock
     # under load) can disagree with itself on a healthy tree. It runs once
-    # more after a settle; a pass then is a pass, and a second red stays red
-    # but is named flaky:<step>:<first>,<second> instead of violation:, so
-    # the land queue re-queues it once rather than evicting a good PR. A
+    # more after a settle; a pass then is a pass. A retry that FAILS reproduced:
+    # it is named red-twice:<step>:<first>,<second> and evicts like any red
+    # (#1441: a deterministic red read as flaky was requeued, a gate each time).
+    # Only a retry that could not run (exit 3, 2251-iyiu) gave no verdict, and is
+    # named flaky:<step>:<first>,<second> so the land queue re-queues it once. A
     # step that declares nothing never retries, and the could-not-run code
     # is never retried either.
     if [ "$_step_rc" -ne 0 ] && [ -n "$STEP_HOST_STATE" ] \
@@ -3062,9 +3372,11 @@ _gs_one() {
         _info "retry:${_step_path##*/}:host-state=$STEP_HOST_STATE — first run red ($_gs_first_verdict); settling ${TILLANDSIAS_GATE_HOST_STATE_SETTLE_S:-10}s and running it once more"
         sleep "${TILLANDSIAS_GATE_HOST_STATE_SETTLE_S:-10}"
         _gs_exec_step
-        if [ "$_step_rc" -ne 0 ]; then
-            echo "flaky:${_step_path##*/}:${_gs_first_verdict},$(_gs_verdict_token "$_step_out" "$_step_rc")"
-        fi
+        case "$_step_rc" in
+            0) ;;
+            3) echo "flaky:${_step_path##*/}:${_gs_first_verdict},$(_gs_verdict_token "$_step_out" "$_step_rc")" ;;
+            *) echo "red-twice:${_step_path##*/}:${_gs_first_verdict},$(_gs_verdict_token "$_step_out" "$_step_rc")" ;;
+        esac
     fi
 
     # ORDER 1916-tsel — ATTRIBUTE BY RUN ID, NOT BY GROWTH. Growth alone
@@ -3153,6 +3465,7 @@ _gs_one() {
         [ -z "$_gs_plan" ] || _step_kind="$("$_gs_plan" script classify --rc "$_step_rc" --file "$_step_out" 2>/dev/null || echo refused)"
         rm -f "$_step_out"
         _error "${STEP_ERROR:-$_step_path failed} — see the verdict line above (class: ${_step_kind:-refused}; 1384-bqhy)"
+        _kg_note "${_step_file##*/}" "$_step_rc" && return 0  # ORDER 2253-iher: recorded; the scheduler carries on
         return 1
     fi
     rm -f "$_step_out"
@@ -3314,9 +3627,30 @@ _gs_lanes() {
 }
 
 if [ -n "$GATE_STEPS_ROOT" ]; then
-    _run_gate_steps "$(cd "$GATE_STEPS_ROOT" && pwd)"
-    exit $?
+    if [ -n "$GATE_STEP_ONLY" ]; then
+        _gs_root="$(cd "$GATE_STEPS_ROOT" && pwd)"
+        _gs_sel=()
+        for _gs_f in "$_gs_root"/scripts/gate-steps.d/"$GATE_STEP_ONLY"-*.step; do
+            [ -e "$_gs_f" ] && _gs_sel+=("$_gs_f")
+        done
+        if [ "${#_gs_sel[@]}" -ne 1 ]; then
+            echo "refused:gate-step:$GATE_STEP_ONLY:matches=${#_gs_sel[@]} (exactly one scripts/gate-steps.d/$GATE_STEP_ONLY-*.step)" >&2
+            _afford "--gate-step runs exactly one step file, and $GATE_STEP_ONLY matched ${#_gs_sel[@]} under $_gs_root/scripts/gate-steps.d" \
+                "pass a step number that names exactly one file: ls $_gs_root/scripts/gate-steps.d/$GATE_STEP_ONLY-*.step"
+            exit 2
+        fi
+        _gs_plan="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _gs_plan=""
+        case "$_gs_plan" in ./*) _gs_plan="$SCRIPT_DIR/${_gs_plan#./}" ;; esac
+        _gate_fallback_begin
+        _gs_one "${_gs_sel[0]}"
+        exit $?
+    fi
+    _kg_arm
+    _run_gate_steps "$(cd "$GATE_STEPS_ROOT" && pwd)" || builtin exit $?
+    _kg_summary || builtin exit 1  # ORDER 2253-iher
+    builtin exit 0
 fi
+if [ -n "$GATE_STEP_ONLY" ]; then echo "error: --gate-step needs --gate-steps <root>" >&2; exit 2; fi
 
 # ORDER 2243-urcy — WHICH TEST RUNNER THIS HOST USES, SAID ONCE, BY NAME.
 # nextest when `cargo nextest` answers (the builder toolbox installs it from a
@@ -3986,6 +4320,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # 765-uti9: emit the preamble duration first — best-effort per the
     # 682-emvg contract, never alters the gate's exit.
     _gate_run_id_begin
+    _kg_arm  # ORDER 2253-iher: no-op unless --keep-going
     timing_emit build-preamble check "${_PREAMBLE_T0:-$(timing_now_ms)}" 0 || true
     _CHECK_T0="$(timing_now_ms)"
     # 1915-gtph: a FAILED gate flushes its phase rows too — the gate that died
@@ -4421,7 +4756,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
-
     # 972-umik: tree-only, sub-second, and it ratchets the number of files
     # deciding whether the control wire is encrypted. Belongs in the fast phase
     # by both of lenovinha's criteria — it reads the tree and it can FAIL.
@@ -4442,13 +4776,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
-    _step "Checking for if-not pipeline verdict guards (795-imz3)..."
-    # PORTED to Lua (1525-c6jm): scripts/lua/check-no-spawn-in-if-not.lua.
-    if ! _run_lua_decider "scripts/lua/check-no-spawn-in-if-not.lua" 2>&1; then
-        _error "a script uses 'if ! <pipeline>' as a verdict — pipefail + SIGPIPE can invert the guard; capture the exit into a variable first or mark '# sigpipe-ok: <reason>' (795-imz3)"
-        exit 1
-    fi
-    _info "If-not pipeline guard check passed"
     _step "Checking the enclave membership list matches the code (245 P8)..."
     # PORTED to Lua (1527-v7cy): scripts/lua/check-enclave-membership-documented.lua.
     if ! _run_lua_decider "scripts/lua/check-enclave-membership-documented.lua" 2>&1; then
@@ -4456,15 +4783,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Enclave membership documentation check passed"
-    # 1746-2szd: a shipped skill, cheatsheet or agent instruction must not tell
-    # a forge agent a browser is pre-installed while the forge image installs
-    # none — forge-quick-intro did, and agents planned browser work on it.
-    _step "Checking forge docs claim no browser the image does not ship (1746-2szd)..."
-    if ! _run_lua_decider "scripts/lua/check-forge-skill-browser-claims-match-image.lua" 2>&1; then
-        _error "a forge doc claims a pre-installed browser the image does not install (1746-2szd) — see the claim lines above"
-        exit 1
-    fi
-    _info "Forge browser-claim check passed"
     # 1762-bano: the enclave CA (a year, unconstrained: squid signs real domains
     # with it) is never installed in a HOST trust store; only 1761-bvyn's
     # name-constrained preview CA may be, on a line marked host-trust-ok.
@@ -4474,24 +4792,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Host trust-store check passed"
-    # 1776-ch4m: a module that runs a versioned image also ensures it (through
-    # launch_images.rs or an ensure call), so a host that never ran --init
-    # builds on first use instead of failing "image missing".
-    _step "Checking every image a module runs is ensured (1776-ch4m)..."
-    if ! _run_lua_decider "scripts/lua/check-launch-images-table.lua" 2>&1; then
-        _error "a module runs an image it never ensures (1776-ch4m) — see the site lines above"
-        exit 1
-    fi
-    _info "Launch-images check passed"
-    # 1713-3v3f: Tillandsias never launches or drives a host browser. Every
-    # launcher-shaped call site in crates/ must be on the guard's allowlist at
-    # its exact count (only file/app opens, never a URL).
-    _step "Checking no code path launches a host browser (1713-3v3f)..."
-    if ! _run_lua_decider "scripts/lua/check-no-host-browser-launch.lua" 2>&1; then
-        _error "a code path hands a URL to the host browser (1713-3v3f) — see the unlisted/count-mismatch lines above"
-        exit 1
-    fi
-    _info "No-host-browser-launch check passed"
     _info "Fast refusals passed"
 
     # 765-uti9 quick win (velocity audit F3): the dedicated `cargo check
@@ -4640,14 +4940,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Fragment-events could-not-run verdict fixture passed"
 
-    _step "Checking every ledger fragment is intact (whole overlay)..."
-    # PORTED to Lua (1527-v7cy): scripts/lua/check-all-fragments-intact.lua.
-    if ! _run_lua_decider "scripts/lua/check-all-fragments-intact.lua" 2>&1; then
-        _error "a ledger fragment is damaged — append-only files are restored, not merged"
-        exit 1
-    fi
-    _info "All fragments intact"
-
     _step "Checking the whole-overlay fragment guard's negative controls..."
     if ! _run_lua_decider "scripts/lua/test-all-fragments-intact.lua" 2>&1; then
         _error "the fragment-integrity guard cannot distinguish valid YAML, parse damage, and conflict markers"
@@ -4667,7 +4959,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Exit-status canary sound"
-
 
     _step "Checking set-field emits valid YAML for every value shape..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-set-field-yaml-shapes.sh" 2>&1; then
@@ -4759,25 +5050,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # absent from a shallow clone.
     # 1218-25z3's must-ship-next advisory fixture is gate step 951 (2173-inst).
 
-    # ORDER 1369-sjbc. The release jobs upload a staged copy to `unstable` whose
-    # installers default to unstable; the versioned copy keeps stable. Hermetic,
-    # a few seconds; wired in local-ci.sh as well.
-    _step "Checking the unstable-channel installer default (1369-sjbc)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-unstable-installer-defaults-to-unstable.sh" 2>&1; then
-        _error "an installer fetched from the unstable release can again install stable"
-        exit 1
-    fi
-    _info "unstable-channel installer default fixture passed"
-
-    # ORDER 1380-zmpi. Every installer ends with a PENDING ACTIONS banner; the
-    # fixture RUNS each banner block (bash, and PowerShell where present).
-    # Hermetic, a few seconds; wired in local-ci.sh as well.
-    _step "Checking the installers' PENDING ACTIONS banner (1380-zmpi)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-installers-print-pending-banner.sh" 2>&1; then
-        _error "an installer can again finish without telling the user what is still pending"
-        exit 1
-    fi
-    _info "pending-actions banner fixture passed"
+    # ORDER 1369-sjbc and 1380-zmpi: the unstable-installer default and the
+    # PENDING ACTIONS banner fixtures moved to gate steps 405 and 404 (Lua, 2111-inst).
 
     # ORDER 970-7fqk. The stale-stamp refusal names paths whose CONTENT moved,
     # on the same axis the staleness decision uses, and keeps the mtime list as
@@ -4803,20 +5077,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "release-ledger distillation advisory fixture passed"
-
-    # Order 1223-wzc4. The coordination pass re-derives "which host is active"
-    # every time, and the corrected recipe lived in drill prose — where it was
-    # retyped WRONG two passes after being written down, stripping the email
-    # domain that is the only part naming the host. This fixture pins the three
-    # corrections that kept getting lost: count by email, derive the host from
-    # the domain (BOTH conventions, including <Host>.local), and bucket an
-    # address that names no host instead of rendering it as one.
-    _step "Checking the fleet-activity read (1223-wzc4)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-fleet-activity.sh" 2>&1; then
-        _error "the fleet-activity read regressed — a working host can again read as silent, or a shared address as a host"
-        exit 1
-    fi
-    _info "fleet-activity read fixture passed"
 
     # Order 1226-jb8y. 872-c9nd's salvage net saved macbookair's finished work
     # when its gate could not pass — and the work sat on origin for hours
@@ -4865,13 +5125,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # ORDER 2118-9kqp: this check is gate step 350-1903-djsq now, and it runs
     # the eight credential fixtures once each (their verdicts and their bus).
 
-    _step "Checking the gate-stamp scope fixture (887-bz88)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-gate-stamp-scope.sh" 2>&1; then
-        _error "the gate-stamp scope fixture regressed — what the stamp covers is unproven, and a too-narrow stamp once let a lost exec bit reach the trunk"
-        exit 1
-    fi
-    _info "gate-stamp scope fixture passed"
-
     # The brew autoinstall shim must not re-enter itself (966-rq7f). `brew` is a
     # Ruby program and `ruby` is a shimmed tool, so an unguarded shim recurses:
     # measured at 3663 live processes on a floor forge — 89.4% of its pid
@@ -4893,29 +5146,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # valid MO-FULL. The fixture's negative controls (cases 2 and 4) are the
     # load-bearing half: they fail if the fix ever widens into "reclaim a lock",
     # which would retire 873-zcim while every positive case stayed green.
-    # append-event must not write into the ARCHIVE (896-f8ti). Arms 3 and 4 are
-    # the load-bearing pair: the naive fix ("refuse anything not in the base")
-    # passes the refusal arms and breaks 699-usxc, the case that lets a packet
-    # filed THIS cycle receive events. Falsified against the pre-fix binary —
-    # arm 1 catches the acceptance, arm 3 catches the fragment it wrote.
-    _step "Checking the append-event archived-refusal fixture (896-f8ti)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-append-event-archived-refusal.sh" 2>&1; then
-        _error "append-event's archive guard regressed — either events are landing on completed work again, or legitimate writes to fragment-only packets are being refused"
-        exit 1
-    fi
-    _info "append-event archived-refusal fixture passed"
-
-    # The fixture above must not be able to dirty THIS checkout however it dies
-    # (1564-lk9f): a SIGKILL after its live-accept arm left a host: fixture
-    # fragment in macuahuitl's plan/index.d on 2026-10-09 and land-queue refused
-    # the dirty tree. Arm 1 SIGKILLs it in a scratch repo; arm 2 is the negative
-    # control that keeps 699-usxc asserted.
-    _step "Checking the append-event archived-refusal fixture is hermetic (1564-lk9f)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-append-event-archived-refusal-is-hermetic.sh" 2>&1; then
-        _error "the append-event archived-refusal fixture can leave a write in the checkout it runs from, or no longer asserts that a fragment-only packet accepts events"
-        exit 1
-    fi
-    _info "append-event archived-refusal hermetic fixture passed"
 
     _step "Checking the checkout-lock attested-release fixture (899-q9di)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-cycle-lock-attested-release.sh" 2>&1; then
@@ -4986,12 +5216,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "expire-claims write-is-opt-in fixture passed"
 
-    _step "Checking the release runbook's tag/back-merge order (898-zhf3)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-release-runbook-tag-order.sh" 2>&1; then
-        _error "the release runbook prescribes an order the pre-push hook refuses — the next cut deadlocks at the tag push"
-        exit 1
-    fi
-    _info "release runbook tag-order fixture passed"
+    # The release-runbook tag-order fixture moved to gate step 916-2262-bke7 (Lua).
 
     # ORDER 1140-i6ct. The HERMETIC half only. The live fixture
     # (test-vault-shutdown-forwards-sigterm.sh) stops a real container and is
@@ -5068,18 +5293,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Runnable-remedy fixture passed"
-
-    # Order 628-r2vk. The NEW-surface railguard: a user-visible tray surface
-    # (menu id, notification, status chip, tooltip) cannot land without a
-    # parity-matrix claim. The hermetic fixture pins both directions; the
-    # LIVE check over the real tree is litmus:tray-new-surface-parity-gate
-    # (post-build phase). Ruby-free: the check is the Rust policy binary.
-    _step "Checking the new-surface parity railguard fixture (628-r2vk)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-tray-surface-parity-gate.sh" 2>&1; then
-        _error "the new-surface parity railguard broke — surfaces could land rowless again"
-        exit 1
-    fi
-    _info "New-surface parity railguard fixture passed"
 
     # 920-tqhs. The negative control for the populate_hot_paths fail-loud
     # change: with /opt/cheatsheets unwritable by a lane user, the entrypoint
@@ -5403,36 +5616,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Lua source-agreement production integration passed"
-
-    # ORDER 1916-tsel — `./build.sh --changed` selects by declared input. The
-    # fixture mutates a stub tree one path at a time: an input selects its
-    # fixture and not an unrelated one, a crate selects its reverse
-    # dependents, and a guard or an unmapped path selects everything.
-    _step "Checking --changed selects checks by their inputs (1916-tsel)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-gate-changed-selects-by-input.sh" 2>&1; then
-        _error "./build.sh --changed no longer scopes by input, or no longer fails safe to the full gate (1916-tsel)"
-        exit 1
-    fi
-    _step "Checking --changed runs its selected fixtures in a bounded pool (1931-steb)..."
-    if ! _run_lua_decider "scripts/lua/test-gate-changed-parallel-fixtures.lua" 2>&1; then
-        _error "./build.sh --changed's fixture pool lost its order, isolation, serial rule or concurrency (1931-steb)"
-        exit 1
-    fi
-    _info "--changed input-selection fixture passed"
-    # ORDER 2248-zcqh — the bundle intake gate: deferral, HEAVY, legacy
-    # unchanged, and a crate graph held to cargo metadata.
-    _step "Checking --changed's derived crate graph equals cargo metadata (2248-zcqh)..."
-    if ! _run_lua_decider "scripts/lua/check-gate-changed-crate-graph.lua" 2>&1; then
-        _error "scripts/gate-changed.sh derives a crate graph cargo does not resolve — intake would skip a dependent crate; see MISSING/EXTRA above (2248-zcqh)"
-        exit 1
-    fi
-    _info "Crate-graph lint passed"
-    _step "Checking --changed --intake defers, marks HEAVY, and matches cargo's crate graph (2248-zcqh)..."
-    if ! _run_lua_decider "scripts/lua/test-gate-changed-intake.lua" 2>&1; then
-        _error "--changed --intake no longer defers whole-tree/slow fixtures by name, marks an unscopable change HEAVY, or derives the crate graph cargo resolves (2248-zcqh)"
-        exit 1
-    fi
-    _info "--changed --intake fixture passed"
 
     # ORDER 1916-tsel — the shared-timing-log leak check names a step only for
     # records carrying ITS gate's run id; two concurrent writers prove a
@@ -5780,18 +5963,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # a no-op, because `packets:` is a G-Set. 11 of 21 fragment-recorded
     # completions were being thrown away when this was found, and the batch
     # selector was handing already-completed packets back out as next work.
-    # Order 721-nyev. Every script that RUNS tillandsias-plan must resolve it
-    # through the shared probe, never a hardcoded target/ path. 704-zcgi
-    # centralised that probe on the reasoning that fixing instances is not
-    # enough, and four more instances appeared afterwards anyway — each written
-    # by someone with no reason to know the probe existed. This makes the rule
-    # enforceable rather than remembered.
-    _step "Checking plan-binary resolution goes through the shared probe (721-nyev)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-plan-binary-probe-usage.sh" 2>&1; then
-        _error "a script runs tillandsias-plan from a hardcoded target/ path — an executable bit is a claim, running the binary is evidence"
-        exit 1
-    fi
-    _info "Plan-binary probe usage check passed"
 
     # PILOT 1 of the class selector (765-xpct). Declared inputs: the plan ledger
     # and the plan crate, because this guard reads plan/index.d and the fold that
@@ -5806,34 +5977,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     else
         _info "Fragment status-loss check passed"
     fi
-
-    # Order 831-ezea. The sibling of the check above, on the other axis: that
-    # one asks whether a fragment's CLOSURE reached the fold; this one asks
-    # whether a fragment that did NOT close a packet left it resumable. The
-    # loop's only blocking exit condition today is FILING A NEW ROW, so arrival
-    # scales with service — every cycle adds rows and carries none forward.
-    # `next_action` is the carry-forward artifact and it has had a reader since
-    # 606-xu52 (answer.rs next_action_snippet -> the `next:` line of every
-    # `plan next` row); without it the row hands the next agent the packet's own
-    # TITLE as its next step.
-    #
-    # ADVISORY, NOT A GATE, AND `_run` IS DELIBERATE HERE: the script exits 0
-    # even when it names fragments. Measured 2026-08-19, next_action adoption is
-    # 4.6% of ready rows (17/367), so a refusal would reject essentially every
-    # fragment the fleet writes tonight and would be switched off within a day —
-    # and 699-dycj forbids making one host's habit every host's red build. The
-    # promotion bar (>= 40% adoption) and the command that measures it are
-    # recorded in the script's header; promoting it means flipping its `exit 0`
-    # and adding an `_error` branch here. Its own non-zero exits (a broken
-    # checkout) still red the build through the `if !` below, which is why this
-    # is wired as a gate whose guard is currently unarmed rather than as a bare
-    # invocation nobody would notice breaking.
-    _step "Checking that open packets carry a next_action (831-ezea, advisory)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-carry-forward.sh" 2>&1; then
-        _error "the carry-forward advisory could not run — that is a broken checkout, not a clean ledger"
-        exit 1
-    fi
-    _info "Carry-forward advisory reported"
 
     # ORDER 751-i9mb. The closure-event pass applied to the BASE ledger, where
     # compaction puts every fragment's events. The sibling gate above scans
@@ -5855,18 +5998,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Base-ledger status-loss advisory reported"
-
-    # Order 941-trcf. The fragment-overlay cost is linear in the index.d
-    # backlog (~40ms of gate time per fragment per gate run, measured), so the
-    # gate NAMES the backlog before it regrows to the 338 that doubled it.
-    # ADVISORY on the 751-i9mb terms: a grown backlog is news for the next
-    # coordination cycle, never a build break.
-    _step "Checking the plan fragment backlog against the compaction cadence (941-trcf, advisory)..."
-    if ! _run_lua_decider "scripts/lua/check-fragment-backlog.lua" 2>&1; then
-        _error "the fragment-backlog advisory could not run — that is a broken checkout, not a clean backlog"
-        exit 1
-    fi
-    _info "Fragment-backlog advisory reported"
 
     # Its fixture, written with the 1577-568c port (the shell original had
     # none): a Lua fixture through the one runner, so no .step file.
@@ -5957,7 +6088,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # SET" on a run where the check never executed. A test that checked only the
     # code would have stayed green through the whole incident.
     _step "Checking a check that could not run never claims what it would have found (965-sxec)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-archiver-could-not-run-verdict.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-archiver-could-not-run-verdict.lua" 2>&1; then
         _error "the archiver's could-not-run path regressed (965-sxec) — a gate that cannot RUN a check must never assert what the check would have FOUND"
         exit 1
     fi
@@ -5977,19 +6108,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Added-fragment parse check passed"
-
-    # Order 634-39ik (Tlatoāni-approved bar raise 2026-08-11). Refuse any NEWLY
-    # ADDED litmus step that pins a literal source expression without a negative
-    # control. Diff-scoped by construction — it can only flag steps added on
-    # this branch, never the existing corpus (624-cf9f backlog), so raising the
-    # bar accepts standing debt rather than redding it (the operator's
-    # CRDT/Erlang posture: keep the line running, file improvement packets).
-    _step "Checking for newly-added expression-pinned litmus steps (634-39ik)..."
-    if ! _run_lua_decider "scripts/lua/check-litmus-expression-pinning-added.lua" 2>&1; then
-        _error "a newly-added litmus step pins a literal source expression without a negative control (634-39ik)"
-        exit 1
-    fi
-    _info "Expression-pinning enforcement passed"
 
     # Order 1473-scdq: the Rust half of the rule above. A NEWLY ADDED Rust test
     # may not pin a literal in source text read by include_str! (or a window
@@ -6072,28 +6190,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # Diff-scoped: standing debt is REPORTED by `tillandsias-plan
     # declared-closures` (exit 0), never redded here.
 
-    # ORDER 885-92iu, restored to the body by 1034-ihxw after 1009-gccx hoisted
-    # it in error. It resolves a built `tillandsias-plan`; with no binary it
-    # emits `note: tillandsias-plan not built` and PASSES, so above the build it
-    # is a no-op rather than a gate. It runs here, where a binary exists.
-    # Ported to Lua (1642-cc54 carry): with no binary it is now could-not-run
-    # (exit 3), which this gate refuses, instead of a pass.
-    # ORDER 2246-fkea — an added Lua fixture line that roots at `pwd -P` or
-    # spawns a bare bash/sed passes here and fails on a native Windows runner
-    # (three ports in one day, #1388 the third). Refused at the source.
-    _step "Checking added Lua fixtures use native-safe roots and shells (2246-fkea)..."
-    if ! _run_lua_decider "scripts/lua/check-lua-fixture-native-argv-added.lua" 2>&1; then
-        _error "an added scripts/lua line roots at pwd -P or spawns a bare bash/sed — use common.fixture's repo_root() / posix_shell(); see the REFUSED lines above (2246-fkea)"
-        exit 1
-    fi
-    _info "Native argv check passed"
-    _step "Checking the native-argv decider refuses what it should (2246-fkea)..."
-    if ! _run_lua_decider "scripts/lua/test-lua-fixture-native-argv-added.lua" 2>&1; then
-        _error "check-lua-fixture-native-argv-added.lua no longer refuses a pwd -P root or a bare bash/sed argv, or refuses the helper form; see the FAIL lines above (2246-fkea)"
-        exit 1
-    fi
-    _info "Native argv fixture passed"
-
     _step "Checking that added fragments' declared closures resolve (885-92iu)..."
     if ! _run_lua_decider "scripts/lua/check-declared-closures-added.lua" 2>&1; then
         _error "this change files a packet whose verifiable_closure names a litmus test that does not resolve (885-92iu)"
@@ -6168,17 +6264,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
-    # Order 614-2gqx / 651-2x5s. The durable MO-FULL attestation ledger
-    # (plan/mo-full-attestations.d/) must never carry a tampered, fabricated,
-    # or unreachable marker — the terminal marker is only as strong as the
-    # record that outlives the transcript it was emitted into.
-    _step "Checking the durable MO-FULL attestation ledger (614-2gqx)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-mo-full-attestations.sh" 2>&1; then
-        _error "the MO-FULL attestation ledger records a marker that is fabricated, tampered, or unreachable (plan/mo-full-attestations.d/)"
-        exit 1
-    fi
-    _info "MO-FULL attestation ledger check passed"
-
     # Order 1148-3439. The salvage-refs ledger (plan/salvage-refs.d/) is the
     # standing record the sweep files to now that its old target is archived;
     # every line must parse and name a ref still on origin or marked deleted.
@@ -6240,13 +6325,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Guest unit hardening guard passed"
-
-    _step "Checking scripts/ bash dialect (761-g36m)..."
-    if ! _run_lua_decider "scripts/lua/check-bash-dialect.lua" 2>&1; then
-        _error "a shared script carries an unguarded bash-4-only construct — see the verdict line above (761-g36m)"
-        exit 1
-    fi
-    _info "Bash dialect gate passed"
 
     # ORDER 1582-c32p — the dialect gate's case-in-$( ) rule on the shape bash
     # 3.2 misparses when the `$(` opens MID-line (a continued pipeline) and the
@@ -6349,28 +6427,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Embedded-ELF arch fixture passed"
 
-    # ORDER 1384-bxhk — the shell ratchet: prints the Lua migration's counts on
-    # every --check, refuses a NEW .sh decider (check-/test-/verify-/guard-), a
-    # new pipe site beyond a file's floor and (once steps: exists) a new piped
-    # litmus command; its floors only descend over their own git history.
-    _step "Checking the shell ratchet (1384-bxhk)..."
-    if ! _run_lua_decider "scripts/lua/check-shell-ratchet.lua" 2>&1; then
-        _error "the shell corpus grew past its floor — see the violation lines above; write it as scripts/lua/<name>.lua on tillandsias-plan script run (1384-bxhk)"
-        exit 1
-    fi
-    _info "Shell ratchet passed"
-
-    # Its fixture (1580-8hra, the Lua port of the orphaned test-shell-ratchet.sh
-    # that nothing ran): the ratchet's verdicts in scratch repos — counts, a new
-    # decider refused, a piped litmus refused once steps: exists, floors only
-    # descend, an empty population could-not-run, fixtures and pipes warned.
-    _step "Checking the shell ratchet's fixture (1580-8hra)..."
-    if ! _run_lua_decider "scripts/lua/test-shell-ratchet.lua" 2>&1; then
-        _error "the shell ratchet no longer refuses or counts what its fixture constructs — see the FAIL lines above (1580-8hra)"
-        exit 1
-    fi
-    _info "Shell-ratchet fixture passed"
-
     # ORDER 1800-nvsc — the parameterised litmus deciders (scripts/lua/
     # litmus-decide.lua) replace piped `command:` strings family by family.
     # Their fixture constructs every outcome against a fake cargo: a FAILED
@@ -6447,18 +6503,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Local-expert health probe fixture passed"
 
-    # ORDER 1268-fx87. A litmus step's verdict is read from STDOUT only; its
-    # stderr is kept and named on failure. The fixture runs the REAL runner over
-    # a throwaway corpus with a manufactured stderr contaminant, plus a mutant
-    # runner with the merged capture restored, so the control cannot pass
-    # vacuously on a host whose build writes nothing to stderr.
-    _step "Checking a litmus verdict is read from stdout only (1268-fx87)..."
-    if ! _run_lua_decider "scripts/lua/test-litmus-verdict-reads-stdout-only.lua" 2>&1; then
-        _error "a litmus step's verdict again reads stderr, or a failing step no longer names its stderr log — see the FAIL lines above (1268-fx87)"
-        exit 1
-    fi
-    _info "Litmus stdout-verdict fixture passed"
-
     # The end-user-installer output guard's own fixture (1561-47a8), a Lua
     # fixture on the one runner: a flag-naming line refused by file:line, the
     # power-user-only exemption, a retired PENDING-1560-UAM3 marker exempting
@@ -6487,30 +6531,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus step-model fixture passed"
 
-    # ORDER 1577-g96z — what THIS change owes each carried obligation
-    # (methodology/convergence.yaml carried_obligations; shell-to-lua is at
-    # stage gentle). One carried:<backlog>:<not-due|paid|waived|due> line per
-    # backlog; in --check it never refuses a due change (silence is refused
-    # only at landing, by the land queue running it with --landing). It does
-    # refuse a tree whose backlog table does not parse.
-    _step "Checking what this change owes each carried obligation (1577-g96z)..."
-    if ! _run_lua_decider "scripts/lua/check-carried-obligations.lua" 2>&1; then
-        _error "the carried-obligation guard could not read methodology/convergence.yaml carried_obligations — see the line above (1577-g96z)"
-        exit 1
-    fi
-    _info "Carried obligations reported"
-
-    # Its fixture, the tree's first Lua gate fixture (1577-g96z): the guard's
-    # verdicts on constructed diffs in a scratch repo. A Lua fixture runs here
-    # directly through the one runner (no .step file, so no second-regime
-    # record is needed to enter --check).
-    _step "Checking the carried-obligation guard's fixture (1577-g96z)..."
-    if ! _run_lua_decider "scripts/lua/test-carried-obligations.lua" 2>&1; then
-        _error "the carried-obligation guard no longer prints due/paid/waived/not-due correctly on its constructed diffs — see the FAIL lines above (1577-g96z)"
-        exit 1
-    fi
-    _info "Carried-obligation fixture passed"
-
     # ORDER 1588-27v3 — a claim names a fleet host. The WIP cap counts claims
     # per host string, so `--host x` held nothing and passed it; set-field now
     # refuses a host outside methodology packet_discipline.fleet_hosts.
@@ -6521,14 +6541,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Unknown-host claim fixture passed"
 
-    # ORDER 2242-u39b — the pre-push-hook fixtures test their scratch
-    # checkout, never a frozen base the caller left behind without its _ROOT.
-    _step "Checking the pre-push fixtures ignore an inherited diff base (2242-u39b)..."
-    if ! _run_lua_decider "scripts/lua/test-pre-push-fixtures-ignore-an-inherited-base.lua" 2>&1; then
-        _error "a pre-push-hook fixture judged the caller's TILLANDSIAS_GATE_DIFF_BASE instead of its scratch checkout — pass TILLANDSIAS_GATE_DIFF_BASE and _ROOT empty in its child env; see the FAIL lines above (2242-u39b)"
+    # ORDER 2244-ge9s — step 380's negative control splits a log on purpose;
+    # it must never do it into the host's shared log under this gate's run id,
+    # where a step in another lane is charged with it (#1369, #1349).
+    _step "Checking the metrics-isolation fixture keeps off the shared timing log (2244-ge9s)..."
+    if ! _run_lua_decider "scripts/lua/test-metrics-isolation-keeps-off-the-shared-log.lua" 2>&1; then
+        _error "test-gate-step-metrics-isolation.sh wrote a record carrying the gate's run id into a log the gate's leak check reads — keep its split in a fixture-private fallback dir with the run id unset; see the FAIL lines above (2244-ge9s)"
         exit 1
     fi
-    _info "Inherited diff-base fixture passed"
+    _info "Metrics-isolation shared-log fixture passed"
 
     # ORDER 1592-idmu — the diff-scoped guards read the base frozen at gate
     # start (TILLANDSIAS_GATE_DIFF_BASE), so a fetch mid-gate cannot move it.
@@ -6538,6 +6559,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Frozen diff-base fixture passed"
+
+    # ORDER 2241-f8jg — `rev-parse --verify <40-hex>` answers 0 for a missing
+    # object, so a frozen base absent from a checkout read as valid and the
+    # diff-scoped guards judged nothing. Each must take its named
+    # unavailable-base path instead.
+    _step "Checking the diff-scoped guards name a missing base (2241-f8jg)..."
+    if ! _run_lua_decider "scripts/lua/test-added-deciders-refuse-a-missing-base.lua" 2>&1; then
+        _error "a diff-scoped guard verified a base that names no commit and judged past it — verify the base as <base>^{commit}; see the FAIL lines above (2241-f8jg)"
+        exit 1
+    fi
+    _info "Missing diff-base fixture passed"
 
     # ORDER 1581-d9ig — no fixture prunes or gcs the operator's checkout. Two
     # fixtures' teardown ran `git -C "$ROOT" worktree prune`, which inside the
@@ -6584,6 +6616,25 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Relay-preflight tray trigger check passed"
 
+    # ORDER 2282-asxn — relay-preflight runs every check-* decider the diff
+    # touches, derived by gate-changed.sh --checks (#1109, #1135 and #1190 were
+    # evicted on deciders its hand-kept list lacked).
+    _step "Checking relay-preflight's derived decider phase (2282-asxn)..."
+    if ! _run_lua_decider "scripts/lua/test-relay-preflight-derived-checks.lua" 2>&1; then
+        _error "relay-preflight no longer runs the check-* deciders the diff touches, or runs none when it cannot scope the change — see the FAIL lines above (2282-asxn)"
+        exit 1
+    fi
+    _info "Relay-preflight derived-checks fixture passed"
+
+    # ORDER 2285-jvg6 — at intake, a green nextest run reads green, and a result
+    # log that could not be converted is named with its reason.
+    _step "Checking intake judges nextest's own results (2285-jvg6)..."
+    if ! _run_lua_decider "scripts/lua/test-gate-changed-nextest-transcript.lua" 2>&1; then
+        _error "gate-changed --intake misreads a nextest run, or hides why its log could not be converted — see the FAIL lines above (2285-jvg6)"
+        exit 1
+    fi
+    _info "Intake nextest transcript fixture passed"
+
     # ORDER 1597-rrku — the mirror's discipline parser and its fixture probe
     # ruby by running it: a forge's `ruby` is a Homebrew shim that exits 127.
     _step "Checking the discipline parser probes ruby by running it (1597-rrku)..."
@@ -6622,7 +6673,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Mirror rewrite-follow fixture passed"
 
     _step "Checking the nix-capability probe's evidence survives a noisy shell (917-zkge)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-probe-nix-capability-evidence.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-probe-nix-capability-evidence.lua" 2>&1; then
         _error "a capable row can carry shell noise as its proof that nix answered (917-zkge)"
         exit 1
     fi
@@ -6651,24 +6702,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
 
     # The uninstall app-dir sweep moved to gate step 402-2109-umac (Lua).
 
-    _step "Checking image rebuild keeps the installed binary's launch tag (747-knbp)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-build-image-installed-version-alias.sh" 2>&1; then
-        _error "an image rebuild can orphan the tag the installed binary launches by — every forge launch would be dead on arrival (747-knbp)"
-        exit 1
-    fi
-    _info "Image-rebuild launch-tag gate passed"
-
-    _step "Checking end-user UX strings against recorded operator approval (626-w3fn)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-approved-ux-strings.sh" 2>&1; then
-        # The script names the file, the string and the ledger it failed to
-        # match, and states the two remedies. spec:tray-ux makes this a
-        # governance gate rather than a style one: an unapproved user-facing
-        # string must not ship, and the in-file unit test cannot catch a
-        # reword because a single find-and-replace edits the assertion too.
-        _error "an end-user UX string is not the one the operator approved in the ledger (626-w3fn, spec:tray-ux)"
-        exit 1
-    fi
-    _info "Approved-UX-string gate passed"
+    # The approved-UX-string gate moved to gate step 909-2257-ba7e (Lua).
 
     # ORDER 1022-y7kc cause 2. An orphaned guard is fixed by INVOKING it
     # (865-n8vq): a guard with no caller on any activation surface is a file
@@ -6782,32 +6816,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Plan/schema status-vocab check passed"
 
-    # Order 702-eusw criterion 3: a build-number VERSION bump must never be swept
-    # into an unrelated commit. dd8fd63f bundled a VERSION bump into a security
-    # fix via `git add -A`; the mandated linux-next merge then imported a
-    # divergent VERSION the mandated pre-push gate refused, blocking the whole
-    # fleet. This guard refuses any NON-MERGE outgoing commit that changes VERSION
-    # alongside non-companion files (a merge inheriting VERSION is exempt — that
-    # is a legitimate catch-up, order 643-64bx). A clean release-bump commit
-    # (VERSION + Cargo files only) still passes.
-    _step "Checking VERSION-bump isolation on outgoing commits (702-eusw)..."
-    if ! _run_lua_decider "scripts/lua/check-version-bump-isolation.lua" 2>&1; then
-        _error "an outgoing commit sweeps a VERSION bump in with unrelated files — bump alone via a release/version-bump-* branch (702-eusw)"
-        exit 1
-    fi
-    _info "VERSION-bump isolation check passed"
-
-    # Order 714-4r6w. `SyncPodmanCommand` makes an unbounded synchronous podman
-    # call a COMPILE error, which is the real guarantee; this guards the two ways
-    # around the type — building a podman std::process::Command directly, and
-    # growing the caller-owned-spawn escape hatch past its reviewed count.
-    _step "Checking the synchronous podman surface stays bounded (714-4r6w)..."
-    if ! _run_lua_decider "scripts/lua/check-podman-sync-budgets.lua" 2>&1; then
-        _error "a synchronous podman call can wait forever — route it through podman_cmd_sync()'s bounded methods (714-4r6w)"
-        exit 1
-    fi
-    _info "Podman sync-budget check passed"
-
     # Order 631-wpkd. Canonical skills/ is the single source of truth and every
     # runtime reaches a skill by symlink. The layout section CLAIMED that while
     # thirteen skills lived only under .claude/skills/ — including a macOS build
@@ -6879,18 +6887,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus scalar-unescape check passed"
 
-    # 956-llei: the kill-time adjudicator must diff THIS cgroup's cpu.pressure
-    # stall counter across the step's own window and say CONTENDED / NOT
-    # contended / UNCLASSIFIED — never the retired host-wide load1-vs-ncpus
-    # rule, which judged forge steps by the host's runqueue. Three arms, run
-    # through the real runner in a temp root with injected counters.
-    _step "Checking the kill-time adjudicator diffs cpu.pressure (956-llei)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-kill-adjudicator.sh" 2>&1; then
-        _error "the litmus kill-time adjudicator does not classify by cpu.pressure diff (956-llei) — see the verdict line above"
-        exit 1
-    fi
-    _info "Litmus kill-time adjudicator check passed"
-
     # The six live/adversarial inference arms run through the dedicated Rust
     # production-CLI target above; a shell fixture would be a second authority.
     _step "Checking source-agreement production fixtures ran (1484-uf29)..."
@@ -6900,13 +6896,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Source-agreement production fixture matrix passed"
-
-    _step "Checking this host has the tools the gate needs (989-ykks)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-host-tools.sh" 2>&1; then
-        _error "a required host tool is missing, or a required-tool claim is unfalsifiable (989-ykks) — see the verdict above"
-        exit 1
-    fi
-    _info "Host-tools check passed"
 
     # 1034-whsp's cross-branch claim visibility fixture is gate step 953 (2173-inst).
 
@@ -6952,15 +6941,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Litmus stdin isolation check passed"
-
-    # 911-m7js: the archiver-check memo hits only on an unchanged ledger AND
-    # unchanged instrument; a fragment written or removed flips it.
-    _step "Checking the archiver-check memo keys on the ledger and the instrument (911-m7js)..."
-    if ! _run_lua_decider "scripts/lua/test-archiver-check-memo.lua" 2>&1; then
-        _error "the archiver-check memo does not miss on a ledger or instrument change (911-m7js) — see the verdict line above"
-        exit 1
-    fi
-    _info "Archiver-check memo check passed"
 
     # 1054-zvq4: the terminology memo's sibling fixture. Same bar as the
     # archiver's above — a memo is only safe while it still MISSES, so the
@@ -7013,25 +6993,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # Numeric prefixes fix the order and are spaced by ten so a later step can
     # land between two without renaming either.
     _run_gate_steps "$SCRIPT_DIR"
-
-    # 965-sxec: a missing or unusable ruby must read as COULD-NOT-RUN (exit 3),
-    # never as a claim about the ready set. Inside a forge `command -v ruby`
-    # finds a brew shim that cannot install one, exits 127, and the caller's
-    # `-ne 0` arm then asserted "the plan archiver would CHANGE THE READY SET" —
-    # a substantive ledger claim from a command that never executed. Wired here
-    # because the defect is invisible on any host that HAS ruby, which is every
-    # host that runs this gate; only the stub-PATH arms exercise it.
-    # 964-zedm: the index builder must stage where the payload FITS. It staged
-    # via the ambient TMPDIR, and in a forge /tmp is a 256 MB tmpfs while the
-    # index root is on a 1.2 TB overlay — so a cold 22,645-chunk build died on
-    # ENOSPC with 1.2 TB free. Wired here because the defect is invisible on any
-    # host with a roomy /tmp, which is every host that runs this gate.
-    _step "Checking the spec-index builder stages where the payload fits (964-zedm)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-spec-index-staging-capacity.sh" 2>&1; then
-        _error "the spec-index builder stages into the ambient TMPDIR (964-zedm) — see the verdict line above"
-        exit 1
-    fi
-    _info "Spec-index staging capacity check passed"
 
     # Order 881-29me. A `plan/issues/` audit cites its evidence and nothing
     # checked those citations still resolved. Measured in one document: every
@@ -7189,23 +7150,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Plan-lane merge-scoping fixture passed"
 
-    # Order 251 criterion LM-04. `plan/long-running.md` is declared a filtered
-    # view of the ledger's active multi_cycle packets and nothing enforced it.
-    # It drifted in July (caught by a human verifier, repaired by hand, bought
-    # six weeks) and again by 2026-08-25, when it was right about 7 of 31
-    # packets: 11 rows, four naming obsoleted packets, twenty live ones absent.
-    # A 23%-accurate sub-queue steers agents toward dead work.
-    #
-    # Checks MEMBERSHIP, not rendering: which orders appear is derivable and is
-    # what rotted; the phase / blocked-on / verification columns are editorial
-    # and fabricating them would make the view more convincing and no more true.
-    _step "Checking plan/long-running.md matches the live multi_cycle set (251 LM-04)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-long-running-view.sh" 2>&1; then
-        _error "the long-running view disagrees with the ledger (251 LM-04) — see the verdict line above"
-        exit 1
-    fi
-    _info "Long-running view agreement check passed"
-
     _step "Checking the reclaim-stranded-claims fixture (943-unii)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-reclaim-stranded-claims.sh" 2>&1; then
         _error "the stranded-claim reaper regressed (943-unii) — see the failing case above"
@@ -7221,7 +7165,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Stranded-sweep predicate fixture passed"
 
     _step "Checking the inference pull-failure classifier (525)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-inference-pull-failure-classification.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-inference-pull-failure-classification.lua" 2>&1; then
         _error "a TLS-trust pull failure stopped being distinguishable from an empty cache (525) — see the failing case above"
         exit 1
     fi
@@ -7241,20 +7185,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Bound-litmus-runnable fixture passed"
-
-    _step "Verifying the skew line can see a behaviour change (984-i4k2)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-expert-capability-behaviour-skew.sh" 2>&1; then
-        _error "the expert-capability behaviour-skew detector regressed (984-i4k2) — see the failing case above"
-        exit 1
-    fi
-    _info "Expert-capability behaviour-skew fixture passed"
-
-    _step "Verifying a MO-FULL marker cannot outrun its ledger record (974-uk95)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-mo-full-record-precedes-marker.sh" 2>&1; then
-        _error "the marker/ledger coupling regressed (974-uk95) — see the failing case above"
-        exit 1
-    fi
-    _info "MO-FULL record-precedes-marker fixture passed"
 
     _step "Checking every spec requirement carries a unique stable id (976-suab)..."
     # PORTED to Lua (1527-v7cy): scripts/lua/check-requirement-ids.lua.
@@ -7352,31 +7282,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _error "scripts/test-git-credential-helper.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
         exit 1
     fi
-    _step "Checking test-guest-unit-hardening (1063-nraf; 62ms)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-guest-unit-hardening.sh" 2>&1; then
-        _error "scripts/test-guest-unit-hardening.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
-        exit 1
-    fi
+    # test-guest-unit-hardening moved to gate step 924-2262-bke7 (Lua).
     _step "Checking test-release-freeze-audit (1255-s4im)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-release-freeze-audit.sh" 2>&1; then
         _error "scripts/test-release-freeze-audit.sh failed — the server-visible freeze audit may no longer name a breach, or the release preflight may no longer refuse one (1255-s4im); read the fixture output above"
         exit 1
     fi
-    # test-land-queue.sh was bound by no gate, so its arms — now including the
-    # freeze hold and the mid-gate re-check (1255-s4im) — ran only by hand. 14 s.
-    _step "Checking test-land-queue (1316-bnzt, 1255-s4im; ~14s)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-land-queue.sh" 2>&1; then
-        _error "scripts/test-land-queue.sh failed — the landing queue may land into a frozen trunk or mis-order, evict or re-queue candidates; read the fixture output above"
-        exit 1
-    fi
-    _step "Checking test-ensure-hooks (1255-s4im)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-ensure-hooks.sh" 2>&1; then
-        _error "scripts/test-ensure-hooks.sh failed — a toolchain-less checkout may no longer arm its push guards (1255-s4im); read the fixture output above"
-        exit 1
-    fi
     _step "Checking test-litmus-steps-can-fail (1063-nraf; 38ms)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-steps-can-fail.sh" 2>&1; then
-        _error "scripts/test-litmus-steps-can-fail.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+    if ! _run_lua_decider "scripts/lua/test-litmus-steps-can-fail.lua" 2>&1; then
+        _error "scripts/lua/test-litmus-steps-can-fail.lua failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
         exit 1
     fi
     _step "Checking test-plan-binary-probe (1063-nraf; 45ms)..."
@@ -7405,8 +7319,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _step "Checking the held-claim report (1115-srfr)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-cycle-claims-report.sh" 2>&1; then
-        _error "scripts/test-cycle-claims-report.sh failed — the exit-time held-claim report is what stops a cycle ending on an unreleased claim; read the fixture output above"
+    if ! _run_lua_decider "scripts/lua/test-cycle-claims-report.lua" 2>&1; then
+        _error "scripts/lua/test-cycle-claims-report.lua failed — the exit-time held-claim report is what stops a cycle ending on an unreleased claim; read the fixture output above"
         exit 1
     fi
     _step "Checking test-subdomain-routing (1063-nraf; 14ms)..."
@@ -7424,15 +7338,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Litmus steps-can-fail check passed"
-
-    _step "Checking plan fragments use keys the fold reads (944-vim8)..."
-    # 1247-sv4d: ported to scripts/lua (the shell-to-lua carried obligation);
-    # the verdict grammar is unchanged.
-    if ! _run_lua_decider "scripts/lua/check-fragment-keys-are-read.lua" 2>&1; then
-        _error "a plan/index.d/ fragment uses a top-level key the fold discards (944-vim8) — see the verdict line above"
-        exit 1
-    fi
-    _info "Fragment key check passed"
 
     _step "Checking worker and coordinator agree on the claim protocol (943-unii)..."
     # 888-vgs8: ported to scripts/lua (the shell-to-lua carried obligation);
@@ -7455,7 +7360,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Proxy permissive-port routing check passed"
-
 
     # Order 797-8dzt. A test that slices its own source between two SYMBOL
     # NAMES silently widens when one of those symbols is renamed away:
@@ -7498,17 +7402,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "wsl.exe single-constructor check passed"
 
-    # Order 1562-tc7p. Every build reads ONE Rust toolchain, pinned in
-    # rust-toolchain.toml. v56.10.8.1's macOS job floated to `stable` (rustc
-    # 1.99.0) while this host gated on 1.96.1 and the Nix release on 1.98.0, and
-    # the cut failed after every gate passed. This refuses a workflow, flake or
-    # build script that stops reading the pin.
-    _step "Checking every build reads the pinned Rust toolchain (1562-tc7p)..."
-    if ! _run_lua_decider "scripts/lua/check-toolchain-pinned.lua" 2>&1; then
-        _error "a build no longer reads the pinned toolchain in rust-toolchain.toml (1562-tc7p) — see the violation lines above"
-        exit 1
-    fi
-    _info "toolchain pin check passed"
     _step "Checking test-check-toolchain-pinned (1562-tc7p)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-check-toolchain-pinned.sh" 2>&1; then
         _error "scripts/test-check-toolchain-pinned.sh failed — the toolchain-pin guard no longer refuses a float it must refuse; read the fixture output above"
@@ -7538,7 +7431,10 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # handoff. Promotion to a refusal is an operator decision, and the moment
     # for it is when dev binaries are signed and SAC stops being a coin flip.
     _step "Reporting Windows-only source verification state (716-f5kc)..."
-    _windows_only_verdict="$(bash "$SCRIPT_DIR/scripts/check-windows-only-sources-verified.sh" 2>/dev/null || echo "stale:sources-check-failed:windows-only")"
+    _wo_plan="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _wo_plan=""
+    # 2243-wosv: the Lua port (one file, --platform macos for the macOS scope).
+    _windows_only_verdict="$( [ -n "$_wo_plan" ] && cd "$SCRIPT_DIR" && "$_wo_plan" script run scripts/lua/check-windows-only-sources-verified.lua 2>/dev/null </dev/null )" || _windows_only_verdict=""
+    case "$_windows_only_verdict" in ok:*|skip:*|stale:*|missing:*) ;; *) _windows_only_verdict="stale:sources-check-failed:windows-only" ;; esac
     case "$_windows_only_verdict" in
         ok:* | skip:*)
             _info "Windows-only sources: $_windows_only_verdict"
@@ -7553,13 +7449,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
             _warn "  No host has committed an attestation for these yet — this is a fact about"
             _warn "  the repository, NOT a claim that the sources are broken or unverified."
             _warn "  On a Windows host: cargo test -p tillandsias-windows-tray --bins | \\"
-            _warn "    scripts/check-windows-only-sources-verified.sh attest --from -"
+            _warn "    tillandsias-plan script run scripts/lua/check-windows-only-sources-verified.lua -- attest --from -"
             ;;
         *)
             _warn "Windows-only sources: $_windows_only_verdict"
             _warn "  A Linux build compiles src/stubs/ for these — this gate did NOT read them."
             _warn "  Verify natively (cargo test -p tillandsias-windows-tray), then:"
-            _warn "    scripts/check-windows-only-sources-verified.sh attest --from <transcript>"
+            _warn "    tillandsias-plan script run scripts/lua/check-windows-only-sources-verified.lua -- attest --from <transcript>"
             ;;
     esac
 
@@ -7569,7 +7465,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # read as healthy. Same gate, same vocabulary, same attestation format; only
     # the scope differs.
     _step "Reporting macOS-only source verification state (739-6r6n)..."
-    _macos_only_verdict="$(bash "$SCRIPT_DIR/scripts/check-macos-only-sources-verified.sh" 2>/dev/null || echo "stale:sources-check-failed:macos-only")"
+    _macos_only_verdict="$( [ -n "$_wo_plan" ] && cd "$SCRIPT_DIR" && "$_wo_plan" script run scripts/lua/check-windows-only-sources-verified.lua -- --platform macos 2>/dev/null </dev/null )" || _macos_only_verdict=""
+    case "$_macos_only_verdict" in ok:*|skip:*|stale:*|missing:*) ;; *) _macos_only_verdict="stale:sources-check-failed:macos-only" ;; esac
     case "$_macos_only_verdict" in
         ok:* | skip:*)
             _info "macOS-only sources: $_macos_only_verdict"
@@ -7582,15 +7479,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
             _warn "  No host has committed an attestation for these yet — this is a fact about"
             _warn "  the repository, NOT a claim that the sources are broken or unverified."
             _warn "  On a macOS host: cargo test -p tillandsias-macos-tray --bins | \\"
-            _warn "    scripts/check-macos-only-sources-verified.sh attest --from -"
+            _warn "    tillandsias-plan script run scripts/lua/check-windows-only-sources-verified.lua -- --platform macos attest --from -"
             ;;
         *)
             _warn "macOS-only sources: $_macos_only_verdict"
             _warn "  A Linux or Windows build compiles stubs for these — this gate did NOT read them."
             _warn "  Verify natively (cargo test -p tillandsias-macos-tray --bins), then:"
-            _warn "    scripts/check-macos-only-sources-verified.sh attest --from <transcript>"
+            _warn "    tillandsias-plan script run scripts/lua/check-windows-only-sources-verified.lua -- --platform macos attest --from <transcript>"
             ;;
     esac
+
+    # ORDER 2253-iher: a keep-going run with any red names them all and stops
+    # HERE, before the stamp: a gate that refused anything never stamps a tree.
+    _kg_summary || builtin exit 1
 
     # Record that the gate passed against THIS exact tree. The pre-push hook
     # verifies this stamp instead of re-running the whole gate: a multi-minute

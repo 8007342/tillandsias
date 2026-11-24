@@ -1,0 +1,11 @@
+# Gate step 2275-fcpy — the preflight bench: which guards a host may leave
+# unstarted, and that the record is advisory (corrupt, foreign or missing starts
+# everything). Pool-safe: it writes only its own scratch.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the preflight bench starts every guard it cannot vouch for leaving out (2275-fcpy)..."
+STEP_LUA="scripts/lua/test-preflight-bench.lua"
+STEP_ERROR="the preflight bench leaves out a guard it should start, or its record is not advisory — see the FAIL lines above"
+STEP_OK="preflight bench fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin ok:preflight-bench:10 arms at 432aa144b (run directly, bash 3.2)"
+STEP_READS="build.sh lib/lua/common/** scripts/lua/test-preflight-bench.lua"

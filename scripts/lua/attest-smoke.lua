@@ -72,7 +72,9 @@ if not PLATFORM then
 end
 if not PLATFORM:match("^[a-z]+$") then refuse("bad-platform:" .. PLATFORM) end
 
-local DIR = O.dir:sub(1, 1) == "/" and O.dir or (ROOT .. "/" .. O.dir)
+-- Absolute on POSIX ("/...") or Windows ("C:/...", "C:\\..."; msys, yolanda 2026-11-22).
+local function absolute(p) return p:sub(1, 1) == "/" or p:match("^%a:[/\\]") ~= nil end
+local DIR = absolute(O.dir) and O.dir or (ROOT .. "/" .. O.dir)
 if run({ "test", "-f", DIR .. "/00-run-start.txt" }) ~= 0 then refuse("no-run-start:" .. O.dir) end
 -- Evidence older than this run's start is a previous run's.
 local _, stale = run({ "find", DIR, "-type", "f", "!", "-newer", DIR .. "/00-run-start.txt", "!", "-name", "00-run-start.txt" })
@@ -104,8 +106,13 @@ local line = "Smoke: " .. host .. " " .. PLATFORM .. " " .. SHA .. " " .. O.tag 
 local argv = { "git", "-C", ROOT, "-c", "commit.gpgsign=false", "commit-tree", TREE,
                "-m", "smoke: " .. PLATFORM .. " " .. O.tag .. " " .. V .. " (" .. host .. ")", "-m", line }
 if prev ~= "" then argv[#argv + 1] = "-p"; argv[#argv + 1] = prev end
-local cc, COMMIT = run(argv)
-if cc ~= 0 or COMMIT == "" then refuse("commit-tree-failed") end
+-- The attestation names its own author: never the ambient identity (a gate
+-- host may have no user.name/email at all; macuahuitl 2026-11-23).
+local ID = "tillandsias-smoke (" .. host .. ")"
+local MAIL = "smoke@" .. host .. ".invalid"
+local cc, COMMIT, ce = run(argv, { env = { GIT_AUTHOR_NAME = ID, GIT_AUTHOR_EMAIL = MAIL,
+    GIT_COMMITTER_NAME = ID, GIT_COMMITTER_EMAIL = MAIL } })
+if cc ~= 0 or COMMIT == "" then refuse("commit-tree-failed:" .. text.trim(ce):gsub("%s+", " ")) end
 if run({ "git", "-C", ROOT, "update-ref", REF, COMMIT }) ~= 0 then refuse("update-ref-failed") end
 if O.push then
     if run({ "git", "-C", ROOT, "push", "-q", "origin", REF .. ":" .. REF }, { timeout_ms = 300000 }) ~= 0 then

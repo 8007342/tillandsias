@@ -15,6 +15,8 @@
 --  10 native_path: /c/x -> C:/x and \\?\C:\x -> C:/x on native Windows; identity
 --     for /c/x elsewhere (a legal directory there)
 --  11 plan_binary is absolute, native, and runs
+--  12 which finds a spawnable tool on PATH, nil when absent (2257-qnt7)
+--  13 is_abs accepts /x, C:/x and C:\x, and nothing relative
 --   9 posix_shell is Git's bash.exe on native Windows, else the caller's default ("bash" when none)
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-common-fixture.lua
@@ -105,5 +107,30 @@ do
         "plan_binary()=" .. pb .. " build-id status=" .. tostring(r.status) .. " code=" .. tostring(r.code)
             .. " why=" .. tostring(r.why or r.reason))
 end
+
+-- 12 ORDER 2257-qnt7: the PATH search needs no `which` binary (the WSL builder has none).
+do
+    local w = T:scratch()
+    fs.write(w.rel .. "/only-here-tool", "#!/bin/sh\nexit 0\n")
+    T:must{ "chmod", "+x", w.abs .. "/only-here-tool" }
+    local bash = fixture.which("bash")
+    local dir = text.trim(proc.run{ argv = { fixture.posix_shell(), "-s", "--", w.abs }, stdin = 'cd "$1" && pwd\n', timeout_ms = 10000 }.stdout or "")
+    local found = fixture.which("only-here-tool", dir)
+    -- A hit must be SPAWNABLE, not just found (msys: /usr/bin/bash is not).
+    local ran = bash and proc.run{ argv = { bash, "--version" }, timeout_ms = 10000 } or {}
+    T:arm("12 which finds a tool on PATH in a spawnable spelling, nil when absent or only a builtin",
+        bash ~= nil and bash:find("bash", 1, true) ~= nil and ran.status == "exited" and ran.code == 0
+            and fixture.which("no-such-tool-2246") == nil
+            and fixture.which("cd", dir) == nil and fixture.which("only-here-tool") == nil
+            and tostring(found):find("/only-here-tool", 1, true) ~= nil,
+        "bash=" .. tostring(bash) .. " spawn=" .. tostring(ran.status) .. " found=" .. tostring(found))
+end
+
+-- 13 (2253-j2at): is_abs accepts both spellings of an absolute path.
+T:arm("13 is_abs takes /x and a drive path C:/x or C:\\x, and nothing relative",
+    fixture.is_abs("/home/x") and fixture.is_abs("C:/a") and fixture.is_abs("c:\\a")
+        and not fixture.is_abs("a/b") and not fixture.is_abs("./a") and not fixture.is_abs("C:a")
+        and not fixture.is_abs("") and not fixture.is_abs(nil),
+    "is_abs(C:/a)=" .. tostring(fixture.is_abs("C:/a")))
 
 T:finish()

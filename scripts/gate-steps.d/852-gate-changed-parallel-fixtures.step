@@ -1,0 +1,12 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 4: the next slowest blocks,
+# measured one at a time on lenovinha). As a .step it is no build.sh edit, so it
+# never makes intake HEAVY; it runs SERIAL on its lane, beside the other lanes.
+STEP_DESC="Checking --changed runs its selected fixtures in a bounded pool (1931-steb)"
+STEP_LUA="scripts/lua/test-gate-changed-parallel-fixtures.lua"
+STEP_ERROR="./build.sh --changed's fixture pool lost its order, isolation, serial rule or concurrency (1931-steb)"
+STEP_OK="--changed input-selection fixture passed"
+STEP_SERIAL="asserts wall-clock bounds (four 1 s stub fixtures under 2.5 s at 4 jobs); pool load would make it flaky"
+STEP_LANES="timing"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin ok:gate-changed-parallel-fixtures:6/6 at 35680bdf4 (run directly, idle host)"
+STEP_READS="scripts/lua/test-gate-changed-parallel-fixtures.lua"

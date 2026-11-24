@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: checkout-writers-door-arms-hold-on-native-windows
+    field: status
+    value: completed
+    ts: "2026-11-24T10:30:32Z"
+    host: yolanda
+
+events:
+  - packet_id: checkout-writers-door-arms-hold-on-native-windows
+    event:
+      type: completed
+      ts: "2026-11-24T10:30:32Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: landed ab981ab868fdd068e791db3a6d65a93c2f4cac1b (PR 1472)
+  - packet_id: checkout-writers-door-arms-hold-on-native-windows
+    event:
+      type: note
+      ts: "2026-11-24T10:30:32Z"
+      host: yolanda
+      summary: |-
+        Verified on origin/linux-next by content: arm 10b and the msys record on step 461 are there. 22 arms ok on Linux (yoga) and darwin (macbookair) at 9c2c38d8c and on msys at f1f56dd04.

@@ -50,7 +50,7 @@ err2="$(guard "$R" 2>&1 >/dev/null)"
 rm -f "$probe"
 case "$out2" in
     violation:order-citations-unresolvable:*)
-        if [ "$rc2" -ne 0 ] && printf '%s' "$err2" | grep -q "$_bad" ; then
+        if [ "$rc2" -ne 0 ] && grep -q <<<"$err2" "$_bad" ; then
             ok "ARM 2 (teeth): an INVENTED SUFFIX on a real order number is caught, named, and rc is non-zero"
         else
             bad "ARM 2: verdict fired but rc=$rc2 or the id was not named"

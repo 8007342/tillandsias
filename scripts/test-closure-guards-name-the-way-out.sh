@@ -77,12 +77,12 @@ PROBE
     git -C "$wt" add "$frag" >/dev/null 2>&1
     g1="$(cd "$wt" && bash scripts/check-scorable-obligation-added.sh 2>&1)"
 
-    if printf '%s' "$g1" | grep -q "$EXIT_FORM"; then
+    if grep -q <<<"$g1" "$EXIT_FORM"; then
         ok "guard 1 names the sanctioned exit '$EXIT_FORM'"
     else
         bad "guard 1 refuses a new-test packet without naming '$EXIT_FORM' — the filer's next move is unguided"
     fi
-    if printf '%s' "$g1" | grep -q '885-92iu'; then
+    if grep -q <<<"$g1" '885-92iu'; then
         ok "guard 1 names its counterpart (885-92iu), so the filer learns pinning a future name will also be refused"
     else
         bad "guard 1 does not name guard 2 — a filer who pins the future litmus walks into the second refusal blind"
@@ -121,22 +121,22 @@ else
     } > "$tmp/pin.yaml"
     g2="$("$BIN" declared-closures-check "$tmp/pin.yaml" 2>&1)"
 
-    if printf '%s' "$g2" | grep -q 'declared-closure-unresolvable'; then
+    if grep -q <<<"$g2" 'declared-closure-unresolvable'; then
         ok "guard 2 still refuses a pin nothing defines — the behaviour being preserved"
     else
         bad "guard 2 did not refuse a dangling pin; the rebuild may be stale or the guard regressed"
     fi
-    if printf '%s' "$g2" | grep -q "$EXIT_FORM"; then
+    if grep -q <<<"$g2" "$EXIT_FORM"; then
         ok "guard 2 names the sanctioned exit '$EXIT_FORM'"
     else
         bad "guard 2 refuses the pin without naming '$EXIT_FORM' — the natural next move is to delete the pin, straight back into guard 1"
     fi
-    if printf '%s' "$g2" | grep -q '977-448j'; then
+    if grep -q <<<"$g2" '977-448j'; then
         ok "guard 2 names its counterpart (977-448j), so deleting the pin is visibly not the way out"
     else
         bad "guard 2 does not name guard 1 — the two refusals still do not reference each other"
     fi
-    if printf '%s' "$g2" | grep -q '1068-cxmf'; then
+    if grep -q <<<"$g2" '1068-cxmf'; then
         ok "guard 2 names the dangling-pin defect (1068-cxmf) the attractive wrong turn creates"
     else
         bad "guard 2 does not name 1068-cxmf, so the cost of leaving the pin dangling stays folklore"

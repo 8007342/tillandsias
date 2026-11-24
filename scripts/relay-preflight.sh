@@ -55,6 +55,8 @@
 #      carried-obligation backlog that neither pays nor waives), plus
 #      `tillandsias-plan check --strict-fragments` and `tillandsias-policy
 #      plan-orders` when the diff adds plan/index.d fragments.
+#   3b. every scripts/**/check-* decider gate-changed.sh --checks selects for
+#      the diff (2282-asxn), derived from build.sh and gate-steps.d.
 #   4. `cargo fmt --check` when the diff touches *.rs.
 #   5. Touched fixtures: every scripts/test-*.sh in the diff, plus every
 #      scripts/test-*.sh (excluding scripts/test-support/*) whose bytes name
@@ -82,8 +84,12 @@
 # --plan prints phases 3-7's selected items without running them, and two
 # --plan runs on the same inputs print byte-identical item lists.
 #
-# NEVER PUSHES. relay/<utc> is left checked out for scripts/land-on-platform-
-# branch.sh (or the landing queue) to push. `.claude/worktrees/` is agent
+# NEVER PUSHES, and leaves the caller's checkout as it found it (2252-2mnf): the
+# branch (or detached SHA) on entry is checked out again on EVERY exit, INT and
+# TERM included (a SIGKILL runs nothing). It used to stay on relay/<utc> after a
+# green run, and the next commit landed there. After a green run relay/<utc>
+# still EXISTS, named on stderr; check it out to land it with
+# scripts/land-on-platform-branch.sh. `.claude/worktrees/` is agent
 # worktree scratch, out of scope for the dirty-worktree check and any scan.
 
 set -uo pipefail
@@ -207,6 +213,25 @@ _restore_clean() {
     git checkout -q "$ORIG_REF" >/dev/null 2>&1 || true
     git branch -D "$RELAY_BRANCH" >/dev/null 2>&1 || true
 }
+
+# ORDER 2252-2mnf: the one restore, on every exit. A no-op unless this checkout
+# still stands on the relay branch. `exec` (the re-exec below) runs no EXIT trap;
+# the merged copy sets its own.
+_restore_caller() {
+    [ -n "${RELAY_BRANCH:-}" ] && [ -n "${ORIG_REF:-}" ] || return 0
+    [ "$(git symbolic-ref --short -q HEAD)" = "$RELAY_BRANCH" ] || return 0
+    git merge --abort >/dev/null 2>&1 || true
+    if git checkout -q "$ORIG_REF" >/dev/null 2>&1; then
+        echo "note:relay-preflight:restored:$ORIG_REF — the merged tree is on $RELAY_BRANCH" >&2
+    else
+        echo "warn:relay-preflight:not-restored — this checkout is still on $RELAY_BRANCH" >&2
+        echo "  why: git could not check $ORIG_REF out (a run may have left files modified: git status)" >&2
+        echo "  remedy: clear what git status names, then git checkout $ORIG_REF, before committing anything" >&2
+    fi
+}
+trap _restore_caller EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 if [ -z "$RP_REEXEC" ]; then
 ORIG_REF="$(git symbolic-ref --short -q HEAD || true)"
@@ -375,7 +400,9 @@ _run_decider() { # name -> sets DEC_OUT, returns rc
         check-plan-binary-probe-usage) _cap bash "$SELF_DIR/check-plan-binary-probe-usage.sh" ;;
         check-litmus-pin-claims) _cap bash "$SELF_DIR/check-litmus-pin-claims.sh" ;;
         check-script-exec-bits) _cap bash "$SELF_DIR/check-script-exec-bits.sh" ;;
-        check-added-fragments-parse) DEC_OUT="$(TILLANDSIAS_FRAGMENT_PARSE_BASE="$BASE" bash "$SELF_DIR/check-added-fragments-parse.sh" 2>&1)"; return $? ;;
+        check-added-fragments-parse)
+            _lua_runner "$name" || return 3
+            _cap env TILLANDSIAS_REPO_ROOT="$ROOT" TILLANDSIAS_FRAGMENT_PARSE_BASE="$BASE" TILLANDSIAS_SCRIPT_RUNNER_BIN="$_lb" "$_lb" script run "$SELF_DIR/lua/check-added-fragments-parse.lua" ;;
         check-scorable-obligation-added) _cap bash "$SELF_DIR/check-scorable-obligation-added.sh" "$BASE" ;;
         check-gate-step-regimes) _cap bash "$SELF_DIR/check-gate-step-regimes.sh" ;;
         check-added-test-is-referenced) DEC_OUT="$(TILLANDSIAS_ADDED_TEST_BASE="$BASE" bash "$SELF_DIR/check-added-test-is-referenced.sh" 2>&1)"; return $? ;;
@@ -437,6 +464,50 @@ for name in $DECIDER_NAMES; do
         [ -n "$FIRST_FAIL_TOKEN" ] || { FIRST_FAIL_TOKEN="deciders:$name"; FIRST_FAIL_RC=1; }
     fi
 done
+
+# BEGIN-DERIVED-CHECKS
+# ORDER 2282-asxn — EVERY check-* DECIDER THE DIFF TOUCHES, DERIVED. The list
+# above is hand-kept, and what it left out was learned from evictions, a full
+# gate each (2026-11-24: check-gate-step-inputs #1109, native-argv-added #1135,
+# check-shell-ratchet #1190). gate-changed derives the population from build.sh
+# and gate-steps.d and the selection from the diff, so a decider wired tomorrow
+# is run with no edit here. A change it cannot scope runs every check-*.
+derived_state="skip"
+if [ "$PLAN_MODE" = 1 ]; then
+    derived_state="plan"
+    TILLANDSIAS_GATE_DIFF_BASE="$BASE" bash "$SELF_DIR/gate-changed.sh" --list --checks "$BASE" 2>/dev/null \
+        | sed -n 's/^select:fixture:\([^ ]*\).*/plan:derived-check:\1/p'
+elif [ "$STUB" = 1 ]; then
+    derived_state="stub"
+    _item derived-checks skip:stub 0
+else
+    _t="$(timing_now_ms)"
+    # Roots by cwd, never by an exported root: check-archive-answerability tests a
+    # COPY of the tree, and an inherited root sent its reads back to this one.
+    _cap env -u TILLANDSIAS_REPO_ROOT -u PROJECT_ROOT TILLANDSIAS_GATE_DIFF_BASE="$BASE" bash "$SELF_DIR/gate-changed.sh" --run --checks "$BASE"
+    _dc_rc=$?
+    _dc_bad="$(sed -n 's/^fail:gate-changed:fixture:\([^ ]*\).*/\1/p' <<<"$_CAP_OUT")"
+    _dc_bad="${_dc_bad%%$'\n'*}"
+    if [ "$_dc_rc" -eq 0 ]; then
+        derived_state="ok"
+        _item derived-checks ok "$_t"
+    else
+        _dc_name="${_dc_bad##*/}"; _dc_name="${_dc_name%.*}"
+        [ -n "$_dc_name" ] || _dc_name="could-not-run:rc=$_dc_rc"
+        _item "derived-checks:$_dc_name" red "$_t"
+        grep -v '^ok:gate-changed:fixture:\|^select:' <<<"$_CAP_OUT" | sed 's/^/  /' >&2
+        if [ "$KEEP_GOING" != 1 ]; then
+            echo "refused:relay-preflight:derived-checks:$_dc_name"
+            _afford "a decider the gate runs on this diff refused on the merged tree (its own output is above)" \
+                "fix what $_dc_name named, commit onto the ref that carries it, and re-run relay-preflight"
+            _restore_clean
+            timing_emit relay-preflight relay "$T0" 1
+            exit 1
+        fi
+        [ -n "$FIRST_FAIL_TOKEN" ] || { FIRST_FAIL_TOKEN="derived-checks:$_dc_name"; FIRST_FAIL_RC=1; }
+    fi
+fi
+# END-DERIVED-CHECKS
 
 # ── phase 4: cargo fmt --check, when *.rs moved ─────────────────────────────
 fmt_state="skip"

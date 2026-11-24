@@ -72,7 +72,7 @@ frags() { find "$1/plan/index.d" -name '*.yaml' 2>/dev/null | wc -l | tr -d ' ';
 # ── ARM 1: the measured case — a claim with no --host is REFUSED ───────────
 D="$W/a"; mk "$D"
 run "$D" 1-aaaa status in_progress --reason "claimed with no host"
-if [ "$RC" -ne 0 ] && printf '%s' "$OUT" | grep -q 'refused:set-field:claim-without-a-host'; then
+if [ "$RC" -ne 0 ] && grep -q <<<"$OUT" 'refused:set-field:claim-without-a-host'; then
     ok "ARM 1: a claim with no --host is refused, with the typed verdict (rc=$RC)"
 else
     bad "ARM 1: rc=$RC, output: $(printf '%s' "$OUT" | head -1 | cut -c1-90)"
