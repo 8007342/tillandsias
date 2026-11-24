@@ -6879,7 +6879,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Spec/registry status agreement passed"
     # ...and the guard itself can fail: hermetic arms for a flipped word, a
     # missing section, an annotated line, and a named undecided pair.
-    if ! _run bash "$SCRIPT_DIR/scripts/test-spec-registry-status.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-spec-registry-status.lua" 2>&1; then
         _error "the spec/registry status guard no longer refuses what it must (1397-eppt)"
         exit 1
     fi

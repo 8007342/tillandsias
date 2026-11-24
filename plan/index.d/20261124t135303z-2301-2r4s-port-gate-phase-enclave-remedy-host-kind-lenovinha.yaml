@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-gate-phase-run-id-enclave-remedy-host-kind-fixtures-to-lua
+    order: 2301-2r4s
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      Three whole-file shell-to-Lua ports: test-gate-phase-rows-carry-run-id.sh, test-enclave-remedy-covers-the-named-service.sh and test-host-kind-evidence-not-from-workspace.sh become scripts/lua/*.lua.
+    context: |
+      Coordinator queue 2026-11-24 14:00Z: lenovinha has scripts/test-[d-h]*.sh, 3 to 5 per PR.
+      ports: scripts/test-gate-phase-rows-carry-run-id.sh scripts/test-enclave-remedy-covers-the-named-service.sh scripts/test-host-kind-evidence-not-from-workspace.sh
+      No origin/work/* ref modifies or deletes any of the three (checked against every ref, 2026-11-24).
+    exit_criteria:
+      - "each .lua gives the same verdict as its .sh on the trunk tree, and the same red arm as the .sh under a mutant"
+      - "every caller runs the .lua; the three .sh files are deleted"
+    unscoreable: "unpinnable-until-the-guard-exists: the mutant parity is the deliverable."
+    next_action: "Port, mutant-parity each, rewire two litmus files and gate step 395, delete the .sh."
+    provenance: coordinator queue; filed by lenovinha.
+    events:
+      - {type: filed, ts: '2026-11-24T13:53:03Z', host: lenovinha, summary: first d-h batch filed}

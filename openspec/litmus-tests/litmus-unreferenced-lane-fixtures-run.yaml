@@ -58,13 +58,13 @@ critical_path:
     assert_output_contains: "ok:plan-lane-agreeing-deletion:"
     timeout_ms: 120000
   - step: "release-tier timer renders the unit the release gates on"
-    command: "bash scripts/test-release-tier-timer-render.sh 2>&1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-release-tier-timer-render.lua 2>&1"
     expected_behavior: "ok:release-tier-timer-render:"
     assert_exit: 0
     assert_output_contains: "ok:release-tier-timer-render:"
     timeout_ms: 120000
   - step: "./repeat passes --model and --effort to claude"
-    command: "bash scripts/test-repeat-model-flag.sh 2>&1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-repeat-model-flag.lua 2>&1"
     expected_behavior: "ok:repeat-model-flag:"
     assert_exit: 0
     assert_output_contains: "ok:repeat-model-flag:"
