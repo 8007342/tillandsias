@@ -2743,7 +2743,7 @@ print_summary() {
     if [[ ${#NONZERO_TEXT_MATCHES[@]} -gt 0 ]]; then
         printf 'Nonzero text matches (2309-fa7q, log only): %d\n' "${#NONZERO_TEXT_MATCHES[@]}" >&2
         local _nz
-        for _nz in "${NONZERO_TEXT_MATCHES[@]}"; do
+        for _nz in ${NONZERO_TEXT_MATCHES[@]+"${NONZERO_TEXT_MATCHES[@]}"}; do
             printf 'census:nonzero-text-match %s\n' "$_nz" >&2
         done
     fi
