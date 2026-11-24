@@ -482,7 +482,9 @@ elif [ "$STUB" = 1 ]; then
     _item derived-checks skip:stub 0
 else
     _t="$(timing_now_ms)"
-    _cap env TILLANDSIAS_GATE_DIFF_BASE="$BASE" TILLANDSIAS_REPO_ROOT="$ROOT" bash "$SELF_DIR/gate-changed.sh" --run --checks "$BASE"
+    # Roots by cwd, never by an exported root: check-archive-answerability tests a
+    # COPY of the tree, and an inherited root sent its reads back to this one.
+    _cap env -u TILLANDSIAS_REPO_ROOT -u PROJECT_ROOT TILLANDSIAS_GATE_DIFF_BASE="$BASE" bash "$SELF_DIR/gate-changed.sh" --run --checks "$BASE"
     _dc_rc=$?
     _dc_bad="$(sed -n 's/^fail:gate-changed:fixture:\([^ ]*\).*/\1/p' <<<"$_CAP_OUT")"
     _dc_bad="${_dc_bad%%$'\n'*}"
