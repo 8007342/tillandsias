@@ -1701,7 +1701,7 @@ pushed, red or green, so **never type a record line**. After §5a's
 ```bash
 [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
 ./target/release/tillandsias-plan script run scripts/lua/smoke-record.lua -- \
-    --tag "$SMOKE_TAG" --regime "$SMOKE_REGIME" | tee target/smoke-e2e/05-record.txt
+    --tag "$SMOKE_TAG" | tee target/smoke-e2e/05-record.txt
 RECORD_RC=${PIPESTATUS[0]}; test -n "$RECORD_RC" && test "$RECORD_RC" -eq 0
 SMOKE_FRAGMENT="$(sed -n 's/^ok:smoke-record://p' target/smoke-e2e/05-record.txt)"
 test -n "$SMOKE_FRAGMENT" && scripts/push-plan-fragments-to-trunk.sh "$SMOKE_FRAGMENT"
@@ -1709,15 +1709,14 @@ test -n "$SMOKE_FRAGMENT" && scripts/push-plan-fragments-to-trunk.sh "$SMOKE_FRA
 
 ```powershell
 .\target\release\tillandsias-plan.exe script run scripts/lua/smoke-record.lua -- `
-    --tag $SmokeTag --regime $SmokeRegime | Tee-Object target\smoke-e2e\05-record.txt
+    --tag $SmokeTag | Tee-Object target\smoke-e2e\05-record.txt
 if ($LASTEXITCODE -ne 0) { throw "smoke-record refused (rc=$LASTEXITCODE) — read 05-record.txt" }
 $SmokeFragment = (Select-String -Path target\smoke-e2e\05-record.txt -Pattern '^ok:smoke-record:(.+)$').Matches[0].Groups[1].Value
 bash scripts/push-plan-fragments-to-trunk.sh $SmokeFragment
 ```
 
-`SMOKE_REGIME` is one short slug for where it ran (`immutable`, `credential-warm`,
-`wsl2`). It describes; it never decides. The first host to record a tag also
-declares its `smoke-<tag>` row; two hosts doing so at once write the same one.
+The regime is the one §5a attested. The first host to record a tag also declares
+its `smoke-<tag>` row; two hosts doing so at once write the same one.
 An attestation that says `partial:credential-unmeasured` is recorded as that and
 **blocks**. When the operator has signed in, attest again (§5a) and record again:
 the later record decides. A `refused:smoke-record:<why>` line is a finding about

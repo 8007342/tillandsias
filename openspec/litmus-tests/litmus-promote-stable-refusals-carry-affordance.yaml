@@ -38,7 +38,7 @@ critical_path:
   - step: "a smoke record is derived from the pushed attestation, and the gate reads it (2298-ifpm)"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-smoke-record.lua 2>&1"
     timeout_ms: 120000
-    success_pattern: "ok:smoke-record-fixture:10 arms"
+    success_pattern: "ok:smoke-record-fixture:11 arms"
 
 observability:
   traces:

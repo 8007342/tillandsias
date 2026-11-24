@@ -8,9 +8,9 @@
 --     -> plan/index.d/<ts>-smoke-<tag>-<platform>-<attestation>.yaml
 --        event smoke-record, summary: smoke <platform> <tag> <verdict> regime=<platform>:<regime>
 --
--- The verdict, host, tag and time are the attestation's. It refuses a ref that names
+-- The verdict, host, tag, time and regime are the attestation's. It refuses a ref that names
 -- another platform, sha or tag, and one origin does not hold byte for byte: an attestation
--- nobody else can read is no evidence. Only the regime is given, and it is a description.
+-- nobody else can read is no evidence.
 -- The first record for a tag declares the row smoke-<tag>; the declaration is identical on
 -- every host, so two hosts declaring it at once agree. It writes ONE fragment and pushes
 -- nothing: scripts/push-plan-fragments-to-trunk.sh takes the printed path.
@@ -19,19 +19,18 @@
 --   refused:smoke-record:<why>             rc 2, nothing written
 --
 -- Usage: tillandsias-plan script run scripts/lua/smoke-record.lua -- \
---   --tag <tag> [--regime <slug>] [--platform darwin|msys|linux]
+--   --tag <tag> [--platform darwin|msys|linux]
 
 local function refuse(why) verdict.emit("refused:smoke-record:" .. why, 2) end
-local O = { regime = "unstated" }
+local O = {}
 local i = 1
 while i <= #arg do
     local a = arg[i]
-    if (a == "--tag" or a == "--regime" or a == "--platform") and arg[i + 1] then O[a:sub(3)] = arg[i + 1]; i = i + 1
+    if (a == "--tag" or a == "--platform") and arg[i + 1] then O[a:sub(3)] = arg[i + 1]; i = i + 1
     else refuse("usage") end
     i = i + 1
 end
 if not O.tag or not O.tag:match("^v%d+%.%d+%.%d+%.%d+$") then refuse("bad-tag") end
-if not O.regime:match("^[%w._-]+$") then refuse("bad-regime") end
 local function run(argv)
     local r = proc.run({ argv = argv, timeout_ms = 120000 })
     return (r.status == "exited") and r.code or -1, text.trim(r.stdout or "")
@@ -65,18 +64,27 @@ end
 if n ~= 1 or not v then refuse("attestation-is-not-this-run:" .. REF) end
 if not (v == "pass" or v == "partial:credential-unmeasured" or v:match("^fail:[%w._-]+$")) then refuse("bad-verdict:" .. v) end
 if not host:match("^[%w._-]+$") then refuse("bad-host") end
+-- digests only (2299-atdg): a tree of any other shape is no source, and the regime is its own
+local _, names = run({ "git", "ls-tree", "--name-only", LOCAL })
+if names ~= "SHA256SUMS\nregime.txt\nverdict.txt" then refuse("attestation-is-not-digest-only:" .. REF) end
+local _, tv = run({ "git", "show", LOCAL .. ":verdict.txt" })
+if tv ~= v then refuse("attestation-disagrees-with-itself:" .. REF) end
+local _, REGIME = run({ "git", "show", LOCAL .. ":regime.txt" })
+if not REGIME:match("^[%w._-]+$") then refuse("bad-regime") end
 local tr = proc.run({ argv = { "git", "log", "-1", "--date=format-local:%Y-%m-%dT%H:%M:%SZ", "--format=%cd", LOCAL },
     env = { TZ = "UTC" }, timeout_ms = 30000 })
 local TS = text.trim(tr.stdout or "")
 if not TS:match("^%d%d%d%d%-%d%d%-%d%dT%d%d:%d%d:%d%dZ$") then refuse("bad-time") end
 
-local LINE = "smoke " .. NAME .. " " .. O.tag .. " " .. v .. " regime=" .. NAME .. ":" .. O.regime
+local LINE = "smoke " .. NAME .. " " .. O.tag .. " " .. v .. " regime=" .. NAME .. ":" .. REGIME
 if #LINE > 100 then refuse("too-long:" .. #LINE .. ">100 (plan-events cuts it; shorten the regime or the fail slug)") end
 
 -- the row
 local PLAN = env.get("TILLANDSIAS_PLAN_BIN") or ""
 if PLAN == "" then PLAN = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN") or "" end
-if PLAN == "" then PLAN = "tillandsias-plan" end
+if PLAN == "" then local _, top = run({ "git", "rev-parse", "--show-toplevel" }); PLAN = top .. "/target/release/tillandsias-plan" end
+-- an absent binary must not read as an absent row
+if run({ PLAN, "capabilities" }) ~= 0 then refuse("no-plan-binary") end
 local ROW = "smoke-" .. O.tag:gsub("%.", "-")
 local have = run({ PLAN, "plan-events", ROW })
 local out_ = { "# Ledger fragment — append-only, IMMUTABLE once written.\n",

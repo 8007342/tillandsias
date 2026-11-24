@@ -20,7 +20,7 @@ packets:
       the verdict is never typed. The row declaration is identical on every host. Local-build smokes record nothing
       (coordinator 2026-11-24).
     exit_criteria:
-      - "scripts/lua/test-smoke-record.lua green (10 arms: real attest, real record, real gate), run by litmus:promote-stable-refusals-carry-affordance."
+      - "scripts/lua/test-smoke-record.lua green (11 arms: real attest, real record, real gate), run by litmus:promote-stable-refusals-carry-affordance."
       - "One real RC has a smoke-record per platform written by step 5b, and promote-stable.sh --dry-run reads them."
     unscoreable: "fixture-scored: test-smoke-record.lua is the pin, bound to litmus:promote-stable-refusals-carry-affordance"
     provenance: "coordinator macuahuitl-fedora 2026-11-24"
