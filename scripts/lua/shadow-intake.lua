@@ -11,11 +11,11 @@
 --   tillandsias-plan script run shadow-intake.lua -- <num>:<base>:<head>:<gate>:<via> ...
 --   SHADOW_CMD   run in the shadow tree as `<cmd> <base>` (./build.sh --intake --changed)
 --   SHADOW_LOG   appended; SHADOW_LOCK a dir (pid inside; a `stop` file in it ends
---                the run at the next PR boundary); SHADOW_PR_S, SHADOW_RUN_S bounds
+--                the run, a build in flight included); SHADOW_PR_S, SHADOW_RUN_S bounds
 -- Log line:
 --   shadow:accept:<pr> tier=intake|heavy selected=<fx>/<pop> crates=<n> intake_s=<s>
 --     intake=ok|red|-|timeout|merge-conflict|could-not-run gate=<verdict> via= base= head= rc= ts=
---   unmeasured:shadow:<pr>:<stopped|run-bound|lock-held>   — named, never silently missing
+--   unmeasured:shadow:<pr>:<stopped|stopped-mid-build|run-bound|lock-held>   — named, never silently missing
 
 local LOG, LOCK = env.get("SHADOW_LOG"), env.get("SHADOW_LOCK")
 local PR_S, RUN_S = tonumber(env.get("SHADOW_PR_S") or "") or 1200, tonumber(env.get("SHADOW_RUN_S") or "") or 1200
@@ -84,14 +84,32 @@ for i = 1, #arg do
                 if run({ "git", "-C", TREE, "-c", "user.name=land-queue", "-c", "user.email=land-queue@localhost", "merge", "-q", "--no-ff", "--no-edit", h }).code ~= 0 then
                     verd = "merge-conflict"
                 else
+                    -- The router sidecar is a BUILD ARTIFACT a fresh tree lacks; without it every
+                    -- cargo build fails and reads as intake=red (a false red on #1109, yoga).
+                    local car = "/images/router/tillandsias-router-sidecar"
+                    local staged = exists(ROOT .. car) and run({ "cp", "-p", ROOT .. car, TREE .. car }).code == 0
+                    local need = exists(ROOT .. "/crates/tillandsias-router-sidecar")
+                    if need and not staged then o = "no router sidecar in " .. ROOT else
                     local e = {}
                     for k, v in pairs(BASE) do e[k] = v end
                     if PLAN ~= "" then e.TILLANDSIAS_PLAN_BIN = PLAN end
-                    local r = sh('cd "$1" || exit 99\ntimeout -k 10 ' .. left .. " " .. CMD .. ' "$2"\n', { TREE, b }, { env = e, ms = (left + 60) * 1000 })
+                    -- A stop (or this runner dying) ends the build MID-PR, the way the bound does:
+                    -- TERM to `timeout`, whose group holds the toolbox wrapper, which ends the
+                    -- container side. A build left running would compete with the real gate.
+                    local r = sh('cd "$1" || exit 99\ntimeout -k 10 ' .. left .. " " .. CMD .. [[ "$2" &
+p=$!; me=$PPID
+while kill -0 "$p" 2>/dev/null; do
+    if [ -e "$3/stop" ] || ! kill -0 "$me" 2>/dev/null; then kill -TERM "$p" 2>/dev/null; wait "$p"; exit 97; fi
+    sleep 1
+done
+wait "$p"
+]], { TREE, b, LOCK }, { env = e, ms = (left + 60) * 1000 })
                     o = (r.stdout or "") .. (r.stderr or "")
                     rc = r.status == "exited" and r.code or 124
                     if rc == 0 then verd = "ok" elseif rc == 1 then verd = "red" elseif rc == 10 then tier, verd = "heavy", "-"
-                    elseif rc == 124 or rc == 137 then verd = "timeout" end
+                    elseif rc == 124 or rc == 137 then verd = "timeout"
+                    elseif rc == 97 then verd = nil end
+                    end
                 end
             end
             local fx, cr = o:match("select:intake fixtures=(%d+/%d+) .-crates=(%d+)/")
@@ -99,8 +117,12 @@ for i = 1, #arg do
                 local pop = o:match("heavy:.- fixtures=(%d+) crates=")
                 fx, cr = pop and "-/" .. pop or "-", "-"
             end
+            if verd == nil then
+                log("unmeasured:shadow:" .. n .. ":stopped-mid-build gate=" .. g .. " via=" .. via .. " base=" .. b:sub(1, 9) .. " head=" .. h:sub(1, 9))
+            else
             log(("shadow:accept:%s tier=%s selected=%s crates=%s intake_s=%d intake=%s gate=%s via=%s base=%s head=%s rc=%s ts=%s"):format(
                 n, tier, fx, cr, secs(t), verd, g, via, b:sub(1, 9), h:sub(1, 9), tostring(rc), time.iso_utc()))
+            end
             if verd == "red" and g == "green" and KEEP ~= "" then run({ "tee", KEEP .. "/shadow-" .. n .. "-false-red.log" }, { stdin = o }) end
             done = done + 1
         end

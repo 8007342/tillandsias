@@ -2222,6 +2222,24 @@ grep -q 'intake=red gate=green ' <<<"$l60" && ls "$TMP/arm60g/logs"/*/shadow-81-
 # run that starts while a shadow holds its lock asks it to stop, and still lands.
 SH60_LINES=2 arm60 arm60i 1 c84.txt other.txt
 grep -q '^shadow:accept:81 .* intake=ok ' <<<"$l60" && grep -q '^unmeasured:shadow:82:stopped gate=green' <<<"$l60" || _b60="$_b60 i-stop"
+# (k) a stop MID-BUILD ends the build's whole process tree and names the PR; (l) the same
+# through the builder wrapper leaves nothing running IN THE TOOLBOX (a named skip where
+# there is no builder). The sleep's duration is its marker, so only it is looked for.
+_m60="86$(( $$ % 100000 ))"
+printf 'sleep %s & sleep %s\n' "$_m60" "$_m60" > "$TMP/mid60.sh"
+printf 'bash "%s" sleep %s\n' "$ROOT/scripts/with-tillandsias-builder.sh" "1$_m60" > "$TMP/mid60tb.sh"
+mid60() { # <name> <stub> <pattern>: run it, stop it once the marker is live, count what is left
+    ( for _w in $(seq 1 300); do pgrep -f "$3" >/dev/null && { sleep 1; : > "$TMP/$1/lock/stop"; break; }; sleep 0.1; done ) &
+    local _sp=$!
+    SH60_CMD="bash $2" arm60 "$1" 1 other.txt; wait "$_sp"
+    grep -q '^unmeasured:shadow:81:stopped-mid-build gate=green' <<<"$l60" || _b60="$_b60 $1-unnamed"
+    for _w in $(seq 1 100); do pgrep -f "$3" >/dev/null || break; sleep 0.1; done
+    pgrep -f "$3" >/dev/null && { _b60="$_b60 $1-survivor"; pkill -f "$3"; }
+}
+mid60 arm60k "$TMP/mid60.sh" "^sleep $_m60\$"
+if command -v toolbox >/dev/null 2>&1 && toolbox list -c 2>/dev/null | grep -q tillandsias-builder; then
+    mid60 arm60l "$TMP/mid60tb.sh" "^sleep 1$_m60\$"
+else echo "skip: ARM 60l — no tillandsias-builder toolbox here"; fi
 sleep 300 & _h60=$!
 mkdir -p "$TMP/arm60j/lock"; echo "$_h60" > "$TMP/arm60j/lock/pid"
 SH60_CMD="" SH60_LINES=0 SH60_J=1 arm60 arm60j 1 c81.txt

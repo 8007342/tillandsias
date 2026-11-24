@@ -134,7 +134,6 @@ scripts/test-credential-channel-survives-a-killed-probe.sh
 scripts/test-credential-cold-state-probe.sh
 scripts/test-credential-verdict-script.sh
 scripts/test-cycle-checkout-lock.sh
-scripts/test-cycle-claims-report.sh
 scripts/test-cycle-driver.sh
 scripts/test-cycle-flow-emit-idempotency.sh
 scripts/test-cycle-lock-attested-release.sh
