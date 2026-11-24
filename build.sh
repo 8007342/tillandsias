@@ -2937,10 +2937,11 @@ _gs_await_step_pipe() {
 }
 
 # _gs_verdict_token <output file> <rc> — the step's verdict as one token for a
-# flaky: line: its last verdict-shaped line's head, else rc=<n>.
+# flaky:/red-twice: line: its last RED verdict line's head, else rc=<n>. Never an
+# ok: line: this is only asked of a step that failed (#1441 read `ok:,ok:`).
 _gs_verdict_token() {
     local _v
-    _v="$(grep -E '^(ok|violation|refused|could-not-run|FAIL|fail)[: ]' "$1" 2>/dev/null | tail -n 1 | cut -d' ' -f1 | cut -c1-80)"
+    _v="$(grep -E '^(violation|refused|could-not-run|FAIL|fail)[: ]' "$1" 2>/dev/null | tail -n 1 | cut -d' ' -f1 | cut -c1-80)"
     printf '%s' "${_v:-rc=$2}" | tr ',' ';'
 }
 
@@ -3076,9 +3077,11 @@ _gs_one() {
     # ORDER 1765-q7rg — A HOST-STATE STEP GETS ONE RETRY, NEVER A SKIP.
     # A step that declares STEP_HOST_STATE (a keyring cold state, a lock
     # under load) can disagree with itself on a healthy tree. It runs once
-    # more after a settle; a pass then is a pass, and a second red stays red
-    # but is named flaky:<step>:<first>,<second> instead of violation:, so
-    # the land queue re-queues it once rather than evicting a good PR. A
+    # more after a settle; a pass then is a pass. A retry that FAILS reproduced:
+    # it is named red-twice:<step>:<first>,<second> and evicts like any red
+    # (#1441: a deterministic red read as flaky was requeued, a gate each time).
+    # Only a retry that could not run (exit 3, 2251-iyiu) gave no verdict, and is
+    # named flaky:<step>:<first>,<second> so the land queue re-queues it once. A
     # step that declares nothing never retries, and the could-not-run code
     # is never retried either.
     if [ "$_step_rc" -ne 0 ] && [ -n "$STEP_HOST_STATE" ] \
@@ -3088,9 +3091,11 @@ _gs_one() {
         _info "retry:${_step_path##*/}:host-state=$STEP_HOST_STATE — first run red ($_gs_first_verdict); settling ${TILLANDSIAS_GATE_HOST_STATE_SETTLE_S:-10}s and running it once more"
         sleep "${TILLANDSIAS_GATE_HOST_STATE_SETTLE_S:-10}"
         _gs_exec_step
-        if [ "$_step_rc" -ne 0 ]; then
-            echo "flaky:${_step_path##*/}:${_gs_first_verdict},$(_gs_verdict_token "$_step_out" "$_step_rc")"
-        fi
+        case "$_step_rc" in
+            0) ;;
+            3) echo "flaky:${_step_path##*/}:${_gs_first_verdict},$(_gs_verdict_token "$_step_out" "$_step_rc")" ;;
+            *) echo "red-twice:${_step_path##*/}:${_gs_first_verdict},$(_gs_verdict_token "$_step_out" "$_step_rc")" ;;
+        esac
     fi
 
     # ORDER 1916-tsel — ATTRIBUTE BY RUN ID, NOT BY GROWTH. Growth alone
