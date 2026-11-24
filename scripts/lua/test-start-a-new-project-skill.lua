@@ -40,6 +40,7 @@ T:arm("2 a forge on any project links it for Claude Code, Codex and OpenCode", l
 
 -- a PATH with no openspec CLI: only the tools the scaffold needs
 fs.mkdir(S.rel .. "/bin")
+-- native-argv: tool NAMES to look up and link into the scratch PATH, never an argv[1]
 for _, t in ipairs{ "bash", "cat", "mkdir", "dirname", "tr", "sed", "git", "env" } do
     local w = proc.run{ argv = { SH, "-s", "--", t }, stdin = 'command -v "$1"\n', env = { PATH = env.get("PATH") }, timeout_ms = 10000 }
     local p = text.trim(w.stdout or "")
