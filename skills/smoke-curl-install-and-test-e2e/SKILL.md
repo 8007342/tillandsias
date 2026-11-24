@@ -1658,7 +1658,24 @@ not an unqualified PASS (above), so it attests as `fail:signatures-unverified`.
 
 **3. Write and push the ref.** The RC is the tag's commit. The asset sha256 is the
 `SHA256SUMS` line for the asset that §1 installed. Set `SMOKE_ASSET` to its
-name as listed in `SHA256SUMS`.
+name as listed in `SHA256SUMS`. Set `SMOKE_REGIME` to this host's regime slug
+(`[A-Za-z0-9._-]+`, e.g. `darwin-arm64`, `linux-x86_64`, `msys-x64`). The
+promote gate's smoke record reads it back from the ref's `regime.txt`
+(2298-ifpm), so it is never retyped.
+
+**The ref carries DIGESTS ONLY, never the evidence (2299-atdg).** Its tree is
+exactly three files: `SHA256SUMS` (a sha256 per evidence file), `regime.txt` and
+`verdict.txt`. The logs stay on this host, provable by their digests. Lane and
+init logs can carry a sign-in URL or a token, and a pushed secret is not undone
+by deleting the ref. The script refuses three cases:
+- `raw-tree-in-history:<commit>`: an older attest on the same ref has any other
+  tree shape, from before 2299-atdg. Delete that LOCAL ref as the refusal says;
+  never push it.
+- `unsafe-evidence-name`: a file name outside `[A-Za-z0-9._/-]`, since a name can
+  leak too. Rename the file; the refusal never echoes the name.
+- `stale-evidence`: a file older than `00-run-start.txt`. Previous rounds archived
+  inside the directory (`_archived-<ts>/`, step 4) are skipped, and are neither
+  judged stale nor digested.
 
 ```bash
 [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
@@ -1666,9 +1683,10 @@ git fetch -q origin "refs/tags/${SMOKE_TAG}:refs/tags/${SMOKE_TAG}"
 SMOKE_RC_SHA="$(git rev-parse "${SMOKE_TAG}^{commit}")"
 SMOKE_ASSET_SHA256="$(gh release download "$SMOKE_TAG" -p SHA256SUMS -O - | awk -v a="$SMOKE_ASSET" '$2 == a || $2 == "*" a { print $1 }')"
 test -n "$SMOKE_RC_SHA" && test -n "$SMOKE_ASSET_SHA256" || { echo 'FAIL: no RC sha or asset sha256 — do not attest'; exit 2; }
+test -n "${SMOKE_REGIME:-}" || { echo 'FAIL: set SMOKE_REGIME (e.g. darwin-arm64) — do not attest'; exit 2; }
 ./target/release/tillandsias-plan script run scripts/lua/attest-smoke.lua -- \
     --sha "$SMOKE_RC_SHA" --tag "$SMOKE_TAG" --asset-sha256 "$SMOKE_ASSET_SHA256" \
-    --verdict "$SMOKE_VERDICT" --dir target/smoke-e2e --push \
+    --verdict "$SMOKE_VERDICT" --regime "$SMOKE_REGIME" --dir target/smoke-e2e --push \
   | tee target/smoke-e2e/05-attest.txt
 ATTEST_RC=${PIPESTATUS[0]}; test -n "$ATTEST_RC" && test "$ATTEST_RC" -eq 0
 ```
@@ -1679,9 +1697,10 @@ $SmokeRcSha = (git rev-parse "${SmokeTag}^{commit}").Trim()
 $sums = gh release download $SmokeTag -p SHA256SUMS -O -
 $SmokeAssetSha256 = ($sums | Where-Object { ($_ -split '\s+')[1] -in @($SmokeAsset, "*$SmokeAsset") } | ForEach-Object { ($_ -split '\s+')[0] })
 if (-not $SmokeRcSha -or -not $SmokeAssetSha256) { throw 'no RC sha or asset sha256 — do not attest' }
+if (-not $SmokeRegime) { throw 'set $SmokeRegime (e.g. msys-x64) — do not attest' }
 .\target\release\tillandsias-plan.exe script run scripts/lua/attest-smoke.lua -- `
     --sha $SmokeRcSha --tag $SmokeTag --asset-sha256 $SmokeAssetSha256 `
-    --verdict $SmokeVerdict --dir target/smoke-e2e --push | Tee-Object target\smoke-e2e\05-attest.txt
+    --verdict $SmokeVerdict --regime $SmokeRegime --dir target/smoke-e2e --push | Tee-Object target\smoke-e2e\05-attest.txt
 if ($LASTEXITCODE -ne 0) { throw "attest-smoke refused (rc=$LASTEXITCODE) — read 05-attest.txt" }
 ```
 
