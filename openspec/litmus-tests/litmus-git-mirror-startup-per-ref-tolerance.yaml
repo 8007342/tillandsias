@@ -27,7 +27,7 @@ critical_path:
     expected_behavior: "ok: stranded-logged-by-name"
 
   - step: "offline fixture proves per-ref isolation (fast-forwardable flushes, stranded named)"
-    command: "scripts/test-git-mirror-startup-per-ref.sh && echo 'ok: per-ref-fixture-pass'"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-git-mirror-startup-per-ref.lua >/dev/null && echo 'ok: per-ref-fixture-pass'"
     timeout_ms: 30000
     expected_behavior: "ok: per-ref-fixture-pass"
 
