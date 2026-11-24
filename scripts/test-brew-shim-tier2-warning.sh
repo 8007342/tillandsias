@@ -52,21 +52,21 @@ run_shim() { # <uname_m> -> stderr; rc in $?
 
 # ── aarch64 install path: the owned one-line policy statement appears ────────
 out="$(run_shim aarch64)"
-printf '%s' "$out" | grep -q 'Tier 2 (no bottles)'
+grep -q <<<"$out" 'Tier 2 (no bottles)'
 check "aarch64-install-path-states-the-policy" "$?"
-printf '%s' "$out" | grep -q 'order 317'
+grep -q <<<"$out" 'order 317'
 check "policy-line-cites-its-order" "$?"
 
 # ── x86_64 install path (NEGATIVE CONTROL): no Tier-2 line ───────────────────
 out="$(run_shim x86_64)"
-! printf '%s' "$out" | grep -q 'Tier 2'
+! grep -q <<<"$out" 'Tier 2'
 check "x86-64-install-path-stays-silent" "$?"
 
 # ── aarch64 exec path (NEGATIVE CONTROL): already-installed tool, no line ────
 printf '#!/bin/sh\necho ran\n' > "$PREFIX/bin/mytool"
 chmod +x "$PREFIX/bin/mytool"
 out="$(run_shim aarch64)"
-! printf '%s' "$out" | grep -q 'Tier 2'
+! grep -q <<<"$out" 'Tier 2'
 check "aarch64-exec-path-stays-silent" "$?"
 rm -f "$PREFIX/bin/mytool"
 
@@ -80,10 +80,10 @@ else
     echo "PASS  mutation-applied"
 fi
 out="$(run_shim aarch64 "$MUTANT")"
-! printf '%s' "$out" | grep -q 'Tier 2'
+! grep -q <<<"$out" 'Tier 2'
 check "mutation-control-neutered-arch-test-loses-the-line" "$?"
 out="$(run_shim x86_64 "$MUTANT")"
-! printf '%s' "$out" | grep -q 'Tier 2'
+! grep -q <<<"$out" 'Tier 2'
 check "mutation-control-x86-64-unchanged" "$?"
 
 if [ "$fail" -eq 0 ]; then

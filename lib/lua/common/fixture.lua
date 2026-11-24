@@ -116,6 +116,15 @@ function M.plan_binary()
     return M.native_path(p)
 end
 
+-- ORDER 2253-j2at. An absolute path in either spelling the fleet produces:
+-- /x on Linux, macOS and MSYS, and a drive path C:/x or C:\x on native
+-- Windows. A check written `p:sub(1, 1) == "/"` reads every Windows path as
+-- relative (macuahuitl relayed: the Mac's attest-smoke hit the same bug).
+function M.is_abs(p)
+    if type(p) ~= "string" or p == "" then return false end
+    return p:sub(1, 1) == "/" or p:find("^%a:[/\\]") ~= nil
+end
+
 local SCRATCH = "target/plan-scratch"
 
 -- ORDER 2158-vrb7. scratch.mkdir returns a Windows verbatim path (\\?\C:\...).

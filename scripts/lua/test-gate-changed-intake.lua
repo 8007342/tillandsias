@@ -20,6 +20,8 @@
 --                  (host-shell -/-> vault-client). Before 2248-zcqh both were
 --                  wrong: 13 of cargo's 46 edges missing, 1 extra
 --   7 LINT-OK      check-gate-changed-crate-graph.lua passes on the live tree
+--   7b LINT-WINDOWS the same graph with cargo's native-Windows C:\...\Cargo.toml
+--                  paths still matches (2253-j2at)
 --   8 LINT-MISS    an edge cargo has and the derived graph lacks is refused
 --   9 LINT-EXTRA   an edge the derived graph has alone is refused
 --  10 BUILD-BLOCK  (2250-gwfy) a build.sh diff that only adds a wired fixture
@@ -124,11 +126,32 @@ T:arm("6 WORKSPACE workspace-inherited deps resolve; commented-out ones do not",
 -- 7, 8, 9
 local function lint(env)
     local r = proc.run{ argv = { PB, "script", "run", LINT }, cwd = ROOT, env = env, timeout_ms = 600000 }
-    return (r.status == "exited" and r.code or -1), text.trim(r.stdout or "")
+    -- stderr kept for the arm's detail (yolanda, msys: arm 7 once read
+    -- could-not-run with no reason recorded).
+    return (r.status == "exited" and r.code or -1), text.trim(r.stdout or ""), text.trim(r.stderr or "")
 end
-rc, o = lint({})
+local lerr
+rc, o, lerr = lint({})
 T:arm("7 LINT-OK the derived graph equals cargo's on the live tree",
-    rc == 0 and text.starts_with(o, "ok:gate-changed-crate-graph:"), "rc=" .. rc .. " out=" .. o)
+    rc == 0 and text.starts_with(o, "ok:gate-changed-crate-graph:"), "rc=" .. rc .. " out=" .. o .. " err=" .. (lerr or ""):sub(1, 400))
+
+-- 7b (2253-j2at, yolanda msys): cargo metadata on native Windows prints
+-- C:\...\Cargo.toml. The same live graph, every path rewritten to that form
+-- through the lint's metadata seam, must still match (it read missing=46:extra=46
+-- when "/Cargo.toml" was stripped before the separators were normalised).
+do
+    local mr = proc.run{ argv = { "cargo", "metadata", "--format-version", "1", "--no-deps",
+        "--manifest-path", ROOT .. "/Cargo.toml" }, cwd = ROOT, timeout_ms = 300000 }
+    local meta = mr.stdout or ""
+    local root_s = ROOT:gsub("%%", "%%%%")
+    local win = meta:gsub(root_s:gsub("[%-%.%+%[%]%(%)%$%^%?%*]", "%%%0"), "C:\\\\x\\\\repo")
+    -- forward slashes inside the rewritten paths become escaped backslashes
+    win = win:gsub('("C:\\\\x\\\\repo)([^"]*)"', function(a, b) return a .. b:gsub("/", "\\\\") .. '"' end)
+    fs.write(S.rel .. "/meta-windows.json", win)
+    local wrc, wo = lint({ TILLANDSIAS_CRATE_GRAPH_METADATA = S.abs .. "/meta-windows.json" })
+    T:arm("7b LINT-WINDOWS cargo's C:\\...\\Cargo.toml paths match the derived graph",
+        wrc == 0 and text.starts_with(wo, "ok:gate-changed-crate-graph:"), "rc=" .. wrc .. " out=" .. wo)
+end
 
 local lines = {}
 for _, l in ipairs(text.lines(graph)) do if l ~= "" then lines[#lines + 1] = l end end

@@ -110,8 +110,8 @@ fi
 # --- Arm 1: --parse-only refuses it, naming what the strict checker names ----
 arm1_out="$(bash "$RUNNER" --parse-only "$W/bad.yaml" 2>&1)"; arm1_rc=$?
 if [ "$arm1_rc" -ne 0 ] \
-   && ! printf '%s\n' "$arm1_out" | grep -qE '^ok:' \
-   && printf '%s\n' "$arm1_out" | grep -q 'bad.yaml'; then
+   && ! grep -qE <<<"$arm1_out" '^ok:' \
+   && grep -q <<<"$arm1_out" 'bad.yaml'; then
     passed=$((passed + 1))
 else
     fail "arm 1: --parse-only did not refuse a non-YAML file (rc=$arm1_rc)"
@@ -122,7 +122,7 @@ fi
 arm2_out="$(bash "$RUNNER" --parse-only "$W/good.yaml" 2>&1)"; arm2_rc=$?
 "$READER" validate-yaml "$W/good.yaml" >/dev/null 2>&1; strict_rc=$?
 if [ "$arm2_rc" -eq 0 ] && [ "$strict_rc" -eq 0 ] \
-   && printf '%s\n' "$arm2_out" | grep -qE '^ok:litmus-parseable'; then
+   && grep -qE <<<"$arm2_out" '^ok:litmus-parseable'; then
     passed=$((passed + 1))
 else
     fail "arm 2: a valid file was not accepted by both (runner=$arm2_rc strict=$strict_rc)"
@@ -167,7 +167,7 @@ if ! bash -n "$MUTANT" 2>/dev/null; then
     fail "arm 3: the mutant does not parse; the deletion range needs updating"
 else
     mut_out="$(bash "$MUTANT" --parse-only "$W/bad.yaml" 2>&1)"; mut_rc=$?
-    if [ "$mut_rc" -eq 0 ] && printf '%s\n' "$mut_out" | grep -qE '^ok:litmus-parseable'; then
+    if [ "$mut_rc" -eq 0 ] && grep -qE <<<"$mut_out" '^ok:litmus-parseable'; then
         passed=$((passed + 1))
     else
         fail "arm 3: removing the load did NOT restore the old behaviour (rc=$mut_rc) -- arm 1 may be passing for an unrelated reason"

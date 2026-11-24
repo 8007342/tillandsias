@@ -29,11 +29,7 @@ local NAME = "gate-changed-crate-graph"
 -- Git's bash on native Windows, else bash. common.fixture.posix_shell() does
 -- this (2246-fkea, #1389); it is not on trunk yet, so the idiom is inline
 -- here until it lands.
-local SH = "bash"
-do
-    local ep = text.trim(proc.run{ argv = { "git", "--exec-path" }, timeout_ms = 10000 }.stdout or "")
-    if ep:find("^%a:/.*/libexec/git%-core$") then SH = (ep:gsub("/[^/]+/libexec/git%-core$", "/bin/bash.exe")) end
-end
+local SH = fixture.posix_shell()
 
 local function read_or_run(seam, argv)
     local f = env.get(seam)
@@ -56,9 +52,9 @@ if not ok or type(meta) ~= "table" or type(meta.packages) ~= "table" then
 end
 
 -- An absolute path as a repo-relative directory, whatever its separators.
-local root_n = (fixture.plain_path(ROOT):gsub("\\", "/")):gsub("/+$", "")
+local root_n = (fixture.native_path(ROOT):gsub("\\", "/")):gsub("/+$", "")
 local function rel(p)
-    p = (fixture.plain_path(p or ""):gsub("\\", "/")):gsub("/+$", "")
+    p = (fixture.native_path(p or ""):gsub("\\", "/")):gsub("/+$", "")
     if p:sub(1, #root_n + 1) == root_n .. "/" then return p:sub(#root_n + 2) end
     -- A seam file written on another host: keep everything from crates/ on.
     return p:match("(crates/.*)$") or p
@@ -66,7 +62,11 @@ end
 
 local cargo = {}
 for _, pkg in ipairs(meta.packages) do
-    local dir = rel(pkg.manifest_path):gsub("/Cargo%.toml$", "")
+    -- Separators FIRST: on native Windows cargo prints C:\...\Cargo.toml, and
+    -- stripping "/Cargo.toml" before turning \ into / left the suffix on every
+    -- key (yolanda, msys: missing=46:extra=46 — no key matched).
+    local mp = (pkg.manifest_path or ""):gsub("\\", "/")
+    local dir = rel((mp:gsub("/Cargo%.toml$", "")))
     for _, d in ipairs(pkg.dependencies or {}) do
         if d.path and d.path ~= "" then cargo[dir .. "\t" .. rel(d.path)] = true end
     end

@@ -1,0 +1,12 @@
+# Gate step 2083-6k44 — the pre-commit hook's two cheatsheet phases (each of
+# whose checkers runs cargo build -p tillandsias-policy) run only when the
+# commit stages a cheatsheet or policy input; an unrelated commit runs neither.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the cheatsheet hook phases are scoped to their inputs (2083-6k44)"
+STEP_LUA="scripts/lua/test-cheatsheet-hook-phases-scoped.lua"
+STEP_ERROR="the pre-commit cheatsheet phases ran for an unrelated commit, or not for a cheatsheet/policy one (2083-6k44) — see the FAIL lines above"
+STEP_OK="Cheatsheet hook scope fixture passed"
+STEP_SECOND_REGIME="yolanda 2026-11-14 msys ok:cheatsheet-hook-scope-fixture:3 arms — native Windows runner over Git Bash; the pre-fix hook failed arm 1 with 2 calls on the same host (2083-6k44)"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY.
+STEP_READS="scripts/lua/test-cheatsheet-hook-phases-scoped.lua scripts/hooks/pre-commit-openspec.sh lib/lua/common/**"
