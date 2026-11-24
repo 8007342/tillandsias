@@ -317,7 +317,6 @@ scripts/test-meta-orchestration-opsx-sync-merge.sh
 scripts/test-metrics-log-fallback-is-loud.sh
 scripts/test-metrics-log-path-agreement.sh
 scripts/test-mirror-discipline.sh
-scripts/test-mirror-healthcheck-quiet.sh
 scripts/test-mirror-host-cert-and-sshd.sh
 scripts/test-mirror-receive-wrapper.sh
 scripts/test-mirror-refuses-when-broken.sh
@@ -366,7 +365,6 @@ scripts/test-pre-push-honours-a-live-freeze.sh
 scripts/test-pre-push-linux-next-merged.sh
 scripts/test-pre-push-main-branch-affordance.sh
 scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh
-scripts/test-pre-push-trailer-states-what-it-saw.sh
 scripts/test-pre-push-version-guard-sigpipe.sh
 scripts/test-pre-push-version-guard.sh
 scripts/test-pre-push-work-ref-lane.sh

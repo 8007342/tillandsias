@@ -1,0 +1,19 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by 2253-j2at (the structural lever of 2250-gwfy): as a .step it
+# is no build.sh edit, so it never makes intake HEAVY, and it runs in the pool.
+#
+# ORDER 885-92iu, restored to the body by 1034-ihxw after 1009-gccx hoisted
+# it in error. It resolves a built `tillandsias-plan`; with no binary it
+# emits `note: tillandsias-plan not built` and PASSES, so above the build it
+# is a no-op rather than a gate. It runs here, where a binary exists.
+# Ported to Lua (1642-cc54 carry): with no binary it is now could-not-run
+# (exit 3), which this gate refuses, instead of a pass.
+# ORDER 2246-fkea — an added Lua fixture line that roots at `pwd -P` or
+# spawns a bare bash/sed passes here and fails on a native Windows runner
+# (three ports in one day, #1388 the third). Refused at the source.
+STEP_DESC="Checking added Lua fixtures use native-safe roots and shells (2246-fkea)"
+STEP_LUA="scripts/lua/check-lua-fixture-native-argv-added.lua"
+STEP_ERROR="an added scripts/lua line roots at pwd -P or spawns a bare bash/sed — use common.fixture's repo_root() / posix_shell(); see the REFUSED lines above (2246-fkea)"
+STEP_OK="Native argv check passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:lua-fixture-native-argv-added:0 checked"
+STEP_READS="scripts/lua/check-lua-fixture-native-argv-added.lua"
