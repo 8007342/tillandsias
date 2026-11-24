@@ -35,7 +35,7 @@ description: >
 
 preconditions:
   - workspace contains scripts/check-base-ledger-status-loss.sh
-  - workspace contains scripts/test-base-ledger-status-loss.sh
+  - workspace contains scripts/lua/test-base-ledger-status-loss.lua
   - workspace contains scripts/lua/check-fragment-status-loss.lua
   - tillandsias-plan is built (the fixture SKIPs loudly otherwise)
 
@@ -45,9 +45,9 @@ critical_path:
     # are its named negative controls (progress/claim is not a closure; a
     # FALSIFIED closure does not report forever); 5 pins advisory-not-gate; 6
     # pins that an unparseable base is never reported as ok.
-    command: "bash scripts/test-base-ledger-status-loss.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-base-ledger-status-loss.lua 2>&1 | tail -1"
     timeout_ms: 120000
-    expected_behavior: "ok:base-status-loss-fixture:7"
+    expected_behavior: "ok:base-ledger-status-loss:7 arms"
 
   - step: "the advisory emits its pinned grammar on the live tree"
     command: "out=$(scripts/check-base-ledger-status-loss.sh 2>/dev/null); case \"$out\" in ok:no-base-status-loss:*\\ checked|advisory:base-status-loss:*|skip:*) echo 'ok: grammar held';; *) echo \"FAIL: off-grammar verdict: $out\"; exit 1;; esac"
@@ -95,7 +95,7 @@ observability:
   log_fields:
     spec: "methodology-accountability"
     test: "base-ledger-status-loss-shape"
-    artifact: "scripts/check-base-ledger-status-loss.sh + scripts/test-base-ledger-status-loss.sh + crates/tillandsias-plan/src/main.rs (fragment-terminal-events --live)"
+    artifact: "scripts/check-base-ledger-status-loss.sh + scripts/lua/test-base-ledger-status-loss.lua + crates/tillandsias-plan/src/main.rs (fragment-terminal-events --live)"
 
 rollback:
   on_failure: >

@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: agent-identity-brew-shim-and-base-ledger-fixtures-ported-to-lua
+    field: status
+    value: implemented
+    ts: "2026-11-24T17:02:42Z"
+    host: yoga
+events:
+  - packet_id: agent-identity-brew-shim-and-base-ledger-fixtures-ported-to-lua
+    event: {type: implemented, ts: "2026-11-24T17:02:42Z", host: yoga, summary: "implemented on work/2313-gbza"}

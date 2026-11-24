@@ -23,7 +23,7 @@ description: >
   executable), the all-sources-absent refusal grammar
   ^refused:agent-identity:empty-(explicit-id|platform|workstation|backend|timestamp)$
   with empty stdout and non-zero exit, the full hermetic fixture
-  (scripts/test-agent-identity.sh, incl. the shared node-name probe alignment
+  (scripts/lua/test-agent-identity.lua, incl. the shared node-name probe alignment
   with mo-full-attest.sh per 743-mgf3), and the consumers' wiring
   (advance-work-from-plan claim recipe + the agent_identity_contract block).
 severity: high
@@ -31,21 +31,21 @@ size: instant
 
 preconditions:
   - workspace contains scripts/agent-identity.sh
-  - workspace contains scripts/test-agent-identity.sh
+  - workspace contains scripts/lua/test-agent-identity.lua
   - workspace contains skills/advance-work-from-plan/SKILL.md
   - workspace contains methodology/distributed-work.yaml
   - shell utilities (bash, grep, mktemp) are available in PATH
 
 critical_path:
-  - step: "helper and fixture parse, are executable, and the helper is sourceable (defines the shared probe without side effects)"
-    command: "bash -n scripts/agent-identity.sh && bash -n scripts/test-agent-identity.sh && test -x scripts/agent-identity.sh && test -x scripts/test-agent-identity.sh && bash -c 'source scripts/agent-identity.sh && declare -F tillandsias_agent_id tillandsias_node_name >/dev/null' && echo 'ok: helper-defined'"
+  - step: "the helper parses, is executable and is sourceable (defines the shared probe without side effects)"
+    command: "bash -n scripts/agent-identity.sh && test -x scripts/agent-identity.sh && bash -c 'source scripts/agent-identity.sh && declare -F tillandsias_agent_id tillandsias_node_name >/dev/null' && echo 'ok: helper-defined'"
     timeout_ms: 5000
     expected_behavior: "ok: helper-defined"
 
   - step: "all hermetic scenarios pass (breach-shape positives, refusal negatives, precedence, sanitize-once, shared-probe alignment)"
-    command: "scripts/test-agent-identity.sh >/dev/null 2>&1 && echo 'ok: scenarios-pass' || { scripts/test-agent-identity.sh; exit 1; }"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-agent-identity.lua 2>&1"
     timeout_ms: 30000
-    expected_behavior: "ok: scenarios-pass"
+    expected_behavior: "ok:agent-identity:11 arms"
 
   - step: "POSITIVE PATH (the 756-hn3a breach shape): hostname absent from PATH but HOSTNAME present yields the COMPLETE stable id"
     command: "out=$(env -i PATH=/nonexistent-756 TILLANDSIAS_HOST_KIND=forge HOSTNAME=forge-tillandsias TILLANDSIAS_AGENT=codex \"$BASH\" scripts/agent-identity.sh id); rc=$?; [ \"$rc\" = 0 ] && printf '%s' \"$out\" | grep -qE '^forge-forge-tillandsias-codex-[0-9]{8}t[0-9]{6}z$' && echo 'ok: hostnameless-complete-id' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
@@ -70,7 +70,7 @@ observability:
   log_fields:
     spec: "methodology-accountability"
     test: "agent-identity-canonical-source-shape"
-    artifact: "scripts/agent-identity.sh + scripts/test-agent-identity.sh + skills/advance-work-from-plan/SKILL.md + methodology/distributed-work.yaml"
+    artifact: "scripts/agent-identity.sh + scripts/lua/test-agent-identity.lua + skills/advance-work-from-plan/SKILL.md + methodology/distributed-work.yaml"
 
 rollback:
   on_failure: >
@@ -87,4 +87,4 @@ rollback:
     ^refused:agent-identity:empty-(explicit-id|platform|workstation|backend|timestamp)$
     whenever a component resolves empty. Keep both scripts executable and the
     advance-work-from-plan recipe calling the helper.
-  command: "scripts/test-agent-identity.sh; grep -n 'agent-identity.sh' skills/advance-work-from-plan/SKILL.md | head -5"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-agent-identity.lua; grep -n 'agent-identity.sh' skills/advance-work-from-plan/SKILL.md | head -5"

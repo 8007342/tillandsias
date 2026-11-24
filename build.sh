@@ -5145,7 +5145,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # nothing. The fixture is hermetic (a fake brew, no network, its own depth
     # stop) because a test for a fork bomb must not be one.
     _step "Checking the brew shim re-entrancy guard (966-rq7f)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-brew-shim-reentrancy.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-brew-shim-reentrancy.lua" 2>&1; then
         _error "the brew shim re-entrancy guard regressed — a tool probe can fork until it hits the pid ceiling"
         exit 1
     fi
