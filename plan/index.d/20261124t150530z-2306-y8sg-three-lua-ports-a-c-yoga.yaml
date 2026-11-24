@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: three-shell-fixtures-a-c-ported-to-lua-2026-11-24
+    order: "2306-y8sg"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/test-cycle-driver.lua
+      - scripts/lua/test-cycle-flow-emit-idempotency.lua
+      - scripts/lua/test-added-test-is-referenced.lua
+    title: "three shell fixtures ported to Lua: cycle driver, cycle flow emit idempotency, added test is referenced"
+    context: |
+      ports: test-cycle-driver, test-cycle-flow-emit-idempotency, test-added-test-is-referenced.
+      Claimed by yoga before the work, in the coordinator's test-[a-c]* range.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its subject is mutated; callers run the .lua; the three .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by their existing gate step and litmus"
+    provenance: "coordinator queue 2026-11-24 (test-[a-c]* range), yoga"
+    related: [856-s56y, 682-epud, 1325-ygq5, 2301-4bgh]
+    events:
+      - {type: claimed, ts: "2026-11-24T15:05:30Z", host: yoga, summary: "claimed; work ref work/2306-y8sg"}

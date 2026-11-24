@@ -539,7 +539,6 @@ scripts scripts/test-centicolon-extract.sh 3
 scripts scripts/test-centicolon-grade.sh 3
 scripts scripts/test-check-bash-dialect.sh 2
 scripts scripts/test-check-credential-channel.sh 12
-scripts scripts/test-check-engine-cpu-dispatch.sh 1
 scripts scripts/test-check-jq-callsite-ratchet.sh 1
 scripts scripts/test-check-stranded-in-progress.sh 7
 scripts scripts/test-claim-wip-limit.sh 2
