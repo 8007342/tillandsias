@@ -5328,7 +5328,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # verdict that asks nobody to do anything, so the capability gate never
     # once prompted it.
     _step "Checking capability-row host resolution (859-b2zc)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-capability-row-check.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-capability-row-check.lua" 2>&1; then
         _error "check-capability-row.sh cannot resolve a host without \`hostname\` — the forge goes silent again"
         exit 1
     fi
@@ -7171,7 +7171,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Reclaim-stranded-claims fixture passed"
 
     _step "Checking the stranded-sweep predicate fixture (946-pdpi)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-check-stranded-in-progress.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-check-stranded-in-progress.lua" 2>&1; then
         _error "the stranded sweep's age predicate regressed (946-pdpi) — see the failing case above"
         exit 1
     fi

@@ -78,7 +78,6 @@ scripts/test-build-sh-ci-full-install-prep.sh
 scripts/test-build-step-timing-attribution.sh
 scripts/test-capabilities-envelope-names-its-source.sh
 scripts/test-capability-routing.sh
-scripts/test-capability-row-check.sh
 scripts/test-capture-helper.sh
 scripts/test-census-admitted-missing-evidence.sh
 scripts/test-centicolon-extract.sh
@@ -90,9 +89,7 @@ scripts/test-check-carry-forward.sh
 scripts/test-check-credential-channel.sh
 scripts/test-check-jq-callsite-ratchet.sh
 scripts/test-check-opsx-generated-dirt.sh
-scripts/test-check-stranded-in-progress.sh
 scripts/test-check-test-baseline.sh
-scripts/test-claim-wip-limit.sh
 scripts/test-claims-across-branches.sh
 scripts/test-claims-affordance.sh
 scripts/test-claims-fleet-visible.sh
@@ -108,7 +105,6 @@ scripts/test-codex-mcp-registration.sh
 scripts/test-codex-oauth-harvest.sh
 scripts/test-codex-oauth-restore.sh
 scripts/test-codex-safe-state.sh
-scripts/test-command-policy-audit.sh
 scripts/test-command-policy-consent.sh
 scripts/test-command-policy-evaluator.sh
 scripts/test-compaction-coverage.sh
