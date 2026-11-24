@@ -186,7 +186,7 @@ _test_secret_not_in_inspect() {
 
     # Secret VALUES should never appear in inspect output
     # Note: The secret NAME may appear in the Secrets section (expected), but not the VALUE
-    if echo "$inspect_output" | grep -q "$test_value"; then
+    if grep -q <<<"$inspect_output" "$test_value"; then
         _fail "Secret VALUE visible in podman inspect output"
         "$PODMAN" rm -f "$container_id" 2>/dev/null || true
         "$PODMAN" secret rm "$test_secret" 2>/dev/null || true
@@ -245,7 +245,7 @@ _test_secret_not_in_ps() {
     fi
 
     # Secret value should never appear in ps output
-    if echo "$ps_output" | grep -q "$test_value"; then
+    if grep -q <<<"$ps_output" "$test_value"; then
         _fail "Secret value visible in container ps output"
         "$PODMAN" secret rm "$test_secret" 2>/dev/null || true
         ((TESTS_FAILED++)) || true

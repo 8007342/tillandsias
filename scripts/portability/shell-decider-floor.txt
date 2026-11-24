@@ -317,7 +317,6 @@ scripts/test-meta-orchestration-opsx-sync-merge.sh
 scripts/test-metrics-log-fallback-is-loud.sh
 scripts/test-metrics-log-path-agreement.sh
 scripts/test-mirror-discipline.sh
-scripts/test-mirror-healthcheck-quiet.sh
 scripts/test-mirror-host-cert-and-sshd.sh
 scripts/test-mirror-receive-wrapper.sh
 scripts/test-mirror-refuses-when-broken.sh

@@ -89,6 +89,20 @@ case "$(uname -s)" in
         ;;
 esac
 
+# ── Guard: `build.sh --floor` stays native (order 2130-fl0r) ─────────────
+# The floor is the memory-limited host's check: no build, ~seconds natively.
+# Across wsl.exe it booted the guest and read the tree over /mnt/c, where a
+# modified build.sh was invisible to `git diff` (1 of 2 changed paths, 35 s
+# against 1 s native, yolanda 2026-11-20).
+if [[ "$_W2_DIRECT" != 1 ]]; then
+    for _w2_arg in "$@"; do
+        if [[ "$_w2_arg" == "--floor" ]]; then
+            ! declare -F _w2_restore_caller_opts >/dev/null || _w2_restore_caller_opts
+            return 0 2>/dev/null || exit 0
+        fi
+    done
+fi
+
 # ── Guard: explicit skip ──────────────────────────────────────────────────
 if [[ "${TILLANDSIAS_SKIP_WSL2:-}" == "1" ]]; then
     [[ "$_W2_DIRECT" == 1 && $# -gt 0 ]] && exec "$@"

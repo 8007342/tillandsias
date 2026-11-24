@@ -118,7 +118,7 @@ ok "a marker from the previous UTC day reads stale in every zone tested"
 # Callers branch on these tokens; changing the boundary must not change them.
 grammar='^(ok:daily-maintenance-(current|stamped):[0-9]{4}-[0-9]{2}-[0-9]{2}|skip:forge-exempt|due:(no-marker|unreadable-marker|stale:[0-9]{4}-[0-9]{2}-[0-9]{2}))$'
 for v in "$same" "$next" "$neg_v" "$pos_v"; do
-    printf '%s\n' "$v" | grep -qE "$grammar" \
+    grep -qE <<<"$v" "$grammar" \
         || bad "verdict escaped the pinned grammar: $v"
 done
 ok "every verdict still matches the pinned grammar"

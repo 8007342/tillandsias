@@ -81,11 +81,11 @@ export STUB_READ_RC=2 STUB_LOOKUP_RC=2 STUB_RENEW_RC=2
 if OUT="$(run_relay)"; then
     fail "case 1: relay returned success with an expired mirror token"
 fi
-echo "$OUT" | grep -Fq "expired or unavailable" \
+grep -Fq <<<"$OUT" "expired or unavailable" \
     || fail "case 1: relay did not emit the expired-mirror-token diagnosis. Got: $OUT"
 # The false-error path emits "HTTPS upstream credential is unavailable"; the
 # honest path must not (its own text says "do NOT run GitHub Login").
-if echo "$OUT" | grep -Fq "HTTPS upstream credential is unavailable"; then
+if grep -Fq <<<"$OUT" "HTTPS upstream credential is unavailable"; then
     fail "case 1: relay FALSELY reported a missing GitHub credential on an expired MIRROR token. Got: $OUT"
 fi
 echo "case 1 ok: expired Agent sink → honest auto-auth diagnosis, no false GitHub Login"
@@ -98,9 +98,9 @@ export STUB_READ_RC=2 STUB_LOOKUP_RC=0 STUB_RENEW_RC=0
 if OUT="$(run_relay)"; then
     fail "case 2: relay returned success with no GitHub token"
 fi
-echo "$OUT" | grep -Fq "HTTPS upstream credential is unavailable" \
+grep -Fq <<<"$OUT" "HTTPS upstream credential is unavailable" \
     || fail "case 2: relay did not emit the GitHub-Login guidance for an absent GitHub token. Got: $OUT"
-if echo "$OUT" | grep -Fq "expired or unavailable"; then
+if grep -Fq <<<"$OUT" "expired or unavailable"; then
     fail "case 2: relay misreported a valid mirror token as expired. Got: $OUT"
 fi
 echo "case 2 ok: valid mirror token + absent GitHub token → run GitHub Login"
@@ -112,7 +112,7 @@ echo "case 2 ok: valid mirror token + absent GitHub token → run GitHub Login"
 VC="$ROOT/images/git/vault-cli.sh"
 for verb in renew-self lookup-self; do
     OUT="$(VAULT_TOKEN_FILE=/nonexistent/path sh "$VC" "$verb" 2>&1 || true)"
-    if echo "$OUT" | grep -Fq "unknown subcommand"; then
+    if grep -Fq <<<"$OUT" "unknown subcommand"; then
         fail "case 3: vault-cli does not recognize '$verb' subcommand"
     fi
 done

@@ -333,7 +333,7 @@ cred_out="$(printf 'protocol=https\nhost=github.example.invalid\n\n' \
     | "$HELPER" get 2>"$WORK/state/pin-stderr")" && pin_rc=0 || pin_rc=$?
 [ "${pin_rc:-0}" -ne 0 ] \
     || fail "the production credential helper did not refuse a non-allowlisted host"
-printf '%s' "$cred_out" | grep -q 'password=' \
+grep -q <<<"$cred_out" 'password=' \
     && fail "the helper printed a password for a non-allowlisted host"
 grep -q '1118-bscs' "$WORK/state/pin-stderr" \
     || fail "the refusal did not name 1118-bscs"
