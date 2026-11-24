@@ -212,7 +212,6 @@ scripts/test-git-mirror-existing-volume-hardening.sh
 scripts/test-git-mirror-ref-convergence.sh
 scripts/test-git-mirror-relay-token-expiry.sh
 scripts/test-git-mirror-relay-verified-ack.sh
-scripts/test-git-mirror-startup-per-ref.sh
 scripts/test-git-mirror-vault-agent-auto-auth.sh
 scripts/test-github-token-auto-rotation.sh
 scripts/test-github-token-rotation-entry-points.sh
