@@ -724,7 +724,6 @@ scripts scripts/test-relay-preflight.sh 15
 scripts scripts/test-release-asset-integrity.sh 4
 scripts scripts/test-release-tier-freshness-reads-ci-full.sh 4
 scripts scripts/test-release-tier-freshness.sh 2
-scripts scripts/test-release-tier-timer-render.sh 1
 scripts scripts/test-reopen-is-history-not-loss.sh 4
 scripts scripts/test-reset-flags-are-accepted.sh 2
 scripts scripts/test-reset-state-contract.sh 3
