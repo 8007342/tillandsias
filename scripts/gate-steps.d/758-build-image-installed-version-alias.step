@@ -8,3 +8,4 @@ STEP_ERROR="an image rebuild can orphan the tag the installed binary launches by
 STEP_OK="Image-rebuild launch-tag gate passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin ok launch tag resolvable under version skew at 213905e79 (fleet-run)"
 STEP_READS="scripts/test-build-image-installed-version-alias.sh"
+STEP_SECOND_REGIME="yolanda 2026-11-23 msys ok launch tag resolvable under version skew at c9f4464cb (fleet-run)"
