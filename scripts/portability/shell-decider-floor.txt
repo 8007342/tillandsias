@@ -332,7 +332,6 @@ scripts/test-plan-lane-agreeing-deletion.sh
 scripts/test-plan-only-lane-structural.sh
 scripts/test-plan-orders-fragment-fold.sh
 scripts/test-podman-mock-refusal.sh
-scripts/test-podman-mock-secret-lifecycle.sh
 scripts/test-podman-sync-budgets.sh
 scripts/test-populate-hot-paths-negative-control.sh
 scripts/test-portability-idioms.sh
@@ -364,7 +363,6 @@ scripts/test-release-tier-freshness-reads-ci-full.sh
 scripts/test-release-tier-freshness.sh
 scripts/test-release-tier-timer-render.sh
 scripts/test-reopen-is-history-not-loss.sh
-scripts/test-repeat-model-flag.sh
 scripts/test-requirement-ids.sh
 scripts/test-reset-flags-are-accepted.sh
 scripts/test-reset-state-contract.sh
@@ -410,7 +408,6 @@ scripts/test-spec-index-durable-tier-demotion.sh
 scripts/test-spec-index-endpoint-classification.sh
 scripts/test-spec-index-repo-relative-rung.sh
 scripts/test-spec-index-staging-capacity.sh
-scripts/test-spec-registry-status.sh
 scripts/test-squid-supervisor.sh
 scripts/test-ssh-lane-sidecar.sh
 scripts/test-status-channel-absent-is-first-class.sh
