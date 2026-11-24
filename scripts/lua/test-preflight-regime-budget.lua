@@ -66,13 +66,18 @@ if budget_fn == "" or judge_fn == "" then
         "build.sh has no _pf_budget or test-preflight-front-door.sh no judge_budget (1616-njfd)")
 end
 
+-- On msys ROOT is C:/..., which a colon-separated PATH splits at the drive
+-- (yolanda 2026-11-24): the shims were never found. /c/... works; elsewhere
+-- ROOT is unchanged.
+local PATH_ROOT = ROOT:match("^%a:/") and ("/" .. ROOT:sub(1, 1):lower() .. ROOT:sub(3)) or ROOT
+
 -- ── 1 the regime table ─────────────────────────────────────────────────────
 fs.write(REL .. "/shim/uname", "#!/bin/sh\necho \"$FAKE_UNAME\"\n")
 fs.write(REL .. "/shim/ps", "#!/bin/sh\necho \"  $FAKE_PRI\"\n")
 proc.run({ argv = { "chmod", "+x", ROOT .. "/" .. REL .. "/shim/uname", ROOT .. "/" .. REL .. "/shim/ps" }, timeout_ms = 10000 })
 fs.write(REL .. "/budget.sh", budget_fn .. '\nPATH="$SHIM:$PATH"\n_pf_budget\necho "$_PF_BUDGET $_PF_BUDGET_REGIME $_PF_DECIDER_DEADLINE"\n')
 local function regime(uname, pri, override)
-    local e = { SHIM = ROOT .. "/" .. REL .. "/shim", FAKE_UNAME = uname, FAKE_PRI = pri }
+    local e = { SHIM = PATH_ROOT .. "/" .. REL .. "/shim", FAKE_UNAME = uname, FAKE_PRI = pri }
     if override then e.TILLANDSIAS_PREFLIGHT_BUDGET_S = override end
     return text.trim(proc.run({ argv = { "bash", ROOT .. "/" .. REL .. "/budget.sh" }, env = e, timeout_ms = 10000 }).stdout or "")
 end
@@ -164,12 +169,13 @@ fs.write(REL .. "/mac/sysctl", '#!/bin/sh\ncase "$2" in hw.ncpu) echo 10; exit 0
     '[ "$LC_ALL" = C ] || { echo "{ 0,10 0,10 0,10 }"; exit 0; }\n[ "$n" -gt "$CALM" ] && echo "{ 1.20 2.00 2.00 }" || echo "{ 3.30 2.00 2.00 }"\n')
 fs.write(REL .. "/mac/sleep", "#!/bin/sh\nexit 0\n")
 proc.run({ argv = { "chmod", "+x", ROOT .. "/" .. REL .. "/mac/sysctl", ROOT .. "/" .. REL .. "/mac/sleep" }, timeout_ms = 10000 })
-fs.write(REL .. "/settle.sh", settle_fn .. '\n_settle_start_load 60; echo "reads=$(cat "$D/n")"\n')
+fs.write(REL .. "/settle.sh", settle_fn .. '\nPATH="$SHIM:$PATH"\n_settle_start_load 60; echo "reads=$(cat "$D/n")"\n')
 local function settle_reads(calm, procfile)
     fs.write(REL .. "/mac/n", "0")
     return text.trim(proc.run({ argv = { require("common.fixture").posix_shell(), ROOT .. "/" .. REL .. "/settle.sh" },
         env = { D = ROOT .. "/" .. REL .. "/mac", CALM = calm, _SETTLE_PROC = procfile, LC_ALL = "fr_CH.UTF-8",
-            PATH = ROOT .. "/" .. REL .. "/mac:/usr/bin:/bin" }, timeout_ms = 20000 }).stdout or "")
+            -- set in the shell: Git's bash.exe prepends its own dirs to an inherited PATH
+            SHIM = PATH_ROOT .. "/" .. REL .. "/mac" }, timeout_ms = 20000 }).stdout or "")
 end
 local w1, w2, w3 = settle_reads("2", "/nonexistent"), settle_reads("99", "/nonexistent"), settle_reads("99", ROOT .. "/build.sh")
 arm("5d SETTLE it waits until the load drains, gives up at its bound, and never waits where /proc answers",
