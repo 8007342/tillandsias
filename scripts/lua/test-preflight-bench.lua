@@ -17,6 +17,7 @@
 --  11 CONTENDED an "over" in a contended or unmeasured door is not recorded
 --  12 MEASURE   cpu others used, pressure, thresholds; unreadable is contended
 --  13 IDENTITY  machine id (hashed) + locus; no host id in a container: no bench
+--  15 LOCALE   the darwin start load under a comma locale
 --  14 WRITER   the save checks the header too
 --  10 DOOR      the door counts benched guards as UNANSWERED (never ok:) and in
 --               the roster sum, and --full / an overridden deadline turn it off
@@ -28,7 +29,7 @@ local T = fixture.new("preflight-bench")
 local SH = fixture.posix_shell()
 local SRC = fs.read("build.sh")
 local fns = {}
-for _, n in ipairs({ "_pf_bench_host", "_pf_bench_contention", "_pf_bench_quiet", "_pf_bench_blobs", "_pf_bench_load", "_pf_bench_save" }) do
+for _, n in ipairs({ "_pf_bench_host", "_pf_bench_contention", "_pf_bench_quiet", "_pf_bench_start_load", "_pf_bench_blobs", "_pf_bench_load", "_pf_bench_save" }) do
     local body = SRC:match("\n(" .. n .. "%(%) {.-\n}\n)")
     if not body then verdict.emit("violation:preflight-bench:no-subject:" .. n, 1) end
     fns[#fns + 1] = body
@@ -47,6 +48,7 @@ SCRIPT_DIR="$2"; . "${0%/*}/fns.sh"
 case "$1" in
     host) _pf_bench_host || echo none; exit 0 ;;
     contention) _pf_bench_contention "$3" "$4" || echo unmeasured; exit 0 ;;
+    startload) _pf_bench_start_load || echo unreadable; exit 0 ;;
     quiet) _pf_bench_quiet "$3" "$4" && echo quiet || echo contended; exit 0 ;;
 esac
 _pf_bench_blobs "$3" || exit 9
@@ -191,5 +193,12 @@ fs.write(W.rel .. "/osav.tsv", HEAD .. one)
 save("fsav", "over"); save("osav", "over")
 T:arm("14 WRITER a foreign record's count is not carried into this host's (the control's is)",
     benched("fsav") == nil and benched("osav") ~= nil, tostring(benched("fsav")) .. " " .. tostring(benched("osav")))
+
+-- 15: macbookair's fr_CH (2026-11-24): sysctl printed "{ 3,62 4,85 3,29 }"
+fs.mkdir(W.rel .. "/bin")
+fs.write(W.rel .. "/bin/sysctl", '#!/bin/sh\ncase "$2" in hw.ncpu) echo 10 ;; *) [ "${LC_ALL:-}" = C ] && echo "{ 3.62 4.85 3.29 }" || echo "{ 3,62 4,85 3,29 }" ;; esac\n')
+proc.run{ argv = { "chmod", "+x", W.abs .. "/bin/sysctl" }, timeout_ms = 5000 }
+local sl = ask("startload", nil, nil, { PATH = W.abs .. "/bin:/usr/bin:/bin", LC_ALL = "fr_CH.UTF-8" })
+T:arm("15 LOCALE a comma-decimal locale does not hide the start load", sl == "36", sl)
 
 T:finish()

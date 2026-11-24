@@ -893,7 +893,7 @@ _pf_bench_host() {
 # busy time from /proc/stat less this shell's own and its reaped children's.
 _pf_bench_sample() {  # prints: busy-jiffies total-jiffies own-jiffies cpu-some-us wall-s; nothing where unreadable
     local _b _t _o _p
-    read -r _b _t <<< "$(awk '/^cpu /{b=$2+$3+$4+$7+$8+$9; print b, b+$5+$6; exit}' /proc/stat 2>/dev/null)"
+    read -r _b _t <<< "$(awk '/^cpu /{b=$2+$3+$4+$7+$8+$9; printf "%.0f %.0f", b, b+$5+$6; exit}' /proc/stat 2>/dev/null)"
     _o="$(sed 's/^.*) //' "/proc/$$/stat" 2>/dev/null | awk '{print $12+$13+$14+$15}')"
     _p="$(sed -n 's/^some .*total=//p' /proc/pressure/cpu 2>/dev/null)"
     [ -n "$_b" ] && [ -n "$_t" ] && [ -n "$_o" ] && [ -n "$_p" ] || return 1
@@ -914,11 +914,11 @@ _pf_bench_quiet() {
 }
 # Where /proc answers nothing (darwin): the 1-minute load when the door STARTED,
 # in percent of the cores. Coarse, and unmeasured against a loaded Mac; its four
-# quiet doors started at 1.39-1.49.
+# quiet doors started at 1.39-1.49. LC_ALL=C: under fr_CH sysctl prints "{ 3,62 ...".
 _pf_bench_start_load() {
     local _l _n
-    _l="$(sysctl -n vm.loadavg 2>/dev/null)" && _n="$(sysctl -n hw.ncpu 2>/dev/null)" || return 1
-    awk -v l="$_l" -v n="$_n" 'BEGIN { split(l, a, " "); if (a[2] !~ /^[0-9.]+$/ || n + 0 <= 0) exit 1; printf "%d", 100 * a[2] / n }' /dev/null
+    _l="$(LC_ALL=C sysctl -n vm.loadavg 2>/dev/null)" && _n="$(sysctl -n hw.ncpu 2>/dev/null)" || return 1
+    LC_ALL=C awk -v l="$_l" -v n="$_n" 'BEGIN { split(l, a, " "); if (a[2] !~ /^[0-9.]+$/ || n + 0 <= 0) exit 1; printf "%d", 100 * a[2] / n }' /dev/null
 }
 _PF_BENCH_MAX_START_LOAD=20
 _PF_BENCH_MAX_SOME=3
