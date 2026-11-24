@@ -26694,22 +26694,40 @@ mod tests {
         );
     }
 
-    /// A start site that bypasses the helper brings the exit 1 back.
+    /// (sites through the fallback helper, lines that start inference directly).
+    fn inference_start_sites(code: &str) -> (usize, Vec<usize>) {
+        let (mut helped, mut direct) = (0, Vec::new());
+        for (idx, _) in code.match_indices("\"tillandsias-inference\",") {
+            let before: String = code[..idx].chars().rev().take(160).collect();
+            let before: String = before.chars().rev().collect();
+            if before.contains("run_container_observed(") {
+                direct.push(code[..idx].matches('\n').count() + 1);
+            } else if before.contains("start_inference_container(") {
+                helped += 1;
+            }
+        }
+        (helped, direct)
+    }
+
+    /// A start site that bypasses the helper brings the exit 1 back. The source
+    /// is the subject: the failure mode is an ADDED site no unit test calls.
     #[test]
     fn every_inference_start_goes_through_the_gpu_fallback() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let dir = std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR");
+        let source = std::fs::read_to_string(Path::new(&dir).join("src/main.rs")).unwrap();
         let code = source.split("#[cfg(test)]\nmod tests").next().unwrap();
-        let mut sites = 0;
-        for (idx, _) in code.match_indices("\"tillandsias-inference\",") {
-            let before = &code[idx.saturating_sub(160)..idx];
-            assert!(
-                !before.contains("run_container_observed("),
-                "a direct start at line {}",
-                code[..idx].matches('\n').count() + 1
-            );
-            sites += before.contains("start_inference_container(") as usize;
-        }
-        assert_eq!(sites, 4, "status, OpenCode, OpenCode Web and forge launch");
+        let (helped, direct) = inference_start_sites(code);
+        assert!(direct.is_empty(), "direct inference starts at {direct:?}");
+        assert_eq!(helped, 4, "status, OpenCode, OpenCode Web and forge launch");
+    }
+
+    /// NEGATIVE CONTROL: the scan finds a site that bypasses the helper.
+    #[test]
+    fn the_gpu_fallback_scan_can_actually_fail() {
+        let bypass = "client\n    .run_container_observed(\n        \"x\",\n        \"tillandsias-inference\",\n";
+        assert_eq!(inference_start_sites(bypass), (0, vec![4]));
+        let helped = "start_inference_container(\n    &client,\n    \"x\",\n    \"tillandsias-inference\",\n";
+        assert_eq!(inference_start_sites(helped), (1, Vec::new()));
     }
 
     #[test]
