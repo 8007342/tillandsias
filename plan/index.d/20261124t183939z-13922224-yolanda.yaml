@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: litmus-expected-behavior-requires-exit-0-unless-the-step-declares-its-exit
+    event:
+      type: note
+      ts: "2026-11-24T18:39:39Z"
+      agent_id: windows-yolanda-claude-20261124t183939z
+      host: yolanda
+      summary: |-
+        CENSUS 2026-11-24, instant pre-build, log-only runner (PR 1502). Linux (coordinator, trunk 64f976b7c): 3 steps, all expected_behavior rc=1: proxy-container-shape#3 (broken check), tray-network-bootstrap#4 (broken check), seam-writer-canonical-lock-shape#2 (meant nonzero). msys (yolanda, bare Git Bash, 423 executed, 92 tests failed on this host so their later steps did not run): the first two; seam-writer failed earlier. success_pattern members: none on either. NOT RUN: quick and long sizes, post-build, runtime and e2e phases, darwin. The code was right in both broken checks, so no product row.

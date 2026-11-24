@@ -63,7 +63,7 @@ critical_path:
 
   - step: "the surface check itself fails when the surface is broken"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-windows-tray-diagnose-surface.lua 2>&1"
-    expected_behavior: "ok:windows-tray-diagnose-surface:8 arms"
+    expected_behavior: "ok:windows-tray-diagnose-surface:9 arms"
     timeout_ms: 60000
 
   - step: "end-to-end cli_integration tests attached (7 of 7 stateless CLI modes + cross-surface version consistency)"

@@ -5278,7 +5278,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # Hermetic — the fixture builds its own ledger under mktemp and never
     # touches plan/, which matters more than usual for a test of a deleter.
     _step "Checking compaction deletes only what it folded (843-624y)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-compaction-coverage.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-compaction-coverage.lua" 2>&1; then
         _error "compaction would delete fragments it never folded — that is silent data loss"
         exit 1
     fi

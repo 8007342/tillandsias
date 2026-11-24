@@ -12,7 +12,7 @@
 -- that cargo never ran.
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-windows-tray-diagnose-surface.lua
--- Verdict: ok:windows-tray-diagnose-surface:8 arms
+-- Verdict: ok:windows-tray-diagnose-surface:9 arms
 --        | violation:windows-tray-diagnose-surface:<n>
 --        | refused:windows-tray-diagnose-surface:<reason>
 
@@ -105,5 +105,13 @@ T:arm("case 7: a cargo refusal is a violation, not a skip",
 local out8 = run("error: linker `link.exe` not found\nerror: could not compile `x`")
 T:arm("case 8: a host with no linker skips by name",
     out8 == "skip:diagnose-surface-unverifiable:linker-absent", out8)
+
+-- The live path with no Windows cargo: the users directory is outside the
+-- repository, so a check that asks fs.* about it dies instead of skipping.
+local r9 = T:run{ PLAN, "script", "run", CHECK, cwd = ROOT,
+    env = { TRAY_DIAGNOSE_WINDOWS_USERS = "/nonexistent-tray-diagnose/Users" } }
+T:arm("case 9: no Windows cargo is a named skip, not a script error", r9.code == 0
+    and text.trim(r9.stdout or "") == "skip:diagnose-surface-unverifiable:no-windows-toolchain",
+    tostring(r9.stdout) .. tostring(r9.stderr))
 
 T:finish()
