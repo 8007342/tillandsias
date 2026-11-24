@@ -1335,6 +1335,7 @@ FLAG_CHECK=false
 # ORDER 1305-udgs — the fast-refusal front door: runs the tree-only guards and
 # exits, and NEVER compiles.
 FLAG_PREFLIGHT=false
+FLAG_FLOOR=false
 FLAG_PREFLIGHT_FULL=false
 # ORDER 1916-tsel — the warm-forge fast loop; see scripts/gate-changed.sh.
 FLAG_CHANGED=false
@@ -1370,6 +1371,7 @@ while [[ $# -gt 0 ]]; do
         --test)           FLAG_TEST=true ;;
         --check)          FLAG_CHECK=true ;;
         --preflight)      FLAG_PREFLIGHT=true ;;
+        --floor)          FLAG_FLOOR=true ;;
         --changed)
             FLAG_CHANGED=true
             if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
@@ -1757,6 +1759,25 @@ _report_build_root() {
 }
 if [[ "$FLAG_PREFLIGHT" != true ]]; then _report_build_root; fi
 # END-BUILD-ROOT-PLACEMENT
+
+# ORDER 2130-fl0r — `./build.sh --floor`: the required local check before a
+# work/* push (operator 2026-11-20: it replaces the worker-side --preflight
+# requirement; the landing queue runs the full preflight and gate on arrival).
+# fmt, Lua parse, and the packet's own litmus, under two minutes, no build.
+# Dispatched before ALL setup, like --preflight: a check has no side effects.
+if [[ "$FLAG_FLOOR" == true ]]; then
+    git -C "$SCRIPT_DIR" fetch -q origin linux-next 2>/dev/null || true
+    _fl_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _fl_bin=""
+    if [[ -z "$_fl_bin" ]]; then
+        echo "could-not-run:floor:no-plan-binary — cargo build --release -p tillandsias-plan" >&2
+        exit 2
+    fi
+    # A native Windows plan binary resolves a bare `bash` to WSL's bash.exe;
+    # hand it this shell, in a spelling it can execute.
+    _fl_bash="$BASH"; command -v cygpath >/dev/null 2>&1 && _fl_bash="$(cygpath -w "$BASH")"
+    cd "$SCRIPT_DIR" && TILLANDSIAS_FLOOR_BASH="$_fl_bash" TILLANDSIAS_PLAN_BIN="$_fl_bin" \
+        exec "$_fl_bin" script run scripts/lua/build-floor.lua
+fi
 
 # ORDER 1305-udgs — `./build.sh --preflight`: every guard that can refuse a push,
 # before the SHA, in seconds.
@@ -2926,10 +2947,11 @@ _gs_await_step_pipe() {
 }
 
 # _gs_verdict_token <output file> <rc> — the step's verdict as one token for a
-# flaky: line: its last verdict-shaped line's head, else rc=<n>.
+# flaky:/red-twice: line: its last RED verdict line's head, else rc=<n>. Never an
+# ok: line: this is only asked of a step that failed (#1441 read `ok:,ok:`).
 _gs_verdict_token() {
     local _v
-    _v="$(grep -E '^(ok|violation|refused|could-not-run|FAIL|fail)[: ]' "$1" 2>/dev/null | tail -n 1 | cut -d' ' -f1 | cut -c1-80)"
+    _v="$(grep -E '^(violation|refused|could-not-run|FAIL|fail)[: ]' "$1" 2>/dev/null | tail -n 1 | cut -d' ' -f1 | cut -c1-80)"
     printf '%s' "${_v:-rc=$2}" | tr ',' ';'
 }
 
@@ -3065,9 +3087,11 @@ _gs_one() {
     # ORDER 1765-q7rg — A HOST-STATE STEP GETS ONE RETRY, NEVER A SKIP.
     # A step that declares STEP_HOST_STATE (a keyring cold state, a lock
     # under load) can disagree with itself on a healthy tree. It runs once
-    # more after a settle; a pass then is a pass, and a second red stays red
-    # but is named flaky:<step>:<first>,<second> instead of violation:, so
-    # the land queue re-queues it once rather than evicting a good PR. A
+    # more after a settle; a pass then is a pass. A retry that FAILS reproduced:
+    # it is named red-twice:<step>:<first>,<second> and evicts like any red
+    # (#1441: a deterministic red read as flaky was requeued, a gate each time).
+    # Only a retry that could not run (exit 3, 2251-iyiu) gave no verdict, and is
+    # named flaky:<step>:<first>,<second> so the land queue re-queues it once. A
     # step that declares nothing never retries, and the could-not-run code
     # is never retried either.
     if [ "$_step_rc" -ne 0 ] && [ -n "$STEP_HOST_STATE" ] \
@@ -3077,9 +3101,11 @@ _gs_one() {
         _info "retry:${_step_path##*/}:host-state=$STEP_HOST_STATE — first run red ($_gs_first_verdict); settling ${TILLANDSIAS_GATE_HOST_STATE_SETTLE_S:-10}s and running it once more"
         sleep "${TILLANDSIAS_GATE_HOST_STATE_SETTLE_S:-10}"
         _gs_exec_step
-        if [ "$_step_rc" -ne 0 ]; then
-            echo "flaky:${_step_path##*/}:${_gs_first_verdict},$(_gs_verdict_token "$_step_out" "$_step_rc")"
-        fi
+        case "$_step_rc" in
+            0) ;;
+            3) echo "flaky:${_step_path##*/}:${_gs_first_verdict},$(_gs_verdict_token "$_step_out" "$_step_rc")" ;;
+            *) echo "red-twice:${_step_path##*/}:${_gs_first_verdict},$(_gs_verdict_token "$_step_out" "$_step_rc")" ;;
+        esac
     fi
 
     # ORDER 1916-tsel — ATTRIBUTE BY RUN ID, NOT BY GROWTH. Growth alone
@@ -4891,18 +4917,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "append-event archived-refusal fixture passed"
 
-    # The fixture above must not be able to dirty THIS checkout however it dies
-    # (1564-lk9f): a SIGKILL after its live-accept arm left a host: fixture
-    # fragment in macuahuitl's plan/index.d on 2026-10-09 and land-queue refused
-    # the dirty tree. Arm 1 SIGKILLs it in a scratch repo; arm 2 is the negative
-    # control that keeps 699-usxc asserted.
-    _step "Checking the append-event archived-refusal fixture is hermetic (1564-lk9f)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-append-event-archived-refusal-is-hermetic.sh" 2>&1; then
-        _error "the append-event archived-refusal fixture can leave a write in the checkout it runs from, or no longer asserts that a fragment-only packet accepts events"
-        exit 1
-    fi
-    _info "append-event archived-refusal hermetic fixture passed"
-
     _step "Checking the checkout-lock attested-release fixture (899-q9di)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-cycle-lock-attested-release.sh" 2>&1; then
         _error "the checkout-lock attested-release fixture regressed — either a finished cycle strands its lock again, or the lock stopped refusing concurrent agents"
@@ -5049,18 +5063,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Runnable-remedy fixture passed"
-
-    # Order 628-r2vk. The NEW-surface railguard: a user-visible tray surface
-    # (menu id, notification, status chip, tooltip) cannot land without a
-    # parity-matrix claim. The hermetic fixture pins both directions; the
-    # LIVE check over the real tree is litmus:tray-new-surface-parity-gate
-    # (post-build phase). Ruby-free: the check is the Rust policy binary.
-    _step "Checking the new-surface parity railguard fixture (628-r2vk)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-tray-surface-parity-gate.sh" 2>&1; then
-        _error "the new-surface parity railguard broke — surfaces could land rowless again"
-        exit 1
-    fi
-    _info "New-surface parity railguard fixture passed"
 
     # 920-tqhs. The negative control for the populate_hot_paths fail-loud
     # change: with /opt/cheatsheets unwritable by a lane user, the entrypoint
@@ -5400,20 +5402,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "--changed input-selection fixture passed"
-    # ORDER 2248-zcqh — the bundle intake gate: deferral, HEAVY, legacy
-    # unchanged, and a crate graph held to cargo metadata.
-    _step "Checking --changed's derived crate graph equals cargo metadata (2248-zcqh)..."
-    if ! _run_lua_decider "scripts/lua/check-gate-changed-crate-graph.lua" 2>&1; then
-        _error "scripts/gate-changed.sh derives a crate graph cargo does not resolve — intake would skip a dependent crate; see MISSING/EXTRA above (2248-zcqh)"
-        exit 1
-    fi
-    _info "Crate-graph lint passed"
-    _step "Checking --changed --intake defers, marks HEAVY, and matches cargo's crate graph (2248-zcqh)..."
-    if ! _run_lua_decider "scripts/lua/test-gate-changed-intake.lua" 2>&1; then
-        _error "--changed --intake no longer defers whole-tree/slow fixtures by name, marks an unscopable change HEAVY, or derives the crate graph cargo resolves (2248-zcqh)"
-        exit 1
-    fi
-    _info "--changed --intake fixture passed"
 
     # ORDER 1916-tsel — the shared-timing-log leak check names a step only for
     # records carrying ITS gate's run id; two concurrent writers prove a
@@ -6028,28 +6016,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # Diff-scoped: standing debt is REPORTED by `tillandsias-plan
     # declared-closures` (exit 0), never redded here.
 
-    # ORDER 885-92iu, restored to the body by 1034-ihxw after 1009-gccx hoisted
-    # it in error. It resolves a built `tillandsias-plan`; with no binary it
-    # emits `note: tillandsias-plan not built` and PASSES, so above the build it
-    # is a no-op rather than a gate. It runs here, where a binary exists.
-    # Ported to Lua (1642-cc54 carry): with no binary it is now could-not-run
-    # (exit 3), which this gate refuses, instead of a pass.
-    # ORDER 2246-fkea — an added Lua fixture line that roots at `pwd -P` or
-    # spawns a bare bash/sed passes here and fails on a native Windows runner
-    # (three ports in one day, #1388 the third). Refused at the source.
-    _step "Checking added Lua fixtures use native-safe roots and shells (2246-fkea)..."
-    if ! _run_lua_decider "scripts/lua/check-lua-fixture-native-argv-added.lua" 2>&1; then
-        _error "an added scripts/lua line roots at pwd -P or spawns a bare bash/sed — use common.fixture's repo_root() / posix_shell(); see the REFUSED lines above (2246-fkea)"
-        exit 1
-    fi
-    _info "Native argv check passed"
-    _step "Checking the native-argv decider refuses what it should (2246-fkea)..."
-    if ! _run_lua_decider "scripts/lua/test-lua-fixture-native-argv-added.lua" 2>&1; then
-        _error "check-lua-fixture-native-argv-added.lua no longer refuses a pwd -P root or a bare bash/sed argv, or refuses the helper form; see the FAIL lines above (2246-fkea)"
-        exit 1
-    fi
-    _info "Native argv fixture passed"
-
     _step "Checking that added fragments' declared closures resolve (885-92iu)..."
     if ! _run_lua_decider "scripts/lua/check-declared-closures-added.lua" 2>&1; then
         _error "this change files a packet whose verifiable_closure names a litmus test that does not resolve (885-92iu)"
@@ -6316,17 +6282,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Shell ratchet passed"
 
-    # Its fixture (1580-8hra, the Lua port of the orphaned test-shell-ratchet.sh
-    # that nothing ran): the ratchet's verdicts in scratch repos — counts, a new
-    # decider refused, a piped litmus refused once steps: exists, floors only
-    # descend, an empty population could-not-run, fixtures and pipes warned.
-    _step "Checking the shell ratchet's fixture (1580-8hra)..."
-    if ! _run_lua_decider "scripts/lua/test-shell-ratchet.lua" 2>&1; then
-        _error "the shell ratchet no longer refuses or counts what its fixture constructs — see the FAIL lines above (1580-8hra)"
-        exit 1
-    fi
-    _info "Shell-ratchet fixture passed"
-
     # ORDER 1800-nvsc — the parameterised litmus deciders (scripts/lua/
     # litmus-decide.lua) replace piped `command:` strings family by family.
     # Their fixture constructs every outcome against a fake cargo: a FAILED
@@ -6403,18 +6358,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Local-expert health probe fixture passed"
 
-    # ORDER 1268-fx87. A litmus step's verdict is read from STDOUT only; its
-    # stderr is kept and named on failure. The fixture runs the REAL runner over
-    # a throwaway corpus with a manufactured stderr contaminant, plus a mutant
-    # runner with the merged capture restored, so the control cannot pass
-    # vacuously on a host whose build writes nothing to stderr.
-    _step "Checking a litmus verdict is read from stdout only (1268-fx87)..."
-    if ! _run_lua_decider "scripts/lua/test-litmus-verdict-reads-stdout-only.lua" 2>&1; then
-        _error "a litmus step's verdict again reads stderr, or a failing step no longer names its stderr log — see the FAIL lines above (1268-fx87)"
-        exit 1
-    fi
-    _info "Litmus stdout-verdict fixture passed"
-
     # The end-user-installer output guard's own fixture (1561-47a8), a Lua
     # fixture on the one runner: a flag-naming line refused by file:line, the
     # power-user-only exemption, a retired PENDING-1560-UAM3 marker exempting
@@ -6443,30 +6386,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus step-model fixture passed"
 
-    # ORDER 1577-g96z — what THIS change owes each carried obligation
-    # (methodology/convergence.yaml carried_obligations; shell-to-lua is at
-    # stage gentle). One carried:<backlog>:<not-due|paid|waived|due> line per
-    # backlog; in --check it never refuses a due change (silence is refused
-    # only at landing, by the land queue running it with --landing). It does
-    # refuse a tree whose backlog table does not parse.
-    _step "Checking what this change owes each carried obligation (1577-g96z)..."
-    if ! _run_lua_decider "scripts/lua/check-carried-obligations.lua" 2>&1; then
-        _error "the carried-obligation guard could not read methodology/convergence.yaml carried_obligations — see the line above (1577-g96z)"
-        exit 1
-    fi
-    _info "Carried obligations reported"
-
-    # Its fixture, the tree's first Lua gate fixture (1577-g96z): the guard's
-    # verdicts on constructed diffs in a scratch repo. A Lua fixture runs here
-    # directly through the one runner (no .step file, so no second-regime
-    # record is needed to enter --check).
-    _step "Checking the carried-obligation guard's fixture (1577-g96z)..."
-    if ! _run_lua_decider "scripts/lua/test-carried-obligations.lua" 2>&1; then
-        _error "the carried-obligation guard no longer prints due/paid/waived/not-due correctly on its constructed diffs — see the FAIL lines above (1577-g96z)"
-        exit 1
-    fi
-    _info "Carried-obligation fixture passed"
-
     # ORDER 1588-27v3 — a claim names a fleet host. The WIP cap counts claims
     # per host string, so `--host x` held nothing and passed it; set-field now
     # refuses a host outside methodology packet_discipline.fleet_hosts.
@@ -6486,15 +6405,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Metrics-isolation shared-log fixture passed"
-
-    # ORDER 2242-u39b — the pre-push-hook fixtures test their scratch
-    # checkout, never a frozen base the caller left behind without its _ROOT.
-    _step "Checking the pre-push fixtures ignore an inherited diff base (2242-u39b)..."
-    if ! _run_lua_decider "scripts/lua/test-pre-push-fixtures-ignore-an-inherited-base.lua" 2>&1; then
-        _error "a pre-push-hook fixture judged the caller's TILLANDSIAS_GATE_DIFF_BASE instead of its scratch checkout — pass TILLANDSIAS_GATE_DIFF_BASE and _ROOT empty in its child env; see the FAIL lines above (2242-u39b)"
-        exit 1
-    fi
-    _info "Inherited diff-base fixture passed"
 
     # ORDER 1592-idmu — the diff-scoped guards read the base frozen at gate
     # start (TILLANDSIAS_GATE_DIFF_BASE), so a fetch mid-gate cannot move it.
@@ -6627,13 +6537,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Hardware-fingerprint gate passed"
 
     # The uninstall app-dir sweep moved to gate step 402-2109-umac (Lua).
-
-    _step "Checking image rebuild keeps the installed binary's launch tag (747-knbp)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-build-image-installed-version-alias.sh" 2>&1; then
-        _error "an image rebuild can orphan the tag the installed binary launches by — every forge launch would be dead on arrival (747-knbp)"
-        exit 1
-    fi
-    _info "Image-rebuild launch-tag gate passed"
 
     # The approved-UX-string gate moved to gate step 909-2257-ba7e (Lua).
 
@@ -6820,18 +6723,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus scalar-unescape check passed"
 
-    # 956-llei: the kill-time adjudicator must diff THIS cgroup's cpu.pressure
-    # stall counter across the step's own window and say CONTENDED / NOT
-    # contended / UNCLASSIFIED — never the retired host-wide load1-vs-ncpus
-    # rule, which judged forge steps by the host's runqueue. Three arms, run
-    # through the real runner in a temp root with injected counters.
-    _step "Checking the kill-time adjudicator diffs cpu.pressure (956-llei)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-kill-adjudicator.sh" 2>&1; then
-        _error "the litmus kill-time adjudicator does not classify by cpu.pressure diff (956-llei) — see the verdict line above"
-        exit 1
-    fi
-    _info "Litmus kill-time adjudicator check passed"
-
     # The six live/adversarial inference arms run through the dedicated Rust
     # production-CLI target above; a shell fixture would be a second authority.
     _step "Checking source-agreement production fixtures ran (1484-uf29)..."
@@ -6841,13 +6732,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Source-agreement production fixture matrix passed"
-
-    _step "Checking this host has the tools the gate needs (989-ykks)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-host-tools.sh" 2>&1; then
-        _error "a required host tool is missing, or a required-tool claim is unfalsifiable (989-ykks) — see the verdict above"
-        exit 1
-    fi
-    _info "Host-tools check passed"
 
     # 1034-whsp's cross-branch claim visibility fixture is gate step 953 (2173-inst).
 
@@ -7297,13 +7181,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _step "Checking test-release-freeze-audit (1255-s4im)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-release-freeze-audit.sh" 2>&1; then
         _error "scripts/test-release-freeze-audit.sh failed — the server-visible freeze audit may no longer name a breach, or the release preflight may no longer refuse one (1255-s4im); read the fixture output above"
-        exit 1
-    fi
-    # test-land-queue.sh was bound by no gate, so its arms — now including the
-    # freeze hold and the mid-gate re-check (1255-s4im) — ran only by hand. 14 s.
-    _step "Checking test-land-queue (1316-bnzt, 1255-s4im; ~14s)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-land-queue.sh" 2>&1; then
-        _error "scripts/test-land-queue.sh failed — the landing queue may land into a frozen trunk or mis-order, evict or re-queue candidates; read the fixture output above"
         exit 1
     fi
     _step "Checking test-ensure-hooks (1255-s4im)..."

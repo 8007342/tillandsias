@@ -50,7 +50,7 @@ for arm in "$ARM1" "$ARM2"; do
     # matching nothing while still exiting 0.
     if out="$(cargo test -p tillandsias-headless --offline --bin tillandsias \
                  -- --exact "tests::$arm" 2>&1)"; then
-        if printf '%s' "$out" | grep -qE "test result: ok\. 1 passed"; then
+        if grep -qE <<<"$out" "test result: ok\. 1 passed"; then
             passed=$((passed + 1))
         else
             echo "arm '$arm' did not run (no single passing test matched)" >&2

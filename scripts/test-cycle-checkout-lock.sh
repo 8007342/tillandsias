@@ -262,7 +262,7 @@ native_pid_live_oracle() {
         printf 'oracle-refused: %s\n' "$(printf '%s' "$out" | head -1)" >&2
         return 2
     fi
-    printf '%s' "$out" | grep -q "^\"[^\"]*\",\"$1\","
+    grep -q <<<"$out" "^\"[^\"]*\",\"$1\","
 }
 case "$(uname -s 2>/dev/null)" in
     MINGW*|MSYS*|CYGWIN*)

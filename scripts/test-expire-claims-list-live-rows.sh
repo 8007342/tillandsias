@@ -116,7 +116,7 @@ write_ledger <<EOF
 $(claimed_packet held-by-a-host 2 "$FRESH" hosta)
 EOF
 out="$(run)"
-if [ "$(count_rows "$out" live-claim)" = "1" ] && printf '%s' "$out" | grep -q 'hosta'; then
+if [ "$(count_rows "$out" live-claim)" = "1" ] && grep -q <<<"$out" 'hosta'; then
     ok "a claimed in_progress packet yields one live-claim row naming its host"
 else
     bad "claimed packet did not produce a named live-claim row: $out"
@@ -136,7 +136,7 @@ if [ "$n_unc" = "1" ] && [ "$tot" = "1" ] && [ "$ip" = "1" ]; then
 else
     bad "fresh unclaimed packet: unclaimed rows=$n_unc rows total='$tot' summary in_progress='$ip' — the count and the rows still disagree"
 fi
-if printf '%s\n' "$out" | grep -q '^unclaimed-in-progress	3	nobody-claimed-me	-	-	'; then
+if grep -q <<<"$out" '^unclaimed-in-progress	3	nobody-claimed-me	-	-	'; then
     ok "the unclaimed row carries '-' where a host and claim time would be, in live-claim field positions"
 else
     bad "unclaimed row shape wrong; one parser must read both row types: $out"
@@ -167,13 +167,13 @@ fi
 # be PRESENT makes the absence of the mismatch line mean something.
 if ! grep -q '^rows: ' <<<"$out"; then
     bad "no 'rows:' accounting line at all — 'no mismatch reported' is unfalsifiable without it"
-elif printf '%s\n' "$out" | grep -q '^attention:list-live-partition-mismatch'; then
+elif grep -q <<<"$out" '^attention:list-live-partition-mismatch'; then
     bad "the partition self-check fired on a ledger that should balance: $out"
 else
     ok "the rows: line is present AND reports no partition mismatch on a balanced ledger"
 fi
 # The stale one must still reach the reaper, not get swallowed by the new row.
-if printf '%s\n' "$out" | grep -qE '^expire-candidate	12	mixed-expired'; then
+if grep -qE <<<"$out" '^expire-candidate	12	mixed-expired'; then
     ok "NEGATIVE CONTROL: the stale claim is still an expire-candidate, not reclassified as unclaimed"
 else
     bad "the stale claim stopped being an expire-candidate — the new row type is swallowing reaper work: $out"
@@ -181,7 +181,7 @@ fi
 
 # ── arm 5: NEGATIVE CONTROL — the summary grammar did not move ──────────────
 # Criterion 3: existing callers parsing the summary keep working.
-if printf '%s\n' "$out" | grep -qE '^summary: in_progress=[0-9]+ expired=[0-9]+ held=[0-9]+ unknown_age=[0-9]+ ttl_hours=[0-9]+ mode=(dry-run|write)$'; then
+if grep -qE <<<"$out" '^summary: in_progress=[0-9]+ expired=[0-9]+ held=[0-9]+ unknown_age=[0-9]+ ttl_hours=[0-9]+ mode=(dry-run|write)$'; then
     ok "the existing summary grammar is byte-compatible for callers that parse it"
 else
     bad "summary grammar changed; existing parsers break: $(printf '%s\n' "$out" | grep '^summary:')"

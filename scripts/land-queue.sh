@@ -584,7 +584,9 @@ if [ "$DAILY_FULL" -eq 1 ]; then
     _dsha="$(git rev-parse "$REMOTE/$TRUNK")"
     git checkout -q --detach "$_dsha" || { say "could-not-run:host:daily-full:checkout-failed"; exit 3; }
     rm -f "$_RUNDIR/no-daily-proof"
-    ( _gate_clean_env; export TILLANDSIAS_CLASS_SELECTOR=off TILLANDSIAS_FULL_GATE_MARKER="$_RUNDIR/no-daily-proof"; eval "$GATE" ) \
+    ( _gate_clean_env; export TILLANDSIAS_CLASS_SELECTOR=off TILLANDSIAS_FULL_GATE_MARKER="$_RUNDIR/no-daily-proof"
+      # 2270-7gp6: the salvage-audit fixture's live 334-ref audit runs here, once a day.
+      export TILLANDSIAS_SALVAGE_AUDIT_LIVE=1; eval "$GATE" ) \
         < /dev/null > "$_RUNDIR/daily-full-gate.log" 2>&1
     _drc=$?
     _dns="$DAILY_NS"; [ "$_drc" -eq 0 ] || _dns="$DAILY_RED_NS"
@@ -739,15 +741,48 @@ next_candidate() {
 # leaves the queue exactly as it was.
 BATCH_K="${TILLANDSIAS_LAND_QUEUE_BATCH_K:-1}"
 TRAIN_LOG="${TILLANDSIAS_LAND_QUEUE_TRAIN_LOG:-$_LOGROOT/trains.log}"
+# bundles.log (bundle landing phase 1): the successor line, beside trains.log, one
+# per train. `heavy=` counts members whose own diff gate-changed cannot scope (its
+# exit-10 rule, printed `heavy:` by --list --intake; no second path list). A probe
+# that does not answer makes it `-`, never a 0 nobody measured. `cause=` is the
+# trains.log result. green = the gate was green (promoted= says whether it landed);
+# red = the gate answered rc=1; aborted = any other rc, the host's state and never a
+# verdict on the tree (2234-a964); abandoned = the train stopped at a named door.
+BUNDLE_LOG="${TILLANDSIAS_LAND_QUEUE_BUNDLE_LOG:-$(dirname "$TRAIN_LOG")/bundles.log}"
+HEAVY_PROBE="${TILLANDSIAS_LAND_QUEUE_HEAVY_PROBE-timeout 60 bash \"$_SELF_DIR/gate-changed.sh\" --list --intake}"
+heavy_probe() { # <base> -> heavy | light | unknown, of the worktree against base
+    local _o
+    [ -n "$HEAVY_PROBE" ] || { echo unknown; return; }
+    _o="$(TILLANDSIAS_GATE_CHANGED_ROOT="$ROOT"; export TILLANDSIAS_GATE_CHANGED_ROOT; eval "$HEAVY_PROBE \"\$1\"" </dev/null 2>/dev/null)"
+    if grep -q '^heavy:' <<<"$_o"; then echo heavy
+    elif grep -q '^select:intake ' <<<"$_o"; then echo light
+    else echo unknown; fi
+}
+bundle_log() { # <base> <union> <result> <gate_s>; try_batch's nums/heavy_n/t_id are in scope
+    local _v _p=- _t
+    case "$3" in
+        landed:*) _v=green; _p="${3#landed:}" ;;
+        green:*) _v=green ;;
+        red:rc=1) _v=red ;;
+        red:*) _v=aborted ;;
+        *) _v=abandoned ;;
+    esac
+    _t="$(git rev-parse --short=9 "$2^{tree}" 2>/dev/null)"
+    printf 'bundle:%s:%s members=%s heavy=%s base=%s tree=%s gate_s=%s reason=train promoted=%s cause=%s ids=%s ts=%s\n' \
+        "$_v" "$t_id" "${#nums[@]}" "$heavy_n" "${1:0:9}" "${_t:--}" "$4" "$_p" "${3// /_}" "$ids" \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$BUNDLE_LOG" 2>/dev/null || true
+}
 train_log() { # <members> <base> <union> <result> <gate_s>
     mkdir -p "$(dirname "$TRAIN_LOG")" 2>/dev/null
     printf '%s members=%s base=%s union=%s result=%s gate_s=%s\n' \
         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "${2:0:9}" "${3:0:9}" "$4" "$5" >> "$TRAIN_LOG" 2>/dev/null || true
+    bundle_log "$2" "$3" "$4" "$5"
 }
 try_batch() {
     [ "$BATCH_K" -ge 2 ] 2>/dev/null || return 0
     [ "$DRY_RUN" -eq 1 ] && return 0
     local base union n h hs lm mb pre ids="" carried="" out err rc key t0 gs c now
+    local heavy_n=0 t_id; t_id="train-$(date +%s)"
     local -a nums=() heads=() parents=()
     git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null || return 0
     base="$(git rev-parse "$REMOTE/$TRUNK" 2>/dev/null)" || return 0
@@ -766,6 +801,11 @@ try_batch() {
         if git -c user.name=land-queue -c user.email=land-queue@localhost \
                 merge --no-ff -q --no-edit -m "train: #$n $h" "$hs" >/dev/null 2>&1; then
             nums+=("$n"); heads+=("$hs"); ids="$ids#$n,"
+            case "$(heavy_probe "$pre")" in
+                heavy) say "train:heavy:#$n"; [ "$heavy_n" = - ] || heavy_n=$((heavy_n + 1)) ;;
+                light) ;;
+                *) say "train:heavy-unknown:#$n"; heavy_n=- ;;
+            esac
         else
             git merge --abort >/dev/null 2>&1 || true
             git reset -q --hard "$pre"
