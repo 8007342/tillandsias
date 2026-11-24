@@ -165,7 +165,6 @@ scripts/test-fleet-msg-mcp.sh
 scripts/test-fleet-msg-same-host.sh
 scripts/test-fleet-msg-store.sh
 scripts/test-forge-clone-wait-is-bounded.sh
-scripts/test-forge-entrypoints-source-agent-profile.sh
 scripts/test-forge-findings-persisted.sh
 scripts/test-forge-git-identity-source.sh
 scripts/test-forge-gitconfig-bidirectional-quarantine.sh
@@ -202,7 +201,6 @@ scripts/test-gate-step-prefix-across-refs.sh
 scripts/test-gate-step-prefix-allocation.sh
 scripts/test-gate-step-regimes.sh
 scripts/test-gate-step-skip-exit.sh
-scripts/test-gate-thresholds-are-chosen.sh
 scripts/test-git-credential-helper.sh
 scripts/test-git-mirror-dns-identity.sh
 scripts/test-git-mirror-existing-volume-hardening.sh
@@ -221,7 +219,6 @@ scripts/test-harness-byte-cheap.sh
 scripts/test-harness-contract-probe.sh
 scripts/test-harness-rollback.sh
 scripts/test-harness-supervisor.sh
-scripts/test-hash-image-sources.sh
 scripts/test-headless-env-lock-is-single.sh
 scripts/test-headless-sidecar-target-gate.sh
 scripts/test-hook-mover-enumeration-is-batched.sh
@@ -331,7 +328,6 @@ scripts/test-plan-lane-agreeing-deletion.sh
 scripts/test-plan-only-lane-structural.sh
 scripts/test-plan-orders-fragment-fold.sh
 scripts/test-podman-mock-refusal.sh
-scripts/test-podman-mock-secret-lifecycle.sh
 scripts/test-podman-sync-budgets.sh
 scripts/test-populate-hot-paths-negative-control.sh
 scripts/test-portability-idioms.sh
@@ -361,9 +357,7 @@ scripts/test-relay-preflight.sh
 scripts/test-release-asset-integrity.sh
 scripts/test-release-tier-freshness-reads-ci-full.sh
 scripts/test-release-tier-freshness.sh
-scripts/test-release-tier-timer-render.sh
 scripts/test-reopen-is-history-not-loss.sh
-scripts/test-repeat-model-flag.sh
 scripts/test-requirement-ids.sh
 scripts/test-reset-flags-are-accepted.sh
 scripts/test-reset-state-contract.sh
@@ -409,7 +403,6 @@ scripts/test-spec-index-durable-tier-demotion.sh
 scripts/test-spec-index-endpoint-classification.sh
 scripts/test-spec-index-repo-relative-rung.sh
 scripts/test-spec-index-staging-capacity.sh
-scripts/test-spec-registry-status.sh
 scripts/test-squid-supervisor.sh
 scripts/test-ssh-lane-sidecar.sh
 scripts/test-status-channel-absent-is-first-class.sh
@@ -417,7 +410,6 @@ scripts/test-stranded-plan-writes.sh
 scripts/test-subdomain-routing.sh
 scripts/test-summarize-pubspec.sh
 scripts/test-sync-image-cheatsheets-for-commit.sh
-scripts/test-terminology-check-memo.sh
 scripts/test-timing-clock-resolution.sh
 scripts/test-timing-record-carries-reproduced.sh
 scripts/test-timing-record-carries-root.sh
@@ -437,7 +429,6 @@ scripts/test-uninstall-matcher-spares-bystanders.sh
 scripts/test-uninstall-path-block.sh
 scripts/test-unrunnable-platform-arms.sh
 scripts/test-validator-surface-currency.sh
-scripts/test-vault-shutdown-fixture-classifier.sh
 scripts/test-vault-shutdown-forwards-sigterm.sh
 scripts/test-verify-closure.sh
 scripts/test-version-bump-isolation-scope.sh
@@ -446,7 +437,6 @@ scripts/test-windows-host-lane-refusal-controls.sh
 scripts/test-windows-host-lane-refusal.sh
 scripts/test-windows-only-sources-verified.sh
 scripts/test-windows-tray-clippy.sh
-scripts/test-windows-tray-diagnose-surface.sh
 scripts/test-worktree-boundary-guard.sh
 scripts/test-wsl-exec-channel-carries-exit-status.sh
 scripts/test-wsl2-builder-shell-options.sh

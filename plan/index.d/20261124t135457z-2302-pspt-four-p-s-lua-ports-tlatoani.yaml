@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-24. Coordinator queue (macuahuitl 14:00Z): scripts/test-[p-s]*.sh is this host's port range.
+packets:
+- packet_id: port-p-s-fixtures-batch-1
+  order: 2302-pspt
+  status: implemented
+  kind: chore
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [shell-to-lua, macos, fixtures, portability]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 2
+  title: 'Four whole-file shell-to-Lua ports from the p-s range: test-podman-mock-secret-lifecycle, test-spec-registry-status, test-repeat-model-flag, test-spawn-program-captured-before-spawn'
+  ports: [scripts/test-podman-mock-secret-lifecycle.sh, scripts/test-spec-registry-status.sh, scripts/test-repeat-model-flag.sh, scripts/test-spawn-program-captured-before-spawn.sh]
+  context: >-
+    Claim: the scripts/test-[p-s]*.sh range is tlatoanis-macbook-air's alone (macuahuitl 2026-11-24 14:00Z); this is batch 1.
+    Each port keeps its arms and text; verdicts move to the common.fixture grammar ok:<name>:<n> arms.
+    The bash-3.2 parity check found a real defect: ./repeat expanded empty arrays ("${CLAUDE_EFFORT_FLAG[@]}") under set -u,
+    which bash 3.2 (stock macOS) aborts on as unbound, so ./repeat --agent claude without --effort never reached the harness on darwin
+    and test-repeat-model-flag.sh read 1/3. Its arm 3 (no flag given, no token) passed VACUOUSLY: no argv file was ever written.
+    The guarded ${X[@]+"${X[@]}"} form fixes all three arms; the port's arm 3 also requires the stub to have run.
+    The port uses the runner's timeout_ms instead of timeout(1), which stock macOS lacks.
+  exit_criteria:
+  - 'Each .lua gives the same verdict as its .sh on the trunk tree, and the same red arms under a mutant (repeat: stricter, as above).'
+  - 'Every caller runs the .lua (build.sh, three litmus files); the four .sh files and their floor lines are gone.'
+  verifiable_closure: 'Mutant parity in the PR; scripts/run-litmus-test.sh litmus-framework --test litmus:podman-mock-secret-lifecycle and init-command --test litmus:spawn-failure-names-program green on darwin.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the mutant parity is the deliverable.'
+  next_action: >-
+    Implemented. Measured on darwin (bash 3.2.57): all four ports green; mutants (a no-op podman mock, an always-ok registry checker,
+    the pre-fix ./repeat, the capture moved after its spawn) red the same arms in .lua and .sh.
+  provenance: 'tlatoanis-macbook-air 2026-11-24, on the coordinator''s (macuahuitl-fedora) 14:00Z queue.'
+  events:
+  - {type: filed, ts: '2026-11-24T13:54:57Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}
