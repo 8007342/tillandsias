@@ -397,7 +397,6 @@ scripts scripts/check-stranded-plan-writes.sh 3
 scripts scripts/check-test-baseline.sh 8
 scripts scripts/check-tracked-files-unwritten.sh 4
 scripts scripts/check-unrunnable-platform-arms.sh 5
-scripts scripts/check-windows-tray-diagnose-surface.sh 2
 scripts scripts/claim-ledger-node.sh 6
 scripts scripts/clamp-ca-material.sh 1
 scripts scripts/claude-delegate.sh 1
@@ -772,7 +771,6 @@ scripts scripts/test-tray-surface-parity-gate.sh 1
 scripts scripts/test-unrunnable-platform-arms.sh 9
 scripts scripts/test-vault-shutdown-forwards-sigterm.sh 2
 scripts scripts/test-verify-closure.sh 1
-scripts scripts/test-windows-host-lane-refusal.sh 4
 scripts scripts/test-wsl-exec-channel-carries-exit-status.sh 2
 scripts scripts/test-wt-reparse-scan.sh 2
 scripts scripts/tillandsias-cycle-driver.sh 2

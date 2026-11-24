@@ -59,7 +59,6 @@ scripts/check-stranded-plan-writes.sh
 scripts/check-test-baseline.sh
 scripts/check-tracked-files-unwritten.sh
 scripts/check-unrunnable-platform-arms.sh
-scripts/check-windows-tray-diagnose-surface.sh
 scripts/check-yaml-reader-availability.sh
 scripts/test-a-claim-names-a-workstation.sh
 scripts/test-agent-identity.sh
@@ -423,8 +422,6 @@ scripts/test-vault-shutdown-forwards-sigterm.sh
 scripts/test-verify-closure.sh
 scripts/test-version-bump-isolation-scope.sh
 scripts/test-warm-tier-model.sh
-scripts/test-windows-host-lane-refusal-controls.sh
-scripts/test-windows-host-lane-refusal.sh
 scripts/test-windows-only-sources-verified.sh
 scripts/test-windows-tray-clippy.sh
 scripts/test-worktree-boundary-guard.sh

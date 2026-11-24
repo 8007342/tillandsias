@@ -49,4 +49,4 @@ STEP_LANES="timing"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/salvage-dirty-worktree.sh scripts/test-salvage-preserves-exec-bits.sh scripts/test-windows-host-lane-refusal.sh"
+STEP_READS="scripts/salvage-dirty-worktree.sh scripts/test-salvage-preserves-exec-bits.sh"
