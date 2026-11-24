@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-smoke-consecutive-lanes-and-dev-inference-refusal-fixtures-to-lua
+    order: 2293-4mrw
+    status: ready
+    kind: debt
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua]
+    estimated_hours: 1
+    title: |
+      Port test-smoke-consecutive-lanes.sh and test-dev-inference-start-refusal-names-cause.sh to scripts/lua.
+    context: |
+      Each is run by one litmus and nothing else, and no origin/work ref (369 checked 2026-11-24) deletes or edits either. Outside Family D (#1149-#1157, #1175), which is parked with the operator.
+    exit_criteria:
+      - "both .sh files are gone, the litmus steps run the Lua, floors lowered"
+      - "every arm is red under a mutant of its subject"
+    unscoreable: "mechanical port; the arms are the deliverable."
+    next_action: "Write the Lua; mutate both subjects."
+    provenance: coordinator queue item 3 (macuahuitl-fedora, 2026-11-24); filed by lenovinha.
+    related: [767-qrbv, 1248-j6vd, 2292-62a5]
+    events:
+      - {type: filed, ts: '2026-11-24T09:50:53Z', host: lenovinha, summary: port two fixtures outside Family D}
