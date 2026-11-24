@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-terminology-memo-diagnose-surface-vault-classifier-fixtures-to-lua
+    order: "2301-eny9"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [windows, lua-first, shell-to-lua]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/test-terminology-check-memo.lua
+      - scripts/lua/test-windows-tray-diagnose-surface.lua
+      - scripts/lua/test-vault-shutdown-fixture-classifier.lua
+    title: "Three whole-file shell-to-Lua ports: test-terminology-check-memo, test-windows-tray-diagnose-surface and test-vault-shutdown-fixture-classifier run from scripts/lua"
+    context: |
+      ports: test-terminology-check-memo test-windows-tray-diagnose-surface test-vault-shutdown-fixture-classifier
+      First batch of the scripts/test-[t-z]*.sh range, three per PR, checked under msys. The subjects stay shell; only
+      the fixtures move. No work ref carries a port of these as of 2026-11-24.
+    exit_criteria:
+      - "Each .lua gives the same verdict as its .sh on the trunk tree and the same red arms under mutants of its subject."
+      - "build.sh and the litmus run the .lua; the three .sh files and their portability floor lines are gone."
+    unscoreable: "unpinnable-until-the-guard-exists: the mutant parity is the deliverable"
+    next_action: "Port, compare under mutants on msys, rewire the callers, delete the shell."
+    provenance: "coordinator macuahuitl-fedora 2026-11-24 14:00Z pass, queue item 2"
+    related: [2296-9jg3, 2235-zkmx]
+    events:
+      - {type: filed, ts: '2026-11-24T13:51:20Z', host: yolanda, summary: three t-z fixture ports filed}
