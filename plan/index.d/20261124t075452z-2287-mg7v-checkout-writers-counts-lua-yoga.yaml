@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: checkout-writers-scan-counts-lua-writers
+    order: "2287-mg7v"
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [preflight, fixtures, hygiene, population-scan]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/check-checkout-writers.lua
+      - scripts/lua/test-checkout-writers.lua
+    title: "check-checkout-writers scans only .sh, so it reported writers=0 while three Lua fixtures wrote scripts into the live checkout"
+    context: |
+      scripts/lua/check-checkout-writers.lua walks scripts/ with suffix .sh. On 2026-11-24 it answered writers=0 on
+      work/2278-x4tw, and the same day PR 1464 was evicted twice by a script a Lua fixture wrote into the live scripts/
+      dir. Three Lua writers existed, test-fixtures-ignore-inherited-git-dir.lua (scripts/.mutant-gitdir-2224.sh),
+      test-litmus-verdict-reads-stdout-only.lua (scripts/.fx87-mutant-runner-N.sh) and test-gate-keep-going.lua
+      (build-keep-going-mutant.sh at the repo root). All three are fixed on work/2287-vcfj; the scan that should have
+      named them was not changed. In Lua the write is fs.write to a repo-relative path outside target/, often through a
+      local, so a literal-only match would miss two of the three.
+    exit_criteria:
+      - "Run over the three fixtures as they were before work/2287-vcfj, the scan counts all three by path; run over the fixed tree it counts none of them."
+      - "A path held in a local (MUT, MREL, mutant_rel) is resolved, not only a literal argument."
+      - "NEGATIVE CONTROL: fs.write under target/plan-scratch, under a kit scratch dir, or into a scratch git repo is not counted."
+      - "The printed line names how many .sh and how many .lua files were scanned, so a population of one language cannot read as the whole."
+    unscoreable: "unpinnable-until-the-guard-exists: the scan's own fixture is the deliverable"
+    next_action: "After land-queue --status: read test-checkout-writers.lua's arms, add the Lua population with the three pre-fix files as fixtures."
+    provenance: "coordinator macuahuitl-fedora 2026-11-24, from yoga's report beside 2288-s2na"
+    related: [1611-imnj, 2278-x4tw, 2287-vcfj, 2288-s2na]
+    events:
+      - {type: filed, ts: "2026-11-24T07:54:52Z", host: yoga, summary: "filed on the coordinator's request; yoga takes it after --status"}
