@@ -61,7 +61,7 @@ case "$MODE" in
       exit 1
     fi
     OUTPUT=$(podman exec "$CONTAINER_A" bash -c 'touch /src/test.txt 2>&1' || true)
-    if echo "$OUTPUT" | grep -q "Read-only file system\|Permission denied\|cannot touch"; then
+    if grep -q <<<"$OUTPUT" "Read-only file system\|Permission denied\|cannot touch"; then
       echo "Read-only mount verified for /src in project-a"
       echo SRC_READONLY_VERIFIED
     else
@@ -82,7 +82,7 @@ case "$MODE" in
     CONTAINER_B=$(podman ps -q -f "label=tillandsias-litmus-storage-test=project-b" 2>/dev/null | head -1)
     if [ -n "$CONTAINER_B" ]; then
       OUTPUT=$(podman exec "$CONTAINER_B" bash -c 'ls /workspace/test-a.txt 2>&1 || echo "file not found"')
-      if echo "$OUTPUT" | grep -q "not found\|No such file"; then
+      if grep -q <<<"$OUTPUT" "not found\|No such file"; then
         echo WORKSPACE_ISOLATION_VERIFIED
       else
         echo "WARNING: Found unexpected file in project-b workspace: $OUTPUT"

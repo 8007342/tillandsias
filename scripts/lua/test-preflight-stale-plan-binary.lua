@@ -1,5 +1,5 @@
 -- @env PATH HOME
--- @trace order:1247-9pr8, order:2251-4xvd
+-- @trace order:1247-9pr8, order:2251-4xvd, order:2279-jbsd
 --
 -- test-preflight-stale-plan-binary.lua — ./build.sh --preflight asks the plan
 -- binary for its currency ONCE, up front, and refuses by name when it is
@@ -18,7 +18,13 @@
 --                        REMEDY lines, rc 1, and nothing after the block runs
 --   2  current stub   -> no refusal; the block falls through (rc 0)
 --   3  mute stub      -> an old binary that cannot answer is NOT refused
---   4  no binary      -> no refusal (TILLANDSIAS_PLAN_BIN at a missing file)
+--   4  no binary      -> ONE could-not-run:preflight:no-classifier line carrying
+--                        the build remedy, rc 3, nothing after it runs (2279-jbsd;
+--                        this arm used to pin "no refusal")
+--   6  fresh tree     -> the same, through the REAL probe: a tree holding only the
+--                        probe, no override, no plan binary on PATH. The door
+--                        before 2279-jbsd (the new block removed) falls through
+--                        with rc 0, so the arm measures the change
 --   5  markers        -> each marker occurs exactly once, in that order
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-preflight-stale-plan-binary.lua
@@ -85,15 +91,45 @@ if rc == 1 and n == 1 and has(o, "REMEDY: the door already ran cargo build --rel
 else
     bad("arm 1: rc=" .. tostring(rc) .. " refusals=" .. n .. " out=[" .. o .. "]")
 end
--- 2, 3, 4: each falls through with no refusal
+-- 2, 3: each falls through with no refusal
 for _, a in ipairs({
     { "current", "arm 2: a current binary falls through, no refusal" },
     { "mute", "arm 3: a binary too old to answer is not refused" },
-    { "absent-binary", "arm 4: no binary, no refusal" },
 }) do
     rc, o = run(W .. "/" .. a[1])
     if rc == 0 and has(o, "fell-through") and not has(o, "refused:") then ok(a[2])
     else bad(a[2]:match("^(arm %d)") .. ": rc=" .. tostring(rc) .. " out=[" .. o .. "]") end
+end
+
+-- 4
+local NC = "could-not-run:preflight:no-classifier"
+local function no_classifier(c, o2)
+    local l
+    for _, x in ipairs(text.lines(o2)) do if x:sub(1, #NC) == NC then l = x end end
+    return c == 3 and count_prefix(o2, NC) == 1 and l:find("cargo build --release -p tillandsias-plan", 1, true) ~= nil
+        and not has(o2, "fell-through")
+end
+rc, o = run(W .. "/absent-binary")
+if no_classifier(rc, o) then ok("arm 4: no binary is could-not-run:no-classifier with its remedy on the line, rc 3")
+else bad("arm 4: rc=" .. tostring(rc) .. " out=[" .. o .. "]") end
+-- 6
+fs.mkdir(REL .. "/fresh/scripts")
+fs.write(REL .. "/fresh/scripts/plan-binary-probe.sh", fs.read("scripts/plan-binary-probe.sh"))
+local body = fs.read(REL .. "/block.sh")
+local a, b = body:find("    # ORDER 2279%-jbsd.-\n    fi\n")
+fs.write(REL .. "/block-old.sh", a and (body:sub(1, a - 1) .. body:sub(b + 1)) or "exit 99\n")
+local function fresh(name)
+    local r = proc.run({ argv = { fixture.posix_shell(), W .. "/" .. name, W .. "/fresh" }, timeout_ms = 60000,
+        -- the runtime hands an ambient TILLANDSIAS_PLAN_BIN down; empty is unset to the probe
+        env = { PATH = "/usr/bin:/bin", HOME = W .. "/fresh", TILLANDSIAS_PLAN_BIN = "", CARGO_TARGET_DIR = "" } })
+    return r.code, (r.stdout or "") .. (r.stderr or "")
+end
+local c1, o1 = fresh("block.sh")
+local c0, o0 = fresh("block-old.sh")
+if no_classifier(c1, o1) and c0 == 0 and has(o0, "fell-through") then
+    ok("arm 6: a fresh tree with no plan binary on PATH exits 3; the door before this fell through with 0")
+else
+    bad("arm 6: rc=" .. tostring(c1) .. " out=[" .. o1 .. "] before: rc=" .. tostring(c0) .. " out=[" .. o0 .. "]")
 end
 
 proc.run({ argv = { "rm", "-rf", W }, timeout_ms = 60000 })

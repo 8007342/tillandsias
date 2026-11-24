@@ -214,7 +214,7 @@ if [[ -n "$_plan_bin" ]]; then
     # LEGACY BACKSTOP, same reasoning as the pre-push lane: a binary predating
     # 796-4ydb ignores the unknown flag and exits 0, so the refusal above never
     # fires. A current binary cannot reach here with a skipped fragment.
-    if printf '%s' "$out" | grep -q 'does not parse and was SKIPPED'; then
+    if grep -q <<<"$out" 'does not parse and was SKIPPED'; then
         fail "plan ledger is INCOMPLETE and this binary predates --strict-fragments:"
         printf '%s' "$out" | grep 'does not parse and was SKIPPED' >&2
         _afford "a plan fragment does not parse, so every count the release records would cover less than the whole plan" "repair the fragment named above until tillandsias-plan check --strict-fragments exits 0, then re-run"

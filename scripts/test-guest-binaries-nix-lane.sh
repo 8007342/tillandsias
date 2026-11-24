@@ -199,7 +199,7 @@ if grep -q -- '--store /tmp/fixture-store' "$sb/nix-argv.log" 2>/dev/null; then
 else
     note_fail "chroot-rung-passes-store-to-nix" "nix never saw --store; argv: $(cat "$sb/nix-argv.log" 2>/dev/null)"
 fi
-if printf '%s' "$out" | grep -q 'DEGRADED to the local Cargo fallback'; then
+if grep -q <<<"$out" 'DEGRADED to the local Cargo fallback'; then
     note_fail "chroot-rung-does-not-degrade" "degraded despite a working chroot rung"
 else
     note_ok "chroot-rung-does-not-degrade"
@@ -232,12 +232,12 @@ fi
 # ── 4. no usable rung: named refusal, then a NAMED degradation ──────────────
 sb="$(make_sandbox blocked 'blocked:nix-toolbox:no-nix-and-no-toolbox' 1 "$DAEMON_ARGS" workingnix)"
 out="$(run_sandbox "$sb")"
-if printf '%s' "$out" | grep -q 'nix lane UNAVAILABLE: blocked:nix-toolbox:no-nix-and-no-toolbox'; then
+if grep -q <<<"$out" 'nix lane UNAVAILABLE: blocked:nix-toolbox:no-nix-and-no-toolbox'; then
     note_ok "blocked-rung-names-the-verdict"
 else
     note_fail "blocked-rung-names-the-verdict" "output: $out"
 fi
-if printf '%s' "$out" | grep -q 'DEGRADED to the local Cargo fallback'; then
+if grep -q <<<"$out" 'DEGRADED to the local Cargo fallback'; then
     note_ok "blocked-rung-degrades-loudly-by-name"
 else
     note_fail "blocked-rung-degrades-loudly-by-name" "the fallback was reached silently"
@@ -271,7 +271,7 @@ sb="$(make_sandbox nolinker 'blocked:nix-toolbox:no-nix-and-no-toolbox' 1 "$DAEM
 rm -f "$sb/bin/aarch64-linux-musl-gcc"
 nolinker_bin="$(make_linkerless_bin "$sb")"
 out="$(PATH="$sb/bin:$nolinker_bin" bash "$sb/scripts/build-guest-binaries.sh" 2>&1)"
-if printf '%s' "$out" | grep -q 'REFUSED: the cargo fallback cannot succeed on this host'; then
+if grep -q <<<"$out" 'REFUSED: the cargo fallback cannot succeed on this host'; then
     note_ok "no-linker-refuses-by-name"
 else
     note_fail "no-linker-refuses-by-name" "output: $out"
@@ -287,7 +287,7 @@ fi
 # are not this checkout's — staging from here would be wrong.
 sb="$(make_sandbox toolbox 'ok:nix-toolbox:toolbox' 0 '' workingnix)"
 out="$(run_sandbox "$sb")"
-if printf '%s' "$out" | grep -q 'serves no host-side store arguments'; then
+if grep -q <<<"$out" 'serves no host-side store arguments'; then
     note_ok "toolbox-rung-refused-by-name"
 else
     note_fail "toolbox-rung-refused-by-name" "output: $out"
@@ -314,7 +314,7 @@ if [ -f "$sb/target-guest/tillandsias-headless-x86_64-unknown-linux-musl" ] \
 else
     note_fail "chroot-dangling-out-link-is-staged-from-the-store-root" "nothing staged; output: $out"
 fi
-if printf '%s' "$out" | grep -q 'DEGRADED to the local Cargo fallback'; then
+if grep -q <<<"$out" 'DEGRADED to the local Cargo fallback'; then
     note_fail "chroot-dangling-link-does-not-degrade" "degraded although the bytes were present in the store"
 else
     note_ok "chroot-dangling-link-does-not-degrade"
@@ -328,7 +328,7 @@ nix-command flakes
 --store
 '"$TDIR/emptystore-root" danglingonly)"
 out="$(run_sandbox "$sb")"
-if printf '%s' "$out" | grep -q 'out-link does not resolve to a binary'; then
+if grep -q <<<"$out" 'out-link does not resolve to a binary'; then
     note_ok "missing-artifact-fails-loud-not-silently"
 else
     note_fail "missing-artifact-fails-loud-not-silently" "output: $out"
