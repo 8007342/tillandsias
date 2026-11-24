@@ -174,7 +174,6 @@ scripts/test-forge-config-trust-cross-platform-parity.sh
 scripts/test-forge-entrypoints-source-agent-profile.sh
 scripts/test-forge-findings-persisted.sh
 scripts/test-forge-git-identity-source.sh
-scripts/test-forge-git-index-materialization.sh
 scripts/test-forge-gitconfig-bidirectional-quarantine.sh
 scripts/test-forge-launch-openspec-init-clean.sh
 scripts/test-forge-liveness-probe.sh
@@ -216,7 +215,6 @@ scripts/test-git-mirror-existing-volume-hardening.sh
 scripts/test-git-mirror-ref-convergence.sh
 scripts/test-git-mirror-relay-token-expiry.sh
 scripts/test-git-mirror-relay-verified-ack.sh
-scripts/test-git-mirror-stale-reconcile.sh
 scripts/test-git-mirror-startup-per-ref.sh
 scripts/test-git-mirror-unborn-head.sh
 scripts/test-git-mirror-vault-agent-auto-auth.sh
@@ -290,7 +288,6 @@ scripts/test-litmus-scalar-unescape.sh
 scripts/test-litmus-stdin-does-not-eat-the-spec-list.sh
 scripts/test-litmus-step-model.sh
 scripts/test-litmus-step-pipefail.sh
-scripts/test-litmus-steps-can-fail.sh
 scripts/test-litmus-structured-assert.sh
 scripts/test-litmus-terminal-verdict.sh
 scripts/test-litmus-test-selector.sh
@@ -352,7 +349,6 @@ scripts/test-podman-mock-secret-lifecycle.sh
 scripts/test-podman-sync-budgets.sh
 scripts/test-populate-hot-paths-negative-control.sh
 scripts/test-portability-idioms.sh
-scripts/test-pre-push-deletion-only.sh
 scripts/test-pre-push-empty-ref-list.sh
 scripts/test-pre-push-honours-a-live-freeze.sh
 scripts/test-pre-push-linux-next-merged.sh

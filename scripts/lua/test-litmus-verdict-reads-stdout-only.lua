@@ -95,8 +95,8 @@ local RUNNER = ROOT .. "/scripts/run-litmus-test.sh"
 local rc, o = litmus(RUNNER, "fx87-contam")
 check("1 a stderr contaminant does not decide a stdout verdict", rc == 0, "rc=" .. rc .. " " .. short(o))
 
--- 2 MUTATION: the merged capture restored, in a copy beside the original so
--- its PROJECT_ROOT and stdlib resolve the same way.
+-- 2 MUTATION: the merged capture restored, in a SCRATCH copy whose PROJECT_ROOT line is
+-- pinned to the real root, so stdlib resolves the same way (2288-s2na: it sat in scripts/).
 local src = fs.read("scripts/run-litmus-test.sh")
 local NEEDLE = [[>"$step_capture" 2>"$step_errcap" || exit_code=$?]]
 local n = 0
@@ -104,13 +104,14 @@ for _ in string.gmatch(src, (NEEDLE:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")))
 if n ~= 1 then
     check("2 the mutation lands exactly once", false, "the capture line occurs " .. n .. " times")
 else
-    local mutant_rel = "scripts/.fx87-mutant-runner-" .. tostring(math.random(100000, 999999)) .. ".sh"
+    local mutant_rel = REL .. "/fx87-mutant-runner.sh"
     local s, e = string.find(src, NEEDLE, 1, true)
-    fs.write(mutant_rel, src:sub(1, s - 1) .. [[>"$step_capture" 2>&1 || exit_code=$?]] .. src:sub(e + 1))
+    local body, pinned = (src:sub(1, s - 1) .. [[>"$step_capture" 2>&1 || exit_code=$?]] .. src:sub(e + 1))
+        :gsub("\nreadonly PROJECT_ROOT=[^\n]*", function() return "\nreadonly PROJECT_ROOT=\"" .. ROOT .. "\"" end, 1)
+    fs.write(mutant_rel, body)
     rc, o = litmus(ROOT .. "/" .. mutant_rel, "fx87-contam")
-    run({ "rm", "-f", ROOT .. "/" .. mutant_rel })
     check("2 with the merged capture restored, the contaminant IS the verdict (control is not vacuous)",
-        rc == 1 and text.contains(o, "[FAIL]"), "rc=" .. rc .. " " .. short(o))
+        pinned == 1 and rc == 1 and text.contains(o, "[FAIL]"), "pinned=" .. pinned .. " rc=" .. rc .. " " .. short(o))
 end
 
 -- 3 STDOUT ONLY

@@ -6,3 +6,5 @@
 # long steps as `cmd & wait $!`. A line whose file is gone or no longer writes
 # scratch into the checkout is refused as stale.
 scripts/test-awk-float-lc-numeric.sh artifacts=.mutant-lcnum-* its .mutant-lcnum-* copies must sit beside the producers they copy, which derive REPO_ROOT from BASH_SOURCE and source siblings by relative path
+scripts/lua/test-cheatsheet-source-anchors.lua artifacts=zz-anchor-fixture-* its subject reads the live cheatsheets/ dir, so the probe sheet must be there (2287-mg7v: found by the Lua scan)
+scripts/lua/test-ghost-trace-yaml-anchoring.lua artifacts=zz-ghost-anchor-fixture-* its subject reads the live openspec/litmus-tests/ dir, so the probe yaml must be there (2287-mg7v: found by the Lua scan)
