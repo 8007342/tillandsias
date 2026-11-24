@@ -14,23 +14,18 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-forge-seed-branch-resolution.sh
+  - workspace contains scripts/lua/test-forge-seed-branch-resolution.lua
 
 critical_path:
-  - step: "fixture parses and is executable"
-    command: "bash -n scripts/test-forge-seed-branch-resolution.sh && test -x scripts/test-forge-seed-branch-resolution.sh && echo 'ok: parse'"
-    timeout_ms: 2000
-    expected_behavior: "ok: parse"
-
   - step: "two mirrors with different HEADs seed the same named branch; each fallback named; explicit seed wins; nothing-resolvable is loud and never fatal; host-mount untouched"
-    command: "bash scripts/test-forge-seed-branch-resolution.sh 2>&1 | tail -n 1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-seed-branch-resolution.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "PASS: forge-seed-branch-resolution"
+    expected_behavior: "ok:forge-seed-branch-resolution:6 arms"
 
 observability:
   traces:
     - "@trace spec:git-mirror-service"
-  expected_log: "PASS: forge-seed-branch-resolution"
+  expected_log: "ok:forge-seed-branch-resolution:6 arms"
   log_fields:
     spec: "git-mirror-service"
     test: "forge-seed-branch-resolution-shape"
@@ -41,4 +36,4 @@ rollback:
     A forge landing on the branch the mirror's HEAD names (another host's work
     branch) is the defect: restore the resolution order in
     resolve_forge_seed_branch and the `resolve` argument on the clone paths.
-  command: "bash scripts/test-forge-seed-branch-resolution.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-seed-branch-resolution.lua 2>&1"
