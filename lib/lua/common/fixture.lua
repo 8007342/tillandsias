@@ -186,10 +186,14 @@ function T:short_scratch()
 end
 
 -- proc.run with argv given positionally; named fields pass through.
+-- ORDER 2305-zm8j. proc.run hands a child every TILLANDSIAS_* name and
+-- CARGO_TARGET_DIR, and a gate exports both. A fixture whose subject reads one
+-- drops it: env_unset = { "TILLANDSIAS_*", "CARGO_TARGET_DIR" } (the call's own
+-- env still wins).
 function T:run(spec)
     local argv = {}
     for i, a in ipairs(spec) do argv[i] = a end
-    return proc.run{ argv = argv, cwd = spec.cwd, env = spec.env, stdin = spec.stdin,
+    return proc.run{ argv = argv, cwd = spec.cwd, env = spec.env, env_unset = spec.env_unset, stdin = spec.stdin,
         timeout_ms = spec.timeout_ms or 120000 }
 end
 

@@ -143,6 +143,7 @@ pub const PROC_RUN_FIELDS: &[&str] = &[
     "argv",
     "cwd",
     "env",
+    "env_unset",
     "stdin",
     "timeout_ms",
     "group",
@@ -164,8 +165,9 @@ pub const PROC_RUN_DEFAULT_TIMEOUT_MS: u64 = 300_000;
 pub(crate) fn base_env_command(
     argv: Vec<String>,
     call: &[(String, String)],
+    unset: &[String],
 ) -> Result<tillandsias_exec::Command, crate::child_env::EnvRefusal> {
-    Ok(crate::child_env::ChildEnv::for_call(call)?.command(argv))
+    Ok(crate::child_env::ChildEnv::for_call(call, unset)?.command(argv))
 }
 
 /// The cwd a door runs in when the call names none: the repository root, else
@@ -207,7 +209,7 @@ pub(crate) fn prepare_shell(
             d.remedy.unwrap_or_default()
         )));
     }
-    let mut cmd = base_env_command(argv, &[])
+    let mut cmd = base_env_command(argv, &[], &[])
         .map_err(|r| mlua::Error::RuntimeError(format!("sh.run: {}", r.lines())))?
         .current_dir(&cwd);
     let timeout_ms = timeout_ms.unwrap_or(PROC_RUN_DEFAULT_TIMEOUT_MS);
@@ -257,7 +259,7 @@ pub fn policy_gate(
     (d.strictness != cp::Strictness::Allow).then_some(d)
 }
 
-/// `proc.run{argv=..., cwd, env, stdin, timeout_ms, group}` (order 1384-aixy,
+/// `proc.run{argv=..., cwd, env, env_unset, stdin, timeout_ms, group}` (order 1384-aixy,
 /// design section 4.1): one process, run to completion, returned as a VALUE.
 /// A non-zero exit, a signal and a timeout are all DATA; only programmer
 /// errors raise. proc.run remains synchronous; the scoped script runner adds
@@ -408,9 +410,34 @@ pub(crate) fn validate_proc(
             )));
         }
     }
+    // ORDER 2305-zm8j: names this call drops from the inherited environment.
+    let mut env_unset: Vec<String> = Vec::new();
+    match spec.get::<LuaValue>("env_unset")? {
+        LuaValue::Nil => {}
+        LuaValue::Table(t) => {
+            for pair in t.pairs::<LuaValue, LuaValue>() {
+                let (LuaValue::Integer(_), LuaValue::String(p)) = pair? else {
+                    return Err(err("env_unset must be a list of strings".into()));
+                };
+                let p = p.to_str()?.to_string();
+                if !crate::child_env::unset_pattern_ok(&p) {
+                    return Err(err(format!(
+                        "env_unset entry '{p}' must be a variable name, or a name prefix ending in one '*'"
+                    )));
+                }
+                env_unset.push(p);
+            }
+        }
+        other => {
+            return Err(err(format!(
+                "env_unset must be a list of strings, not a {}",
+                other.type_name()
+            )));
+        }
+    }
     // ORDER 2031-dwwy: the one builder; a per-call class-A literal is a
     // programmer error and raises before anything is authorised or spawned.
-    let mut cmd = base_env_command(argv.clone(), &env_added)
+    let mut cmd = base_env_command(argv.clone(), &env_added, &env_unset)
         .map_err(|r| err(r.lines()))?
         .current_dir(&cwd);
 

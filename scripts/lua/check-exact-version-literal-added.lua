@@ -34,7 +34,7 @@
 --   ok:exact-version-literal-added:base-unavailable                 exit 0  (no base ref; nothing judged)
 --   could-not-run:exact-version-literal-added                       exit 3  (not inside a git work tree)
 --
--- Pinned by scripts/test-exact-version-literal-added.sh (gate step 968-uhzg).
+-- Pinned by scripts/lua/test-exact-version-literal-added.lua (gate step 968-uhzg).
 
 local function nonempty(v) return v ~= nil and v ~= "" end
 

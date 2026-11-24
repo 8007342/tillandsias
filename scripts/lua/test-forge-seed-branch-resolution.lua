@@ -48,8 +48,7 @@ if not (src:find("resolve_forge_seed_branch() {", 1, true) and src:find("checkou
     T:arm("0 both functions are in lib-common.sh", false, "missing")
     T:finish()
 end
--- proc.run passes TILLANDSIAS_* through, so a launch's own seed is unset here.
-fs.write(W.rel .. "/seed.sh", "[ -n \"${ARM_SEED:-}\" ] && export TILLANDSIAS_FORGE_SEED_BRANCH=\"$ARM_SEED\" || unset TILLANDSIAS_FORGE_SEED_BRANCH\ntrace_lifecycle() { :; }\n" .. src .. '\ncheckout_forge_seed_branch ${1:+"$1"}\necho "rc=$?"\n')
+fs.write(W.rel .. "/seed.sh", "trace_lifecycle() { :; }\n" .. src .. '\ncheckout_forge_seed_branch ${1:+"$1"}\necho "rc=$?"\n')
 
 local function mirror(name, head, seed, branches)
     local d, rel = W.abs .. "/src-" .. name, W.rel .. "/src-" .. name
@@ -78,7 +77,7 @@ local function forge(m, arg, extra)
     local c, e = clone(m), {}
     for k, v in pairs(E) do e[k] = v end
     for k, v in pairs(extra or {}) do e[k] = v end
-    local r = T:run{ fixture.posix_shell(), W.abs .. "/seed.sh", arg, cwd = c, env = e, timeout_ms = 60000 }
+    local r = T:run{ fixture.posix_shell(), W.abs .. "/seed.sh", arg, cwd = c, env = e, env_unset = { "TILLANDSIAS_*" }, timeout_ms = 60000 }
     return head(c), (r.stdout or "") .. (r.stderr or "")
 end
 local function has(s, w) return s:find(w, 1, true) ~= nil end
@@ -95,7 +94,7 @@ mirror("noseed", "work/1325-ygq5", false, { "linux-next", "work/1325-ygq5" })
 local b, o = forge("noseed", "resolve")
 T:arm("2 with no discipline seed, main by convention, named", b == "main" and has(o, "the remote default by convention (origin/main exists"), b .. " " .. o)
 
-b, o = forge("stray", "resolve", { ARM_SEED = "osx-next" })
+b, o = forge("stray", "resolve", { TILLANDSIAS_FORGE_SEED_BRANCH = "osx-next" })
 T:arm("3 an explicit TILLANDSIAS_FORGE_SEED_BRANCH wins", b == "osx-next", b .. " " .. o)
 
 local d = W.abs .. "/src-nothing"
