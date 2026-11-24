@@ -10,7 +10,9 @@
 --
 -- Arms:
 --   1 BOUNDED   gh and curl both stubbed to sleep 300 s: the script finishes in
---               under 40 s, names the read as could-not-run, and never calls gh
+--               under 40 s, names the read as could-not-run, and never calls gh.
+--               Bound (2278-zhqb): 18 s measured max over 10 idle runs each on yoga and
+--               darwin, same span; 40 s = 18 + 22 s margin; the pre-fix path took ~120 s
 --   2 READS     curl stubbed to return {"tag_name":"v0.0.0.fixture"}: the tag
 --               reaches the comparison (the "no peeled tag" note names it).
 --               Needs origin reachable for refs/tags/stable; a named skip if not.
