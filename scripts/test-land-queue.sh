@@ -2103,7 +2103,7 @@ arm57 arm57d 0 "false" l57d
 arm57 arm57e 0 "" l57e
 _ok57=1
 grep -Eq "^bundle:green:train-[0-9]+ members=2 heavy=1 base=[0-9a-f]{9} tree=${_t57:0:9} gate_s=[0-9]+ reason=train promoted=${_h57:0:9} cause=landed:${_h57:0:9} ids=#71,#72 ts=[0-9TZ:-]+$" <<<"$l57a" || _ok57="a"
-grep -Eq '^bundle:red:train-[0-9]+ members=2 heavy=1 .* promoted=- cause=red:rc=1 ' <<<"$l57b" || _ok57="$_ok57 b"
+grep -Eq '^bundle:red:train-[0-9]+ members=2 heavy=1 .* promoted=- cause=red:rc=1:unjudged:no-step-named ' <<<"$l57b" || _ok57="$_ok57 b"
 grep -Eq '^bundle:aborted:train-[0-9]+ .* promoted=- cause=red:rc=137 ' <<<"$l57c" || _ok57="$_ok57 c"
 grep -Eq '^bundle:green:train-[0-9]+ members=2 heavy=- ' <<<"$l57d" || _ok57="$_ok57 d"
 grep -Eq '^bundle:green:train-[0-9]+ members=2 heavy=2 ' <<<"$l57e" || _ok57="$_ok57 e"
@@ -2311,6 +2311,99 @@ $_si
 $(head -3 "$_st61"/pr*)
 $_p1
 $_p3"
+fi
+# ARM 62 (bundle landing phase 1): A RED TRAIN IS DIAGNOSED BY ITS FAILING STEP. The
+# scratch tree has one gate-run step (scripts/test-s62.sh, red iff bad.txt exists), run
+# through a stub build.sh exactly as the gate would. (a) one member brings bad.txt: named
+# by the first red merge, it leaves the train, the rest land on ONE more gate and its own
+# gate evicts it; (b) a flake: the same members ride again; (c) the trunk is red: held,
+# nobody evicted; (d) a script the log names but no gate step runs is NEVER executed;
+# (e) red alone on the trunk while its whole gate is green is not judged; (f) a member that
+# ADDS the red step is the culprit; (g) diagnosis off is the old fallback; (h) two members
+# each bring their own red (two steps named, one per red-script line the gate reaches):
+# the second train is red too and the rest go one at a time, no third train.
+arm62() { # <name> <gate body> <files of members 91..93>; sets out62 l62
+    local _f _i=0 _o
+    scaffold "$1"
+    git -C "$WORK_DIR" checkout -q linux-next
+    mkdir -p "$WORK_DIR/scripts/gate-steps.d"
+    printf 'echo ran-s62 >> "%s"\n[ ! -e bad.txt ]\n' "$TMP/$1/step-runs" > "$WORK_DIR/scripts/test-s62.sh"
+    printf 'echo actor >> "%s"\n' "$TMP/$1/actor-ran" > "$WORK_DIR/scripts/test-actor62.sh"
+    printf 'STEP_DESC="s62"\nSTEP_SCRIPT="scripts/test-s62.sh"\n' > "$WORK_DIR/scripts/gate-steps.d/100-s62.step"
+    cat > "$WORK_DIR/build.sh" <<'BLD'
+#!/usr/bin/env bash
+[ "$1 $2 $3" = "--gate-steps . --gate-step" ] || exit 2
+bash "$(sed -n 's/^STEP_SCRIPT="\(.*\)"$/\1/p' scripts/gate-steps.d/"$4"-*.step)"
+BLD
+    chmod +x "$WORK_DIR/build.sh"
+    [ -z "${A62_TRUNK:-}" ] || printf 'x\n' > "$WORK_DIR/$A62_TRUNK"
+    git -C "$WORK_DIR" add -A; git -C "$WORK_DIR" commit -q -m base62; git -C "$WORK_DIR" push -q origin linux-next
+    : > "$TMP/$1/prs"
+    for _f in $3; do
+        _i=$((_i + 1)); _o="109$_i-aaaa"
+        if [ "$_f" = addstep ]; then
+            git -C "$WORK_DIR" checkout -q -B "work/$_o" origin/linux-next
+            printf 'exit 1\n' > "$WORK_DIR/scripts/test-new62.sh"
+            printf 'STEP_SCRIPT="scripts/test-new62.sh"\n' > "$WORK_DIR/scripts/gate-steps.d/200-new.step"
+            git -C "$WORK_DIR" add -A; git -C "$WORK_DIR" commit -q -m add; git -C "$WORK_DIR" push -q origin "work/$_o"; git -C "$WORK_DIR" checkout -q linux-next
+        else candidate "$1" "$_o" "$_f" "$_f"; fi
+        printf '{"number":9%s,"headRefName":"work/%s","isDraft":false}\n' "$_i" "$_o" >> "$TMP/$1/prs"
+    done
+    { echo '['; paste -sd, "$TMP/$1/prs"; echo ']'; } > "$GH_PRS"
+    printf '#!/usr/bin/env bash\necho "gated" >> "%s"\nn="$(grep -c . "%s")"\n%s\n' "$GATE_LOG" "$GATE_LOG" "$2" > "$GATE_BIN"
+    out62="$(ARM_BATCH_K=4 ARM_HEAVY_MAX=4 ARM_TRAIN_LOG="$TMP/$1/trains.log" run_queue)"; rc62=$?
+    l62="$(cat "$TMP/$1/bundles.log" 2>/dev/null)"; g62="$(grep -c . "$GATE_LOG")"
+}
+_g62='[ ! -e bad.txt ] || { echo "red-script:scripts/test-s62.sh"; exit 1; }'
+_b62=""; _all62=""
+chk62() { _all62="$_all62
+== $1
+$l62
+$out62"; }
+arm62 arm62a "$_g62" "ok1.txt bad.txt ok3.txt"; chk62 a
+grep -q '^train:red:culprit=#92 ' <<<"$out62" && [ "$(grep -c '^land:9[13] .*train=' <<<"$out62")" -eq 2 ] && [ "$g62" -eq 3 ] \
+    && grep -q '^evict:land-queue:92:' <<<"$out62" && grep -q '^bundle:red:.* cause=red:rc=1:culprit=#92 ' <<<"$l62" || _b62="$_b62 a-culprit"
+arm62 arm62b 'if [ "$n" -eq 1 ]; then echo "red-script:scripts/test-s62.sh"; exit 1; fi' "ok1.txt ok2.txt"; chk62 b
+grep -q '^train:red:flaky ' <<<"$out62" && [ "$(grep -c '^land:9[12] .*train=' <<<"$out62")" -eq 2 ] && [ "$g62" -eq 2 ] \
+    && grep -q 'cause=red:rc=1:flaky ' <<<"$l62" || _b62="$_b62 b-flaky"
+A62_TRUNK=bad.txt arm62 arm62c "$_g62" "ok1.txt ok2.txt"; chk62 c
+grep -q '^hold:trunk-red:scripts/test-s62.sh ' <<<"$out62" && ! grep -qE '^(evict|land:)' <<<"$out62" && [ "$g62" -eq 2 ] && [ "$rc62" -eq 4 ] || _b62="$_b62 c-trunk"
+arm62 arm62d 'if [ "$n" -eq 1 ]; then echo "red-script:scripts/test-actor62.sh"; exit 1; fi' "ok1.txt ok2.txt"; chk62 d
+[ ! -e "$TMP/arm62d/actor-ran" ] && grep -q '^train:red:rc=1:unjudged:' <<<"$out62" && [ "$(grep -c '^land:9[12] ' <<<"$out62")" -eq 2 ] && [ "$g62" -eq 3 ] || _b62="$_b62 d-actor"
+A62_TRUNK=bad.txt arm62 arm62e 'if [ "$n" -eq 1 ]; then echo "red-script:scripts/test-s62.sh"; exit 1; fi' "ok1.txt ok2.txt"; chk62 e
+grep -q '^train:red:rc=1:unjudged:scripts/test-s62.sh:red-alone-on-trunk' <<<"$out62" && ! grep -q '^hold' <<<"$out62" && [ "$(grep -c '^land:9[12] ' <<<"$out62")" -eq 2 ] || _b62="$_b62 e-not-confirmed"
+arm62 arm62f '[ ! -e scripts/test-new62.sh ] || { echo "red-script:scripts/test-new62.sh"; exit 1; }' "ok1.txt addstep ok3.txt"; chk62 f
+grep -q '^train:red:culprit=#92 ' <<<"$out62" && [ "$(grep -c '^land:9[13] .*train=' <<<"$out62")" -eq 2 ] || _b62="$_b62 f-adds-step"
+TILLANDSIAS_LAND_QUEUE_TRAIN_DIAGNOSE=0 arm62 arm62g "$_g62" "ok1.txt bad.txt ok3.txt"; chk62 g
+grep -q '^train:red:rc=1 — ' <<<"$out62" && ! grep -q 'culprit' <<<"$out62" && [ ! -e "$TMP/arm62g/step-runs" ] && [ "$g62" -eq 4 ] || _b62="$_b62 g-off"
+arm62 arm62h "$_g62"'; [ ! -e worse.txt ] || { echo "FAIL: something unnamed"; exit 1; }' "bad.txt worse.txt ok3.txt"; chk62 h
+[ "$(grep -c '^train: ' <<<"$out62")" -eq 2 ] && grep -q '^train:red:culprit=#91 ' <<<"$out62" && grep -q '^train:red:rc=1 — ' <<<"$out62" \
+    && grep -q '^land:93 ' <<<"$out62" && [ "$(grep -c '^evict:land-queue:9[12]:' <<<"$out62")" -eq 2 ] || _b62="$_b62 h-second-red"
+if [ -z "$_b62" ]; then
+    ok "ARM 62: a red train is judged by its failing step: culprit leaves and the rest land, flake rides again, trunk red holds, and only a gate-run step is ever executed"
+else
+    bad "ARM 62: failed:$_b62
+$_all62"
+fi
+# ARM 63: the REAL build.sh _run and _error print red-script:<path> once for a script that
+# exited 1 and was refused, and nothing for an advisory red, a could-not-run (3) or a green.
+mkdir -p "$TMP/arm63/scripts"
+printf 'exit "$1"\n' > "$TMP/arm63/scripts/test-s63.sh"
+{ printf 'SCRIPT_DIR="%s"; RED=; NC=; _PHASE_WORK_MS=0\n_require_host_build_tools() { :; }; _now_ms() { echo 0; }; _info() { :; }\n' "$TMP/arm63"
+  sed -n -e '/^_RED_SCRIPT=""$/,/^}$/p' -e '/^_run() {$/,/^}$/p' "$ROOT/build.sh"
+  cat <<'DRV'
+t() { _run bash "$SCRIPT_DIR/scripts/test-s63.sh" "$1"; }
+t 1; _error refused; _error second
+echo --; t 1; t 0; _error after-green
+echo --; t 3; _error could-not-run
+echo --; t 1; _info advisory
+DRV
+} > "$TMP/arm63/drv.sh"
+o63="$(bash "$TMP/arm63/drv.sh" 2>&1 | tr '\n' '|')"
+if [ "$o63" = "red-script:scripts/test-s63.sh|[build] refused|[build] second|--|[build] after-green|--|[build] could-not-run|--|" ]; then
+    ok "ARM 63: build.sh names a refused script once as red-script:<path>, never an advisory, a could-not-run or a green one"
+else
+    bad "ARM 63: got $o63"
 fi
 printf '\n'
 if [ "$fail" -eq 0 ]; then
