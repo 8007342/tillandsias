@@ -1497,6 +1497,44 @@ else
 $out32d"
 fi
 
+# ARM 32e-g (2277-7trt): red-twice:<test>: says the step runner already ran that
+# step twice on this tree. (e) candidate-only red: no identical-tree re-run, the
+# trunk check still gates once and the candidate is evicted (2 gates, not 3).
+# (f) trunk fails it too: the queue holds, nobody is evicted (2 gates). (g)
+# CONTROL: another untouched red beside it still re-runs (3 gates).
+arm32rt() { # <name> <order> <num> <gate body, sees candidate file rt.txt>
+    scaffold "$1"
+    mkdir -p "$WORK_DIR/scripts"; echo "# $1" > "$WORK_DIR/scripts/test-hs.sh"
+    git -C "$WORK_DIR" add -A; git -C "$WORK_DIR" commit -q -m hs; git -C "$WORK_DIR" push -q origin linux-next
+    candidate "$1" "$2" rt.txt A
+    printf '[{"number":%s,"headRefName":"work/%s","isDraft":false}]\n' "$3" "$2" > "$GH_PRS"
+    printf '#!/usr/bin/env bash\necho gated >> "%s"\n%s\nexit 0\n' "$GATE_LOG" "$4" > "$GATE_BIN"
+    out32rt="$(run_queue)"; g32rt="$(grep -c . "$GATE_LOG")"
+}
+_rt="echo 'red-twice:test-hs.sh:rc=1,rc=1'"
+arm32rt arm32e 1325-aaaa 25 "if [ -e rt.txt ]; then $_rt; exit 1; fi"
+if [ "$g32rt" -eq 2 ] && grep -q '^land-queue: #25 red-twice in scripts/test-hs.sh' <<<"$out32rt" \
+    && grep -q '^evict:land-queue:25:gate-failed' <<<"$out32rt" && ! grep -q 're-running the gate once' <<<"$out32rt"; then
+    ok "ARM 32e: a red-twice red is not re-run; the trunk is asked once and the candidate is evicted (2 gates)"
+else
+    bad "ARM 32e: wanted 2 gates, no re-run, evicted; got gates=$g32rt
+$out32rt"
+fi
+arm32rt arm32f 1326-aaaa 26 "$_rt; exit 1"
+if [ "$g32rt" -eq 2 ] && grep -q '^hold:trunk-red:scripts/test-hs.sh ' <<<"$out32rt" && ! grep -q '^evict' <<<"$out32rt"; then
+    ok "ARM 32f: a red-twice red the trunk shares holds the queue and evicts nobody (2 gates)"
+else
+    bad "ARM 32f: wanted 2 gates and hold:trunk-red; got gates=$g32rt
+$out32rt"
+fi
+arm32rt arm32g 1327-aaaa 27 "if [ -e rt.txt ]; then $_rt; echo 'FAIL scripts/test-other.sh: x'; exit 1; fi"
+if [ "$g32rt" -eq 3 ] && grep -q 're-running the gate once' <<<"$out32rt"; then
+    ok "ARM 32g (control): a red-twice beside another untouched red still re-runs once (3 gates)"
+else
+    bad "ARM 32g: wanted 3 gates and a re-run; got gates=$g32rt
+$out32rt"
+fi
+
 # ──────────────────────────────────────────────────────────── ARM 33
 # Operator ruling 2026-11-20: A PLAN-LEDGER-ONLY PR LANDS ON THE PLAN-LANE
 # CHECKS WITH ZERO BUILD-CHECK INVOCATIONS. #1166 took 53 min of full gate.
