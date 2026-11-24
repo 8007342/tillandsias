@@ -2207,7 +2207,7 @@ grep -Eq '^shadow:accept:83 tier=heavy selected=-/9 crates=- .* intake=- gate=gr
 [ "$(grep -c 'gates=3 nice=10 clean shared=off$' "$TMP/arm60a/seen")" -eq 3 ] || _b60="$_b60 b-order"
 [ -z "$(git -C "$WORK_DIR" status --porcelain --untracked-files=no)" ] && [ ! -e "$WORK_DIR/dirt-from-shadow" ] && [ ! -e "$WORK_DIR/target/shadow-intake" ] && [ -e "$TMP/arm60a/shtree/.git" ] || _b60="$_b60 b-isolation"
 st60="$(ARM_SHADOW=x ARM_SHADOW_LOG="$TMP/arm60a/shadow.log" run_queue --status)"
-grep -Eq "^queue:shadow-intake log=$TMP/arm60a/shadow.log lines=3$" <<<"$st60" || _b60="$_b60 h-status"
+grep -Eq "^queue:shadow (idle|running) pr=[-#0-9]+ log=$TMP/arm60a/shadow.log lines=3$" <<<"$st60" || _b60="$_b60 h-status"
 SH60_CMD="" SH60_LINES=0 arm60 arm60c 1 c81.txt
 [ ! -e "$TMP/arm60c/shadow.log" ] && [ ! -s "$TMP/arm60c/seen" ] && grep -q '^land:81 ' <<<"$out60" && ! grep -q shadow <<<"$out60" || _b60="$_b60 c-off"
 SH60_LINES=2 arm60 arm60d 4 c81.txt c83.txt
@@ -2252,6 +2252,65 @@ else
 $l60
 $out60
 $(cat "$TMP/arm60a/seen")"
+fi
+# ARM 61 (bundle landing phase 2 prep): `--status` also says what is next, the open
+# train and the shadow, and `--status --pr N` answers "is my PR gating?". Asked from
+# INSIDE a real gate, so it reads what a run really wrote. (a) a train of #91,#92 with
+# #93 left waiting (K=2): bundle open, heavy counted, next, and each PR's own answer;
+# (b) idle: bundle open=- with the last bundles.log line; (c) a live shadow is named,
+# a stop request shows; (d) `--pr` alone never runs the queue, and without a number is
+# refused; (e) the published body carries no local path; (f) the first line is ARM 56's.
+scaffold arm61
+for _i in 1 2 3; do candidate arm61 "109$_i-aaaa" "s61$_i.txt" A; done
+cat > "$GH_PRS" <<JSON
+[{"number":91,"headRefName":"work/1091-aaaa","isDraft":false},
+ {"number":92,"headRefName":"work/1092-aaaa","isDraft":false},
+ {"number":93,"headRefName":"work/1093-aaaa","isDraft":false}]
+JSON
+_st61="$TMP/arm61/st"; mkdir -p "$_st61" "$TMP/arm61/sk"
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+n="\$(grep -c . "$GATE_LOG")"; echo gated >> "$GATE_LOG"
+s() { ( cd "$WORK_DIR" && TILLANDSIAS_LAND_QUEUE_GH="$GH_BIN" TILLANDSIAS_LAND_QUEUE_REMOTE=origin TILLANDSIAS_TRUNK_BRANCH=linux-next TILLANDSIAS_LAND_QUEUE_LOGDIR="$TMP/arm61/logs" TILLANDSIAS_LAND_QUEUE_TRAIN_LOG="$TMP/arm61/trains.log" TILLANDSIAS_LAND_QUEUE_SHADOW_LOCK="$TMP/arm61/sk" TILLANDSIAS_LAND_QUEUE_SHADOW_LOG="$TMP/arm61/shadow.log" bash "$QUEUE" "\$@" 2>&1 ); }
+s --status > "$_st61/status.\$n"; for p in 91 93 99; do s --status --pr "#\$p" > "$_st61/pr\$p.\$n"; done
+git -C "$REMOTE_DIR" log -1 --format=%B refs/tillandsias/queue/status > "$_st61/pub.\$n"
+exit 0
+GATE
+sleep 300 & _h61=$!
+echo "$_h61" > "$TMP/arm61/sk/pid"; printf 88 > "$TMP/arm61/sk/current"
+out61="$(ARM_BATCH_K=2 ARM_HEAVY_PROBE="bash $_p57" ARM_TRAIN_LOG="$TMP/arm61/trains.log" ARM_SHADOW_LOCK="$TMP/arm61/sk" ARM_SHADOW_LOG="$TMP/arm61/shadow.log" LOGDIR_OVERRIDE="$TMP/arm61/logs" run_queue)"
+_b61=""; _s0="$(cat "$_st61/status.0")"; _s1="$(cat "$_st61/status.1")"
+grep -Eq '^queue:gating:#91 train phase=train-gate elapsed=[0-9]+ train=#91,#92 waiting=[0-9]+$' <<<"$_s0" || _b61="$_b61 f-first-line"
+grep -Eq '^queue:bundle open=train-[0-9]+ members=#91,#92 heavy=0 base=[0-9a-f]{9} phase=train-gate elapsed=[0-9]+$' <<<"$_s0" || _b61="$_b61 a-bundle"
+grep -q '^queue:next #93$' <<<"$_s0" || _b61="$_b61 a-next"
+grep -q '^queue:pr:#91 gating in-train .*\|^queue:pr:#91 gating ' "$_st61/pr91.0" || _b61="$_b61 a-pr91"
+grep -q '^queue:pr:#93 waiting position=1 of=1$' "$_st61/pr93.0" || _b61="$_b61 a-pr93"
+grep -q '^queue:pr:#99 not-in-this-run ' "$_st61/pr99.0" || _b61="$_b61 a-pr99"
+grep -Eq '^queue:gating:#93 work/1093-aaaa phase=gate ' <<<"$_s1" && grep -Eq '^queue:bundle open=- last=bundle:green:train-[0-9]+ members=2 ' <<<"$_s1" && grep -q '^queue:next -$' <<<"$_s1" || _b61="$_b61 b-single"
+grep -q '^queue:pr:#93 gating ' "$_st61/pr93.1" || _b61="$_b61 b-pr93"
+# the run asked this live shadow to stop at its start (2285-haa6), so it reads stopping
+grep -q "^queue:shadow stopping pr=#88 log=$TMP/arm61/shadow.log lines=0$" <<<"$_s0" || _b61="$_b61 c-shadow"
+kill "$_h61" 2>/dev/null; wait "$_h61" 2>/dev/null
+grep -q '^queue:bundle open=train-' "$_st61/pub.0" && ! grep -qF "$TMP" "$_st61/pub.0" || _b61="$_b61 e-published"
+_si="$(ARM_SHADOW_LOCK="$TMP/arm61/sk" ARM_TRAIN_LOG="$TMP/arm61/trains.log" LOGDIR_OVERRIDE="$TMP/arm61/logs" run_queue --status)"
+grep -q '^queue:idle last-land=' <<<"$_si" && grep -q '^queue:bundle open=- last=bundle:green:' <<<"$_si" && grep -q '^queue:shadow idle pr=- ' <<<"$_si" && ! grep -q '^queue:next' <<<"$_si" || _b61="$_b61 b-idle"
+_g61="$(grep -c . "$GATE_LOG")"
+_p1="$(LOGDIR_OVERRIDE="$TMP/arm61/logs" run_queue --pr 91)"
+_p3="$(LOGDIR_OVERRIDE="$TMP/arm61/logs" run_queue --status --pr)"; _r3=$?
+[ "$(grep -c . "$GATE_LOG")" -eq "$_g61" ] && grep -q '^queue:pr:#91 idle ' <<<"$_p1" || _b61="$_b61 d-pr-alone"
+[ "$_r3" -ne 0 ] && grep -q 'fail:land-queue:pr-needs-a-number' <<<"$_p3" || _b61="$_b61 d-no-number"
+if [ -z "$_b61" ]; then
+    ok "ARM 61: --status names the open train, what is next and the shadow from inside a real gate, --pr answers for one PR, and neither runs the queue"
+else
+    bad "ARM 61: failed:$_b61
+$_s0
+--
+$_s1
+--
+$_si
+$(head -3 "$_st61"/pr*)
+$_p1
+$_p3"
 fi
 printf '\n'
 if [ "$fail" -eq 0 ]; then
