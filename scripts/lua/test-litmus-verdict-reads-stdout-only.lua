@@ -24,6 +24,10 @@
 --   4 EXPLICIT MERGE    the same token, the step writing `2>&1` itself -> PASSES
 --   5 NAMED ON FAILURE  a failing step's [FAIL] detail carries stderr=<path>,
 --                       and that file holds what the step wrote to stderr
+--   6 CENSUS            (2309-fa7q) a step that prints its text and exits 1 is
+--                       named in the log-only census and still passes
+--   7 CENSUS CONTROL    a text match that exits 0, and one that declares
+--                       assert_exit 1, are not in the census
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-litmus-verdict-reads-stdout-only.lua
 
@@ -62,11 +66,16 @@ write_case("fx87-explicit", "{ printf 'ok: from-stderr\\\\n' >&2; } 2>&1",
 write_case("fx87-named", "printf 'not the token\\\\n'; printf 'the-reason-is-here\\\\n' >&2; exit 1",
     "    expected_behavior: \"ok: never-printed\"\n")
 
+write_case("fa7q-nonzero", "printf 'ok: token\\\\n'; exit 1", "    expected_behavior: \"ok: token\"\n")
+write_case("fa7q-declared", "printf 'ok: token\\\\n'; exit 1",
+    "    assert_exit: 1\n    assert_output_contains: \"ok: token\"\n")
+
 -- The bindings are half of the seam (1252-znbn): `--test` runs a test through
 -- the spec that binds it, so the throwaway corpus carries its own.
 local bind = "version: '1.0'\ndescription: throwaway bindings for the 1268-fx87 fixture\nspecs:\n"
     .. "- spec_id: fx87-probe\n  status: active\n  litmus_tests:\n"
-for _, nm in ipairs({ "fx87-contam", "fx87-stderr-only", "fx87-explicit", "fx87-named" }) do
+for _, nm in ipairs({ "fx87-contam", "fx87-stderr-only", "fx87-explicit", "fx87-named",
+    "fa7q-nonzero", "fa7q-declared" }) do
     bind = bind .. "  - " .. LIT .. ":" .. nm .. "\n"
 end
 bind = bind .. "  coverage_ratio: 100\n"
@@ -137,6 +146,17 @@ if path then
 end
 check("5 a failing step names its stderr log, and the log holds the stderr",
     rc == 1 and path ~= nil and held, "rc=" .. rc .. " path=" .. tostring(path) .. " held=" .. tostring(held))
+
+-- 6 CENSUS, and 7 its control
+local CENSUS = "census:nonzero-text-match "
+rc, o = litmus(RUNNER, "fa7q-nonzero")
+check("6 a nonzero text match is in the census and its verdict is unchanged",
+    rc == 0 and text.contains(o, CENSUS .. LIT .. ":fa7q-nonzero#1 rc=1 expected_behavior"), "rc=" .. rc .. " " .. short(o))
+for _, name in ipairs({ "fx87-explicit", "fa7q-declared" }) do
+    rc, o = litmus(RUNNER, name)
+    check("7 " .. name .. " passes and is not in the census",
+        rc == 0 and text.contains(o, "[OK]") and not text.contains(o, CENSUS), "rc=" .. rc .. " " .. short(o))
+end
 
 run({ "rm", "-rf", W })
 if failed > 0 then

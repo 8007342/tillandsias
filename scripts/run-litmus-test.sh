@@ -340,6 +340,11 @@ mkdir -p "$LITMUS_STEP_STDERR_DIR" 2>/dev/null || true
 LITMUS_YQ_DEGRADED_LOG="$LITMUS_RUNTIME_DIR/yq-degraded-steps"
 LITMUS_YQ_DEGRADED=0
 : >"$LITMUS_YQ_DEGRADED_LOG" 2>/dev/null || true
+# ORDER 2309-fa7q, CENSUS ONLY: no verdict reads this. One entry per step whose
+# text matched while its command exited nonzero, so the rule "a text match also
+# needs exit 0" can be judged against the corpus before it is made. In memory,
+# because a nested runner in the same runtime dir would truncate a file.
+NONZERO_TEXT_MATCHES=()
 if ! command -v yq &>/dev/null && [[ ! -x "$LITMUS_RUNTIME_DIR/bin/yq" ]]; then
     LITMUS_YQ_DEGRADED=1
     printf 'warn:litmus-degraded-no-yq — yq is not on PATH and could not be provisioned from the tillandsias-builder toolbox. Steps whose commands call yq will fail or return empty. (The runner'\''s OWN metadata reads use the compiled tillandsias-plan reader when one resolves — order 746-htj9 — and fall back to grep only without it.) Install yq on the host, or create the toolbox (see scripts/with-tillandsias-builder.sh), before trusting a verdict from this run.\n' >&2
@@ -2369,6 +2374,14 @@ run_litmus_test_file() {
         # Step matched expected behavior — surface success only after validation.
         _t_pass=$((_t_pass+1))
         printf ' %b[OK]%b\n' "${GREEN}" "${NC}" >&2
+        # 2309-fa7q: logged, never judged. The strict-exit opt-out declares no
+        # text, so it is not a text match and is not counted.
+        if [[ -z "$step_structured" && "$exit_code" -ne 0 \
+              && ( -n "$step_success_pattern" || -n "$step_expected" ) ]]; then
+            local _nz_kind="expected_behavior"
+            if [[ -n "$step_success_pattern" ]]; then _nz_kind="success_pattern"; fi
+            NONZERO_TEXT_MATCHES+=("$test_name#$step_index rc=$exit_code $_nz_kind")
+        fi
     done
 
     for failure in "${failure_criteria[@]}"; do
@@ -2726,6 +2739,14 @@ print_summary() {
     # would make the test line's `skipped=` incommensurable with the step line's.
     # So: `skipped=` is VERDICT skips only, and `not-run=` is what was never
     # attempted. Neither is in the rate's denominator, and neither ever was.
+    # 2309-fa7q: the census, printed on every run that has a member.
+    if [[ ${#NONZERO_TEXT_MATCHES[@]} -gt 0 ]]; then
+        printf 'Nonzero text matches (2309-fa7q, log only): %d\n' "${#NONZERO_TEXT_MATCHES[@]}" >&2
+        local _nz
+        for _nz in ${NONZERO_TEXT_MATCHES[@]+"${NONZERO_TEXT_MATCHES[@]}"}; do
+            printf 'census:nonzero-text-match %s\n' "$_nz" >&2
+        done
+    fi
     # 2093-gfak: a quarantine is a known, cited, UNPROVEN property. Name each
     # one so a green summary cannot hide it.
     if [[ ${#QUARANTINED[@]} -gt 0 ]]; then

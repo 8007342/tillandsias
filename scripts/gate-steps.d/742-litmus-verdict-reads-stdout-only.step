@@ -14,5 +14,5 @@ STEP_ERROR="a litmus step's verdict again reads stderr, or a failing step no lon
 STEP_OK="Litmus stdout-verdict fixture passed"
 STEP_SERIAL="runs the real litmus runner (a scratch corpus, but the runner still writes the shared timing log)"
 STEP_LANES="litmus"
-STEP_SECOND_REGIME="yolanda 2026-11-23 msys ok:litmus-verdict-stdout-fixture:5 arms at ac15428c5 (fleet-run)"
+STEP_SECOND_REGIME="yolanda 2026-11-24 msys ok:litmus-verdict-stdout-fixture:8 arms"
 STEP_READS="scripts/lua/test-litmus-verdict-reads-stdout-only.lua"
