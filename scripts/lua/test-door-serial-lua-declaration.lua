@@ -230,11 +230,14 @@ else
     -- door's own normalisation is what this arm measures.
     fs.write(S .. "/scripts/plan-binary-probe.sh",
         'resolve_plan_binary() { echo ./target/release/tillandsias-plan; }\n')
+    -- 2281-k3sn: the door asks its binary one known classify question.
     fs.write(S .. "/target/release/tillandsias-plan",
-        '#!/bin/sh\ncase "$1" in validator-surface-hash) echo ok:validator-surface:stub ;; esac\nexit 0\n')
+        '#!/bin/sh\ncase "$1" in validator-surface-hash) echo ok:validator-surface:stub ;; script) echo could-not-run ;; esac\nexit 0\n')
     proc.run({ argv = { "chmod", "+x", ROOT .. "/" .. S .. "/target/release/tillandsias-plan" }, timeout_ms = 10000 })
+    -- 2281-k3sn: the block asks the door's own _pf_classify, so it goes with it.
+    local classify_fn = (fs.read("build.sh") or ""):match("\n(_pf_classify%(%) {.-\n}\n)") or "exit 98\n"
     local function hand(which, body)
-        fs.write(REL .. "/runner-" .. which .. ".sh", 'SCRIPT_DIR="$1"\n' .. body .. 'echo "runner=$_pf_plan_bin"\n')
+        fs.write(REL .. "/runner-" .. which .. ".sh", 'SCRIPT_DIR="$1"\n' .. classify_fn .. body .. 'echo "runner=$_pf_plan_bin"\n')
         local r = proc.run({ argv = { "bash", ROOT .. "/" .. REL .. "/runner-" .. which .. ".sh", ROOT .. "/" .. S },
             cwd = ROOT, timeout_ms = 30000 })
         return text.trim((r.stdout or "") .. (r.stderr or ""))
