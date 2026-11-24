@@ -221,6 +221,17 @@ else
 fi
 
 # ── WIRING layer (the real build.sh in this checkout) ────────────────────────
+# ORDER 2319-fmgy. The litmus runner puts its podman wrapper first on PATH, and
+# toolbox calls podman. The first build.sh below touches the crate sources
+# (1599-egzz), the wrapper then refuses its own prebuilt as stale (1270-5mz8),
+# and every later re-exec died with "failed to get the Podman version". The
+# subject here is build.sh, so its children get the host's podman.
+_p=""
+while IFS= read -r -d: _d; do
+    case "$_d" in */target/litmus-runtime/bin) continue ;; esac
+    _p="${_p:+$_p:}$_d"
+done <<<"$PATH:"
+export PATH="$_p"
 # Bounded: a run that must NOT memoize is stopped once it has demonstrably
 # entered real work. The branch is decided in the first second.
 started_real_work() { grep -q 'Checking Rust formatting' "$1"; }
@@ -429,10 +440,12 @@ red_rc=$?
 cp -p "$TDIR/victim.orig" "$ROOT/$VICTIM"
 VICTIM_DIRTY=0
 after="$("${PORTABLE_SHA256[@]}" "$STAMP_PATH" | cut -d' ' -f1)"
-if [ "$red_rc" -ne 0 ] && [ "$before" = "$after" ]; then
+# The gate must be red BECAUSE of the break: a build.sh that never started the
+# gate is also nonzero and also writes no stamp.
+if [ "$red_rc" -ne 0 ] && [ "$before" = "$after" ] && grep -q 'memo_fixture_badfmt' "$TDIR/red.log"; then
     ok "a RED gate writes no stamp, so nothing can memoize it as green"
 else
-    bad "red gate rc=$red_rc; stamp changed=$([ "$before" = "$after" ] && echo no || echo YES)"
+    bad "red gate rc=$red_rc; stamp changed=$([ "$before" = "$after" ] && echo no || echo YES); the break was seen=$(grep -q 'memo_fixture_badfmt' "$TDIR/red.log" && echo yes || echo NO)"
     tail -3 "$TDIR/red.log" >&2
 fi
 
