@@ -1,0 +1,15 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 4: the next slowest blocks,
+# measured one at a time on lenovinha). As a .step it is no build.sh edit, so it
+# never makes intake HEAVY; it runs in the pool (it writes only its own scratch).
+#
+# ORDER 1384-bxhk — the shell ratchet: prints the Lua migration's counts on
+# every --check, refuses a NEW .sh decider (check-/test-/verify-/guard-), a
+# new pipe site beyond a file's floor and (once steps: exists) a new piped
+# litmus command; its floors only descend over their own git history.
+STEP_DESC="Checking the shell ratchet (1384-bxhk)"
+STEP_LUA="scripts/lua/check-shell-ratchet.lua"
+STEP_ERROR="the shell corpus grew past its floor — see the violation lines above; write it as scripts/lua/<name>.lua on tillandsias-plan script run (1384-bxhk)"
+STEP_OK="Shell ratchet passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin ok:shell-ratchet at 35680bdf4 (run directly, idle host)"
+STEP_READS="scripts/lua/check-shell-ratchet.lua"

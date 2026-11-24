@@ -1434,6 +1434,10 @@ FLAG_INTAKE=false
 # scripts/gate-steps.d it reads). The fixture's way into the real loop over a
 # scratch tree; --check calls the same function over the checkout.
 GATE_STEPS_ROOT=""
+# ORDER 2250-44uy round 4 — with --gate-steps, run ONLY the step whose file is
+# <NNN>-*.step, over the INTACT tree (fleet-run; a fixture that reads
+# scripts/gate-steps.d/ must see every step). Without it nothing changes.
+GATE_STEP_ONLY=""
 FLAG_CLEAN=false
 FLAG_INSTALL=false
 FLAG_REMOVE=false
@@ -1470,6 +1474,12 @@ while [[ $# -gt 0 ]]; do
         --gate-steps)
             GATE_STEPS_ROOT="${2:-}"
             [ -n "$GATE_STEPS_ROOT" ] || { echo "error: --gate-steps needs a root directory" >&2; exit 2; }
+            shift 2
+            continue
+            ;;
+        --gate-step)
+            GATE_STEP_ONLY="${2:-}"
+            [[ "$GATE_STEP_ONLY" =~ ^[0-9]+$ ]] || { echo "error: --gate-step needs a step number" >&2; exit 2; }
             shift 2
             continue
             ;;
@@ -3475,9 +3485,28 @@ _gs_lanes() {
 }
 
 if [ -n "$GATE_STEPS_ROOT" ]; then
+    if [ -n "$GATE_STEP_ONLY" ]; then
+        _gs_root="$(cd "$GATE_STEPS_ROOT" && pwd)"
+        _gs_sel=()
+        for _gs_f in "$_gs_root"/scripts/gate-steps.d/"$GATE_STEP_ONLY"-*.step; do
+            [ -e "$_gs_f" ] && _gs_sel+=("$_gs_f")
+        done
+        if [ "${#_gs_sel[@]}" -ne 1 ]; then
+            echo "refused:gate-step:$GATE_STEP_ONLY:matches=${#_gs_sel[@]} (exactly one scripts/gate-steps.d/$GATE_STEP_ONLY-*.step)" >&2
+            _afford "--gate-step runs exactly one step file, and $GATE_STEP_ONLY matched ${#_gs_sel[@]} under $_gs_root/scripts/gate-steps.d" \
+                "pass a step number that names exactly one file: ls $_gs_root/scripts/gate-steps.d/$GATE_STEP_ONLY-*.step"
+            exit 2
+        fi
+        _gs_plan="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _gs_plan=""
+        case "$_gs_plan" in ./*) _gs_plan="$SCRIPT_DIR/${_gs_plan#./}" ;; esac
+        _gate_fallback_begin
+        _gs_one "${_gs_sel[0]}"
+        exit $?
+    fi
     _run_gate_steps "$(cd "$GATE_STEPS_ROOT" && pwd)"
     exit $?
 fi
+if [ -n "$GATE_STEP_ONLY" ]; then echo "error: --gate-step needs --gate-steps <root>" >&2; exit 2; fi
 
 # ORDER 2243-urcy — WHICH TEST RUNNER THIS HOST USES, SAID ONCE, BY NAME.
 # nextest when `cargo nextest` answers (the builder toolbox installs it from a
@@ -4980,13 +5009,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # ORDER 2118-9kqp: this check is gate step 350-1903-djsq now, and it runs
     # the eight credential fixtures once each (their verdicts and their bus).
 
-    _step "Checking the gate-stamp scope fixture (887-bz88)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-gate-stamp-scope.sh" 2>&1; then
-        _error "the gate-stamp scope fixture regressed — what the stamp covers is unproven, and a too-narrow stamp once let a lost exec bit reach the trunk"
-        exit 1
-    fi
-    _info "gate-stamp scope fixture passed"
-
     # The brew autoinstall shim must not re-enter itself (966-rq7f). `brew` is a
     # Ruby program and `ruby` is a shimmed tool, so an unguarded shim recurses:
     # measured at 3663 live processes on a floor forge — 89.4% of its pid
@@ -5489,22 +5511,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Lua source-agreement production integration passed"
-
-    # ORDER 1916-tsel — `./build.sh --changed` selects by declared input. The
-    # fixture mutates a stub tree one path at a time: an input selects its
-    # fixture and not an unrelated one, a crate selects its reverse
-    # dependents, and a guard or an unmapped path selects everything.
-    _step "Checking --changed selects checks by their inputs (1916-tsel)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-gate-changed-selects-by-input.sh" 2>&1; then
-        _error "./build.sh --changed no longer scopes by input, or no longer fails safe to the full gate (1916-tsel)"
-        exit 1
-    fi
-    _step "Checking --changed runs its selected fixtures in a bounded pool (1931-steb)..."
-    if ! _run_lua_decider "scripts/lua/test-gate-changed-parallel-fixtures.lua" 2>&1; then
-        _error "./build.sh --changed's fixture pool lost its order, isolation, serial rule or concurrency (1931-steb)"
-        exit 1
-    fi
-    _info "--changed input-selection fixture passed"
 
     # ORDER 1916-tsel — the shared-timing-log leak check names a step only for
     # records carrying ITS gate's run id; two concurrent writers prove a
@@ -6193,17 +6199,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
-    # Order 614-2gqx / 651-2x5s. The durable MO-FULL attestation ledger
-    # (plan/mo-full-attestations.d/) must never carry a tampered, fabricated,
-    # or unreachable marker — the terminal marker is only as strong as the
-    # record that outlives the transcript it was emitted into.
-    _step "Checking the durable MO-FULL attestation ledger (614-2gqx)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-mo-full-attestations.sh" 2>&1; then
-        _error "the MO-FULL attestation ledger records a marker that is fabricated, tampered, or unreachable (plan/mo-full-attestations.d/)"
-        exit 1
-    fi
-    _info "MO-FULL attestation ledger check passed"
-
     # Order 1148-3439. The salvage-refs ledger (plan/salvage-refs.d/) is the
     # standing record the sweep files to now that its old target is archived;
     # every line must parse and name a ref still on origin or marked deleted.
@@ -6373,17 +6368,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Embedded-ELF arch fixture passed"
-
-    # ORDER 1384-bxhk — the shell ratchet: prints the Lua migration's counts on
-    # every --check, refuses a NEW .sh decider (check-/test-/verify-/guard-), a
-    # new pipe site beyond a file's floor and (once steps: exists) a new piped
-    # litmus command; its floors only descend over their own git history.
-    _step "Checking the shell ratchet (1384-bxhk)..."
-    if ! _run_lua_decider "scripts/lua/check-shell-ratchet.lua" 2>&1; then
-        _error "the shell corpus grew past its floor — see the violation lines above; write it as scripts/lua/<name>.lua on tillandsias-plan script run (1384-bxhk)"
-        exit 1
-    fi
-    _info "Shell ratchet passed"
 
     # ORDER 1800-nvsc — the parameterised litmus deciders (scripts/lua/
     # litmus-decide.lua) replace piped `command:` strings family by family.
@@ -6942,25 +6926,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # land between two without renaming either.
     _run_gate_steps "$SCRIPT_DIR"
 
-    # 965-sxec: a missing or unusable ruby must read as COULD-NOT-RUN (exit 3),
-    # never as a claim about the ready set. Inside a forge `command -v ruby`
-    # finds a brew shim that cannot install one, exits 127, and the caller's
-    # `-ne 0` arm then asserted "the plan archiver would CHANGE THE READY SET" —
-    # a substantive ledger claim from a command that never executed. Wired here
-    # because the defect is invisible on any host that HAS ruby, which is every
-    # host that runs this gate; only the stub-PATH arms exercise it.
-    # 964-zedm: the index builder must stage where the payload FITS. It staged
-    # via the ambient TMPDIR, and in a forge /tmp is a 256 MB tmpfs while the
-    # index root is on a 1.2 TB overlay — so a cold 22,645-chunk build died on
-    # ENOSPC with 1.2 TB free. Wired here because the defect is invisible on any
-    # host with a roomy /tmp, which is every host that runs this gate.
-    _step "Checking the spec-index builder stages where the payload fits (964-zedm)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-spec-index-staging-capacity.sh" 2>&1; then
-        _error "the spec-index builder stages into the ambient TMPDIR (964-zedm) — see the verdict line above"
-        exit 1
-    fi
-    _info "Spec-index staging capacity check passed"
-
     # Order 881-29me. A `plan/issues/` audit cites its evidence and nothing
     # checked those citations still resolved. Measured in one document: every
     # factual claim re-verified TRUE while every `file:line` citation
@@ -7117,23 +7082,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Plan-lane merge-scoping fixture passed"
 
-    # Order 251 criterion LM-04. `plan/long-running.md` is declared a filtered
-    # view of the ledger's active multi_cycle packets and nothing enforced it.
-    # It drifted in July (caught by a human verifier, repaired by hand, bought
-    # six weeks) and again by 2026-08-25, when it was right about 7 of 31
-    # packets: 11 rows, four naming obsoleted packets, twenty live ones absent.
-    # A 23%-accurate sub-queue steers agents toward dead work.
-    #
-    # Checks MEMBERSHIP, not rendering: which orders appear is derivable and is
-    # what rotted; the phase / blocked-on / verification columns are editorial
-    # and fabricating them would make the view more convincing and no more true.
-    _step "Checking plan/long-running.md matches the live multi_cycle set (251 LM-04)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-long-running-view.sh" 2>&1; then
-        _error "the long-running view disagrees with the ledger (251 LM-04) — see the verdict line above"
-        exit 1
-    fi
-    _info "Long-running view agreement check passed"
-
     _step "Checking the reclaim-stranded-claims fixture (943-unii)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-reclaim-stranded-claims.sh" 2>&1; then
         _error "the stranded-claim reaper regressed (943-unii) — see the failing case above"
@@ -7176,13 +7124,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Expert-capability behaviour-skew fixture passed"
-
-    _step "Verifying a MO-FULL marker cannot outrun its ledger record (974-uk95)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-mo-full-record-precedes-marker.sh" 2>&1; then
-        _error "the marker/ledger coupling regressed (974-uk95) — see the failing case above"
-        exit 1
-    fi
-    _info "MO-FULL record-precedes-marker fixture passed"
 
     _step "Checking every spec requirement carries a unique stable id (976-suab)..."
     # PORTED to Lua (1527-v7cy): scripts/lua/check-requirement-ids.lua.
@@ -7284,11 +7225,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _step "Checking test-release-freeze-audit (1255-s4im)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-release-freeze-audit.sh" 2>&1; then
         _error "scripts/test-release-freeze-audit.sh failed — the server-visible freeze audit may no longer name a breach, or the release preflight may no longer refuse one (1255-s4im); read the fixture output above"
-        exit 1
-    fi
-    _step "Checking test-ensure-hooks (1255-s4im)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-ensure-hooks.sh" 2>&1; then
-        _error "scripts/test-ensure-hooks.sh failed — a toolchain-less checkout may no longer arm its push guards (1255-s4im); read the fixture output above"
         exit 1
     fi
     _step "Checking test-litmus-steps-can-fail (1063-nraf; 38ms)..."
