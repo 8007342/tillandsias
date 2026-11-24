@@ -5240,7 +5240,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # check that short-circuited the measurement would make the live fixture
     # unable to fail at all.
     _step "Checking the vault-shutdown classifier keeps all four outcomes reachable (1140-i6ct)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-vault-shutdown-fixture-classifier.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-vault-shutdown-fixture-classifier.lua" 2>&1; then
         _error "the vault shutdown fixture can no longer tell a stale image from the 1134-u934 defect — or can no longer fail at all"
         exit 1
     fi
@@ -6961,7 +6961,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # checker) are what this pins. A memo that only ever hits has stopped
     # checking and would turn a gate green by never running it.
     _step "Checking the terminology memo keys on the dictionary, the locales and the checker (1054-zvq4)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-terminology-check-memo.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-terminology-check-memo.lua" 2>&1; then
         _error "the terminology memo does not miss on a dictionary, locale or instrument change (1054-zvq4) — see the verdict line above"
         exit 1
     fi
