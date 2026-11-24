@@ -1,0 +1,10 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 5: the next slowest movable blocks,
+# lenovinha timing log 2026-11-24).
+#
+# PORTED to Lua (1525-c6jm): scripts/lua/check-no-spawn-in-if-not.lua.
+STEP_DESC="Checking for if-not pipeline verdict guards (795-imz3)"
+STEP_LUA="scripts/lua/check-no-spawn-in-if-not.lua"
+STEP_ERROR="a script uses 'if ! <pipeline>' as a verdict — pipefail + SIGPIPE can invert the guard; capture the exit into a variable first or mark '# sigpipe-ok: <reason>' (795-imz3)"
+STEP_OK="If-not pipeline guard check passed"
+STEP_READS="scripts/lua/check-no-spawn-in-if-not.lua"

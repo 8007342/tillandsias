@@ -1,0 +1,9 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 5: the next slowest movable blocks,
+# lenovinha timing log 2026-11-24).
+#
+STEP_DESC="Checking scripts/ bash dialect (761-g36m)"
+STEP_LUA="scripts/lua/check-bash-dialect.lua"
+STEP_ERROR="a shared script carries an unguarded bash-4-only construct — see the verdict line above (761-g36m)"
+STEP_OK="Bash dialect gate passed"
+STEP_READS="scripts/lua/check-bash-dialect.lua"

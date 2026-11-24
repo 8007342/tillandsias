@@ -4776,13 +4776,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
-    _step "Checking for if-not pipeline verdict guards (795-imz3)..."
-    # PORTED to Lua (1525-c6jm): scripts/lua/check-no-spawn-in-if-not.lua.
-    if ! _run_lua_decider "scripts/lua/check-no-spawn-in-if-not.lua" 2>&1; then
-        _error "a script uses 'if ! <pipeline>' as a verdict — pipefail + SIGPIPE can invert the guard; capture the exit into a variable first or mark '# sigpipe-ok: <reason>' (795-imz3)"
-        exit 1
-    fi
-    _info "If-not pipeline guard check passed"
     _step "Checking the enclave membership list matches the code (245 P8)..."
     # PORTED to Lua (1527-v7cy): scripts/lua/check-enclave-membership-documented.lua.
     if ! _run_lua_decider "scripts/lua/check-enclave-membership-documented.lua" 2>&1; then
@@ -4947,14 +4940,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Fragment-events could-not-run verdict fixture passed"
 
-    _step "Checking every ledger fragment is intact (whole overlay)..."
-    # PORTED to Lua (1527-v7cy): scripts/lua/check-all-fragments-intact.lua.
-    if ! _run_lua_decider "scripts/lua/check-all-fragments-intact.lua" 2>&1; then
-        _error "a ledger fragment is damaged — append-only files are restored, not merged"
-        exit 1
-    fi
-    _info "All fragments intact"
-
     _step "Checking the whole-overlay fragment guard's negative controls..."
     if ! _run_lua_decider "scripts/lua/test-all-fragments-intact.lua" 2>&1; then
         _error "the fragment-integrity guard cannot distinguish valid YAML, parse damage, and conflict markers"
@@ -5093,20 +5078,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "release-ledger distillation advisory fixture passed"
 
-    # Order 1223-wzc4. The coordination pass re-derives "which host is active"
-    # every time, and the corrected recipe lived in drill prose — where it was
-    # retyped WRONG two passes after being written down, stripping the email
-    # domain that is the only part naming the host. This fixture pins the three
-    # corrections that kept getting lost: count by email, derive the host from
-    # the domain (BOTH conventions, including <Host>.local), and bucket an
-    # address that names no host instead of rendering it as one.
-    _step "Checking the fleet-activity read (1223-wzc4)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-fleet-activity.sh" 2>&1; then
-        _error "the fleet-activity read regressed — a working host can again read as silent, or a shared address as a host"
-        exit 1
-    fi
-    _info "fleet-activity read fixture passed"
-
     # Order 1226-jb8y. 872-c9nd's salvage net saved macbookair's finished work
     # when its gate could not pass — and the work sat on origin for hours
     # because nobody queried the refs. Making that query routine then produced
@@ -5175,17 +5146,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # valid MO-FULL. The fixture's negative controls (cases 2 and 4) are the
     # load-bearing half: they fail if the fix ever widens into "reclaim a lock",
     # which would retire 873-zcim while every positive case stayed green.
-    # append-event must not write into the ARCHIVE (896-f8ti). Arms 3 and 4 are
-    # the load-bearing pair: the naive fix ("refuse anything not in the base")
-    # passes the refusal arms and breaks 699-usxc, the case that lets a packet
-    # filed THIS cycle receive events. Falsified against the pre-fix binary —
-    # arm 1 catches the acceptance, arm 3 catches the fragment it wrote.
-    _step "Checking the append-event archived-refusal fixture (896-f8ti)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-append-event-archived-refusal.sh" 2>&1; then
-        _error "append-event's archive guard regressed — either events are landing on completed work again, or legitimate writes to fragment-only packets are being refused"
-        exit 1
-    fi
-    _info "append-event archived-refusal fixture passed"
 
     _step "Checking the checkout-lock attested-release fixture (899-q9di)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-cycle-lock-attested-release.sh" 2>&1; then
@@ -6003,18 +5963,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # a no-op, because `packets:` is a G-Set. 11 of 21 fragment-recorded
     # completions were being thrown away when this was found, and the batch
     # selector was handing already-completed packets back out as next work.
-    # Order 721-nyev. Every script that RUNS tillandsias-plan must resolve it
-    # through the shared probe, never a hardcoded target/ path. 704-zcgi
-    # centralised that probe on the reasoning that fixing instances is not
-    # enough, and four more instances appeared afterwards anyway — each written
-    # by someone with no reason to know the probe existed. This makes the rule
-    # enforceable rather than remembered.
-    _step "Checking plan-binary resolution goes through the shared probe (721-nyev)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-plan-binary-probe-usage.sh" 2>&1; then
-        _error "a script runs tillandsias-plan from a hardcoded target/ path — an executable bit is a claim, running the binary is evidence"
-        exit 1
-    fi
-    _info "Plan-binary probe usage check passed"
 
     # PILOT 1 of the class selector (765-xpct). Declared inputs: the plan ledger
     # and the plan crate, because this guard reads plan/index.d and the fold that
@@ -6029,34 +5977,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     else
         _info "Fragment status-loss check passed"
     fi
-
-    # Order 831-ezea. The sibling of the check above, on the other axis: that
-    # one asks whether a fragment's CLOSURE reached the fold; this one asks
-    # whether a fragment that did NOT close a packet left it resumable. The
-    # loop's only blocking exit condition today is FILING A NEW ROW, so arrival
-    # scales with service — every cycle adds rows and carries none forward.
-    # `next_action` is the carry-forward artifact and it has had a reader since
-    # 606-xu52 (answer.rs next_action_snippet -> the `next:` line of every
-    # `plan next` row); without it the row hands the next agent the packet's own
-    # TITLE as its next step.
-    #
-    # ADVISORY, NOT A GATE, AND `_run` IS DELIBERATE HERE: the script exits 0
-    # even when it names fragments. Measured 2026-08-19, next_action adoption is
-    # 4.6% of ready rows (17/367), so a refusal would reject essentially every
-    # fragment the fleet writes tonight and would be switched off within a day —
-    # and 699-dycj forbids making one host's habit every host's red build. The
-    # promotion bar (>= 40% adoption) and the command that measures it are
-    # recorded in the script's header; promoting it means flipping its `exit 0`
-    # and adding an `_error` branch here. Its own non-zero exits (a broken
-    # checkout) still red the build through the `if !` below, which is why this
-    # is wired as a gate whose guard is currently unarmed rather than as a bare
-    # invocation nobody would notice breaking.
-    _step "Checking that open packets carry a next_action (831-ezea, advisory)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-carry-forward.sh" 2>&1; then
-        _error "the carry-forward advisory could not run — that is a broken checkout, not a clean ledger"
-        exit 1
-    fi
-    _info "Carry-forward advisory reported"
 
     # ORDER 751-i9mb. The closure-event pass applied to the BASE ledger, where
     # compaction puts every fragment's events. The sibling gate above scans
@@ -6405,13 +6325,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Guest unit hardening guard passed"
-
-    _step "Checking scripts/ bash dialect (761-g36m)..."
-    if ! _run_lua_decider "scripts/lua/check-bash-dialect.lua" 2>&1; then
-        _error "a shared script carries an unguarded bash-4-only construct — see the verdict line above (761-g36m)"
-        exit 1
-    fi
-    _info "Bash dialect gate passed"
 
     # ORDER 1582-c32p — the dialect gate's case-in-$( ) rule on the shape bash
     # 3.2 misparses when the `$(` opens MID-line (a continued pipeline) and the
@@ -7029,15 +6942,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus stdin isolation check passed"
 
-    # 911-m7js: the archiver-check memo hits only on an unchanged ledger AND
-    # unchanged instrument; a fragment written or removed flips it.
-    _step "Checking the archiver-check memo keys on the ledger and the instrument (911-m7js)..."
-    if ! _run_lua_decider "scripts/lua/test-archiver-check-memo.lua" 2>&1; then
-        _error "the archiver-check memo does not miss on a ledger or instrument change (911-m7js) — see the verdict line above"
-        exit 1
-    fi
-    _info "Archiver-check memo check passed"
-
     # 1054-zvq4: the terminology memo's sibling fixture. Same bar as the
     # archiver's above — a memo is only safe while it still MISSES, so the
     # negative controls (dictionary, scanned source, a file appearing, the
@@ -7282,13 +7186,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Bound-litmus-runnable fixture passed"
 
-    _step "Verifying the skew line can see a behaviour change (984-i4k2)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-expert-capability-behaviour-skew.sh" 2>&1; then
-        _error "the expert-capability behaviour-skew detector regressed (984-i4k2) — see the failing case above"
-        exit 1
-    fi
-    _info "Expert-capability behaviour-skew fixture passed"
-
     _step "Checking every spec requirement carries a unique stable id (976-suab)..."
     # PORTED to Lua (1527-v7cy): scripts/lua/check-requirement-ids.lua.
     if ! _run_lua_decider "scripts/lua/check-requirement-ids.lua" 2>&1; then
@@ -7441,15 +7338,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Litmus steps-can-fail check passed"
-
-    _step "Checking plan fragments use keys the fold reads (944-vim8)..."
-    # 1247-sv4d: ported to scripts/lua (the shell-to-lua carried obligation);
-    # the verdict grammar is unchanged.
-    if ! _run_lua_decider "scripts/lua/check-fragment-keys-are-read.lua" 2>&1; then
-        _error "a plan/index.d/ fragment uses a top-level key the fold discards (944-vim8) — see the verdict line above"
-        exit 1
-    fi
-    _info "Fragment key check passed"
 
     _step "Checking worker and coordinator agree on the claim protocol (943-unii)..."
     # 888-vgs8: ported to scripts/lua (the shell-to-lua carried obligation);

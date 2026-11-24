@@ -1,0 +1,11 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 5: the next slowest movable blocks,
+# lenovinha timing log 2026-11-24).
+#
+# 911-m7js: the archiver-check memo hits only on an unchanged ledger AND
+# unchanged instrument; a fragment written or removed flips it.
+STEP_DESC="Checking the archiver-check memo keys on the ledger and the instrument (911-m7js)"
+STEP_LUA="scripts/lua/test-archiver-check-memo.lua"
+STEP_ERROR="the archiver-check memo does not miss on a ledger or instrument change (911-m7js) — see the verdict line above"
+STEP_OK="Archiver-check memo check passed"
+STEP_READS="scripts/lua/test-archiver-check-memo.lua"

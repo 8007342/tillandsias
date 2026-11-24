@@ -1,0 +1,15 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 5: the next slowest movable blocks,
+# lenovinha timing log 2026-11-24).
+#
+# Order 721-nyev. Every script that RUNS tillandsias-plan must resolve it
+# through the shared probe, never a hardcoded target/ path. 704-zcgi
+# centralised that probe on the reasoning that fixing instances is not
+# enough, and four more instances appeared afterwards anyway — each written
+# by someone with no reason to know the probe existed. This makes the rule
+# enforceable rather than remembered.
+STEP_DESC="Checking plan-binary resolution goes through the shared probe (721-nyev)"
+STEP_SCRIPT="scripts/check-plan-binary-probe-usage.sh"
+STEP_ERROR="a script runs tillandsias-plan from a hardcoded target/ path — an executable bit is a claim, running the binary is evidence"
+STEP_OK="Plan-binary probe usage check passed"
+STEP_READS="scripts/check-plan-binary-probe-usage.sh"

@@ -1,0 +1,11 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 5: the next slowest movable blocks,
+# lenovinha timing log 2026-11-24).
+#
+# 1247-sv4d: ported to scripts/lua (the shell-to-lua carried obligation);
+# the verdict grammar is unchanged.
+STEP_DESC="Checking plan fragments use keys the fold reads (944-vim8)"
+STEP_LUA="scripts/lua/check-fragment-keys-are-read.lua"
+STEP_ERROR="a plan/index.d/ fragment uses a top-level key the fold discards (944-vim8) — see the verdict line above"
+STEP_OK="Fragment key check passed"
+STEP_READS="scripts/lua/check-fragment-keys-are-read.lua"

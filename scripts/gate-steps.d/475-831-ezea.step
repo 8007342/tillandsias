@@ -1,0 +1,30 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 5: the next slowest movable blocks,
+# lenovinha timing log 2026-11-24).
+#
+# Order 831-ezea. The sibling of the check above, on the other axis: that
+# one asks whether a fragment's CLOSURE reached the fold; this one asks
+# whether a fragment that did NOT close a packet left it resumable. The
+# loop's only blocking exit condition today is FILING A NEW ROW, so arrival
+# scales with service — every cycle adds rows and carries none forward.
+# `next_action` is the carry-forward artifact and it has had a reader since
+# 606-xu52 (answer.rs next_action_snippet -> the `next:` line of every
+# `plan next` row); without it the row hands the next agent the packet's own
+# TITLE as its next step.
+#
+# ADVISORY, NOT A GATE, AND `_run` IS DELIBERATE HERE: the script exits 0
+# even when it names fragments. Measured 2026-08-19, next_action adoption is
+# 4.6% of ready rows (17/367), so a refusal would reject essentially every
+# fragment the fleet writes tonight and would be switched off within a day —
+# and 699-dycj forbids making one host's habit every host's red build. The
+# promotion bar (>= 40% adoption) and the command that measures it are
+# recorded in the script's header; promoting it means flipping its `exit 0`
+# and adding an `_error` branch here. Its own non-zero exits (a broken
+# checkout) still red the build through the `if !` below, which is why this
+# is wired as a gate whose guard is currently unarmed rather than as a bare
+# invocation nobody would notice breaking.
+STEP_DESC="Checking that open packets carry a next_action (831-ezea, advisory)"
+STEP_SCRIPT="scripts/check-carry-forward.sh"
+STEP_ERROR="the carry-forward advisory could not run — that is a broken checkout, not a clean ledger"
+STEP_OK="Carry-forward advisory reported"
+STEP_READS="scripts/check-carry-forward.sh"
