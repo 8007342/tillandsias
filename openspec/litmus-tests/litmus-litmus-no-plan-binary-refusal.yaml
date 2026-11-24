@@ -17,11 +17,11 @@ description: >
 preconditions:
   - workspace contains scripts/run-litmus-test.sh
   - workspace contains scripts/plan-binary-probe.sh
-  - workspace contains scripts/test-litmus-no-plan-binary.sh
+  - workspace contains scripts/lua/test-litmus-no-plan-binary.lua
 
 critical_path:
   - step: "no binary and an unrunnable binary each give ONE named refusal (rc 2); the opt-out proceeds; a runnable binary is admitted"
-    command: "bash scripts/test-litmus-no-plan-binary.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-no-plan-binary.lua 2>&1"
     timeout_ms: 60000
     expected_behavior: "ok:litmus-no-plan-binary:"
 
