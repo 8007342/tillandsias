@@ -131,7 +131,6 @@ scripts/test-daily-maintenance-day-boundary.sh
 scripts/test-decider-retirement.sh
 scripts/test-default-vault-cli-security.sh
 scripts/test-derive-host-identity.sh
-scripts/test-discipline-derive.sh
 scripts/test-discipline-install-hooks.sh
 scripts/test-dispatch-reap.sh
 scripts/test-e2e-preflight-live-runtime.sh
@@ -140,7 +139,6 @@ scripts/test-enclave-proxy-lib.sh
 scripts/test-enclave-service-health.sh
 scripts/test-ensure-cosign.sh
 scripts/test-ensure-toolbox-properties.sh
-scripts/test-env-forward-shared.sh
 scripts/test-exec-bits-guard-end-to-end.sh
 scripts/test-expert-accuracy-record-shape.sh
 scripts/test-expert-capability-behaviour-skew.sh
@@ -154,7 +152,6 @@ scripts/test-fleet-heartbeat-sees-a-ledger-filed-blocker.sh
 scripts/test-fleet-msg-mcp.sh
 scripts/test-fleet-msg-same-host.sh
 scripts/test-fleet-msg-store.sh
-scripts/test-forge-clone-wait-is-bounded.sh
 scripts/test-forge-findings-persisted.sh
 scripts/test-forge-git-identity-source.sh
 scripts/test-forge-gitconfig-bidirectional-quarantine.sh
@@ -207,7 +204,6 @@ scripts/test-harness-affinity-selection.sh
 scripts/test-harness-byte-cheap.sh
 scripts/test-harness-contract-probe.sh
 scripts/test-harness-rollback.sh
-scripts/test-harness-supervisor.sh
 scripts/test-headless-env-lock-is-single.sh
 scripts/test-headless-sidecar-target-gate.sh
 scripts/test-hook-mover-enumeration-is-batched.sh
