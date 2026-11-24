@@ -50,16 +50,20 @@ critical_path:
   # toolchain is reachable rather than passing on a technicality (the sources it
   # covers are #[cfg(target_os = "windows")], so a Linux cargo compiles a stub
   # and proves nothing). Fixture: scripts/lua/test-windows-tray-diagnose-surface.lua,
-  # 6/6, including a renamed test, a FAILING test — which no grep could see —
+  # 8 arms, including a renamed test, a FAILING test — which no grep could see —
   # and a blocked toolchain.
   - step: "the pinned diagnose/status/log unit tests RUN and pass (not merely exist)"
-    command: "bash scripts/check-windows-tray-diagnose-surface.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-windows-tray-diagnose-surface.lua 2>&1"
     expected_behavior: "diagnose-surface"
+    # A violation names diagnose-surface too, so the exit status must be judged
+    # (2306-3hr6): without this the step passed on a violation.
+    assert_exit: 0
+    assert_output_contains: "diagnose-surface"
     timeout_ms: 180000
 
   - step: "the surface check itself fails when the surface is broken"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-windows-tray-diagnose-surface.lua 2>&1"
-    expected_behavior: "ok:windows-tray-diagnose-surface:6 arms"
+    expected_behavior: "ok:windows-tray-diagnose-surface:8 arms"
     timeout_ms: 60000
 
   - step: "end-to-end cli_integration tests attached (7 of 7 stateless CLI modes + cross-surface version consistency)"
