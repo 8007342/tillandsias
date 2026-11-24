@@ -6156,7 +6156,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # SET" on a run where the check never executed. A test that checked only the
     # code would have stayed green through the whole incident.
     _step "Checking a check that could not run never claims what it would have found (965-sxec)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-archiver-could-not-run-verdict.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-archiver-could-not-run-verdict.lua" 2>&1; then
         _error "the archiver's could-not-run path regressed (965-sxec) — a gate that cannot RUN a check must never assert what the check would have FOUND"
         exit 1
     fi
@@ -6700,6 +6700,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Relay-preflight derived-checks fixture passed"
+
+    # ORDER 2285-jvg6 — at intake, a green nextest run reads green, and a result
+    # log that could not be converted is named with its reason.
+    _step "Checking intake judges nextest's own results (2285-jvg6)..."
+    if ! _run_lua_decider "scripts/lua/test-gate-changed-nextest-transcript.lua" 2>&1; then
+        _error "gate-changed --intake misreads a nextest run, or hides why its log could not be converted — see the FAIL lines above (2285-jvg6)"
+        exit 1
+    fi
+    _info "Intake nextest transcript fixture passed"
 
     # ORDER 1597-rrku — the mirror's discipline parser and its fixture probe
     # ruby by running it: a forge's `ruby` is a Homebrew shim that exits 127.

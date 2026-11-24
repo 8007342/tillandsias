@@ -523,7 +523,6 @@ scripts scripts/test-agent-identity.sh 4
 scripts scripts/test-append-event-archived-refusal.sh 4
 scripts scripts/test-append-vs-origin-fold.sh 7
 scripts scripts/test-archiver-could-not-run-is-self-naming.sh 1
-scripts scripts/test-archiver-could-not-run-verdict.sh 2
 scripts scripts/test-archiver-ruby-could-not-run.sh 8
 scripts scripts/test-awk-float-lc-numeric.sh 6
 scripts scripts/test-base-ledger-status-loss.sh 7

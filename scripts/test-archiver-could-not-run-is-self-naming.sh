@@ -11,7 +11,7 @@
 # after starting), and the property under test — "a refusal names its own cause"
 # — is a property of what the script CAN emit, not of what it emitted today.
 # The behavioural half is already covered by test-archiver-ruby-could-not-run.sh
-# and test-archiver-could-not-run-verdict.sh, which drive the one site a stub
+# and scripts/lua/test-archiver-could-not-run-verdict.lua, which drive the one site a stub
 # PATH can reach.
 #
 # NO ABSOLUTE TIMESTAMP IS ENCODED HERE and no line number is cited: the arms

@@ -67,7 +67,6 @@ scripts/test-agent-identity.sh
 scripts/test-append-event-archived-refusal.sh
 scripts/test-append-vs-origin-fold.sh
 scripts/test-archiver-could-not-run-is-self-naming.sh
-scripts/test-archiver-could-not-run-verdict.sh
 scripts/test-archiver-ruby-could-not-run.sh
 scripts/test-awk-float-lc-numeric.sh
 scripts/test-base-ledger-status-loss.sh
