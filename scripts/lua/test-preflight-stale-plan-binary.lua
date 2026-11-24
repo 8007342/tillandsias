@@ -1,5 +1,5 @@
 -- @env PATH HOME
--- @trace order:1247-9pr8, order:2251-4xvd, order:2279-jbsd
+-- @trace order:1247-9pr8, order:2251-4xvd, order:2279-jbsd, order:2281-k3sn
 --
 -- test-preflight-stale-plan-binary.lua — ./build.sh --preflight asks the plan
 -- binary for its currency ONCE, up front, and refuses by name when it is
@@ -17,7 +17,12 @@
 --   1  stale stub     -> ONE refused:preflight:stale-plan-binary line, WHY and
 --                        REMEDY lines, rc 1, and nothing after the block runs
 --   2  current stub   -> no refusal; the block falls through (rc 0)
---   3  mute stub      -> an old binary that cannot answer is NOT refused
+--   3  mute stub      -> could-not-run:preflight:no-classifier, rc 3, nothing
+--                        after it runs (2281-k3sn; this arm used to pin "not
+--                        refused"). The door before it fell through with rc 0
+--   7  wrong word     -> a binary that classifies from the rc alone, and one that
+--                        always answers ok, exit 3 the same way
+--   8  real binary    -> the checkout's own binary answers the question
 --   4  no binary      -> ONE could-not-run:preflight:no-classifier line carrying
 --                        the build remedy, rc 3, nothing after it runs (2279-jbsd;
 --                        this arm used to pin "no refusal")
@@ -63,7 +68,11 @@ local function mkstub(name, body)
     proc.run({ argv = { "chmod", "+x", W .. "/" .. name }, timeout_ms = 10000 })
 end
 mkstub("stale", 'echo "stale:validator-surface built-from=aaaa checkout=bbbb" >&2; exit 3')
-mkstub("current", 'echo "ok:validator-surface:bbbb"; exit 0')
+-- A classifier, as the door needs one: the word comes from the file.
+local KNOWS = 'case "$1 $2" in "script classify") grep -q "^could-not-run:" "$6" && echo could-not-run || echo refused; exit 0 ;; esac\n'
+mkstub("current", KNOWS .. 'echo "ok:validator-surface:bbbb"; exit 0')
+mkstub("rc-only", 'case "$1 $2" in "script classify") [ "$4" = 0 ] && echo ok || echo refused; exit 0 ;; esac\nexit 2')
+mkstub("yes-man", 'case "$1 $2" in "script classify") echo ok; exit 0 ;; esac\nexit 2')
 mkstub("mute", "exit 2")
 -- ORDER 2186-x5kv: the block now rebuilds a stale binary once; a planted cargo
 -- that fails keeps the real one from running and leaves the stub stale.
@@ -91,15 +100,10 @@ if rc == 1 and n == 1 and has(o, "REMEDY: the door already ran cargo build --rel
 else
     bad("arm 1: rc=" .. tostring(rc) .. " refusals=" .. n .. " out=[" .. o .. "]")
 end
--- 2, 3: each falls through with no refusal
-for _, a in ipairs({
-    { "current", "arm 2: a current binary falls through, no refusal" },
-    { "mute", "arm 3: a binary too old to answer is not refused" },
-}) do
-    rc, o = run(W .. "/" .. a[1])
-    if rc == 0 and has(o, "fell-through") and not has(o, "refused:") then ok(a[2])
-    else bad(a[2]:match("^(arm %d)") .. ": rc=" .. tostring(rc) .. " out=[" .. o .. "]") end
-end
+-- 2
+rc, o = run(W .. "/current")
+if rc == 0 and has(o, "fell-through") and not has(o, "refused:") then ok("arm 2: a current binary falls through, no refusal")
+else bad("arm 2: rc=" .. tostring(rc) .. " out=[" .. o .. "]") end
 
 -- 4
 local NC = "could-not-run:preflight:no-classifier"
@@ -112,10 +116,36 @@ end
 rc, o = run(W .. "/absent-binary")
 if no_classifier(rc, o) then ok("arm 4: no binary is could-not-run:no-classifier with its remedy on the line, rc 3")
 else bad("arm 4: rc=" .. tostring(rc) .. " out=[" .. o .. "]") end
+-- 3: the block minus the new question is the door before it
+local whole = fs.read(REL .. "/block.sh")
+local qa, qb = whole:find("    # ORDER 2281%-k3sn.-\n    fi\n")
+fs.write(REL .. "/block-pre.sh", qa and (whole:sub(1, qa - 1) .. whole:sub(qb + 1)) or "exit 99\n")
+local pre = proc.run({ argv = { fixture.posix_shell(), W .. "/block-pre.sh", root }, timeout_ms = 60000,
+    env = { PATH = env.get("PATH"), HOME = env.get("HOME"), TILLANDSIAS_PLAN_BIN = W .. "/mute" } })
+rc, o = run(W .. "/mute")
+if no_classifier(rc, o) and pre.code == 0 and has(pre.stdout or "", "fell-through") then
+    ok("arm 3: a mute binary is could-not-run:no-classifier, rc 3; the door before this fell through with 0")
+else bad("arm 3: rc=" .. tostring(rc) .. " before=" .. tostring(pre.code) .. " out=[" .. o .. "]") end
+-- 7
+local wrong = {}
+for _, b7 in ipairs({ "rc-only", "yes-man" }) do
+    rc, o = run(W .. "/" .. b7)
+    if not (no_classifier(rc, o) and has(o, b7 == "yes-man" and "'ok'" or "'refused'")) then wrong[#wrong + 1] = b7 .. " rc=" .. tostring(rc) .. " [" .. o .. "]" end
+end
+if #wrong == 0 then ok("arm 7: a binary answering from the rc, or always ok, is no classifier and its word is named")
+else bad("arm 7: " .. table.concat(wrong, " ")) end
+-- 8: an exit-0 binary whose currency may differ, so only the question is asked
+local probe = REL .. "/ask"
+fs.write(probe, "could-not-run:preflight-classifier-probe\n")
+fs.write(REL .. "/ask.sh", 'cd "$1" && . scripts/plan-binary-probe.sh && b="$(resolve_plan_binary)" && "$b" script classify --rc 1 --file "$2"\n')
+local r8 = proc.run({ argv = { fixture.posix_shell(), W .. "/ask.sh", root, probe }, timeout_ms = 60000,
+    env = { PATH = env.get("PATH"), HOME = env.get("HOME") } })
+if text.trim(r8.stdout or "") == "could-not-run" then ok("arm 8: this checkout's binary answers the question")
+else bad("arm 8: rc=" .. tostring(r8.code) .. " [" .. (r8.stdout or "") .. (r8.stderr or "") .. "]") end
 -- 6
 fs.mkdir(REL .. "/fresh/scripts")
 fs.write(REL .. "/fresh/scripts/plan-binary-probe.sh", fs.read("scripts/plan-binary-probe.sh"))
-local body = fs.read(REL .. "/block.sh")
+local body = fs.read(REL .. "/block-pre.sh")
 local a, b = body:find("    # ORDER 2279%-jbsd.-\n    fi\n")
 fs.write(REL .. "/block-old.sh", a and (body:sub(1, a - 1) .. body:sub(b + 1)) or "exit 99\n")
 local function fresh(name)

@@ -1937,6 +1937,18 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
                 exit 1 ;;
         esac
     fi
+    # ORDER 2281-k3sn (coordinator ruling 2026-11-23): A BINARY THAT CANNOT
+    # CLASSIFY IS NO BINARY. One question, answered from the text and not the rc
+    # (a guard that exits 1 saying could-not-run), so neither a mute binary nor
+    # one that echoes the rc passes. Never mtime, never a version string.
+    _pf_ask="$(mktemp)" || { echo "could-not-run:preflight:no-scratch — mktemp failed, so the classifier could not be asked; remedy: free space in \${TMPDIR:-/tmp}, then re-run ./build.sh --preflight" >&2; exit 3; }
+    echo "could-not-run:preflight-classifier-probe" > "$_pf_ask"
+    _pf_word="$(cd "$SCRIPT_DIR" && "$_pf_plan_bin" script classify --rc 1 --file "$_pf_ask" 2>/dev/null)" || _pf_word="${_pf_word:-}"
+    rm -f "$_pf_ask"
+    if [ "$_pf_word" != could-not-run ]; then
+        echo "could-not-run:preflight:no-classifier — $_pf_plan_bin cannot classify a guard's result (asked a known one, it answered '${_pf_word%%$'\n'*}'), so none was started; remedy: cargo build --release -p tillandsias-plan, then re-run ./build.sh --preflight" >&2
+        exit 3
+    fi
     # END-STALE-PLAN-BINARY-CHECK
 
     # ORDER 1237-f9dy — ADVISORY ONLY: is the installed launcher older than the
