@@ -166,7 +166,6 @@ scripts/test-fleet-msg-mcp.sh
 scripts/test-fleet-msg-same-host.sh
 scripts/test-fleet-msg-store.sh
 scripts/test-forge-clone-wait-is-bounded.sh
-scripts/test-forge-entrypoints-source-agent-profile.sh
 scripts/test-forge-findings-persisted.sh
 scripts/test-forge-git-identity-source.sh
 scripts/test-forge-gitconfig-bidirectional-quarantine.sh
@@ -203,7 +202,6 @@ scripts/test-gate-step-prefix-across-refs.sh
 scripts/test-gate-step-prefix-allocation.sh
 scripts/test-gate-step-regimes.sh
 scripts/test-gate-step-skip-exit.sh
-scripts/test-gate-thresholds-are-chosen.sh
 scripts/test-git-credential-helper.sh
 scripts/test-git-mirror-dns-identity.sh
 scripts/test-git-mirror-existing-volume-hardening.sh
@@ -222,7 +220,6 @@ scripts/test-harness-byte-cheap.sh
 scripts/test-harness-contract-probe.sh
 scripts/test-harness-rollback.sh
 scripts/test-harness-supervisor.sh
-scripts/test-hash-image-sources.sh
 scripts/test-headless-env-lock-is-single.sh
 scripts/test-headless-sidecar-target-gate.sh
 scripts/test-hook-mover-enumeration-is-batched.sh
