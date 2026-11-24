@@ -59,8 +59,8 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "ok: guard key list agrees with the fold"
 
-  - step: "build.sh consults the guard (wiring is real, not prose)"
-    command: "grep -q '_run_lua_decider \"scripts/lua/check-fragment-keys-are-read.lua\"' build.sh && echo 'ok: wired into the gate'"
+  - step: "a gate step runs the guard (wiring is real, not prose; a step file since 2291-ungn)"
+    command: "grep -hqx 'STEP_LUA=\"scripts/lua/check-fragment-keys-are-read.lua\"' scripts/gate-steps.d/*.step && echo 'ok: wired into the gate'"
     timeout_ms: 8000
     expected_behavior: "ok: wired into the gate"
 

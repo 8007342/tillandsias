@@ -77,7 +77,6 @@ scripts/test-brew-shim-reentrancy.sh
 scripts/test-build-image-installed-version-alias.sh
 scripts/test-build-sh-ci-full-install-prep.sh
 scripts/test-build-step-timing-attribution.sh
-scripts/test-build-version-label.sh
 scripts/test-capabilities-envelope-names-its-source.sh
 scripts/test-capability-routing.sh
 scripts/test-capability-row-check.sh
@@ -90,7 +89,6 @@ scripts/test-change-class.sh
 scripts/test-check-bash-dialect.sh
 scripts/test-check-carry-forward.sh
 scripts/test-check-credential-channel.sh
-scripts/test-check-engine-cpu-dispatch.sh
 scripts/test-check-jq-callsite-ratchet.sh
 scripts/test-check-opsx-generated-dirt.sh
 scripts/test-check-stranded-in-progress.sh
@@ -107,7 +105,6 @@ scripts/test-cloudflare-login.sh
 scripts/test-cloudflare-oauth-core.sh
 scripts/test-cloudflare-token-rotation.sh
 scripts/test-cmdkey-predicate-discriminates.sh
-scripts/test-codex-device-auth.sh
 scripts/test-codex-mcp-registration.sh
 scripts/test-codex-oauth-harvest.sh
 scripts/test-codex-oauth-restore.sh
@@ -141,15 +138,12 @@ scripts/test-discipline-derive.sh
 scripts/test-discipline-install-hooks.sh
 scripts/test-dispatch-reap.sh
 scripts/test-e2e-preflight-live-runtime.sh
-scripts/test-embed-endpoint-derivation.sh
 scripts/test-enclave-network-internal-discovery.sh
 scripts/test-enclave-proxy-lib.sh
-scripts/test-enclave-remedy-covers-the-named-service.sh
 scripts/test-enclave-service-health.sh
 scripts/test-ensure-cosign.sh
 scripts/test-ensure-toolbox-properties.sh
 scripts/test-env-forward-shared.sh
-scripts/test-envelope-suite-resolves-the-gates-artifact.sh
 scripts/test-exact-version-literal-added.sh
 scripts/test-exec-bits-guard-end-to-end.sh
 scripts/test-expert-accuracy-record-shape.sh
@@ -174,7 +168,6 @@ scripts/test-forge-localization-staged.sh
 scripts/test-forge-project-guard-hooks.sh
 scripts/test-forge-project-trust-seeds.sh
 scripts/test-forge-runtime-ca-trust.sh
-scripts/test-forge-seed-branch-resolution.sh
 scripts/test-forge-seeds-from-salvage-ref.sh
 scripts/test-forge-src-budget-report.sh
 scripts/test-forge-standard-gitconfig-path.sh

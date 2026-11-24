@@ -33,16 +33,11 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-envelope-suite-resolves-the-gates-artifact.sh
+  - workspace contains scripts/lua/test-envelope-suite-resolves-the-gates-artifact.lua
   - workspace contains scripts/plan-binary-probe.sh (resolve_target_binary)
 
 critical_path:
-  - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-envelope-suite-resolves-the-gates-artifact.sh && test -x scripts/test-envelope-suite-resolves-the-gates-artifact.sh && echo 'ok: redirected-artifact-fixture-parses'"
-    timeout_ms: 3000
-    expected_behavior: "ok: redirected-artifact-fixture-parses"
-
   - step: "pre-fix resolution picks the stale in-tree binary; post-fix resolution picks the redirected, current one"
-    command: "bash scripts/test-envelope-suite-resolves-the-gates-artifact.sh | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-envelope-suite-resolves-the-gates-artifact.lua 2>&1"
     timeout_ms: 30000
-    expected_behavior: "PASS: envelope-suite-resolves-the-gates-artifact"
+    expected_behavior: "ok:envelope-suite-resolves-the-gates-artifact:4 arms"
