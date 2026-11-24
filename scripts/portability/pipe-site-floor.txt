@@ -681,7 +681,6 @@ scripts scripts/test-order-citations-resolve.sh 7
 scripts scripts/test-packet-tier-fields.sh 4
 scripts scripts/test-pending-capability-row-does-not-wedge.sh 1
 scripts scripts/test-plan-binary-copy-refresh.sh 1
-scripts scripts/test-plan-binary-probe-release-over-debug.sh 2
 scripts scripts/test-plan-binary-probe-usage-determinism.sh 2
 scripts scripts/test-plan-binary-runnability-precondition.sh 10
 scripts scripts/test-plan-field-get.sh 2
