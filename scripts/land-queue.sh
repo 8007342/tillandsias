@@ -758,6 +758,14 @@ heavy_probe() { # <base> -> heavy | light | unknown, of the worktree against bas
     elif grep -q '^select:intake ' <<<"$_o"; then echo light
     else echo unknown; fi
 }
+# HEAVY_MAX (2281-xx62, phase 2): a train takes at most this many members the probe
+# does not answer `light` for; a further one is put back for the one-at-a-time loop,
+# exactly like a conflicting member, and the next light candidate may still join.
+# `unknown` counts toward the cap: nobody measured it light. 0 = no heavy member.
+# A value that is not a whole number falls back to 2, said aloud.
+HEAVY_MAX="${TILLANDSIAS_BUNDLE_HEAVY_MAX:-2}"
+[[ "$HEAVY_MAX" =~ ^[0-9]{1,4}$ ]] || { [ "$BATCH_K" -ge 2 ] 2>/dev/null && say "train:heavy-max-unreadable:'$HEAVY_MAX' — using 2"; HEAVY_MAX=2; }
+HEAVY_MAX=$((10#$HEAVY_MAX))
 bundle_log() { # <base> <union> <result> <gate_s>; try_batch's nums/heavy_n/t_id are in scope
     local _v _p=- _t
     case "$3" in
@@ -782,7 +790,7 @@ try_batch() {
     [ "$BATCH_K" -ge 2 ] 2>/dev/null || return 0
     [ "$DRY_RUN" -eq 1 ] && return 0
     local base union n h hs lm mb pre ids="" carried="" out err rc key t0 gs c now
-    local heavy_n=0 t_id; t_id="train-$(date +%s)"
+    local heavy_n=0 heavy_cap=0 tier t_id; t_id="train-$(date +%s)"
     local -a nums=() heads=() parents=()
     git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null || return 0
     base="$(git rev-parse "$REMOTE/$TRUNK" 2>/dev/null)" || return 0
@@ -800,8 +808,18 @@ try_batch() {
         pre="$(git rev-parse HEAD)"
         if git -c user.name=land-queue -c user.email=land-queue@localhost \
                 merge --no-ff -q --no-edit -m "train: #$n $h" "$hs" >/dev/null 2>&1; then
+            tier="$(heavy_probe "$pre")"
+            if [ "$tier" != light ]; then
+                if [ "$heavy_cap" -ge "$HEAVY_MAX" ]; then
+                    say "train:heavy-deferred:#$n tier=$tier max=$HEAVY_MAX — goes one at a time"
+                    git reset -q --hard "$pre"
+                    continue
+                fi
+                heavy_cap=$((heavy_cap + 1))
+            fi
             nums+=("$n"); heads+=("$hs"); ids="$ids#$n,"
-            case "$(heavy_probe "$pre")" in
+            say "train:accept:#$n tier=$tier"
+            case "$tier" in
                 heavy) say "train:heavy:#$n"; [ "$heavy_n" = - ] || heavy_n=$((heavy_n + 1)) ;;
                 light) ;;
                 *) say "train:heavy-unknown:#$n"; heavy_n=- ;;
