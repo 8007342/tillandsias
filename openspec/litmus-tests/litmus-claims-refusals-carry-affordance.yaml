@@ -20,7 +20,7 @@ critical_path:
   - step: "each claims refusal carries why and remedy, the executed remedies clear their refusals, and no refusal site lacks an affordance"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-claims-affordance.lua 2>&1 | tail -1"
     timeout_ms: 120000
-    expected_behavior: "ok:claims-affordance:8 arms"
+    expected_behavior: "ok:claims-affordance:12 arms"
 
 observability:
   traces:

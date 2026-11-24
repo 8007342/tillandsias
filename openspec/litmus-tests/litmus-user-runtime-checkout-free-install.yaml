@@ -14,8 +14,9 @@ preconditions:
 
 critical_path:
   - step: "verify installer PATH persistence is idempotent"
-    command: "bash scripts/test-install-path.sh"
-    timeout_ms: 10000
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-install-path.lua 2>&1"
+    expected_behavior: "ok:install-path:4 arms"
+    timeout_ms: 30000
 
   - step: "verify runtime assets embed and repair without Podman"
     command: "cargo test -p tillandsias-headless --bin tillandsias runtime_assets --features tray"
