@@ -7281,8 +7281,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _step "Checking test-check-engine-cpu-dispatch (1063-nraf; 206ms)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-check-engine-cpu-dispatch.sh" 2>&1; then
-        _error "scripts/test-check-engine-cpu-dispatch.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+    if ! _run_lua_decider "scripts/lua/test-check-engine-cpu-dispatch.lua" 2>&1; then
+        _error "scripts/lua/test-check-engine-cpu-dispatch.lua failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
         exit 1
     fi
     _step "Checking test-forge-findings-persisted (1063-nraf; 283ms)..."
@@ -7416,8 +7416,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "wsl.exe single-constructor check passed"
 
     _step "Checking test-check-toolchain-pinned (1562-tc7p)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-check-toolchain-pinned.sh" 2>&1; then
-        _error "scripts/test-check-toolchain-pinned.sh failed — the toolchain-pin guard no longer refuses a float it must refuse; read the fixture output above"
+    if ! _run_lua_decider "scripts/lua/test-check-toolchain-pinned.lua" 2>&1; then
+        _error "scripts/lua/test-check-toolchain-pinned.lua failed — the toolchain-pin guard no longer refuses a float it must refuse; read the fixture output above"
         exit 1
     fi
 

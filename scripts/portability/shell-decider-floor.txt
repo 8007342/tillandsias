@@ -78,7 +78,6 @@ scripts/test-brew-shim-reentrancy.sh
 scripts/test-build-image-installed-version-alias.sh
 scripts/test-build-sh-ci-full-install-prep.sh
 scripts/test-build-step-timing-attribution.sh
-scripts/test-build-version-label.sh
 scripts/test-capabilities-envelope-names-its-source.sh
 scripts/test-capability-routing.sh
 scripts/test-capability-row-check.sh
@@ -91,7 +90,6 @@ scripts/test-change-class.sh
 scripts/test-check-bash-dialect.sh
 scripts/test-check-carry-forward.sh
 scripts/test-check-credential-channel.sh
-scripts/test-check-engine-cpu-dispatch.sh
 scripts/test-check-jq-callsite-ratchet.sh
 scripts/test-check-opsx-generated-dirt.sh
 scripts/test-check-stranded-in-progress.sh
@@ -108,7 +106,6 @@ scripts/test-cloudflare-login.sh
 scripts/test-cloudflare-oauth-core.sh
 scripts/test-cloudflare-token-rotation.sh
 scripts/test-cmdkey-predicate-discriminates.sh
-scripts/test-codex-device-auth.sh
 scripts/test-codex-mcp-registration.sh
 scripts/test-codex-oauth-harvest.sh
 scripts/test-codex-oauth-restore.sh

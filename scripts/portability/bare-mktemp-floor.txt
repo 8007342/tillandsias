@@ -56,7 +56,6 @@ scripts/test-claude-forge-bypass-preaccepted.sh 1
 scripts/test-clear-vault-credentials-partial-is-nonzero.sh 1
 scripts/test-clear-vault-host-credentials.sh 1
 scripts/test-cloudflare-oauth-core.sh 1
-scripts/test-codex-device-auth.sh 1
 scripts/test-codex-mcp-registration.sh 1
 scripts/test-codex-oauth-harvest.sh 2
 scripts/test-codex-oauth-restore.sh 1

@@ -21,7 +21,7 @@
 --   * a build script that does not consult rust-toolchain.toml
 --     (scripts/build-macos-tray.sh, scripts/build-windows-tray.ps1).
 --
--- The optional root is a fixture seam (scripts/test-check-toolchain-pinned.sh).
+-- The optional root is a fixture seam (scripts/lua/test-check-toolchain-pinned.lua).
 --
 -- Verdicts:
 --   ok:toolchain-pinned:<version>:workflow-sites=<n>
