@@ -53,6 +53,13 @@
 #   * a change that cannot be scoped (exit 10 below) prints `heavy:<reason>`
 #     and runs nothing: the lander marks the member HEAVY rather than
 #     running everything at intake.
+#
+# CHECKS (2282-asxn, relay-preflight). `--checks` keeps only the selected
+# scripts/**/check-* deciders (no test-* fixture, no crate), whole-tree readers
+# included: they are the tree-only answers the queue evicts on. A change that
+# cannot be scoped selects EVERY check-* decider, never none. A header declaring
+# `preflight: gate-only — <reason>` is left out and named on a deferred: line.
+#
 # Without --intake every line and exit code is exactly today's.
 #
 # Usage:
@@ -60,6 +67,7 @@
 #   gate-changed.sh --run  [base]   run the selection (build.sh --changed)
 #   gate-changed.sh --map           print the derived input map
 #   --intake                        the bundle intake gate (see INTAKE above)
+#   --checks                        only the check-* deciders (see CHECKS above)
 #   --crate-graph                   print the derived path-dependency edges
 #                                   (<crate dir> TAB <dep dir>) and exit; the
 #                                   metadata lint compares them to cargo's
@@ -75,17 +83,19 @@ set -uo pipefail
 ROOT="${TILLANDSIAS_GATE_CHANGED_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 MODE="--list"
 INTAKE=0
+CHECKS=0
 BASE=""
 FILES_FROM=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --list|--run|--map|--crate-graph) MODE="$1" ;;
         --intake) INTAKE=1 ;;
+        --checks) CHECKS=1 ;;
         --files) FILES_FROM="${2:-}"; shift ;;
         -h|--help) sed -n '2,75p' "${BASH_SOURCE[0]}"; exit 0 ;;
         -*) echo "refused:gate-changed:unknown-flag:$1" >&2
             echo "  why: an unknown flag would be read as the base ref and diff against nothing meaningful" >&2
-            echo "  remedy: use --list, --run, --map, --crate-graph, --intake or --files <file>, then an optional base ref (see --help)" >&2
+            echo "  remedy: use --list, --run, --map, --crate-graph, --intake, --checks or --files <file>, then an optional base ref (see --help)" >&2
             exit 2 ;;
         *) BASE="$1" ;;
     esac
@@ -398,6 +408,25 @@ END { h = 1; while (h <= t) { c = q[h++]; print c; n = split(R[c], p, " ")
 awk -F'\t' 'NR == FNR { N[$1] = $2; next } ($0 in N) { print N[$0] }' "$WORK/crates" "$WORK/crate-sel" > "$WORK/pkg-sel"
 
 awk -F'\t' '$1 == "sel" && $2 ~ /^fx:/ { sub(/^fx:/, "", $2); print $2 "\t" $3 }' "$WORK/sel" | sort > "$WORK/fx-sel"
+if [ "$CHECKS" = 1 ]; then
+    if [ -n "$_why_all" ]; then
+        echo "select:checks-all reason=$_why_all"
+        awk -F'\t' '{ print $1 ($4 == "" ? "" : " " $4) "\tall" }' "$WORK/pop" > "$WORK/fx-sel"
+        _why_all=""
+    fi
+    : > "$WORK/fx-chk"; : > "$WORK/fx-chk-def"
+    while IFS=$'\t' read -r _u _why; do
+        _fp="${_u%% *}"
+        case "${_fp##*/}" in check-*) ;; *) continue ;; esac
+        if [ -n "$(awk 'NR > 40 { exit } /preflight: gate-only-decider/ { next } /^(#|--) preflight: gate-only/ { print; exit }' "$_fp" 2>/dev/null)" ]; then
+            printf '%s\n' "$_u" >> "$WORK/fx-chk-def"
+        else
+            printf '%s\t%s\n' "$_u" "$_why" >> "$WORK/fx-chk"
+        fi
+    done < "$WORK/fx-sel"
+    sort -u "$WORK/fx-chk" > "$WORK/fx-sel"; : > "$WORK/pkg-sel"; : > "$WORK/crate-hit"
+    [ ! -s "$WORK/fx-chk-def" ] || echo "deferred:checks $(tr '\n' ' ' < "$WORK/fx-chk-def")"
+fi
 FX_N="$(wc -l < "$WORK/fx-sel" | tr -d ' ')"
 PKG_N="$(wc -l < "$WORK/pkg-sel" | tr -d ' ')"
 CRATE_TOTAL="$(wc -l < "$WORK/crates" | tr -d ' ')"

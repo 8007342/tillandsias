@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-23T05:46:10Z (bundle-landing design phase 1, coordinator queue item 4).
+packets:
+  - packet_id: gate-keep-going-names-every-red-step
+    order: "2253-iher"
+    status: implemented
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, build-sh, land-queue]
+    estimated_hours: 4
+    owned_files:
+      - build.sh
+      - scripts/lua/test-gate-keep-going.lua
+      - scripts/gate-steps.d/980-2253-iher.step
+    title: "./build.sh --check stops at the first red step; --keep-going (opt-in) names every one"
+    context: |
+      Measured (source) on trunk 2026-11-23: build.sh has 276 'exit 1' sites and no failure accumulator, so --check
+      names only the FIRST failing step. The bundle-landing design's culprit search keys on the failing step, so it
+      needs every red named. Opt-in --keep-going (bundle gate and daily-full use it; default --check stays fail-fast):
+      a refusing gate-steps.d step is recorded and the scheduler (serial, pool, lanes) carries on; an inline
+      section's nonzero exit in the gate's own process is recorded against the current _step and execution
+      continues; prerequisite phases (Building ..., Running clippy, the debug-binary build) stay fatal and are named;
+      at the end red-steps:<n> plus one red-step:<name>:rc=<n> line each, exit 1, no stamp. LIMIT: under set -e a bare
+      failing command outside if/||/&& still aborts in either mode.
+    exit_criteria:
+      - "scripts/lua/test-gate-keep-going.lua green as gate step 980-2253-iher: fail-fast default, every red named (serial and pool), green root clean, mutant red."
+      - "A real ./build.sh --check --keep-going on a tree with two red inline sections names both."
+    unscoreable: "fixture-scored: scripts/lua/test-gate-keep-going.lua via gate step 980-2253-iher is the pin; no litmus covers build.sh's step scheduler"
+    provenance: "coordinator macuahuitl-fedora queue 2026-11-23, bundle-landing design phase 1; operator approved the design"
+    events:
+      - type: implemented
+        ts: "2026-11-23T05:46:10Z"
+        host: yoga
+        summary: "implemented on work/2253-iher; fixture 5/5; inline-exit arm verified only by a full gate run"

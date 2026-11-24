@@ -468,6 +468,58 @@ _error() { echo -e "${RED}[build]${NC} $*" >&2; }
 # ORDER 1515-iwb3 (1247-amcu): a refusal says the rule that refused and what
 # clears it, in the fleet's why/remedy shape.
 _afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+# ── ORDER 2253-iher: --keep-going — NAME EVERY RED STEP, NOT ONLY THE FIRST ──
+# Opt-in (`--check --keep-going`, or `--gate-steps <root> --keep-going`); the
+# default gate stays fail-fast so a red PR still fails in seconds. The bundle
+# gate and the daily full run use it: a train's culprit search keys on the
+# FAILING STEP, so the gate must name every one (bundle-landing design, phase 1).
+#   - a gate-steps.d step that refuses is recorded and the scheduler (serial,
+#     pool or lanes) carries on: _gs_one returns 0 after recording;
+#   - an inline section's `exit <nonzero>` in the gate's own process is
+#     recorded against the current _step name and execution continues after it;
+#   - a PREREQUISITE phase (a build or the type-check: nothing after it means
+#     anything) stays fatal, and is named as such;
+#   - at the end: `red-steps:<n>` and one `red-step:<name>:rc=<n>` line each,
+#     exit 1, and NO gate stamp is written.
+# LIMIT, stated rather than hidden: build.sh runs under `set -e`, so a bare
+# command failing outside an if/||/&& still aborts the gate; that abort is
+# fatal in either mode (the EXIT trap names the phase in the timing record).
+FLAG_KEEP_GOING="${FLAG_KEEP_GOING:-false}"
+_KG_FILE=""
+_KG_PID=$$
+_KG_FATAL_RE="${TILLANDSIAS_GATE_KEEP_GOING_FATAL:-^(Building |Running clippy|target/debug/tillandsias is absent)}"
+_kg_note() { # <name> <rc> — append one red; safe from pool/lane subshells
+    [ -n "$_KG_FILE" ] || return 1
+    printf 'red-step:%s:rc=%s\n' "$1" "$2" >> "$_KG_FILE"
+}
+_kg_summary() { # prints the reds; rc 0 when there were none
+    [ -n "$_KG_FILE" ] && [ -s "$_KG_FILE" ] || return 0
+    echo "red-steps:$(grep -c . "$_KG_FILE") (keep-going: every refusal below ran to its end)"
+    cat "$_KG_FILE"
+    return 1
+}
+_kg_arm() {
+    [ "$FLAG_KEEP_GOING" = true ] || return 0
+    _KG_FILE="$(mktemp "${TMPDIR:-/tmp}/gate-keep-going.XXXXXX")" || { _error "keep-going: no scratch file"; builtin exit 1; }
+    # bash 3.2 (darwin's /bin/bash) has no BASHPID: an exec'd sh's parent IS
+    # this shell (macbookair 2026-11-23). Inline, never in a helper function:
+    # called as $(helper) it would name the command substitution's pid.
+    _KG_PID="${BASHPID:-$(exec sh -c 'echo "$PPID"')}"
+    echo "keep-going:armed (prerequisites stay fatal: $_KG_FATAL_RE)"
+    exit() {
+        local _rc="${1:-$?}"
+        local _me="${BASHPID:-$(exec sh -c 'echo "$PPID"')}"
+        if [ "$_rc" = 0 ] || [ "$_me" != "$_KG_PID" ] || [ -z "$_KG_FILE" ]; then builtin exit "$_rc"; fi
+        if [[ "${_PHASE_NAME:-}" =~ $_KG_FATAL_RE ]]; then
+            _kg_note "${_PHASE_NAME}" "$_rc (prerequisite: fatal)"
+            _kg_summary
+            builtin exit "$_rc"
+        fi
+        _kg_note "${_PHASE_NAME:-unnamed}" "$_rc"
+        _error "keep-going: recorded red step '${_PHASE_NAME:-unnamed}' (rc=$_rc); continuing"
+        return 0
+    }
+}
 # ── Per-phase timing (order 758-jw6v) ────────────────────────────────────────
 #
 # WHY THIS EXISTS. `./build.sh --check` is the largest fixed cost in a
@@ -1521,6 +1573,7 @@ while [[ $# -gt 0 ]]; do
         --release)        FLAG_RELEASE=true ;;
         --test)           FLAG_TEST=true ;;
         --check)          FLAG_CHECK=true ;;
+        --keep-going)     FLAG_KEEP_GOING=true ;;  # ORDER 2253-iher
         --preflight)      FLAG_PREFLIGHT=true ;;
         --floor)          FLAG_FLOOR=true ;;
         --changed)
@@ -3400,6 +3453,7 @@ _gs_one() {
         [ -z "$_gs_plan" ] || _step_kind="$("$_gs_plan" script classify --rc "$_step_rc" --file "$_step_out" 2>/dev/null || echo refused)"
         rm -f "$_step_out"
         _error "${STEP_ERROR:-$_step_path failed} — see the verdict line above (class: ${_step_kind:-refused}; 1384-bqhy)"
+        _kg_note "${_step_file##*/}" "$_step_rc" && return 0  # ORDER 2253-iher: recorded; the scheduler carries on
         return 1
     fi
     rm -f "$_step_out"
@@ -3579,8 +3633,10 @@ if [ -n "$GATE_STEPS_ROOT" ]; then
         _gs_one "${_gs_sel[0]}"
         exit $?
     fi
-    _run_gate_steps "$(cd "$GATE_STEPS_ROOT" && pwd)"
-    exit $?
+    _kg_arm
+    _run_gate_steps "$(cd "$GATE_STEPS_ROOT" && pwd)" || builtin exit $?
+    _kg_summary || builtin exit 1  # ORDER 2253-iher
+    builtin exit 0
 fi
 if [ -n "$GATE_STEP_ONLY" ]; then echo "error: --gate-step needs --gate-steps <root>" >&2; exit 2; fi
 
@@ -4252,6 +4308,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # 765-uti9: emit the preamble duration first — best-effort per the
     # 682-emvg contract, never alters the gate's exit.
     _gate_run_id_begin
+    _kg_arm  # ORDER 2253-iher: no-op unless --keep-going
     timing_emit build-preamble check "${_PREAMBLE_T0:-$(timing_now_ms)}" 0 || true
     _CHECK_T0="$(timing_now_ms)"
     # 1915-gtph: a FAILED gate flushes its phase rows too — the gate that died
@@ -6634,6 +6691,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Relay-preflight tray trigger check passed"
 
+    # ORDER 2282-asxn — relay-preflight runs every check-* decider the diff
+    # touches, derived by gate-changed.sh --checks (#1109, #1135 and #1190 were
+    # evicted on deciders its hand-kept list lacked).
+    _step "Checking relay-preflight's derived decider phase (2282-asxn)..."
+    if ! _run_lua_decider "scripts/lua/test-relay-preflight-derived-checks.lua" 2>&1; then
+        _error "relay-preflight no longer runs the check-* deciders the diff touches, or runs none when it cannot scope the change — see the FAIL lines above (2282-asxn)"
+        exit 1
+    fi
+    _info "Relay-preflight derived-checks fixture passed"
+
     # ORDER 1597-rrku — the mirror's discipline parser and its fixture probe
     # ruby by running it: a forge's `ruby` is a Homebrew shim that exits 127.
     _step "Checking the discipline parser probes ruby by running it (1597-rrku)..."
@@ -7512,6 +7579,10 @@ if [[ "$FLAG_CHECK" == true ]]; then
             _warn "    tillandsias-plan script run scripts/lua/check-windows-only-sources-verified.lua -- --platform macos attest --from <transcript>"
             ;;
     esac
+
+    # ORDER 2253-iher: a keep-going run with any red names them all and stops
+    # HERE, before the stamp: a gate that refused anything never stamps a tree.
+    _kg_summary || builtin exit 1
 
     # Record that the gate passed against THIS exact tree. The pre-push hook
     # verifies this stamp instead of re-running the whole gate: a multi-minute

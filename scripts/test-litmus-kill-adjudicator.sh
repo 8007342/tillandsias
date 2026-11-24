@@ -97,7 +97,7 @@ PLAN_BIN="$(cd "$ROOT" && resolve_plan_binary)" || {
     echo "SKIP: no runnable tillandsias-plan to read the fixture's own metadata (956-llei)"
     exit 0
 }
-case "$PLAN_BIN" in /*) ;; *) PLAN_BIN="$ROOT/${PLAN_BIN#./}" ;; esac
+case "$PLAN_BIN" in /*|[A-Za-z]:*) ;; *) PLAN_BIN="$ROOT/${PLAN_BIN#./}" ;; esac
 
 run_probe() {
     (cd "$tmp" && TILLANDSIAS_PLAN_BIN="$PLAN_BIN" bash "$tmp/scripts/run-litmus-test.sh" kill-adjudicator-probe --phase pre-build --timeout 2 2>&1) || true
