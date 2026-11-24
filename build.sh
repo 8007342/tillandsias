@@ -1835,6 +1835,16 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
         ""|/*|[A-Za-z]:*) ;;
         *) _pf_plan_bin="$SCRIPT_DIR/${_pf_plan_bin#./}" ;;
     esac
+    # ORDER 2279-jbsd (coordinator ruling 2026-11-23): NO BINARY, NO DOOR. Every
+    # guard that does not plainly pass is classified by this binary, so without
+    # it the door judges none of them and still ended partial:, rc 0. Measured on
+    # macbookair: 217 of 335 could-not-run:no-classifier, refused=0, rc 0, with
+    # two refusing guards planted. 3 is could-not-run: the land queue evicts on 1
+    # only. Deadline skips keep 1353-ryhq's partial: and exit 0.
+    if [ -z "$_pf_plan_bin" ]; then
+        echo "could-not-run:preflight:no-classifier — no runnable tillandsias-plan resolves in this checkout, so no guard's answer could be judged and none was started; remedy: cargo build --release -p tillandsias-plan, then re-run ./build.sh --preflight" >&2
+        exit 3
+    fi
     if [ -n "$_pf_plan_bin" ]; then
         _pf_vs="$(cd "$SCRIPT_DIR" && "$_pf_plan_bin" validator-surface-hash --check 2>&1)" || true
         # ORDER 2186-x5kv — A STALE BINARY IS REBUILT ONCE, THEN RE-ASKED. Every
