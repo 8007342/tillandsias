@@ -148,7 +148,6 @@ scripts/test-ensure-cosign.sh
 scripts/test-ensure-toolbox-properties.sh
 scripts/test-env-forward-shared.sh
 scripts/test-envelope-suite-resolves-the-gates-artifact.sh
-scripts/test-exact-version-literal-added.sh
 scripts/test-exec-bits-guard-end-to-end.sh
 scripts/test-expert-accuracy-record-shape.sh
 scripts/test-expert-capability-behaviour-skew.sh

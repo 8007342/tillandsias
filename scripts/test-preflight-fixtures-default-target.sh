@@ -36,9 +36,9 @@
 # ARM 9  NEGATIVE CONTROL for 8: the absolutising Lua fixture is admitted
 #        and counted. Arms 8-9 need a REAL runner (a stub cannot run Lua), so
 #        they copy the caller's plan binary and skip by name without one.
-# ARM 10 (2305-zm8j) A Lua fixture whose subject reads an exported gate variable
+# ARM 11 (2305-zm8j) A Lua fixture whose subject reads an exported gate variable
 #        is refused as gate-env.  PRE-FIX RESULT: FAILS, it was admitted.
-# ARM 11 NEGATIVE CONTROL for 10: the same subject with env_unset is admitted.
+# ARM 12 NEGATIVE CONTROL for 11: the same subject with env_unset is admitted.
 #        Skips by name on a plan binary with no env_unset.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -248,18 +248,18 @@ EOS
     done
     o10="$(by_lpath scripts/lua/test-leaks.lua)"; rc10=$?
     if [ "$rc10" -ne 0 ] && [[ "$o10" == *"refused:fixture-default-target:gate-env:scripts/lua/test-leaks.lua"* ]]; then
-        ok "ARM 10 a Lua fixture red only under a gate's variables is refused"
+        ok "ARM 11 a Lua fixture red only under a gate's variables is refused"
     else
-        bad "ARM 10 expected the leaking Lua fixture refused as gate-env (rc=$rc10): $(printf '%s' "$o10" | tail -2 | tr '\n' ';')"
+        bad "ARM 11 expected the leaking Lua fixture refused as gate-env (rc=$rc10): $(printf '%s' "$o10" | tail -2 | tr '\n' ';')"
     fi
     o11="$(by_lpath scripts/lua/test-drops.lua)"; rc11=$?
     if [[ "$o11" == *"unknown field 'env_unset'"* ]]; then
-        echo "skip:arm-11:plan-binary-without-env_unset"
+        echo "skip:arm-12:plan-binary-without-env_unset"
     elif [ "$rc11" -eq 0 ] && [ "$(printf '%s' "$o11" | tail -1)" = "ok:fixture-default-target:1 checked" ] \
        && [[ "$o11" != *"note:fixture-default-target"* ]]; then
-        ok "ARM 11 the same subject with env_unset is admitted"
+        ok "ARM 12 the same subject with env_unset is admitted"
     else
-        bad "ARM 11 expected the env_unset fixture admitted (rc=$rc11): $(printf '%s' "$o11" | tail -2 | tr '\n' ';')"
+        bad "ARM 12 expected the env_unset fixture admitted (rc=$rc11): $(printf '%s' "$o11" | tail -2 | tr '\n' ';')"
     fi
 fi
 
