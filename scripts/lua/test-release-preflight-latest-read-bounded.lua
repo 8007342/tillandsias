@@ -62,6 +62,12 @@ local function bad(m) out.line("FAIL: " .. m); fail = fail + 1 end
 -- ── ARM 1: BOUNDED ─────────────────────────────────────────────────────────
 fs.write(REL .. "/bin1/gh", "#!/usr/bin/env bash\ntouch \"" .. W .. "/gh-called\"\nsleep 300\n")
 fs.write(REL .. "/bin1/curl", "#!/usr/bin/env bash\nsleep 300\n")
+-- 2278-zhqb: release-preflight also calls `tillandsias --cloud-usage` (its own 120 s cap)
+-- where that binary is on PATH, which put 12-14 s of another read inside this arm on yoga
+-- and none on darwin. It is not this arm's subject, so every host runs a stub that
+-- answers at once, and the arm proves the stub is what ran.
+fs.write(REL .. "/bin1/tillandsias", "#!/usr/bin/env bash\ntouch \"" .. W .. "/usage-stubbed\"\nexit 1\n")
+proc.run({ argv = { "chmod", "+x", W .. "/bin1/tillandsias" }, env = BASE })
 proc.run({ argv = { "chmod", "+x", W .. "/bin1/gh", W .. "/bin1/curl" }, env = BASE })
 local t0 = time.now_ms()
 local r1 = run({ PLAN, "run", "--timeout-ms", "40000", "--", "bash", "scripts/release-preflight.sh", "--verbose" }, W .. "/bin1")
@@ -70,6 +76,7 @@ local out1 = (r1.stdout or "") .. (r1.stderr or "")
 local a1 = ""
 if r1.code == 124 then a1 = a1 .. " still running at the 40 s bound (rc=124);" end
 if fs.exists(REL .. "/gh-called") then a1 = a1 .. " gh was called;" end
+if not fs.exists(REL .. "/usage-stubbed") then a1 = a1 .. " the cloud-usage read was not the stub;" end
 if not (text.contains(out1, "stable-vs-latest: could not read refs/tags/stable") or text.contains(out1, "bounded read timed out")) then
     a1 = a1 .. " no could-not-run note for the latest read;"
 end
