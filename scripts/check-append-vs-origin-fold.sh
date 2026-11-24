@@ -35,6 +35,15 @@
 # identically before and after it: it cannot be the pair that drops a line.
 # Measured cost of the whole-corpus scope: 116 s on pirria (checked:100) and
 # about 2 min on yolanda-windows (162 pairs x 2 folds), for a one-line push.
+# ORDER 2285-cbtf: BARE RUNS NARROW THEMSELVES BY THE SAME ARGUMENT. The folded
+# value of a pair depends on the base and on the fragments naming that pair, so
+# only pairs named by a fragment that DIFFERS from origin can differ: one that is
+# new, changed, or on origin and missing here (its pairs are read from origin's
+# copy, and kept only where a fragment of this tree names them, as the whole
+# corpus did: a branch merely behind origin is not refused for pairs it never
+# wrote). A differing plan file outside plan/index.d and plan/issues, a FRAG_DIR
+# of its own, or a git that cannot answer, falls back to the whole corpus, and
+# `--all` asks for it. Measured on lenovinha: 159 s for 609 pairs, all unchanged.
 # BOUND: past TILLANDSIAS_APPEND_FOLD_DEADLINE seconds (default 300) the check
 # stops and answers could-not-run with exit 3 rather than hanging a push.
 set -uo pipefail
@@ -87,22 +96,69 @@ _is_long_form() {
 # file and misattributes it.
 # 1310-7apk: the push's fragments when given, else the whole corpus.
 _pair_sources=()
-if [ "$#" -gt 0 ]; then
+_narrow=no
+if [ "${1:-}" = --all ]; then
+    _pair_sources=("$FRAG_DIR"/*.yaml)
+elif [ "$#" -gt 0 ]; then
     for _f in "$@"; do
         case "$_f" in *.yaml) [ -f "$_f" ] && _pair_sources+=("$_f") ;; esac
     done
     [ "${#_pair_sources[@]}" -gt 0 ] || { echo "ok:append-vs-origin:checked:0"; exit 0; }
 else
     _pair_sources=("$FRAG_DIR"/*.yaml)
+    if [ "$FRAG_DIR" = plan/index.d ] \
+        && _differs="$(git diff --name-only --no-renames "$TRUNK_REF" -- plan 2>/dev/null)" \
+        && _untracked="$(git ls-files --others -- plan 2>/dev/null)"; then
+        _narrow=yes
+        _changed=()
+        while IFS= read -r _f; do
+            case "$_f" in
+                ""|plan/issues/*) ;;
+                plan/index.d/*.yaml) _changed+=("$_f") ;;
+                plan/index.d/*) ;;
+                *) _narrow=no ;;
+            esac
+        done <<EOF
+$_differs
+$_untracked
+EOF
+        # Nothing differs: the two folds are the same fold.
+        if [ "$_narrow" = yes ] && [ "${#_changed[@]}" -eq 0 ]; then
+            echo "ok:append-vs-origin:checked:0"; exit 0
+        fi
+    fi
 fi
-pairs="$(awk '
+
+TMP="$(mktemp -d)" || { echo "skip:append-vs-origin:no-tmpdir"; exit 0; }
+trap 'rm -rf "$TMP"' EXIT
+git archive "$TRUNK_REF" plan/ 2>/dev/null | tar -x -C "$TMP" 2>/dev/null || {
+    echo "skip:append-vs-origin:cannot-extract-origin"; exit 0; }
+
+if [ "$_narrow" = yes ]; then
+    _pair_sources=()
+    for _f in "${_changed[@]}"; do
+        [ -f "$_f" ] && _pair_sources+=("$_f")
+        # Origin's copy too: a pair it named may be one this tree no longer does.
+        [ -f "$TMP/$_f" ] && _pair_sources+=("$TMP/$_f")
+    done
+fi
+_pairs_of() {
+    [ "$#" -gt 0 ] || return 0  # awk with no file reads stdin
+    awk '
     FNR == 1 { in_s = 0; pid = ""; fld = "" }
     /^status:[[:space:]]*$/   { in_s = 1; pid = ""; fld = ""; next }
     /^[a-z_]+:[[:space:]]*$/  { in_s = 0; pid = ""; fld = "" }
     in_s && /^  - packet_id:/ { pid = $3; fld = ""; next }
     in_s && /^    field:/     { fld = $2; if (pid != "") print pid "\t" fld }
-' "${_pair_sources[@]}" 2>/dev/null | sort -u)"
+' "$@" 2>/dev/null
+}
+[ "${#_pair_sources[@]}" -gt 0 ] || { echo "ok:append-vs-origin:checked:0"; exit 0; }
+pairs="$(_pairs_of "${_pair_sources[@]}" | sort -u)"
 
+if [ "$_narrow" = yes ] && [ -n "$pairs" ]; then
+    pairs="$(awk -F'\t' 'NR == FNR { want[$0] = 1; next } ($0 in want)' \
+        <(printf '%s\n' "$pairs") <(_pairs_of "$FRAG_DIR"/*.yaml | sort -u))"
+fi
 [ -n "$pairs" ] || { echo "ok:append-vs-origin:checked:0"; exit 0; }
 
 # ORDER 1458-8y85. DELIBERATE-REPLACE ACKNOWLEDGEMENTS in this push's own
@@ -119,11 +175,6 @@ acks="$(awk '
     in_s && /^    field:/     { fld = $2; next }
     in_s && /^    replaces_sha256:/ { v = $2; gsub(/"/, "", v); if (pid != "" && fld != "") print pid "\t" fld "\t" v }
 ' "${_pair_sources[@]}" 2>/dev/null | sort -u)"
-
-TMP="$(mktemp -d)" || { echo "skip:append-vs-origin:no-tmpdir"; exit 0; }
-trap 'rm -rf "$TMP"' EXIT
-git archive "$TRUNK_REF" plan/ 2>/dev/null | tar -x -C "$TMP" 2>/dev/null || {
-    echo "skip:append-vs-origin:cannot-extract-origin"; exit 0; }
 
 checked=0; refused=0; admitted=0
 _deadline="${TILLANDSIAS_APPEND_FOLD_DEADLINE:-300}"
