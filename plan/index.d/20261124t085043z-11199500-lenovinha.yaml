@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: two-ungated-fixtures-are-red-and-evict-any-pr-that-touches-them
+    field: status
+    value: blocked
+    ts: "2026-11-24T08:50:43Z"
+    host: lenovinha
+
+events:
+  - packet_id: two-ungated-fixtures-are-red-and-evict-any-pr-that-touches-them
+    event:
+      type: note
+      ts: "2026-11-24T08:50:43Z"
+      host: lenovinha
+      summary: |-
+        queued as PR #1443 at 2e22a8fb5. Darwin budget now judged live: 142s <= 200s, door=3 benched=52 (macbookair, e49301129), which supersedes the not-yet-judged note.
