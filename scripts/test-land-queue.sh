@@ -2175,7 +2175,7 @@ fi
 _sh60="$TMP/shadow60.sh"
 cat > "$_sh60" <<'SH'
 [ -e dirt-from-shadow ] && dirty=dirty || dirty=clean
-echo "shadow gates=$(grep -c . "@GATES@") nice=$(nice) $dirty" >> "@SEEN@"
+echo "shadow gates=$(grep -c . "@GATES@") nice=$(nice) $dirty shared=${TILLANDSIAS_SHARED_TARGET:-on}" >> "@SEEN@"
 echo dirt > dirt-from-shadow; echo dirt >> seed-dirt
 if [ -e c83.txt ]; then echo "heavy:guard:x fixtures=9 crates=28 changed=1"; exit 10; fi
 if [ -e c82.txt ]; then echo "select:intake fixtures=6/9 deferred=1 crates=0/28 changed=1 base=x"; exit 1; fi
@@ -2204,7 +2204,7 @@ grep -Eq '^shadow:accept:81 tier=intake selected=5/9 crates=2 intake_s=[0-9]+ in
 grep -Eq '^shadow:accept:82 tier=intake selected=6/9 crates=0 .* intake=red gate=red ' <<<"$l60" || _b60="$_b60 a82"
 grep -Eq '^shadow:accept:83 tier=heavy selected=-/9 crates=- .* intake=- gate=green ' <<<"$l60" || _b60="$_b60 a83"
 [ "$(grep -c "^shadow:accept:" <<<"$l60")" -eq 3 ] && grep -Eq "^shadow:tree $TMP/arm60a/shtree size_mb=[0-9]+$" <<<"$l60" && grep -q '^land:81 ' <<<"$out60" && grep -q '^land:83 ' <<<"$out60" && grep -q '^evict:land-queue:82' <<<"$out60" || _b60="$_b60 a-landing"
-[ "$(grep -c 'gates=3 nice=10 clean$' "$TMP/arm60a/seen")" -eq 3 ] || _b60="$_b60 b-order"
+[ "$(grep -c 'gates=3 nice=10 clean shared=off$' "$TMP/arm60a/seen")" -eq 3 ] || _b60="$_b60 b-order"
 [ -z "$(git -C "$WORK_DIR" status --porcelain --untracked-files=no)" ] && [ ! -e "$WORK_DIR/dirt-from-shadow" ] && [ ! -e "$WORK_DIR/target/shadow-intake" ] && [ -e "$TMP/arm60a/shtree/.git" ] || _b60="$_b60 b-isolation"
 st60="$(ARM_SHADOW=x ARM_SHADOW_LOG="$TMP/arm60a/shadow.log" run_queue --status)"
 grep -Eq "^queue:shadow-intake log=$TMP/arm60a/shadow.log lines=3$" <<<"$st60" || _b60="$_b60 h-status"

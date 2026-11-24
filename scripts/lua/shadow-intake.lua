@@ -92,6 +92,10 @@ for i = 1, #arg do
                     if need and not staged then o = "no router sidecar in " .. ROOT else
                     local e = {}
                     for k, v in pairs(BASE) do e[k] = v end
+                    -- ITS OWN target/, never the shared one (1807-shtg): measured on yoga, a shadow
+                    -- built into <main checkout>/target and HELD ITS LOCK, so on the lander it would
+                    -- overwrite the gate's artifacts (freshness is mtime-only) or make it wait.
+                    e.TILLANDSIAS_SHARED_TARGET = "off"
                     if PLAN ~= "" then e.TILLANDSIAS_PLAN_BIN = PLAN end
                     -- A stop (or this runner dying) ends the build MID-PR, the way the bound does:
                     -- TERM to `timeout`, whose group holds the toolbox wrapper, which ends the
