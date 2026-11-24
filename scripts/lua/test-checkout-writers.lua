@@ -18,6 +18,15 @@
 --   7 STALE      a declared file that no longer writes: stale-declared
 --   8 COMMENT    a commented-out writer is not one
 --   9 EMPTY      no scripts: could-not-run, exit 3
+-- THE LUA POPULATION (2287-mg7v):
+--  12 PRE-FIX   the three real Lua writers of 2026-11-24, as they were at LUA_PRE_REV, are each
+--               counted by path (two hold the path in a local); as they are now, none is
+--  13 SAFE      fs.write under target/, a kit .rel dir, and an assignment inside an embedded
+--               long string are not writers
+--  14 UNRESOLVED a function parameter is counted apart and named, never refused, never safe
+--  15 DECLARED  a declared Lua writer needs artifacts=: without it unsafe, with it listed
+--  16 NUMBERS   the line names how many .sh and how many .lua were scanned
+--  17 MUTANT    with local-following removed, the two local-held writers go uncounted
 -- THE DOOR KILL, in one run, on scripts/test-litmus-step-pipefail.sh: the
 -- pre-fix file (git show PRE_REV, the trunk commit before the move) and the
 -- file as it stands. Each is held in ARM 3, while its runner copy exists, by a
@@ -58,8 +67,9 @@ end
 local REL = "target/plan-scratch/checkout-writers-" .. time.iso_utc() .. "-" .. tostring(math.random(100000, 999999))
 fs.mkdir(REL)
 
-local failed = {}
+local failed, ran = {}, 0
 local function arm(name, cond, got)
+    ran = ran + 1
     if cond then out.line("ok:   " .. name) else
         out.line("FAIL: " .. name .. " — got: " .. got)
         failed[#failed + 1] = name
@@ -149,6 +159,48 @@ fs.mkdir(REL .. "/empty/x")
 rc, o = scan(REL .. "/empty")
 arm("9 EMPTY no scripts is could-not-run", rc == 3 and o:find("could-not-run:checkout-writers:empty-population", 1, true) ~= nil, rc .. " " .. o)
 
+-- ── the Lua population ──────────────────────────────────────────────────────
+local LUA_PRE_REV = "5eaa4fe3d"
+local THREE = { "test-fixtures-ignore-inherited-git-dir", "test-litmus-verdict-reads-stdout-only", "test-gate-keep-going" }
+local function count(o, what) local n = 0; for _ in o:gmatch(what) do n = n + 1 end; return n end
+local LW = ":lua%-fixture%-writes%-the%-checkout"
+local pre3, now3, have = { ["x.sh"] = "echo x\n" }, { ["x.sh"] = "echo x\n" }, 0
+for _, f in ipairs(THREE) do
+    local r = proc.run({ argv = { "git", "show", LUA_PRE_REV .. ":scripts/lua/" .. f .. ".lua" }, cwd = ROOT, timeout_ms = 30000 })
+    if r.code == 0 then have = have + 1; pre3[f .. ".lua"] = r.stdout end
+    now3[f .. ".lua"] = fs.read("scripts/lua/" .. f .. ".lua")
+end
+local dpre = root_with("lua-pre", pre3)
+if have ~= 3 then
+    out.line("not run: 12 and 17 need " .. LUA_PRE_REV .. " in this clone (a shallow one lacks it)")
+else
+    rc, o = scan(dpre)
+    arm("12 PRE-FIX the three real writers are each counted by path", rc == 1 and count(o, LW) == 3, rc .. " " .. o)
+    rc, o = scan(root_with("lua-now", now3))
+    arm("12 PRE-FIX as they are now none is", rc == 0 and o:find(":lua=3:writers=0:", 1, true) ~= nil, rc .. " " .. o)
+end
+rc, o = scan(root_with("lua-safe", { ["x.sh"] = "echo x\n", ["test-s.lua"] =
+    "local REL = \"target/plan-scratch/a-\" .. n\nfs.write(REL .. \"/b\", x)\nlocal W = T:scratch()\nfs.write(W.rel .. \"/c\", [[\nd=scripts/x\n  d = \"scripts/y\"\n]])\nlocal d = REL .. \"/k\"\nfs.write(d .. \"/e\", x)\n-- fs.write(\"scripts/old.sh\", x)\n" }))
+arm("13 SAFE target/, a kit dir and an embedded long string are not writers", rc == 0 and o:find(":lua=1:writers=0:", 1, true) ~= nil and o:find("lua-unresolved=0", 1, true) ~= nil, rc .. " " .. o)
+rc, o = scan(root_with("lua-unres", { ["x.sh"] = "echo x\n", ["test-u.lua"] = "local function w(p) fs.write(p, x) end\n" }))
+arm("14 UNRESOLVED a parameter is counted apart and named", rc == 0 and o:find("lua-unresolved=1", 1, true) ~= nil and o:find("note:checkout-writers:lua-unresolved:test-u.lua", 1, true) ~= nil, rc .. " " .. o)
+local LUAW = { ["x.sh"] = "echo x\n", ["test-d.lua"] = "local FIX = \"docs/zz-probe.md\"\nfs.write(FIX, x)\n" }
+d = REL .. "/lua-decl"
+root_with("lua-decl", LUAW, d .. "/scripts/test-d.lua it reads the live dir\n")
+rc, o = scan(d)
+arm("15 DECLARED without artifacts= it is unsafe", rc == 1 and o:find("test-d.lua:lua-writer-declared-without-artifacts", 1, true) ~= nil, rc .. " " .. o)
+root_with("lua-decl", LUAW, d .. "/scripts/test-d.lua artifacts=zz-probe* it reads the live dir\n")
+rc, o = scan(d)
+arm("15 DECLARED with artifacts= it is listed", rc == 0 and o:find("test-d.lua:kept-in-checkout:it reads the live dir", 1, true) ~= nil, rc .. " " .. o)
+arm("16 NUMBERS the line names both populations", o:find("scanned=1:lua=1:", 1, true) ~= nil, o)
+if have == 3 then
+    local msrc, nm = fs.read(SUBJECT_REL):gsub("in ipairs%(assigns%[name%] or {}%) do", "in ipairs({}) do", 1)
+    fs.write(REL .. "/mutant.lua", msrc)
+    local r = proc.run({ argv = { PLAN, "script", "run", REL .. "/mutant.lua" }, cwd = ROOT, timeout_ms = 60000,
+        env = { TILLANDSIAS_CHECKOUT_WRITERS_SCAN_DIR = dpre .. "/scripts", TILLANDSIAS_CHECKOUT_WRITERS_DECLARED = dpre .. "/declared.txt" } })
+    arm("17 MUTANT without following locals the writers go uncounted", nm == 1 and count(r.stdout or "", LW) < 3, "nm=" .. nm .. " " .. tostring(r.stdout))
+end
+
 -- ── the door kill ──────────────────────────────────────────────────────────
 local GUARD = "scripts/test-litmus-step-pipefail.sh"
 local function pinned(body)
@@ -215,4 +267,4 @@ proc.run({ argv = { "rm", "-rf", ROOT .. "/" .. REL }, timeout_ms = 30000 })
 if #failed > 0 then
     verdict.emit("violation:checkout-writers-fixture:" .. #failed .. "-failed", 1)
 end
-verdict.ok("checkout-writers-fixture", "13 arms")
+verdict.ok("checkout-writers-fixture", ran .. " arms")
