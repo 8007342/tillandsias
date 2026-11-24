@@ -172,23 +172,17 @@ end
 -- Start a guest and wait until the in-guest command is actually RUNNING. A
 -- tray killed before the VM boots orphans nothing, and would score green for
 -- the wrong reason.
--- THE LIVE TRAY LEAVES THE RUNNER'S PROCESS GROUP. proc.spawn makes its child a
--- group leader and kills the GROUP when the leader exits; a helper left in the
--- tray's group would then die with the SIGKILLed tray, and arm 1 would read
--- green on exactly the leak it exists to catch (measured with a stub whose
--- holder outlives the tray: the .sh reds, a same-group port went green). The
--- .sh's `&` reaps nothing. A bare setsid is NOT enough (measured): the new
--- group's id is the leader's own pid, the very group the runner then kills.
--- So perl FORKS, the child setsid()s into a group the spawned leader never
--- owned and execs the tray, and the parent writes the child's pid and exits.
--- perl ships on every macOS, and this point is past the darwin check.
+-- THE LIVE TRAY IS SPAWNED WITH detach = true (2294-dtch). The runner reaps a
+-- run's process group when its leader exits; a helper left in the tray's group
+-- would die with the SIGKILLed tray, and arm 1 would read green on exactly the
+-- leak it exists to catch (measured with a stub whose holder outlives the
+-- tray: the .sh reds, an undetached port went green). detach leaves the group
+-- unreaped on exit, and this file's cleanup kills every holder itself. The
+-- wrapper only records the pid and sends the tray's output to a log the loop
+-- below can read while the tray still runs; `exec` keeps the pid the tray's.
 local function start_live_guest()
-    fs.write(WORK_REL .. "/live.sh",
-        'exec /usr/bin/perl -e \'use POSIX; my ($d, @cmd) = @ARGV; my $p = fork; die unless defined $p;\n'
-        .. 'if ($p) { open(my $f, ">", "$d/live.pid") or die; print $f "$p\\n"; close $f; exit 0 }\n'
-        .. 'POSIX::setsid(); open(STDIN, "<", "/dev/null"); open(STDOUT, ">", "$d/live.log"); open(STDERR, ">&", \\*STDOUT);\n'
-        .. 'exec @cmd or die\' "$1" "$2" --exec-guest "sleep 600"\n')
-    LIVE_H = proc.spawn({ argv = { fixture.posix_shell(), WORK .. "/live.sh", WORK, TRAY }, timeout_ms = 900000 })
+    fs.write(WORK_REL .. "/live.sh", 'echo "$$" > "$1/live.pid"\nexec "$2" --exec-guest "sleep 600" > "$1/live.log" 2>&1 </dev/null\n')
+    LIVE_H = proc.spawn({ argv = { fixture.posix_shell(), WORK .. "/live.sh", WORK, TRAY }, timeout_ms = 900000, detach = true })
     for _ = 1, 60 do
         if not LIVE_PID and fs.exists(WORK_REL .. "/live.pid") then
             LIVE_PID = (fs.read(WORK_REL .. "/live.pid") or ""):match("(%d+)")
