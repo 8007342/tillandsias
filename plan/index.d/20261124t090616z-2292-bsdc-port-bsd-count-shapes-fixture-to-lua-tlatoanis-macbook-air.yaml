@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-24. Coordinator queue item (2): darwin-relevant Lua-first .sh ports.
+packets:
+- packet_id: port-test-bsd-count-shapes-to-lua
+  order: 2292-bsdc
+  status: implemented
+  kind: debt
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [shell-to-lua, macos, fixtures, portability]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 1
+  title: 'Port scripts/test-bsd-count-shapes.sh (order 1454-ssg3, gate step 278) to scripts/lua/test-bsd-count-shapes.lua'
+  context: >-
+    The fixture reproduces the BSD userland's count shapes (grep -lc prints file:N and file; wc -l left-pads) with stub grep and wc on PATH,
+    so a gate count cannot regress on darwin while Linux stays green. The port keeps the four arms, their text and the verdict grammar.
+    The stubs and the commands under test stay bash files, because a shell's view of the userland is the subject. The runner refuses bash -c,
+    so each command runs from a scratch file. The litmus yaml is read with yaml.parse, so the .sh's skip:…:no-plan-binary path is gone.
+  exit_criteria:
+  - 'Lua and shell print the same arms, verdict and rc, green and against the pre-fix grep -lc yaml.'
+  - 'Step 278 runs the .lua; the .sh and its shell-decider and pipe-site floor lines are gone.'
+  verifiable_closure: 'Parity in the PR; ./build.sh --gate-steps . --gate-step 278 green on darwin.'
+  next_action: >-
+    Implemented. Measured on darwin: Lua ok:bsd-count-shapes:4/4 rc 0, shell 4/4 rc 0; with the litmus yaml mutated back to grep -lc,
+    both print fail:bsd-count-shapes:2/4 (arms 2 and 3, FAIL:consumers=4) rc 1. ./build.sh --gate-steps . --gate-step 278: rc 0.
+    check-shell-ratchet ok, check-gate-step-inputs ok, check-gate-step-regimes ok.
+  provenance: 'tlatoanis-macbook-air 2026-11-24, on the coordinator''s (macuahuitl-fedora) queue item (2).'
+  events:
+  - {type: filed, ts: '2026-11-24T09:06:16Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}
