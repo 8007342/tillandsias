@@ -136,7 +136,7 @@ local function settle(name, d1, d2, d3)
     local d = REL .. "/settled-" .. name
     fs.mkdir(d); fs.write(d .. "/n", "0")
     fs.write(d .. "/1", d1); fs.write(d .. "/2", d2 or ""); fs.write(d .. "/3", d3 or "")
-    return text.trim(proc.run({ argv = { "bash", ROOT .. "/" .. REL .. "/settled.sh" }, env = { D = ROOT .. "/" .. d }, timeout_ms = 10000 }).stdout or "")
+    return text.trim(proc.run({ argv = { require("common.fixture").posix_shell(), ROOT .. "/" .. REL .. "/settled.sh" }, env = { D = ROOT .. "/" .. d }, timeout_ms = 10000 }).stdout or "")
 end
 local function has(s, w) return s:find(w, 1, true) ~= nil end
 local s1 = settle("inside", door(140, 0, QUIET))
