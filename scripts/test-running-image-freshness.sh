@@ -41,11 +41,11 @@ trap cleanup EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
-command -v podman >/dev/null 2>&1 || { echo "SKIP: podman not available"; exit 0; }
+command -v podman >/dev/null 2>&1 || { echo "skip:running-image-freshness:no-podman (named skip, not a pass)"; exit 0; }
 [ -x "$GATE" ] || fail "gate not executable: $GATE"
 
 if ! podman image exists localhost/tillandsias-git:latest 2>/dev/null; then
-    echo "SKIP: localhost/tillandsias-git:latest not built (run ./build-git.sh first)"
+    echo "skip:running-image-freshness:no-git-image — ./build-git.sh builds it (named skip, not a pass)"
     exit 0
 fi
 
@@ -76,7 +76,10 @@ echo "case 2 ok: absent container skips, --require-running fails loud"
 # --- case 3: NEGATIVE CONTROL — a stale running image must be detected ------
 # LABEL (not RUN) so the derived image needs no write access; the image runs as
 # a non-root user and any RUN touching / would fail.
-printf 'FROM localhost/tillandsias-git:latest\nLABEL tillandsias.freshness.fixture="stale"\n' \
+# 2272-cuxh: the source-digest label is set HERE, not inherited. Only the Rust
+# image_builder writes it; build-image.sh does not, so on a host whose :latest
+# it built (lenovinha) there was nothing to inherit and this case died in setup.
+printf 'FROM localhost/tillandsias-git:latest\nLABEL tillandsias.freshness.fixture="stale" io.tillandsias.image.source-digest="sha256:%s"\n' "$STALE_HASH" \
     > "$WORK/Containerfile"
 podman build -q -t "$STALE_TAG" "$WORK" >/dev/null 2>&1 \
     || fail "case3 setup: could not build the synthetic stale image"
@@ -98,22 +101,31 @@ set +e
 OUT="$("$GATE" --name "$C_NAME" git 2>&1)"; RC=$?
 set -e
 [ "$RC" -eq 1 ] || fail "case3: gate did not detect a stale running image (exit $RC). Output: $OUT"
-printf '%s' "$OUT" | grep -q "STALE" \
+grep -q "STALE" <<<"$OUT" \
     || fail "case3: gate exited 1 but did not name the staleness. Output: $OUT"
-printf '%s' "$OUT" | grep -q "$C_NAME" \
+grep -q "$C_NAME" <<<"$OUT" \
     || fail "case3: gate did not name the offending container. Output: $OUT"
 echo "case 3 ok: stale running image is DETECTED and named"
 
 # --- case 4: the current image passes ---------------------------------------
-podman rm -f "$C_NAME" >/dev/null 2>&1 || true
-podman run -d --name "$C_NAME" --entrypoint sleep localhost/tillandsias-git:latest 300 >/dev/null 2>&1 \
-    || fail "case4 setup: could not start a container from the current image"
-
-set +e
-OUT="$("$GATE" --name "$C_NAME" git 2>&1)"; RC=$?
-set -e
-[ "$RC" -eq 0 ] || fail "case4: current image should pass, got exit $RC. Output: $OUT"
-echo "case 4 ok: current running image passes"
+# 2272-cuxh: only where :latest IS this checkout's image. Elsewhere a stale
+# :latest (any branch that edits images/git/) read as a red gate, and one with
+# no hash tag passed as indeterminate, so "current" was never asked.
+EXPECTED="$("$ROOT/scripts/hash-image-sources.sh" git "$ROOT/images/git" "$ROOT")" || fail "case4 setup: cannot hash images/git"
+LATEST_TAGS="$(podman inspect -f '{{range .RepoTags}}{{.}} {{end}}' localhost/tillandsias-git:latest 2>/dev/null || true)"
+if [[ " $LATEST_TAGS " != *" localhost/tillandsias-git:$EXPECTED "* ]]; then
+    echo "not-run:running-image-freshness:case4 — :latest is not this checkout's image (${EXPECTED:0:12}); ./build-git.sh builds it"
+else
+    podman rm -f "$C_NAME" >/dev/null 2>&1 || true
+    podman run -d --name "$C_NAME" --entrypoint sleep localhost/tillandsias-git:latest 300 >/dev/null 2>&1 \
+        || fail "case4 setup: could not start a container from the current image"
+    set +e
+    OUT="$("$GATE" --name "$C_NAME" git 2>&1)"; RC=$?
+    set -e
+    [ "$RC" -eq 0 ] || fail "case4: current image should pass, got exit $RC. Output: $OUT"
+    [[ "$OUT" == *"ok: $C_NAME runs current"* ]] || fail "case4: the gate exited 0 without saying current. Output: $OUT"
+    echo "case 4 ok: current running image passes"
+fi
 
 # --- case 5: label-only identity is INDETERMINATE, never stale ---------------
 # Tag absence does not imply stale content: build-image.sh prunes tags on later
@@ -122,7 +134,7 @@ echo "case 4 ok: current running image passes"
 # the evidence supports — the same error as claiming PASS on ambiguous
 # evidence, just in the safer direction.
 podman rm -f "$C_NAME" >/dev/null 2>&1 || true
-printf 'FROM localhost/tillandsias-git:latest\nLABEL tillandsias.freshness.fixture="unidentified"\n' \
+printf 'FROM localhost/tillandsias-git:latest\nLABEL tillandsias.freshness.fixture="unidentified" io.tillandsias.image.source-digest="sha256:%s"\n' "$STALE_HASH" \
     > "$WORK/Containerfile"
 podman build -q -t "$UNIDENTIFIED_TAG" "$WORK" >/dev/null 2>&1 \
     || fail "case5 setup: could not build the unidentified image"
@@ -139,9 +151,9 @@ set +e
 OUT="$("$GATE" --name "$C_NAME" git 2>&1)"; RC=$?
 set -e
 [ "$RC" -eq 0 ] || fail "case5: an unidentifiable image must not be reported as drift (exit $RC). Output: $OUT"
-printf '%s' "$OUT" | grep -qi "indeterminate" \
+grep -qi "indeterminate" <<<"$OUT" \
     || fail "case5: expected an indeterminate verdict. Output: $OUT"
-printf '%s' "$OUT" | grep -q "STALE" \
+grep -q "STALE" <<<"$OUT" \
     && fail "case5: must NOT claim STALE without positive evidence. Output: $OUT"
 echo "case 5 ok: unidentifiable image is INDETERMINATE, not stale"
 
