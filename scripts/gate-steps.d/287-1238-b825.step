@@ -10,7 +10,7 @@
 #
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking local builds label a stale CalVer date and never write VERSION (1238-b825)"
-STEP_SCRIPT="scripts/test-build-version-label.sh"
+STEP_LUA="scripts/lua/test-build-version-label.lua"
 STEP_ERROR="a local build path again stamps VERSION's stale date silently, writes VERSION, or labels a release build (1238-b825); see which arm failed above"
 STEP_OK="local builds label stale CalVer dates; VERSION untouched; releases verbatim"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:build-version-label-fixture:7/7"
@@ -20,4 +20,4 @@ STEP_LANES="checkout"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/build-macos-tray.sh scripts/lib-build-version.sh scripts/test-build-version-label.sh"
+STEP_READS="scripts/build-macos-tray.sh scripts/lib-build-version.sh scripts/lua/test-build-version-label.lua"
