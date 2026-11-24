@@ -43,10 +43,10 @@ local OWN = sh('printf "%s" "$PPID"').stdout
 local function take()
     return sh([[mkdir "$1" 2>/dev/null && { printf '%s' "$2" > "$1/pid"; exit 0; }
 p="$(cat "$1/pid" 2>/dev/null)"; [ -n "$p" ] && kill -0 "$p" 2>/dev/null && exit 1
-rm -f "$1/pid" "$1/stop"; rmdir "$1" 2>/dev/null; mkdir "$1" 2>/dev/null && printf '%s' "$2" > "$1/pid"]], { LOCK, OWN }).code == 0
+rm -f "$1/pid" "$1/stop" "$1/current"; rmdir "$1" 2>/dev/null; mkdir "$1" 2>/dev/null && printf '%s' "$2" > "$1/pid"]], { LOCK, OWN }).code == 0
 end
 -- Never a recursive rm: the lock's two known files and an empty dir, nothing else.
-local function release() run({ "rm", "-f", LOCK .. "/pid", LOCK .. "/stop" }); run({ "rmdir", LOCK }) end
+local function release() run({ "rm", "-f", LOCK .. "/pid", LOCK .. "/stop", LOCK .. "/current" }); run({ "rmdir", LOCK }) end
 local got = take()
 while not got and secs() < PR_S do sh("sleep 2"); got = take() end
 -- Fully outside the checkout (coordinator 2026-11-24), so no scan or archive copy of it
@@ -79,6 +79,7 @@ for i = 1, #arg do
         if why then
             log("unmeasured:shadow:" .. n .. ":" .. why .. " gate=" .. g .. " via=" .. via .. " base=" .. b:sub(1, 9) .. " head=" .. h:sub(1, 9))
         else
+            run({ "tee", LOCK .. "/current" }, { stdin = n })
             local t, tier, verd, rc, o = time.now_ms(), "intake", "could-not-run", "-", ""
             if tree_at(b) then
                 if run({ "git", "-C", TREE, "-c", "user.name=land-queue", "-c", "user.email=land-queue@localhost", "merge", "-q", "--no-ff", "--no-edit", h }).code ~= 0 then

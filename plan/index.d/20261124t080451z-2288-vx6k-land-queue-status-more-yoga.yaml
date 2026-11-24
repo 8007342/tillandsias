@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: land-queue-status-names-bundle-next-and-shadow
+    order: "2288-vx6k"
+    status: implemented
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [land-queue, observability]
+    estimated_hours: 3
+    owned_files:
+      - scripts/land-queue.sh
+      - scripts/lua/shadow-intake.lua
+      - scripts/test-land-queue.sh
+    title: "land-queue.sh --status also names the open bundle, what is next and the shadow; --status --pr N answers for one PR"
+    context: |
+      Bundle landing phase 2 prep. The first line is unchanged. After it come queue:next (the order left), queue:bundle
+      (the open train, or the last bundles.log line) and queue:shadow (idle, running or stopping, and its PR).
+      --pr N answers gating, in-train, waiting with its position, not in this run, or idle; it always implies --status.
+      The same lines are the body of the commit on refs/tillandsias/queue/status, without local paths. Read-only.
+    exit_criteria:
+      - "scripts/test-land-queue.sh ARM 61 green, asked from inside a real gate; mutants for --pr running the queue, a published local path, members listed as next and a closed train shown open each red it."
+    unscoreable: "fixture-scored: scripts/test-land-queue.sh ARM 61 is the pin; no litmus covers the land queue"
+    provenance: "coordinator macuahuitl-fedora 2026-11-24, queue item 3"
+    related: [2248-jihs, 2276-fnhy, 2285-haa6]
+    events:
+      - {type: implemented, ts: "2026-11-24T08:04:51Z", host: yoga, summary: "implemented on work/2288-vx6k; test-land-queue 81/81"}
