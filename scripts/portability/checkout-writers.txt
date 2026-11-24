@@ -5,3 +5,5 @@
 # must also have 1587-qqzs's shape: an EXIT trap, a TERM trap that exits, and
 # long steps as `cmd & wait $!`. A line whose file is gone or no longer writes
 # scratch into the checkout is refused as stale.
+scripts/lua/test-cheatsheet-source-anchors.lua artifacts=zz-anchor-fixture-* its subject reads the live cheatsheets/ dir, so the probe sheet must be there (2287-mg7v: found by the Lua scan)
+scripts/lua/test-ghost-trace-yaml-anchoring.lua artifacts=zz-ghost-anchor-fixture-* its subject reads the live openspec/litmus-tests/ dir, so the probe yaml must be there (2287-mg7v: found by the Lua scan)

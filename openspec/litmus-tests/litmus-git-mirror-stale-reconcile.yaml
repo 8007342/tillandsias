@@ -29,7 +29,7 @@ critical_path:
     expected_behavior: "ok: safe-refspec"
 
   - step: "offline fixture reproduces the stranding and proves the reconcile heals it without clobbering un-relayed agent heads"
-    command: "scripts/test-git-mirror-stale-reconcile.sh >/dev/null && echo 'ok: stale-reconcile-fixture-pass'"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-git-mirror-stale-reconcile.lua >/dev/null && echo 'ok: stale-reconcile-fixture-pass'"
     timeout_ms: 30000
     expected_behavior: "ok: stale-reconcile-fixture-pass"
 
