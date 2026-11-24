@@ -8,3 +8,4 @@ STEP_ERROR="a required host tool is missing, or a required-tool claim is unfalsi
 STEP_OK="Host-tools check passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin PASS host-tools 24/24 at 213905e79 (fleet-run)"
 STEP_READS="scripts/test-host-tools.sh"
+STEP_SECOND_REGIME="yolanda 2026-11-23 msys PASS host-tools 20/20 at c9f4464cb (fleet-run)"

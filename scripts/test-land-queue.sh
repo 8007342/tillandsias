@@ -109,7 +109,9 @@ candidate() {
 # this fixture through the gate, and every one-at-a-time arm then ran as a train
 # (macuahuitl run 26: ARM 1b/2/17a/22/30/34 red). Arms set ARM_* instead.
 run_queue() {
-    ( cd "$WORK_DIR" && env \
+    ( cd "$WORK_DIR" && env -u TILLANDSIAS_LAND_QUEUE_BUNDLE_LOG -u TILLANDSIAS_LAND_QUEUE_HEAVY_PROBE \
+        ${ARM_HEAVY_PROBE:+"TILLANDSIAS_LAND_QUEUE_HEAVY_PROBE=$ARM_HEAVY_PROBE"} \
+        TILLANDSIAS_BUNDLE_HEAVY_MAX="${ARM_HEAVY_MAX:-2}" \
         TILLANDSIAS_LAND_QUEUE_GH="$GH_BIN" \
         TILLANDSIAS_LAND_QUEUE_GATE="bash $GATE_BIN" \
         TILLANDSIAS_LAND_QUEUE_PREFLIGHT="${PREFLIGHT_CMD:-}" \
@@ -1495,6 +1497,44 @@ else
 $out32d"
 fi
 
+# ARM 32e-g (2277-7trt): red-twice:<test>: says the step runner already ran that
+# step twice on this tree. (e) candidate-only red: no identical-tree re-run, the
+# trunk check still gates once and the candidate is evicted (2 gates, not 3).
+# (f) trunk fails it too: the queue holds, nobody is evicted (2 gates). (g)
+# CONTROL: another untouched red beside it still re-runs (3 gates).
+arm32rt() { # <name> <order> <num> <gate body, sees candidate file rt.txt>
+    scaffold "$1"
+    mkdir -p "$WORK_DIR/scripts"; echo "# $1" > "$WORK_DIR/scripts/test-hs.sh"
+    git -C "$WORK_DIR" add -A; git -C "$WORK_DIR" commit -q -m hs; git -C "$WORK_DIR" push -q origin linux-next
+    candidate "$1" "$2" rt.txt A
+    printf '[{"number":%s,"headRefName":"work/%s","isDraft":false}]\n' "$3" "$2" > "$GH_PRS"
+    printf '#!/usr/bin/env bash\necho gated >> "%s"\n%s\nexit 0\n' "$GATE_LOG" "$4" > "$GATE_BIN"
+    out32rt="$(run_queue)"; g32rt="$(grep -c . "$GATE_LOG")"
+}
+_rt="echo 'red-twice:test-hs.sh:rc=1,rc=1'"
+arm32rt arm32e 1325-aaaa 25 "if [ -e rt.txt ]; then $_rt; exit 1; fi"
+if [ "$g32rt" -eq 2 ] && grep -q '^land-queue: #25 red-twice in scripts/test-hs.sh' <<<"$out32rt" \
+    && grep -q '^evict:land-queue:25:gate-failed' <<<"$out32rt" && ! grep -q 're-running the gate once' <<<"$out32rt"; then
+    ok "ARM 32e: a red-twice red is not re-run; the trunk is asked once and the candidate is evicted (2 gates)"
+else
+    bad "ARM 32e: wanted 2 gates, no re-run, evicted; got gates=$g32rt
+$out32rt"
+fi
+arm32rt arm32f 1326-aaaa 26 "$_rt; exit 1"
+if [ "$g32rt" -eq 2 ] && grep -q '^hold:trunk-red:scripts/test-hs.sh ' <<<"$out32rt" && ! grep -q '^evict' <<<"$out32rt"; then
+    ok "ARM 32f: a red-twice red the trunk shares holds the queue and evicts nobody (2 gates)"
+else
+    bad "ARM 32f: wanted 2 gates and hold:trunk-red; got gates=$g32rt
+$out32rt"
+fi
+arm32rt arm32g 1327-aaaa 27 "if [ -e rt.txt ]; then $_rt; echo 'FAIL scripts/test-other.sh: x'; exit 1; fi"
+if [ "$g32rt" -eq 3 ] && grep -q 're-running the gate once' <<<"$out32rt"; then
+    ok "ARM 32g (control): a red-twice beside another untouched red still re-runs once (3 gates)"
+else
+    bad "ARM 32g: wanted 3 gates and a re-run; got gates=$g32rt
+$out32rt"
+fi
+
 # ──────────────────────────────────────────────────────────── ARM 33
 # Operator ruling 2026-11-20: A PLAN-LEDGER-ONLY PR LANDS ON THE PLAN-LANE
 # CHECKS WITH ZERO BUILD-CHECK INVOCATIONS. #1166 took 53 min of full gate.
@@ -1720,7 +1760,8 @@ _t41="$TMP/arm41/trains.log"
 if [ "$(git -C "$REMOTE_DIR" for-each-ref --format='%(objectname)' 'refs/heads/work/*' | sort -u | grep -c .)" -ne 3 ]; then
     bad "ARM 41 premise: three distinct work heads were not pushed"
 else
-    out41="$(ARM_BATCH_K=4 ARM_TRAIN_LOG="$_t41" run_queue)"; rc41=$?
+    # HEAVY_MAX=4: the scratch tree's empty fixture population probes every member heavy.
+    out41="$(ARM_BATCH_K=4 ARM_HEAVY_MAX=4 ARM_TRAIN_LOG="$_t41" run_queue)"; rc41=$?
     _h41="$(git -C "$REMOTE_DIR" rev-parse linux-next)"
     _np41="$(git -C "$REMOTE_DIR" rev-list --parents -n 1 "$_h41" | wc -w)"
     _fp41="$(git -C "$REMOTE_DIR" rev-list --first-parent --count "$_b41..$_h41")"
@@ -2026,6 +2067,100 @@ else
     bad "ARM 56: got rc=$rc56a/$rc56b lock=$_lock56 gates=$(grep -c . "$GATE_LOG") published='$pub56'
 $out56a
 $out56b"
+fi
+# ARM 57 (bundle landing phase 1): every train writes ONE bundles.log line beside
+# trains.log, and heavy= counts members by gate-changed's own answer. (a) landed:
+# one of two members probed heavy; (b) a red train, promoted=-; (c) a gate rc=137
+# is the host's, aborted and never red; (d) a probe that does not answer reads `-`,
+# never 0; (e) the REAL default probe answers in the scratch tree (its empty
+# fixture population is heavy by gate-changed's rule, so 2).
+_p57="$TMP/heavy57.sh"
+cat > "$_p57" <<'PROBE'
+if grep -q heavy <<<"$(git diff --name-only "$1")"; then echo "heavy:guard:x"; else echo "select:intake fixtures=1/9"; fi
+PROBE
+arm57() { # <name> <gate rc on the first gate> <probe> <out var for the line(s)>
+    scaffold "$1"
+    candidate "$1" 1071-aaaa light57.txt A
+    candidate "$1" 1072-bbbb heavy57.txt B
+    cat > "$GH_PRS" <<JSON
+[{"number":71,"headRefName":"work/1071-aaaa","isDraft":false},
+ {"number":72,"headRefName":"work/1072-bbbb","isDraft":false}]
+JSON
+    printf '#!/usr/bin/env bash\n[ -e "%s" ] && exit 0\n: > "%s"\nexit %s\n' "$TMP/$1/once" "$TMP/$1/once" "$2" > "$GATE_BIN"
+    out57="$out57
+$(ARM_BATCH_K=4 ARM_HEAVY_PROBE="$3" ARM_TRAIN_LOG="$TMP/$1/trains.log" run_queue)"
+    printf -v "$4" '%s' "$(cat "$TMP/$1/bundles.log" 2>&1)"
+}
+out57=""
+arm57 arm57a 0 "bash $_p57" l57a; _h57="$(git -C "$REMOTE_DIR" rev-parse linux-next)"
+_t57="$(git -C "$REMOTE_DIR" rev-parse "linux-next^{tree}")"
+arm57 arm57b 1 "bash $_p57" l57b
+arm57 arm57c 137 "bash $_p57" l57c
+arm57 arm57d 0 "false" l57d
+arm57 arm57e 0 "" l57e
+_ok57=1
+grep -Eq "^bundle:green:train-[0-9]+ members=2 heavy=1 base=[0-9a-f]{9} tree=${_t57:0:9} gate_s=[0-9]+ reason=train promoted=${_h57:0:9} cause=landed:${_h57:0:9} ids=#71,#72 ts=[0-9TZ:-]+$" <<<"$l57a" || _ok57="a"
+grep -Eq '^bundle:red:train-[0-9]+ members=2 heavy=1 .* promoted=- cause=red:rc=1 ' <<<"$l57b" || _ok57="$_ok57 b"
+grep -Eq '^bundle:aborted:train-[0-9]+ .* promoted=- cause=red:rc=137 ' <<<"$l57c" || _ok57="$_ok57 c"
+grep -Eq '^bundle:green:train-[0-9]+ members=2 heavy=- ' <<<"$l57d" || _ok57="$_ok57 d"
+grep -Eq '^bundle:green:train-[0-9]+ members=2 heavy=2 ' <<<"$l57e" || _ok57="$_ok57 e"
+[ "$(grep -c . <<<"$l57a$l57b$l57c$l57d$l57e")" -ge 1 ] && for _l in "$l57a" "$l57b" "$l57c" "$l57d" "$l57e"; do
+    [ "$(grep -c . <<<"$_l")" -eq 1 ] || _ok57="$_ok57 not-one-line"
+done
+if [ "$_ok57" = 1 ]; then
+    ok "ARM 57: one bundles.log line per train (green/red/aborted) with members, heavy, base, tree, gate seconds, promoted; an unanswered heavy probe reads '-'"
+else
+    bad "ARM 57: failed: $_ok57
+a=$l57a
+b=$l57b
+c=$l57c
+d=$l57d
+e=$l57e
+$out57"
+fi
+# ARM 58 (2281-xx62): TILLANDSIAS_BUNDLE_HEAVY_MAX caps a train's non-light members.
+# Queue order heavy, heavy, light. (a) max=1: the second heavy is put back and the
+# light one behind it still joins, so the train is #71,#73 and #72 lands alone;
+# (b) max=2: all three ride; (c) an unanswered probe counts toward the cap, so
+# max=1 leaves one member, which is no train; (d) max=0 takes no heavy member;
+# (e) an unreadable max is said aloud and read as 2.
+arm58() { # <name> <max> <probe> -> o58 (queue output), l58 (bundle lines)
+    scaffold "$1"
+    candidate "$1" 1081-aaaa heavy58a.txt A
+    candidate "$1" 1082-bbbb heavy58b.txt B
+    candidate "$1" 1083-cccc light58.txt C
+    cat > "$GH_PRS" <<JSON
+[{"number":71,"headRefName":"work/1081-aaaa","isDraft":false},
+ {"number":72,"headRefName":"work/1082-bbbb","isDraft":false},
+ {"number":73,"headRefName":"work/1083-cccc","isDraft":false}]
+JSON
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$GATE_BIN"
+    o58="$(ARM_BATCH_K=4 ARM_HEAVY_MAX="$2" ARM_HEAVY_PROBE="$3" ARM_TRAIN_LOG="$TMP/$1/trains.log" run_queue)"
+    l58="$(cat "$TMP/$1/bundles.log" 2>/dev/null)"
+    _n58="$(grep -cE '^land:7[123] .*gate=green' <<<"$o58")"
+}
+_ok58=1
+arm58 arm58a 1 "bash $_p57"; _d58="$o58"
+{ grep -q 'members=2 heavy=1 .* ids=#71,#73 ' <<<"$l58" && grep -q 'train:accept:#71 tier=heavy' <<<"$o58" \
+  && grep -q 'train:accept:#73 tier=light' <<<"$o58" && grep -q 'train:heavy-deferred:#72 tier=heavy max=1' <<<"$o58" \
+  && [ "$_n58" -eq 3 ]; } || _ok58="$_ok58 a"
+arm58 arm58b 2 "bash $_p57"; _d58="$_d58
+$o58"
+{ grep -q 'members=3 heavy=2 .* ids=#71,#72,#73 ' <<<"$l58" && [ "$_n58" -eq 3 ]; } || _ok58="$_ok58 b"
+arm58 arm58c 1 false; _d58="$_d58
+$o58"
+{ [ -z "$l58" ] && grep -q 'train:heavy-deferred:#72 tier=unknown max=1' <<<"$o58" && [ "$_n58" -eq 3 ]; } || _ok58="$_ok58 c"
+arm58 arm58d 0 "bash $_p57"; _d58="$_d58
+$o58"
+{ [ -z "$l58" ] && grep -q 'train:heavy-deferred:#71 tier=heavy max=0' <<<"$o58" && [ "$_n58" -eq 3 ]; } || _ok58="$_ok58 d"
+arm58 arm58e two "bash $_p57"; _d58="$_d58
+$o58"
+{ grep -q "train:heavy-max-unreadable:'two'" <<<"$o58" && grep -q 'members=3 heavy=2 ' <<<"$l58"; } || _ok58="$_ok58 e"
+if [ "$_ok58" = 1 ]; then
+    ok "ARM 58: HEAVY_MAX caps a train's heavy and unmeasured members; the rest go one at a time"
+else
+    bad "ARM 58: failed: $_ok58
+$_d58"
 fi
 printf '\n'
 if [ "$fail" -eq 0 ]; then

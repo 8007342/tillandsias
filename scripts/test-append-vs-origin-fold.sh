@@ -14,12 +14,15 @@
 #        arm 1 and the lane would be unusable.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT" || exit 1  # 2285-cbtf: the probe answers for the checkout, not the caller's cwd
 CHECK="$ROOT/scripts/check-append-vs-origin-fold.sh"
 [ -f "$CHECK" ] || { echo "skip:append-vs-origin-fixture:checker-absent"; exit 0; }
 # shellcheck source=scripts/plan-binary-probe.sh
 . "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
 PLAN="$(resolve_plan_binary 2>/dev/null)" || { echo "skip:append-vs-origin-fixture:no-plan-binary"; exit 0; }
-PLAN_ABS="$ROOT/${PLAN#./}"
+# 2285-cbtf: an absolute override is kept; prefixing it made a path that does
+# not exist, and the whole fixture skipped.
+case "$PLAN" in /*) PLAN_ABS="$PLAN" ;; *) PLAN_ABS="$ROOT/${PLAN#./}" ;; esac
 _probe="$("$PLAN_ABS" field-get 9999-nosuch next_action 2>&1)"
 case "$_probe" in
     *unset:field-get*|*error:*) ;;
@@ -152,16 +155,61 @@ esac
 
 # ARM 4  COST FOLLOWS THE PUSH: scoped to one pushed fragment the check folds
 #        exactly that fragment's pair (checked:1), although the corpus holds
-#        two long-form pairs; unscoped it folds both (checked:2).
+#        two long-form pairs; --all folds both (checked:2).
 #        PRE-FIX: FAILS — the argument is ignored and the scoped run reads 2.
 R4="$WORK/scope-count"; _build_repo "$R4" "with-l1"; _add_unrelated "$R4"
 out4s="$(cd "$R4" && TILLANDSIAS_PLAN_BIN="$PLAN_ABS" bash scripts/check-append-vs-origin-fold.sh "$PUSHED" 2>&1)"
-out4a="$(cd "$R4" && TILLANDSIAS_PLAN_BIN="$PLAN_ABS" bash scripts/check-append-vs-origin-fold.sh 2>&1)"
+out4a="$(cd "$R4" && TILLANDSIAS_PLAN_BIN="$PLAN_ABS" bash scripts/check-append-vs-origin-fold.sh --all 2>&1)"
 if [ "$out4s" = "ok:append-vs-origin:checked:1" ] && [ "$out4a" = "ok:append-vs-origin:checked:2" ]; then
     echo "ok:   ARM 4 scoped checks 1 pair, the whole corpus 2"
 else
     echo "FAIL: ARM 4 expected scoped checked:1 and unscoped checked:2, got '$out4s' / '$out4a'"; fail=1
 fi
+
+# ORDER 2285-cbtf: a bare run narrows itself to what differs from origin.
+_bare() { (cd "$1" && TILLANDSIAS_PLAN_BIN="$PLAN_ABS" bash scripts/check-append-vs-origin-fold.sh 2>&1); }
+out4b="$(_bare "$R4")"
+if [ "$out4b" = "ok:append-vs-origin:checked:1" ]; then echo "ok:   ARM 4b a bare run folds only the pair a differing fragment names"
+else echo "FAIL: ARM 4b expected checked:1, got '$out4b'"; fail=1; fi
+# ARM 4c  an origin fragment missing here whose pair an UNCHANGED fragment here
+#         names: its line is dropped, so it is refused.
+R4c="$WORK/missing"; _build_repo "$R4c" "with-l1"
+cat > "$R4c/plan/index.d/20260101t000000z-older-hostd.yaml" <<'YAML'
+status:
+  - packet_id: fixture-packet
+    field: next_action
+    value: |-
+      BASE LINE.
+    ts: "2026-01-01T00:00:00Z"
+    host: host-d
+YAML
+git -C "$R4c" add plan/index.d/20260101t000000z-older-hostd.yaml >/dev/null 2>&1
+git -C "$R4c" commit -qm older-on-origin
+git -C "$R4c" update-ref refs/remotes/origin/linux-next HEAD
+rm -f "$R4c/$PUSHED" "$R4c"/plan/index.d/20260101t000001z-*.yaml
+out4c="$(_bare "$R4c")"
+case "$out4c" in
+    *"refused:append-drops-lines-vs-origin:fixture-packet:next_action"*L1-PEER-WARNING*) echo "ok:   ARM 4c an origin fragment missing here is still compared" ;;
+    *) echo "FAIL: ARM 4c expected a refusal naming L1, got: $(printf '%s' "$out4c" | head -2)"; fail=1 ;;
+esac
+# ARM 4f  a tree merely behind origin, naming none of the missing fragment's
+#         pairs, is not refused (the whole-corpus answer).
+R4f="$WORK/behind"; _build_repo "$R4f" "with-l1"
+rm -f "$R4f/$PUSHED" "$R4f"/plan/index.d/20260101t000001z-*.yaml
+out4f="$(_bare "$R4f")"
+out4g="$(cd "$R4f" && TILLANDSIAS_PLAN_BIN="$PLAN_ABS" bash scripts/check-append-vs-origin-fold.sh --all 2>&1)"
+if [ "$out4f" = "ok:append-vs-origin:checked:0" ] && [ "$out4g" = "$out4f" ]; then echo "ok:   ARM 4f a tree behind origin reads the same narrowed and whole"
+else echo "FAIL: ARM 4f expected checked:0 twice, got '$out4f' / '$out4g'"; fail=1; fi
+# ARM 4d  a changed base can move any pair: the whole corpus is folded.
+printf '\n# base changed\n' >> "$R4/plan/index.yaml"
+out4d="$(_bare "$R4")"
+if [ "$out4d" = "ok:append-vs-origin:checked:2" ]; then echo "ok:   ARM 4d a differing base falls back to the whole corpus"
+else echo "FAIL: ARM 4d expected checked:2, got '$out4d'"; fail=1; fi
+# ARM 4e  nothing differs: nothing to fold.
+R4e="$WORK/same"; _build_repo "$R4e" "with-l1"; rm -f "$R4e/$PUSHED"
+out4e="$(_bare "$R4e")"
+if [ "$out4e" = "ok:append-vs-origin:checked:0" ]; then echo "ok:   ARM 4e a tree equal to origin folds nothing"
+else echo "FAIL: ARM 4e expected checked:0, got '$out4e'"; fail=1; fi
 
 # ARM 5  BOUNDED: past its deadline the check refuses by NAME with exit 3,
 #        instead of hanging the push (it hung for tens of minutes on

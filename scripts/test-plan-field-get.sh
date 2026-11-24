@@ -69,7 +69,11 @@ if git rev-parse --verify --quiet refs/remotes/origin/linux-next >/dev/null 2>&1
     T="$(mktemp -d)"
     if git archive origin/linux-next plan/ 2>/dev/null | tar -x -C "$T" 2>/dev/null; then
         here="$("$P" field-get "$REF" next_action 2>/dev/null)"
-        there="$(cd "$T" && "$ROOT/$P" field-get "$REF" next_action 2>/dev/null || true)"
+        # resolve_plan_binary may return an ABSOLUTE path; "$ROOT/$P" then named
+        # nothing and this arm failed for the fixture's reason, not the binary's
+        # (2099-f982).
+        case "$P" in /*) PA="$P" ;; *) PA="$ROOT/$P" ;; esac
+        there="$(cd "$T" && "$PA" field-get "$REF" next_action 2>/dev/null || true)"
         if [ -n "$there" ]; then
             ok "ARM 4 the binary reads the ledger in its CWD, so an extracted origin tree can be folded"
         else

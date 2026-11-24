@@ -65,7 +65,7 @@ has_dependency() {
   printf '%s\n' "$DEPENDENCIES" | grep -Fxq "$1"
 }
 
-if has_dependency flutter || printf '%s\n' "$PUBSPEC_FACTS" | grep -Fq $'flutter_project\t1'; then
+if has_dependency flutter || grep -Fq <<<"$PUBSPEC_FACTS" $'flutter_project\t1'; then
   IS_FLUTTER=1
 else
   IS_FLUTTER=0

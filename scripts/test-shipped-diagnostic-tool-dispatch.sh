@@ -73,7 +73,7 @@ chmod +x "$W/tray"
 out="$(cd "$W" && env -i HOME="$W" PATH="$W/emptybin" \
        TILLANDSIAS_TRAY_EXE="$W/tray" \
        bash "$ROOT/scripts/tray-diagnose.sh" 2>"$W/err")"; rc=$?
-if printf '%s' "$out" | grep -q '"version":"9.9.9"'; then
+if grep -q <<<"$out" '"version":"9.9.9"'; then
     ok "no parser -> the tray's RAW answer still reaches stdout (data preserved)"
 else
     bad "degrade path lost the data: out=$(printf '%s' "$out" | head -c 120)"

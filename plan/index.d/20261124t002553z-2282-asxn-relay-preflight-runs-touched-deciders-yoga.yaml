@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: relay-preflight-runs-every-decider-whose-inputs-the-diff-touches
+    order: "2282-asxn"
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [build-speed, land-queue, preflight]
+    estimated_hours: 3
+    owned_files:
+      - scripts/relay-preflight.sh
+    title: "relay-preflight runs every gate decider whose inputs the diff touches, so a decider-level red is found before the queue spends a gate on it"
+    context: |
+      Measured on queue run 37, 2026-11-24. PR 1109 at 5ff23c074 passed relay-preflight clean (17 deciders) and was
+      evicted on violation:gate-step-inputs:1-problem(s), step 931 having no STEP_READS record. PR 1135 at 0b5c866c3
+      ran relay-preflight with only coordinator-waived reds and was evicted on violation:lua-fixture-native-argv-added:1.
+      Each eviction cost a full gate. Both checks are tree-only and answer in under a second by hand, so the list
+      relay-preflight runs is a curated subset, and what it leaves out is learned from an eviction.
+    exit_criteria:
+      - "relay-preflight on the pre-fix head 5ff23c074 merged onto its eviction base 3df889a8a refuses and names check-gate-step-inputs."
+      - "relay-preflight on the pre-fix head 0b5c866c3 merged onto 3df889a8a refuses and names check-lua-fixture-native-argv-added."
+      - "The decider set is derived from what build.sh and scripts/gate-steps.d wire plus the diff, not a second hand-kept list: a decider newly wired in a scratch tree is selected with no edit to relay-preflight."
+      - "NEGATIVE CONTROL: a diff touching no declared input of either decider runs neither."
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture replaying the two pre-fix heads is the deliverable"
+    next_action: "Read how relay-preflight picks its deciders; reuse gate-changed.sh's derived input map."
+    provenance: "coordinator macuahuitl-fedora 2026-11-24, from yoga's report of the two evictions"
+    related: [2083-6k44, 2099-f982, 2157-ginp, 2246-fkea]
+    events:
+      - {type: filed, ts: "2026-11-24T00:25:53Z", host: yoga, summary: "filed on the coordinator's request"}

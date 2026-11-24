@@ -376,7 +376,6 @@ scripts scripts/check-must-ship-rows.sh 5
 scripts scripts/check-nix-builder-e2e.sh 7
 scripts scripts/check-nix-deps-stability.sh 6
 scripts scripts/check-no-competing-gate.sh 6
-scripts scripts/check-no-fixture-writes-live-ledger.sh 16
 scripts scripts/check-no-tracked-binaries.sh 7
 scripts scripts/check-pickup-role-grammar.sh 3
 scripts scripts/check-plan-binary-current.sh 5
@@ -394,7 +393,6 @@ scripts scripts/check-sigpipe-verdict-pipelines-added.sh 15
 scripts scripts/check-skill-canonicalization.sh 4
 scripts scripts/check-skills-single-source.sh 8
 scripts scripts/check-spec-index-resolution-agreement.sh 4
-scripts scripts/check-spec-script-paths.sh 7
 scripts scripts/check-stranded-in-progress.sh 5
 scripts scripts/check-stranded-plan-writes.sh 3
 scripts scripts/check-test-baseline.sh 8
@@ -525,7 +523,6 @@ scripts scripts/test-agent-identity.sh 4
 scripts scripts/test-append-event-archived-refusal.sh 4
 scripts scripts/test-append-vs-origin-fold.sh 7
 scripts scripts/test-archiver-could-not-run-is-self-naming.sh 1
-scripts scripts/test-archiver-could-not-run-verdict.sh 2
 scripts scripts/test-archiver-ruby-could-not-run.sh 8
 scripts scripts/test-awk-float-lc-numeric.sh 6
 scripts scripts/test-base-ledger-status-loss.sh 7
@@ -721,7 +718,6 @@ scripts scripts/test-pre-push-empty-ref-list.sh 6
 scripts scripts/test-pre-push-honours-a-live-freeze.sh 11
 scripts scripts/test-pre-push-linux-next-merged.sh 3
 scripts scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh 7
-scripts scripts/test-pre-push-trailer-states-what-it-saw.sh 2
 scripts scripts/test-pre-push-version-guard-sigpipe.sh 3
 scripts scripts/test-pre-push-version-guard.sh 1
 scripts scripts/test-pre-push-work-ref-lane.sh 12

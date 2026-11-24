@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+- packet_id: slow-and-regime-dependent-unreferenced-fixtures-fixed-ported-and-wired
+  order: 2099-f982
+  status: in_progress
+  kind: chore
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [tests, litmus, shell-to-lua]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 2
+  title: 'Family A of 2096-pq2g, part 4: fix three host-red fixtures, port the sidecar fixture to Lua, wire the slow and regime-dependent ones'
+  context: |-
+    test-toolbox-refusal-wsl-exception.sh was red on every Fedora builder (/usr/bin/toolbox on its pinned PATH). test-plan-field-get.sh ARM 4 doubled an absolute plan-binary path. test-macos-signing-seam.sh needed PlistBuddy and BSD mktemp, and its get-task-allow arm passed vacuously off macOS. test-sidecar-ignores-rustc-wrapper.sh is ported to scripts/lua. All of these, plus the census, headless ENV_LOCK, macOS model share and nix cache fixtures, run in litmus:unreferenced-slow-and-regime-fixtures-run.
+  exit_criteria:
+  - 'litmus:unreferenced-slow-and-regime-fixtures-run passes on a Linux builder with toolbox installed; the three fixed fixtures were red on macuahuitl before this change.'
+  verifiable_closure: 'litmus:unreferenced-slow-and-regime-fixtures-run'
+  unscoreable: 'none.'
+  next_action: 'Land the PR; a macOS host should run the litmus once to see the PlistBuddy arms execute rather than skip.'
+  provenance: 'Operator objective 2026-11-17 (.sh halving), family A.'
+  events:
+  - type: filed
+    ts: '2026-11-17T22:30:00Z'
+    host: macuahuitl
+    summary: filed in_progress with the part-4 PR

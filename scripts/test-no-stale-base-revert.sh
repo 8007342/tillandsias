@@ -68,12 +68,12 @@ git push -q origin main 2>/dev/null
 #    forced one. See the packet event for why that corrects the threat model.
 git checkout -q stale
 out="$(git push --force origin stale:main 2>&1)"; rc=$?
-if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q '^blocked:stale-base-revert:'; then
+if [ "$rc" -ne 0 ] && grep -q <<<"$out" '^blocked:stale-base-revert:'; then
     check ok "a stale-base push is refused"
 else
     check FAIL "a stale-base push is refused" "rc=$rc out=[$(printf '%s' "$out" | tail -3)]"
 fi
-if printf '%s' "$out" | grep -q 'trunk_d' && printf '%s' "$out" | grep -q 'trunk_e'; then
+if grep -q <<<"$out" 'trunk_d' && grep -q <<<"$out" 'trunk_e'; then
     check ok "the refusal NAMES the files that would be reverted"
 else
     check FAIL "the refusal names the files" "out=[$(printf '%s' "$out" | tail -5)]"
@@ -85,7 +85,7 @@ fi
 #     fetches each iteration REFRESHES the lease and it always passes. The more
 #     careful the loop looks, the more reliably it reverts. Measured.
 out="$(git fetch -q origin; git push --force-with-lease origin stale:main 2>&1)"; rc=$?
-if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q '^blocked:stale-base-revert:'; then
+if [ "$rc" -ne 0 ] && grep -q <<<"$out" '^blocked:stale-base-revert:'; then
     check ok "--force-with-lease after a fresh fetch is ALSO refused"
 else
     check FAIL "--force-with-lease after a fresh fetch is refused" "rc=$rc out=[$(printf '%s' "$out" | tail -3)]"

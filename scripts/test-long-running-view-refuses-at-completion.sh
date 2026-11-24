@@ -123,8 +123,11 @@ rm -rf "$D"
 echo "arm 5 — the LAND-TIME check remains as the backstop"
 # This guard is a courtesy to the author and cannot see a flip that bypasses
 # set-field. Removing the gate check would trade a late refusal for no refusal.
-if grep -q 'check-long-running-view.sh' "$ROOT/build.sh"; then
-    ok "build.sh still runs check-long-running-view.sh"
+# Inline in build.sh, or (batch 4) a gate step the gate runs from gate-steps.d.
+# A RUN, not a mention: step 385 names the script in a comment and its READS.
+if grep -qE '^STEP_SCRIPT="scripts/check-long-running-view\.sh"|_run bash "[^"]*/scripts/check-long-running-view\.sh"' \
+    "$ROOT/build.sh" "$ROOT"/scripts/gate-steps.d/*.step 2>/dev/null; then
+    ok "the gate still runs check-long-running-view.sh (build.sh or a gate step)"
 else
     bad "the land-time backstop is gone — a flip bypassing set-field would strand the view silently"
 fi

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: intake-judges-nextest-results
+    order: "2285-jvg6"
+    status: implemented
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [build-speed, land-queue]
+    estimated_hours: 2
+    owned_files:
+      - scripts/gate-changed.sh
+      - scripts/lua/test-gate-changed-nextest-transcript.lua
+    title: "gate-changed --intake read red on every crate-touching change where nextest is installed, with every test green"
+    context: |
+      Measured on yoga 2026-11-24 by the shadow runner on PR 1135's head: nextest passed 3168 of 3168 and intake answered
+      fail:test-baseline:no-test-results. The log sat in the /tmp work dir, the converter's fs.read refuses a path outside
+      the repository, and a silent cp fallback handed the ratchet the raw log. The log is now under target/, and a failed
+      conversion is fail:gate-changed:nextest-transcript with its reason. build.sh --check was checked and does not have
+      the hole: its log is under target/ and a failed conversion exits the gate.
+    exit_criteria:
+      - "scripts/lua/test-gate-changed-nextest-transcript.lua green: green reads green, red is named, a failing converter (with or without a message) is named, and the log back in /tmp is refused with its reason; the pre-fix gate-changed reds it."
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture is this row's deliverable and build.sh runs it"
+    provenance: "yoga's shadow-intake run (2285-haa6); coordinator macuahuitl-fedora asked for it as its own p1"
+    related: [2248-zcqh, 2243-urcy, 2285-haa6]
+    events:
+      - {type: implemented, ts: "2026-11-24T04:42:46Z", host: yoga, summary: "implemented on work/2285-jvg6; fixture 6 arms, pre-fix reds it"}
