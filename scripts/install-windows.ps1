@@ -1044,7 +1044,7 @@ try {
     # the tray's own reset log stays in a file, shown by path only on failure.
     # stdin is NUL so the GUI-subsystem tray can never wait on a prompt nobody
     # can see. scripts/lua/test-installer-reset-kind.lua pins all of it, and
-    # scripts/test-installer-provisions-once.sh pins ONE provisioning per
+    # scripts/lua/test-installer-provisions-once.lua pins ONE provisioning per
     # install, through the SOFT reset. No line of its own: "Getting Tillandsias
     # ready..." was said once, before the download, and covers this step too.
     $ResetLog = Join-Path $env:TEMP "tillandsias-setup.log"

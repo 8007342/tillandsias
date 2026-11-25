@@ -90,8 +90,6 @@ scripts/test-headless-env-lock-is-single.sh 1
 scripts/test-hook-mover-enumeration-is-batched.sh 2
 scripts/test-host-slug-resolution.sh 2
 scripts/test-image-build-convergence.sh 1
-scripts/test-installer-probes-by-attempt-not-by-help.sh 2
-scripts/test-installer-provisions-once.sh 1
 scripts/test-land-merges-trunk.sh 1
 scripts/test-land-queue.sh 1
 scripts/test-ledger-node-claim-resolution.sh 1
@@ -140,11 +138,8 @@ scripts/test-spec-index-durable-tier-demotion.sh 1
 scripts/test-spec-index-endpoint-classification.sh 1
 scripts/test-squid-supervisor.sh 1
 scripts/test-ssh-lane-sidecar.sh 1
-scripts/test-timing-record-carries-root.sh 1
 scripts/test-tool-materialize-litmus-surfaces-arm.sh 1
-scripts/test-trace-coverage.sh 1
 scripts/test-uninstall-matcher-spares-bystanders.sh 1
-scripts/test-validator-surface-currency.sh 1
 scripts/test-vault-shutdown-forwards-sigterm.sh 1
 scripts/test-wsl-builder-kill-reaches-guest.sh 1
 scripts/update-convergence-dashboard.sh 2

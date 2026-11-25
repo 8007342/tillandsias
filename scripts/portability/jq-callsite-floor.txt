@@ -68,7 +68,6 @@
 1 scripts/test-opencode-vault-auth-content.sh
 2 scripts/test-project-info-grep-code-recall.sh
 2 scripts/test-ssh-lane-sidecar.sh
-6 scripts/test-timing-record-carries-root.sh
 1 scripts/test-tool-dispatch-lib.sh
 6 scripts/tillandsias-host-push-cert.sh
 10 scripts/update-convergence-dashboard.sh
