@@ -66,9 +66,9 @@ critical_path:
     expected_behavior: "ok: codex --json reaches exec"
 
   - step: "the entrypoint prompt-routing fixture covers default and json shapes"
-    command: "scripts/test-opencode-entrypoint-prompt.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-opencode-entrypoint-prompt.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "ok: opencode entrypoint prompt routing"
+    expected_behavior: "ok:opencode-entrypoint-prompt:6 arms"
 
   - step: "container entrypoints do not consume a host result-file path"
     command: "! grep -q 'TILLANDSIAS_AGENT_RESULT_FILE' images/default/entrypoint-forge-codex.sh && ! grep -q 'TILLANDSIAS_AGENT_RESULT_FILE' images/default/entrypoint-forge-opencode.sh && echo 'ok: result path remains host-only'"
