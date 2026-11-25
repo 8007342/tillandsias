@@ -42,6 +42,7 @@ git("commit", "-qm", "seed")
 -- The farm: what gate-stamp needs, minus sha256sum.
 local FARM = W.abs .. "/farm"
 fs.mkdir(W.rel .. "/farm")
+-- native-argv: names to link into the farm, not a spawn; the farm bash is spawned by its absolute path
 for _, t in ipairs({ "bash", "sh", "git", "sort", "cut", "xargs", "readlink", "grep", "sed", "awk", "mktemp", "rm", "cat", "mv",
     "dirname", "basename", "date", "head", "tail", "wc", "tr", "find", "ls", "env" }) do
     local p = fixture.which(t)
