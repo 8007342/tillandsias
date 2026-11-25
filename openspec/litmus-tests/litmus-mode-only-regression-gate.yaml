@@ -34,17 +34,17 @@ size: instant
 preconditions:
   - workspace contains scripts/gate-stamp.sh
   - workspace contains scripts/check-script-exec-bits.sh
-  - workspace contains scripts/test-mode-only-regression-887-bz88.sh
+  - workspace contains scripts/lua/test-mode-only-regression-887-bz88.lua
   - git and bash are available in PATH
 
 critical_path:
   - step: "guards and fixture parse and the fixture is executable"
-    command: "bash -n scripts/gate-stamp.sh && bash -n scripts/check-script-exec-bits.sh && bash -n scripts/test-mode-only-regression-887-bz88.sh && test -x scripts/test-mode-only-regression-887-bz88.sh && echo 'ok: parses'"
+    command: "bash -n scripts/gate-stamp.sh && bash -n scripts/check-script-exec-bits.sh && test -f scripts/lua/test-mode-only-regression-887-bz88.lua && echo 'ok: parses'"
     timeout_ms: 5000
     expected_behavior: "ok: parses"
 
   - step: "all fixture arms pass (stamp sees st_mode, worktree arm refuses pre-staging, mutation control, negative controls)"
-    command: "bash scripts/test-mode-only-regression-887-bz88.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-mode-only-regression-887-bz88.lua 2>&1"
     timeout_ms: 120000
     expected_behavior: "ok:mode-only-regression-fixture:all"
 
@@ -114,7 +114,7 @@ critical_path:
     success_pattern: "^(ok: clean tree still memoises|skip:1036-e5w9c:no-warm-stamp )"
 
 evidence:
-  artifact: "scripts/gate-stamp.sh + scripts/check-script-exec-bits.sh + scripts/test-mode-only-regression-887-bz88.sh"
+  artifact: "scripts/gate-stamp.sh + scripts/check-script-exec-bits.sh + scripts/lua/test-mode-only-regression-887-bz88.lua"
   measured_on: >
     lenovinha (Fedora Silverblue) 2026-08-25 — fixture 9/9 green. End-to-end on a
     scratch clone with a local bare remote and the real pre-push hook installed:

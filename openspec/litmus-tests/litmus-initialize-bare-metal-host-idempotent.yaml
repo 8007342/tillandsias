@@ -17,17 +17,17 @@ description: >
   Bound by the coordinator when landing lenovinha's v1 by path (the fixture was
   invoked by nothing in the salvage snapshot; an unbound fixture proves nothing).
 preconditions:
-  - workspace contains scripts/test-initialize-bare-metal-host-idempotent.sh
+  - workspace contains scripts/lua/test-initialize-bare-metal-host-idempotent.lua
   - workspace contains scripts/lua/check-bare-metal-host-initialized.lua
   - workspace contains skills/initialize-bare-metal-host/SKILL.md
 critical_path:
   - step: "the checker and the fixture parse and carry their exec bits"
-    command: "test -f scripts/lua/check-bare-metal-host-initialized.lua && bash -n scripts/test-initialize-bare-metal-host-idempotent.sh && test -x scripts/test-initialize-bare-metal-host-idempotent.sh && echo ok:bare-metal-host-scripts-parse"
+    command: "test -f scripts/lua/check-bare-metal-host-initialized.lua && test -f scripts/lua/test-initialize-bare-metal-host-idempotent.lua && echo ok:bare-metal-host-scripts-parse"
     expected_behavior: "ok:bare-metal-host-scripts-parse"
     assert_exit: 0
     timeout_ms: 5000
   - step: "the fixture's three arms and the Repairs arm hold (hermetic stub podman)"
-    command: "bash scripts/test-initialize-bare-metal-host-idempotent.sh 2>&1 | grep -E '^ok:initialize-bare-metal-host:hermetic:3/3$'"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-initialize-bare-metal-host-idempotent.lua 2>&1"
     expected_behavior: "ok:initialize-bare-metal-host:hermetic:3/3"
     assert_exit: 0
     assert_output_nonempty: true
