@@ -87,7 +87,7 @@ arm2 "$W/build-nomiss.sh" archiver-check \
 # Timestamps come from jq, not `date -d`: GNU date accepts `-d @<epoch>` and
 # BSD date SUCCEEDS ON IT WITH GARBAGE OUTPUT, so an exit-code fallback cannot
 # catch the difference — 761-g36m's dialect gate refused exactly that here, and
-# it was right. scripts/test-cycle-metrics-recurrence.sh already solved this
+# it was right. scripts/lua/test-cycle-metrics-recurrence.lua already solved this
 # with an `ago` helper; this is the same idiom rather than a second one.
 JQ="${JQ:-jq}"
 ago() { "$JQ" -n -r --arg s "$1" 'now - ($s | tonumber) | todate'; }

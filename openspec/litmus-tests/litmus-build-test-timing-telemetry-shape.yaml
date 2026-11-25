@@ -39,7 +39,7 @@ inputs:
   - scripts/cycle-metrics.sh
   - scripts/local-ci.sh
   - scripts/run-litmus-test.sh
-  - scripts/test-build-step-timing-attribution.sh
+  - scripts/lua/test-build-step-timing-attribution.lua
   - scripts/lua/test-gate-phase-rows-carry-run-id.lua
   - scripts/lua/test-litmus-step-timing.lua
   - scripts/lua/test-slowest-span-marker.lua
@@ -113,9 +113,9 @@ critical_path:
     # asserts the fast step's record stays fast. Reverting the fix makes it
     # report the adjacent second instead — the defect that got a packet filed
     # on an inflated reading.
-    command: "bash scripts/test-build-step-timing-attribution.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-build-step-timing-attribution.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "ok:build-step-timing-attribution-fixture:9"
+    expected_behavior: "ok:build-step-timing-attribution:"
 
   - step: "1915-gtph: one gate run's phase rows and its build-check row share a run_id"
     # Stub gate of three phases through build.sh's real tracker: asserts three

@@ -15,7 +15,7 @@
 --   3 the bridge (`policy classify-bash`) allows the reset as prefix and as hook env;
 --     without TILLANDSIAS_DESTRUCTIVE_RESET_OK it asks
 --   4 hard reset is untouched: `wsl --unregister x` is consent:policy:hard-reset and an ask
--- Arms 2-4 need bare-metal evidence (no /run/.containerenv); in a forge they are a named skip.
+-- Arms 2-4 need a host that is not a forge; in a forge they are a named skip.
 --
 -- GRAMMAR ok:smoke-skill-reset-env:9 arms | violation:smoke-skill-reset-env:<n>-failed
 
@@ -71,9 +71,13 @@ T:must{ "chmod", "+x", STUB }
 local _, pe = plan{ "policy", "eval", "--", STUB, "--reset-state" }
 if pe ~= "consent:policy:soft-reset" then T:refuse("premise", "the stub argv left the soft-reset class ([" .. pe .. "])") end
 
--- fs is repo-scoped; the forge marker is outside it, so ask `test -e`.
-if T:run{ "test", "-e", "/run/.containerenv", timeout_ms = 10000 }.code == 0 then
-    out.line("skip: 2, 3, 4 /run/.containerenv is present, so the evidence says forge; run on bare metal")
+-- A forge is a container of the forge IMAGE (the policy's own evidence); a toolbox is not one. The
+-- record is outside fs's scope, so cat reads it.
+local rec = T:run{ "cat", "/run/.containerenv", timeout_ms = 10000 }
+local image = rec.code == 0 and ("\n" .. (rec.stdout or "")):match('\nimage="([^"\n]*)"') or ""
+local base = image:match("([^/]*)$")
+if base == "tillandsias-forge" or base:match("^tillandsias%-forge[:@]") then
+    out.line("skip: 2, 3, 4 the container record names the forge image; run on bare metal")
     T:finish()
 end
 for _, s in ipairs(SKILLS) do
