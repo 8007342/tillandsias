@@ -2204,7 +2204,9 @@ grep -Eq '^shadow:accept:81 tier=intake selected=5/9 crates=2 intake_s=[0-9]+ in
 grep -Eq '^shadow:accept:82 tier=intake selected=6/9 crates=0 .* intake=red gate=red ' <<<"$l60" || _b60="$_b60 a82"
 grep -Eq '^shadow:accept:83 tier=heavy selected=-/9 crates=- .* intake=- gate=green ' <<<"$l60" || _b60="$_b60 a83"
 [ "$(grep -c "^shadow:accept:" <<<"$l60")" -eq 3 ] && grep -Eq "^shadow:tree $TMP/arm60a/shtree size_mb=[0-9]+$" <<<"$l60" && grep -q '^land:81 ' <<<"$out60" && grep -q '^land:83 ' <<<"$out60" && grep -q '^evict:land-queue:82' <<<"$out60" || _b60="$_b60 a-landing"
-[ "$(grep -c 'gates=3 nice=10 clean shared=off$' "$TMP/arm60a/seen")" -eq 3 ] || _b60="$_b60 b-order"
+# nice -n 10 adds to the caller's own niceness: an agent session at 5 gives 15 (yoga, 2026-11-25).
+_n60=$(( $(nice) + 10 )); [ "$_n60" -le 19 ] || _n60=19
+[ "$(grep -c "gates=3 nice=$_n60 clean shared=off\$" "$TMP/arm60a/seen")" -eq 3 ] || _b60="$_b60 b-order"
 [ -z "$(git -C "$WORK_DIR" status --porcelain --untracked-files=no)" ] && [ ! -e "$WORK_DIR/dirt-from-shadow" ] && [ ! -e "$WORK_DIR/target/shadow-intake" ] && [ -e "$TMP/arm60a/shtree/.git" ] || _b60="$_b60 b-isolation"
 st60="$(ARM_SHADOW=x ARM_SHADOW_LOG="$TMP/arm60a/shadow.log" run_queue --status)"
 grep -Eq "^queue:shadow (idle|running) pr=[-#0-9]+ log=$TMP/arm60a/shadow.log lines=3$" <<<"$st60" || _b60="$_b60 h-status"
