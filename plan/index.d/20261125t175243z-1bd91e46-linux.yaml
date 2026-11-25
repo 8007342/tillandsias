@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: port-eight-remaining-free-d-to-h-fixtures-to-lua
+    event:
+      type: note
+      ts: "2026-11-25T17:52:43Z"
+      agent_id: linux-lenovinha-claude-20261125t175242z
+      host: linux
+      summary: |-
+        Dropped from the batch, with reasons, 2026-11-25. test-dispatch-reap.sh, test-fake-cloudflare.sh and test-fleet-msg-same-host.sh: the script runtime ends every process a proc.run started when the call returns (measured: a setsid child marked in one call is gone by the next), and these hold processes or servers across many steps. test-harness-byte-cheap.sh: eleven concurrent scenarios over sourced shell functions, the same need. test-gate-stamp-memoization.sh: it borrows the real checkout's gate stamp, and INT, TERM and HUP traps are what restore it; the runtime has no signal trap. A port of any of the five would be bash inside a Lua string. Ported so far: gate-stamp-does-not-memoize-guard-owned-paths (18 arms) and git-mirror-existing-volume-hardening (21 arms, the rewind fed to the hook because the command policy refuses a force push).
