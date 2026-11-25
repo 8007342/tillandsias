@@ -7210,7 +7210,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Backgrounded-job stderr check passed"
 
     _step "Checking bound litmus files are RUNNABLE, not merely parseable (958-b36m)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-bound-litmus-is-runnable.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-bound-litmus-is-runnable.lua" 2>&1; then
         _error "the bound-but-unrunnable check regressed (958-b36m) — see the failing case above"
         exit 1
     fi

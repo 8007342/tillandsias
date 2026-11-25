@@ -22,7 +22,7 @@
 --   0 — ok:clean-tree. (The .sh exited 4 here. Order 2201-opsx moved it to the
 --       house code 0 under the coordinator's policy (b): a clean tree is the ok
 --       outcome, and nothing else returns 0 since 1440-w8g8 retired
---       ok:opsx-only. Its two readers, test-check-opsx-generated-dirt.sh and
+--       ok:opsx-only. Its two readers, test-check-opsx-generated-dirt.lua and
 --       meta-orchestration SKILL.md step 4a, change in the same PR.
 --       check-resumable-claim-dirt.sh still prints ok:clean-tree with exit 4.)
 --   5 — launch-dirt:opsx-only (refuse; report the launch regression)

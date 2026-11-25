@@ -519,7 +519,6 @@ scripts scripts/test-append-vs-origin-fold.sh 7
 scripts scripts/test-archiver-ruby-could-not-run.sh 8
 scripts scripts/test-awk-float-lc-numeric.sh 6
 scripts scripts/test-bench-prompt-uniqueness.sh 1
-scripts scripts/test-bound-litmus-is-runnable.sh 5
 scripts scripts/test-build-sh-ci-full-install-prep.sh 1
 scripts scripts/test-build-step-timing-attribution.sh 1
 scripts scripts/test-capability-routing.sh 24
