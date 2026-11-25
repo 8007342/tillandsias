@@ -103,7 +103,6 @@ scripts/test-cycle-metrics-recurrence.sh
 scripts/test-cycle-preflight-cargo-resolution.sh
 scripts/test-daily-maintenance-day-boundary.sh
 scripts/test-decider-retirement.sh
-scripts/test-default-vault-cli-security.sh
 scripts/test-dispatch-reap.sh
 scripts/test-e2e-preflight-live-runtime.sh
 scripts/test-enclave-network-internal-discovery.sh
@@ -117,16 +116,11 @@ scripts/test-expire-claims-write-is-opt-in.sh
 scripts/test-fake-cloudflare.sh
 scripts/test-fleet-activity.sh
 scripts/test-fleet-heartbeat-sees-a-ledger-filed-blocker.sh
-scripts/test-fleet-msg-mcp.sh
 scripts/test-fleet-msg-same-host.sh
-scripts/test-fleet-msg-store.sh
 scripts/test-forge-findings-persisted.sh
-scripts/test-forge-gitconfig-bidirectional-quarantine.sh
 scripts/test-forge-localization-staged.sh
 scripts/test-forge-project-trust-seeds.sh
-scripts/test-forge-runtime-ca-trust.sh
 scripts/test-forge-src-budget-report.sh
-scripts/test-forge-standard-gitconfig-path.sh
 scripts/test-forge-swap-service.sh
 scripts/test-fragment-batch-never-collapses-verdicts.sh
 scripts/test-fragment-status-loss-row-boundary.sh
@@ -135,12 +129,10 @@ scripts/test-freshness-regime-budget.sh
 scripts/test-gate-memory-wsl2-guest.sh
 scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh
 scripts/test-gate-stamp-memoization.sh
-scripts/test-gate-stamp.sh
 scripts/test-gate-step-prefix-allocation.sh
 scripts/test-gate-step-regimes.sh
 scripts/test-gate-step-skip-exit.sh
 scripts/test-git-credential-helper.sh
-scripts/test-git-mirror-dns-identity.sh
 scripts/test-git-mirror-existing-volume-hardening.sh
 scripts/test-git-mirror-relay-token-expiry.sh
 scripts/test-git-mirror-vault-agent-auto-auth.sh
