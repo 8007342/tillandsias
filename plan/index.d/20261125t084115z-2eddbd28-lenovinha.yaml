@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: port-relay-ack-salvage-seed-fast-refusals-hook-phase-fixtures-to-lua
+    field: status
+    value: blocked
+    ts: "2026-11-25T08:41:15Z"
+    host: lenovinha
+
+events:
+  - packet_id: port-relay-ack-salvage-seed-fast-refusals-hook-phase-fixtures-to-lua
+    event:
+      type: note
+      ts: "2026-11-25T08:41:15Z"
+      host: lenovinha
+      summary: |-
+        PR open at 5e6b511ac (work/2342-9f4k); waits on landing, after #1538

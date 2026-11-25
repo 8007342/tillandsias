@@ -6707,7 +6707,14 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Gate-stamp earned-only guard passed"
 
     _step "Checking the hardware fingerprint refuses an untrue twin claim (805-r98w)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-hardware-fingerprint.sh" 2>&1; then
+    # 2333-rqjn: the fixture is Lua. No runnable plan binary is a failed check.
+    _hwfp_plan="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _hwfp_plan=""
+    case "$_hwfp_plan" in ./*) _hwfp_plan="$SCRIPT_DIR/${_hwfp_plan#./}" ;; esac
+    if [[ -z "$_hwfp_plan" ]]; then
+        _error "could-not-run:hardware-fingerprint:no-plan-binary — scripts/lua/test-hardware-fingerprint.lua needs tillandsias-plan script run (805-r98w)"
+        exit 1
+    fi
+    if ! (cd "$SCRIPT_DIR" && _run "$_hwfp_plan" script run scripts/lua/test-hardware-fingerprint.lua) 2>&1; then
         _error "the hardware fingerprint would bless two different machines as a control — every tier number keyed on it inherits the difference (805-r98w)"
         exit 1
     fi
