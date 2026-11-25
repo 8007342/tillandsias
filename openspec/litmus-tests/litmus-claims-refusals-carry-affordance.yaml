@@ -14,13 +14,13 @@ description: >
 
 preconditions:
   - workspace contains scripts/check-claims-across-branches.sh
-  - workspace contains scripts/test-claims-affordance.sh
+  - workspace contains scripts/lua/test-claims-affordance.lua
 
 critical_path:
   - step: "each claims refusal carries why and remedy, the executed remedies clear their refusals, and no refusal site lacks an affordance"
-    command: "bash scripts/test-claims-affordance.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-claims-affordance.lua 2>&1 | tail -1"
     timeout_ms: 120000
-    expected_behavior: "PASS: claims-affordance 8/8 (1247-omqr)"
+    expected_behavior: "ok:claims-affordance:12 arms"
 
 observability:
   traces:

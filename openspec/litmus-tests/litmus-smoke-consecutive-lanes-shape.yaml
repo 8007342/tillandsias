@@ -15,23 +15,23 @@ severity: medium
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-smoke-consecutive-lanes.sh
+  - workspace contains scripts/lua/test-smoke-consecutive-lanes.lua
 
 critical_path:
-  - step: "fixture parses and is executable"
-    command: "bash -n scripts/test-smoke-consecutive-lanes.sh && test -x scripts/test-smoke-consecutive-lanes.sh && test -x scripts/smoke-consecutive-lanes.sh && echo 'ok: parse'"
+  - step: "the subject parses and is executable"
+    command: "bash -n scripts/smoke-consecutive-lanes.sh && test -x scripts/smoke-consecutive-lanes.sh && echo 'ok: parse'"
     timeout_ms: 2000
     expected_behavior: "ok: parse"
 
   - step: "every consecutive-lane verdict is produced by name"
-    command: "bash scripts/test-smoke-consecutive-lanes.sh 2>&1 | tail -n 1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-smoke-consecutive-lanes.lua 2>&1"
     timeout_ms: 30000
-    expected_behavior: "PASS: smoke-consecutive-lanes"
+    expected_behavior: "ok:smoke-consecutive-lanes:7 arms"
 
 observability:
   traces:
     - "@trace spec:meta-orchestration"
-  expected_log: "PASS: smoke-consecutive-lanes"
+  expected_log: "ok:smoke-consecutive-lanes:7 arms"
   log_fields:
     spec: "ci-release"
     test: "smoke-consecutive-lanes-shape"
@@ -42,4 +42,4 @@ rollback:
     A second lane that reads healthy while its harness crashed, or while it ran
     against a different stack, is the defect: the variant exists to exercise
     exactly that shape.
-  command: "bash scripts/test-smoke-consecutive-lanes.sh"
+  command: "tillandsias-plan script run scripts/lua/test-smoke-consecutive-lanes.lua"

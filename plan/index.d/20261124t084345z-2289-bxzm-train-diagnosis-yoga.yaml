@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: land-queue-train-red-judged-by-failing-step
+    order: "2289-bxzm"
+    status: implemented
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [land-queue, train, bundle-landing]
+    estimated_hours: 5
+    owned_files:
+      - scripts/land-queue.sh
+      - scripts/test-land-queue.sh
+      - build.sh
+    title: "a red train is judged by its failing step (trunk-red, flake, culprit) instead of one gate per member"
+    context: |
+      Bundle landing phase 1. A red train sent every member through its own whole gate. The gate now names the script a
+      refusal is about (red-script:<path>, printed by build.sh _error after the _run that exited 1); real eviction
+      comments of 2026-11-22..24 (#1464 #1446 #1135 #1190) named none. The queue re-runs that one step, the way the gate
+      runs it, on the identical union (green is a flake, the same members ride once more), on the bare trunk (red is
+      confirmed by the one memoised whole trunk gate, then hold:trunk-red), then on the per-member merges in order (the
+      first red is the culprit; it leaves the train, the rest ride once more, its own gate judges it). A train still
+      evicts nobody. Anything not judged falls back to one at a time. Only a test-*/check-* the tree's own gate runs is
+      ever executed. trains.log and bundles.log carry the answer in result=/cause=.
+    exit_criteria:
+      - "scripts/test-land-queue.sh ARM 62 and ARM 63 green; a mutant that executes any named script, skips the base, skips the whole-gate confirmation, keeps the culprit, or diagnoses the second train reds ARM 62."
+      - "After it lands, each red train's bundles.log cause names what the evidence shows; phase 2 waits on at least 10 trains with the right PR named on every red."
+    unscoreable: "fixture-scored: scripts/test-land-queue.sh ARM 62 and 63 are the pin; no litmus covers the land queue"
+    provenance: "coordinator macuahuitl-fedora 2026-11-23 and 2026-11-24, bundle landing phase 1 item 3"
+    related: [2153-trn1, 2118-tpmy, 2253-iher, 2276-fnhy]
+    events:
+      - {type: implemented, ts: "2026-11-24T08:43:45Z", host: yoga, summary: "implemented on work/2289-bxzm; test-land-queue 83/83"}

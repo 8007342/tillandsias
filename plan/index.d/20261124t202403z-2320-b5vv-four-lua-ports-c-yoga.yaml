@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: confinement-census-bypass-and-codex-harvest-fixtures-ported-to-lua
+    order: "2320-b5vv"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/test-credential-and-proxy-confinement.lua
+      - scripts/lua/test-census-admitted-missing-evidence.lua
+      - scripts/lua/test-claude-forge-bypass-preaccepted.lua
+      - scripts/lua/test-codex-oauth-harvest.lua
+    title: "four shell fixtures ported to Lua: credential/proxy confinement, admitted-missing-evidence census, claude bypass consent, codex oauth harvest"
+    context: |
+      ports: test-credential-and-proxy-confinement, test-census-admitted-missing-evidence, test-claude-forge-bypass-preaccepted, test-codex-oauth-harvest.
+      Claimed by yoga before the work, in the coordinator's test-[a-c]* range.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its subject is mutated; callers run the .lua; the four .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by their gate steps and litmus"
+    provenance: "coordinator queue 2026-11-24 (test-[a-c]* range), yoga"
+    related: [1118-bscs, 1349-tdpg, 1437-y2wu]
+    events:
+      - {type: claimed, ts: "2026-11-24T20:24:03Z", host: yoga, summary: "claimed; work ref work/2320-b5vv"}

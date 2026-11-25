@@ -88,6 +88,13 @@ echo "MUTATION git $*" >> "$VIOLATIONS"
 exit 1
 TRIP
 chmod +x "$WORK/bin/gh" "$WORK/bin/git"
+# The record gate (check-promote-gate.lua) has its own fixture; here its ANSWER is stubbed.
+cat >"$WORK/bin/plan-stub" <<'STUB'
+#!/usr/bin/env bash
+echo "$*" >> "${PG_ARGV:-/dev/null}"
+echo "${PG_LINE-ok:promote-gate:v0.4.260817.1:linux=pass,darwin=pass,windows=pass:queue=idle}"; exit "${PG_RC:-0}"
+STUB
+chmod +x "$WORK/bin/plan-stub"; export TILLANDSIAS_PLAN_BIN="$WORK/bin/plan-stub"
 
 # run_case <name> <expected-regex> -- then the caller has already populated
 # $WORK/root/plan with the fixture evidence.
@@ -302,7 +309,7 @@ seed_platform windows "$VER"
 : > "$VIOLATIONS"
 _force_err="$(PATH="$WORK/bin:$PATH" VIOLATIONS="$VIOLATIONS" \
     bash "$WORK/root/scripts/promote-stable.sh" "$VER" --dry-run --force 2>&1 >/dev/null)"
-if printf '%s' "$_force_err" | grep -q 'missing platform(s): linux,macos'; then
+if grep -q <<<"$_force_err" 'missing platform(s): linux,macos'; then
     printf 'ok   %-52s -> names linux,macos\n' "--force warning names what was overridden"
     pass=$((pass + 1))
 else
@@ -325,8 +332,8 @@ EOF
 _disc_out="$(PATH="$WORK/bin:$PATH" VIOLATIONS="$VIOLATIONS" \
     bash "$WORK/root/scripts/promote-stable.sh" "$VER" --dry-run 2>"$WORK/disc.err")"
 _disc_err="$(cat "$WORK/disc.err")"
-if printf '%s' "$_disc_out" | grep -q '^would-promote:' \
-   && printf '%s' "$_disc_err" | grep -q 'disclaiming'; then
+if grep -q <<<"$_disc_out" '^would-promote:' \
+   && grep -q <<<"$_disc_err" 'disclaiming'; then
     printf 'ok   %-52s -> promoted + warned\n' "PASS-but-disclaimed counts, and warns loudly"
     pass=$((pass + 1))
 else
@@ -359,7 +366,7 @@ seed_platform linux "$VER"
 _one_out="$(PATH="$WORK/bin:$PATH" VIOLATIONS="$VIOLATIONS" TILLANDSIAS_REQUIRED_PLATFORMS="linux" \
     bash "$WORK/root/scripts/promote-stable.sh" "$VER" --dry-run 2>/dev/null \
     | grep -E '^(would-promote|refused):' | tail -1)"
-if printf '%s' "$_one_out" | grep -q '^would-promote:'; then
+if grep -q <<<"$_one_out" '^would-promote:'; then
     printf 'ok   %-52s -> would-promote\n' "REQUIRED_PLATFORMS=linux is satisfied by linux"
     pass=$((pass + 1))
 else
@@ -657,6 +664,23 @@ case "$deploy_refs" in
         printf 'FAIL %-52s -> %s\n' "promote-stable.sh names no deploy ref" "$(printf '%s\n' "$deploy_refs" | head -3 | tr '\n' ' ')"
         fail=$((fail + 1)) ;;
 esac
+
+
+# ── ORDER 2296-pn45: THE RECORD GATE IS ASKED, AND ITS NO IS A NO ────────────
+fresh_root; seed_all_platforms "$VER"
+export PG_ARGV="$WORK/pg.argv"; : > "$PG_ARGV"
+run_case "the record gate's ok promotes" "^would-promote:$VER$"
+run_case "an unmeasured platform is passed on by name" "^would-promote:$VER$" "$VER" --dry-run --allow-unmeasured darwin --approval smoke-row
+if grep -q "check-promote-gate.lua -- $VER --allow-unmeasured darwin --approval smoke-row$" "$PG_ARGV"; then
+    printf 'ok   %-52s\n' "the gate is asked for this tag and the named platform"; pass=$((pass + 1))
+else printf 'FAIL %-52s -> %s\n' "the gate is asked for this tag and the named platform" "$(tr '\n' ';' < "$PG_ARGV")"; fail=$((fail + 1)); fi
+PG_RC=1 PG_LINE="refused:promote-gate:$VER:linux=missing queue=idle" run_case "its refusal refuses" "^refused:promote-gate:$VER$"
+PG_RC=0 PG_LINE="ok:promote-gate:v9.9.9.9:x" run_case "an ok for another tag refuses" "^refused:promote-gate:$VER$"
+PG_RC=0 PG_LINE="" run_case "silence with rc 0 refuses" "^refused:promote-gate:$VER$"
+PG_RC=3 PG_LINE="could-not-run:promote-gate:trunk-head-unreadable" run_case "could-not-run refuses" "^refused:promote-gate:$VER$"
+TILLANDSIAS_PLAN_BIN="$WORK/bin/absent" run_case "no plan binary refuses" "^refused:promote-gate:$VER$"
+PG_RC=1 PG_LINE="refused:promote-gate:$VER:queue=gating" run_case "--force overrides it, as it does the reports" "^would-promote:$VER$" "$VER" --dry-run --force
+unset PG_ARGV
 
 printf '\n%s/%s passed\n' "$pass" "$((pass + fail))"
 [ "$fail" -eq 0 ]

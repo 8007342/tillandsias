@@ -16,6 +16,8 @@
 //   2 the project namespace, every runner `TILLANDSIAS_*` name;
 //   3 the declared inherit set (`-- @env-profile` / `-- @env-inherit` in a
 //     script header, `--env-profile` / `--env-inherit` on the run verb);
+//   3b the call's `env_unset` (order 2305-zm8j): names this one call drops from
+//     what steps 1-3 inherited. It only removes, so it widens nothing;
 //   4 the fixed overrides `ENV_FIXED`;
 //   5 the call's own literals (`proc.run{env=...}`, `run --env K=V`).
 //
@@ -901,6 +903,23 @@ fn upsert(vars: &mut Vec<(OsString, OsString)>, name: OsString, value: OsString,
     }
 }
 
+/// ORDER 2305-zm8j. An `env_unset` entry: a variable name, or a name prefix
+/// ending in one `*`. A bare `*` is refused: it would drop PATH and HOME, and a
+/// child that cannot start is not a clean environment.
+pub fn unset_pattern_ok(p: &str) -> bool {
+    let name = p.strip_suffix('*').unwrap_or(p);
+    !name.is_empty() && !name.contains(['*', '=', '\0'])
+}
+
+fn unset_matches(p: &str, name: &str, fold: bool) -> bool {
+    match p.strip_suffix('*') {
+        Some(prefix) => name
+            .get(..prefix.len())
+            .is_some_and(|head| eq_with(head, prefix, fold)),
+        None => eq_with(p, name, fold),
+    }
+}
+
 impl ChildEnv {
     /// The six steps over an explicit runner environment (pure: tests feed
     /// it). Fails only on a per-call literal.
@@ -917,6 +936,17 @@ impl ChildEnv {
         runner: &[(OsString, OsString)],
         declared: &Declared,
         call: &[(String, String)],
+        fold: bool,
+    ) -> Result<ChildEnv, EnvRefusal> {
+        Self::build_unset_with(runner, declared, call, &[], fold)
+    }
+
+    /// `build_with` plus step 3b, the call's `env_unset` patterns.
+    pub fn build_unset_with(
+        runner: &[(OsString, OsString)],
+        declared: &Declared,
+        call: &[(String, String)],
+        unset: &[String],
         fold: bool,
     ) -> Result<ChildEnv, EnvRefusal> {
         // Step 5 is judged FIRST, so a refused call builds nothing.
@@ -964,6 +994,13 @@ impl ChildEnv {
                 }
             }
         }
+        // Step 3b (2305-zm8j): removal only, before the fixed values and the
+        // call's literals, so neither can be lost to it.
+        env.vars.retain(|(k, _)| {
+            !unset
+                .iter()
+                .any(|p| unset_matches(p, &k.to_string_lossy(), fold))
+        });
         // Step 4.
         for (k, v) in ENV_FIXED {
             upsert(&mut env.vars, OsString::from(k), OsString::from(v), fold);
@@ -977,8 +1014,9 @@ impl ChildEnv {
 
     /// THE door entry: the runner's own environment, the running script's
     /// declared set (none outside a script run), the call's literals.
-    pub fn for_call(call: &[(String, String)]) -> Result<ChildEnv, EnvRefusal> {
-        Self::for_declared(&script_declared(), call)
+    /// `unset` is the call's `env_unset` (step 3b).
+    pub fn for_call(call: &[(String, String)], unset: &[String]) -> Result<ChildEnv, EnvRefusal> {
+        Self::for_runner(&script_declared(), call, unset)
     }
 
     /// The door entry with an explicit declared set (the run verb's flags).
@@ -986,8 +1024,16 @@ impl ChildEnv {
         declared: &Declared,
         call: &[(String, String)],
     ) -> Result<ChildEnv, EnvRefusal> {
+        Self::for_runner(declared, call, &[])
+    }
+
+    fn for_runner(
+        declared: &Declared,
+        call: &[(String, String)],
+        unset: &[String],
+    ) -> Result<ChildEnv, EnvRefusal> {
         let runner: Vec<(OsString, OsString)> = std::env::vars_os().collect();
-        let env = Self::build(&runner, declared, call)?;
+        let env = Self::build_unset_with(&runner, declared, call, unset, fold())?;
         env.report_once();
         Ok(env)
     }
@@ -1085,6 +1131,69 @@ mod tests {
 
     fn get<'a>(env: &'a ChildEnv, name: &str) -> Option<&'a OsString> {
         env.vars.iter().find(|(k, _)| k == name).map(|(_, v)| v)
+    }
+
+    /// ORDER 2305-zm8j: `env_unset` drops an inherited project name and
+    /// CARGO_TARGET_DIR, leaves the rest, and never beats a literal or a fixed
+    /// value.
+    #[test]
+    fn env_unset_drops_inherited_names_and_nothing_else() {
+        let runner = os(&[
+            ("PATH", "/bin"),
+            ("CARGO_TARGET_DIR", "/shared"),
+            ("TILLANDSIAS_BIN", "/gate/bin"),
+            ("TILLANDSIAS_SURFACE_ROOT", "/gate"),
+        ]);
+        let s = |v: &[&str]| v.iter().map(|p| p.to_string()).collect::<Vec<_>>();
+        let build = |call: &[(String, String)], unset: &[&str], fold: bool| {
+            ChildEnv::build_unset_with(&runner, &Declared::default(), call, &s(unset), fold)
+                .unwrap()
+        };
+        // Without it: today's environment.
+        let plain = build(&[], &[], false);
+        assert_eq!(
+            get(&plain, "TILLANDSIAS_BIN"),
+            Some(&OsString::from("/gate/bin"))
+        );
+        assert_eq!(
+            plain.vars,
+            ChildEnv::build_with(&runner, &Declared::default(), &[], false)
+                .unwrap()
+                .vars
+        );
+        // A name and a prefix.
+        let one = build(&[], &["TILLANDSIAS_BIN"], false);
+        assert_eq!(get(&one, "TILLANDSIAS_BIN"), None);
+        assert!(
+            get(&one, "TILLANDSIAS_SURFACE_ROOT").is_some()
+                && get(&one, "CARGO_TARGET_DIR").is_some()
+        );
+        let all = build(&[], &["TILLANDSIAS_*", "CARGO_TARGET_DIR", "LC_ALL"], false);
+        for gone in [
+            "TILLANDSIAS_BIN",
+            "TILLANDSIAS_SURFACE_ROOT",
+            "CARGO_TARGET_DIR",
+        ] {
+            assert_eq!(get(&all, gone), None, "{gone}");
+        }
+        assert!(get(&all, "PATH").is_some());
+        assert_eq!(
+            get(&all, "LC_ALL"),
+            Some(&OsString::from("C")),
+            "a fixed value stays"
+        );
+        // The call's own literal wins; the case rule is the host's.
+        let call = [("TILLANDSIAS_BIN".to_string(), "/mine".to_string())];
+        assert_eq!(
+            get(&build(&call, &["TILLANDSIAS_*"], false), "TILLANDSIAS_BIN"),
+            Some(&OsString::from("/mine"))
+        );
+        assert!(get(&build(&[], &["tillandsias_*"], false), "TILLANDSIAS_BIN").is_some());
+        assert!(get(&build(&[], &["tillandsias_*"], true), "TILLANDSIAS_BIN").is_none());
+        for bad in ["", "*", "A*B", "A**", "A=B"] {
+            assert!(!unset_pattern_ok(bad), "{bad}");
+        }
+        assert!(unset_pattern_ok("TILLANDSIAS_*") && unset_pattern_ok("CARGO_TARGET_DIR"));
     }
 
     /// Design §5.3 and the §4.10 census, one row per name: (name, expected).

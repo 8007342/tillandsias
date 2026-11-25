@@ -76,7 +76,7 @@
 # exists across files would trade a naming clash for the defect the row fixes.
 #
 # The classifier is sourceable for its hermetic negative control — see
-# scripts/test-vault-shutdown-fixture-classifier.sh, which is the guard that
+# scripts/lua/test-vault-shutdown-fixture-classifier.lua, which is the guard that
 # keeps all four outcomes reachable and keeps a real regression failing.
 set -uo pipefail
 

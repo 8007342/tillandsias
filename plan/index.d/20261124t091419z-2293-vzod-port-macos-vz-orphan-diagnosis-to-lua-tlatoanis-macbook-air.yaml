@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-24. Coordinator queue item (2): darwin-relevant Lua-first .sh ports.
+packets:
+- packet_id: port-test-macos-vz-orphan-diagnosis-to-lua
+  order: 2293-vzod
+  status: implemented
+  kind: debt
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [shell-to-lua, macos, vm, fixtures]
+  size: M
+  implementer_tier: sonnet
+  estimated_hours: 2
+  title: 'Port scripts/test-macos-vz-orphan-diagnosis.sh (order 1253-gina) to scripts/lua/test-macos-vz-orphan-diagnosis.lua'
+  context: >-
+    The darwin fixture pins the enriched "boot loader is invalid" text: with a VM helper holding nvram.bin, a second start must fail naming
+    the holder and steering away from --reset-guest (arm 2), a SIGKILLed tray must leave no helper (arm 1), and the image must start again (arm 3).
+    Arm 0 guards the explainer in vz.rs on every host. The port keeps the arms, their order, the verdict lines and the subject/image clauses.
+    PORT FINDING: proc.spawn makes its child a process-group leader and kills that group when the leader exits, so a helper sharing the
+    tray's group died with it and a first port read green on the outlive mutant the .sh reds. A bare setsid did not fix it, because the
+    new group's id is the leader's own pid. The port launches the live tray through a perl fork plus setsid, so its group is one the
+    spawned leader never owned. The litmus steps now call the .lua and no longer pipe into grep.
+  exit_criteria:
+  - 'Lua and shell print the same last line, rc and unsupported/skip pair on every path reachable with stub trays.'
+  - 'The .sh and its shell-decider, pipe-site and bare-mktemp floor lines are gone; litmus:macos-vz-orphan-diagnosis calls the .lua.'
+  verifiable_closure: 'litmus:macos-vz-orphan-diagnosis (vm-provisioning-lifecycle, post-build); parity table in the PR.'
+  unscoreable: 'The live arms against a real guest were NOT run here: the only bundle in dist/ is a stale dev build that must not drive the guest, and the installed tray holds nvram.bin while it waits for the operator to sign in.'
+  next_action: >-
+    Implemented. Parity measured on darwin with a scratch HOME and stub trays, Lua vs shell, same verdict and rc in 11 cases
+    (two differ only in the pid number): no tray, no nvram, pre-held (both skip and leave the pre-holder alive), green ok:4,
+    second start succeeds, failure text without the pid, helper outlives SIGKILL, never running, lsof blind, start fails after
+    the kill, and arm 0 with DO NOT --reset-guest removed from vz.rs. run-litmus-test.sh vm-provisioning-lifecycle --test
+    litmus:macos-vz-orphan-diagnosis with the tray stubbed absent: passed=1. Open: the live arms on a published release with no tray running.
+  provenance: 'tlatoanis-macbook-air 2026-11-24, on the coordinator''s (macuahuitl-fedora) queue item (2).'
+  events:
+  - {type: filed, ts: '2026-11-24T09:14:19Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}

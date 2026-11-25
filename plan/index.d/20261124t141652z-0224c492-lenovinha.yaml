@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: port-embed-endpoint-envelope-suite-seed-branch-fixtures-to-lua
+    event:
+      type: note
+      ts: "2026-11-24T14:16:52Z"
+      agent_id: linux-lenovinha-claude-20261124t141652z
+      host: lenovinha
+      summary: |-
+        FOLLOW-UP for the next change that rebuilds the forge image anyway: images/default/lib-common.sh and images/default/lib-embed-endpoint.sh each have one comment naming scripts/test-embed-endpoint-derivation.sh; point both at scripts/lua/test-embed-endpoint-derivation.lua.

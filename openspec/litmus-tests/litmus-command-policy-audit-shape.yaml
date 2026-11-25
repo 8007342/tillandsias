@@ -13,23 +13,18 @@ severity: normal
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-command-policy-audit.sh
+  - workspace contains scripts/lua/test-command-policy-audit.lua
 
 critical_path:
-  - step: "fixture parses and is executable"
-    command: "bash -n scripts/test-command-policy-audit.sh && test -x scripts/test-command-policy-audit.sh && echo 'ok: parse'"
-    timeout_ms: 2000
-    expected_behavior: "ok: parse"
-
   - step: "decisions audited and redacted, summary verb, timing-log NEGATIVE CONTROL, bridge on the same audit"
-    command: "bash scripts/test-command-policy-audit.sh 2>&1 | tail -n 1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-command-policy-audit.lua 2>&1 | tail -n 1"
     timeout_ms: 120000
-    expected_behavior: "PASS: command-policy-audit"
+    expected_behavior: "ok:command-policy-audit:9 arms"
 
 observability:
   traces:
     - "@trace spec:command-policies"
-  expected_log: "PASS: command-policy-audit"
+  expected_log: "ok:command-policy-audit:9 arms"
   log_fields:
     spec: "command-policies"
     test: "command-policy-audit-shape"
@@ -39,4 +34,4 @@ rollback:
   on_failure: >
     A line that carries a raw token is a leak: restore redaction before
     anything else; TILLANDSIAS_POLICY_AUDIT=off stops writing.
-  command: "bash scripts/test-command-policy-audit.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-command-policy-audit.lua"

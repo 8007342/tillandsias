@@ -2244,7 +2244,7 @@ distributed_work:
       ^refused:agent-identity:empty-(explicit-id|platform|workstation|backend|timestamp)$
       and a non-zero exit — BEFORE any append-event. A refused identity is a
       blocked claim, never an improvised one.
-    fixture: scripts/test-agent-identity.sh
+    fixture: scripts/lua/test-agent-identity.lua
     pinned_by: litmus:agent-identity-canonical-source-shape
     consumers:
       - "skills/advance-work-from-plan/SKILL.md §1.4 (Create Agent ID) and §3 (claim events)"

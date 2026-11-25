@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: tray-import-surface-litmus-resolves-the-plan-binary
+    field: status
+    value: implemented
+    ts: "2026-11-24T15:43:36Z"
+    host: yoga
+events:
+  - packet_id: tray-import-surface-litmus-resolves-the-plan-binary
+    event: {type: implemented, ts: "2026-11-24T15:43:36Z", host: yoga, summary: "on work/2308-irfp; a bare-call grep of the corpus hits 24 other litmus files, not fixed here"}

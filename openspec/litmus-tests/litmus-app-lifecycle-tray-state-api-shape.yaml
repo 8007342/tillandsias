@@ -61,7 +61,8 @@ critical_path:
   - step: "app-lifecycle trace breadth covers lifecycle helpers"
     command: "grep -cF '@trace spec:app-lifecycle' crates/tillandsias-core/src/state.rs | awk '{ if ($1+0 >= 10) print \"ok:\", $1, \"app-lifecycle traces\"; else { print \"FAIL: only\", $1, \"app-lifecycle traces\"; exit 1 } }'"
     timeout_ms: 3000
-    expected_behavior: "app-lifecycle traces"
+    assert_exit: 0
+    assert_output_matches: "^ok: [0-9]+ app-lifecycle traces$"
 
 observability:
   traces:

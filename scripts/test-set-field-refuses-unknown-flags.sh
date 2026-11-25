@@ -91,7 +91,7 @@ out="$("$BIN" --index "$IDX" set-field "$REF" notes "arm1" --append --host yoga 
 a="$(frags)"
 if [ "$a" -ne "$b" ]; then
     bad "ARM 1: an unknown flag still WROTE ($b -> $a fragments) — the ledger-corrupting path is open"
-elif printf '%s' "$out" | grep -q "unknown flag '--dry-run'"; then
+elif grep -q <<<"$out" "unknown flag '--dry-run'"; then
     ok "ARM 1: --dry-run is refused BY NAME and nothing is written (pre-fix: absorbed in silence, write landed)"
 else
     bad "ARM 1: no write, but the refusal does not name the flag: $(printf '%s' "$out" | head -1)"
@@ -99,7 +99,7 @@ fi
 
 # The refusal must also say what IS accepted, or a caller learns only that they
 # were wrong and not what to type.
-if printf '%s' "$out" | grep -q -- '--value-file' && printf '%s' "$out" | grep -q -- '--append'; then
+if grep -q <<<"$out" -- '--value-file' && grep -q <<<"$out" -- '--append'; then
     ok "ARM 1b: the refusal lists the accepted flags, value-taking and valueless separately"
 else
     bad "ARM 1b: the refusal names the bad flag but not the accepted set"
@@ -114,7 +114,7 @@ out="$("$BIN" --index "$IDX" set-field "$REF" notes "arm2 real value" --append -
 a="$(frags)"
 if [ "$a" -le "$b" ]; then
     bad "ARM 2: an ordinary --append write did not land ($b -> $a) — the parse now refuses something it should accept: $(printf '%s' "$out" | head -1)"
-elif printf '%s' "$out" | grep -Fq 'arm2 real value'; then
+elif grep -Fq <<<"$out" 'arm2 real value'; then
     ok "ARM 2: --append followed by --ts writes the POSITIONAL value, not the timestamp"
 else
     bad "ARM 2: the write landed but the value is not the positional one: $(printf '%s' "$out" | tail -1)"
@@ -129,7 +129,7 @@ out="$("$BIN" --index "$IDX" set-field "$REF" notes --value-file "$TMP/value.txt
 a="$(frags)"
 if [ "$a" -le "$b" ]; then
     bad "ARM 3: --value-file did not write ($b -> $a): $(printf '%s' "$out" | head -1)"
-elif printf '%s' "$out" | grep -Fq 'prose with $HOME and `backticks`'; then
+elif grep -Fq <<<"$out" 'prose with $HOME and `backticks`'; then
     ok "ARM 3: --value-file carries prose verbatim, metacharacters and all, with no shell in the path"
 else
     bad "ARM 3: --value-file wrote something other than the file's contents: $(printf '%s' "$out" | tail -1)"
@@ -139,7 +139,7 @@ fi
 # rather than silently prefer one.
 b="$(frags)"
 out="$("$BIN" --index "$IDX" set-field "$REF" notes "positional too" --value-file "$TMP/value.txt" --host yoga 2>&1)"
-if [ "$(frags)" -eq "$b" ] && printf '%s' "$out" | grep -q 'REFUSED'; then
+if [ "$(frags)" -eq "$b" ] && grep -q <<<"$out" 'REFUSED'; then
     ok "ARM 3b: a positional value AND --value-file together are refused, not silently resolved"
 else
     bad "ARM 3b: the ambiguous form was accepted — one of the two values was chosen without saying which"
@@ -150,7 +150,7 @@ fi
 # landed was byte-identical to another flag's argument on the same line.
 b="$(frags)"
 out="$("$BIN" --index "$IDX" set-field "$REF" notes "yoga" --host yoga --ts "$TS" 2>&1)"
-if [ "$(frags)" -eq "$b" ] && printf '%s' "$out" | grep -q 'byte-identical'; then
+if [ "$(frags)" -eq "$b" ] && grep -q <<<"$out" 'byte-identical'; then
     ok "ARM 4: a value byte-identical to another flag's argument is refused — the misparse's fingerprint"
 else
     bad "ARM 4: a value identical to the --host argument was accepted; the signature that caught the original incident is unguarded"

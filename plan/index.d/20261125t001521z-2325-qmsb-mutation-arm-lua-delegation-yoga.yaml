@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-mutation-arm-guard-accepts-a-delegation-to-a-scripts-lua-fixture
+    order: "2325-qmsb"
+    status: in_progress
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, litmus, guards]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/check-litmus-mutation-arms-mutate.lua
+      - scripts/lua/test-litmus-mutation-arm-guard.lua
+    title: "check-litmus-mutation-arms-mutate refuses a MUTATION step that delegates to scripts/lua/*.lua"
+    context: |
+      The guard accepts a MUTATION step whose command runs scripts/*.sh, since the mutation happens inside the fixture. Its
+      pattern has no form for scripts/lua/*.lua, so porting such a fixture would make its litmus step refused.
+    exit_criteria:
+      - "A MUTATION step that runs a scripts/lua/*.lua file on `script run` passes. Pre-fix result: FAILS, flagged."
+      - "NEGATIVE CONTROL: a MUTATION step that does not delegate, and one that only names a scripts/lua file as an argument of another command, are still flagged."
+    unscoreable: "fixture-scored: new arms of test-litmus-mutation-arm-guard.lua are the guard"
+    provenance: "coordinator macuahuitl-fedora 2026-11-24, from yoga's reading of the pattern in 2310-eji3"
+    related: [1059-pb2j, 2310-eji3]
+    events:
+      - {type: claimed, ts: "2026-11-25T00:15:21Z", host: yoga, summary: "filed and claimed on the coordinator's word; work ref work/2325-qmsb"}

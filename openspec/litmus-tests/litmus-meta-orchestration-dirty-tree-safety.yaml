@@ -65,9 +65,9 @@ critical_path:
     # real reason the timeout was masking — core.autocrlf=true makes the clone
     # hash diverge and core.fileMode=false makes the exec-bit scenario a no-op.
     # See plan/issues/hash-image-sources-fixture-windows-portability-2026-08-16.md.
-    command: "scripts/test-hash-image-sources.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-hash-image-sources.lua 2>&1"
     timeout_ms: 90000
-    expected_behavior: "PASS: canonical skills participate in forge image cache key"
+    expected_behavior: "ok:hash-image-sources:9 arms"
 
 observability:
   traces:

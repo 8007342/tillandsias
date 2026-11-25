@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-litmus-no-plan-binary-fixture-to-lua
+    order: 2294-y3iu
+    status: ready
+    kind: debt
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua]
+    estimated_hours: 1
+    title: |
+      Port test-litmus-no-plan-binary.sh to scripts/lua; four of its arms assert only that the runner did not refuse, so a runner that crashed would pass them.
+    context: |
+      One litmus step runs it; no origin/work ref touches it (checked 2026-11-24). The port asserts what the admitted run does say: no litmus tests matched, the list, the parse verdict.
+    exit_criteria:
+      - "the .sh is gone, the litmus step runs the Lua, floors lowered"
+      - "a runner that dies at start reds every admitted arm"
+    unscoreable: "mechanical port; the arms are the deliverable."
+    next_action: "Write the Lua and the mutants."
+    provenance: coordinator queue (macuahuitl-fedora, 2026-11-24); filed by lenovinha.
+    related: [1419-zydw]
+    events:
+      - {type: filed, ts: '2026-11-24T10:18:46Z', host: lenovinha, summary: port one fixture}
