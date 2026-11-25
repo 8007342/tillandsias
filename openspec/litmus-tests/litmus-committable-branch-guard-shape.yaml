@@ -36,6 +36,16 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: probe-defined"
 
+  - step: "no live file still names the deleted shell checker (1781-wves)"
+    command: "if git grep -n 'check-committable-branch[.]sh' -- . ':!plan' ':!openspec/changes/archive' ':!openspec/litmus-tests/litmus-committable-branch-guard-shape.yaml'; then echo 'refused:committable-branch-shell-mention'; exit 1; fi; echo 'no shell checker mention'"
+    timeout_ms: 10000
+    expected_behavior: "no shell checker mention"
+
+  - step: "negative control: the same guard pattern really is present-sensitive (a planted mention is found)"
+    command: "m='run scripts/check-committable-branch.sh'; grep -q 'check-committable-branch[.]sh' <<<\"$m\" && echo 'guard pattern matches a planted mention'"
+    timeout_ms: 3000
+    expected_behavior: "guard pattern matches a planted mention"
+
   - step: "a scratch `git init -b main` checkout is refused with the deterministic on-main verdict and a non-zero exit"
     command: "PB=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; case \"$PB\" in ./*) PB=\"$PWD/${PB#./}\" ;; esac; L=\"$PWD/scripts/lua/check-committable-branch.lua\";  d=$(mktemp -d); git init -q -b main \"$d/repo\"; git -C \"$d/repo\" config user.name litmus-fixture; git -C \"$d/repo\" config user.email litmus-fixture@invalid; out=$( cd \"$d/repo\" && env -u PROJECT_ROOT -u TILLANDSIAS_REPO_ROOT \"$PB\" script run \"$L\" ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'blocked:committable-cycle-on-main' ] && echo 'ok: main-fails-closed' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
     timeout_ms: 5000
