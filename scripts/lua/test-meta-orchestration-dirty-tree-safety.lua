@@ -1,4 +1,4 @@
--- @trace spec:meta-orchestration, order:1247-b46r
+-- @trace spec:meta-orchestration, order:1247-b46r, order:2348-ak6u
 --
 -- test-meta-orchestration-dirty-tree-safety.lua — PORTED from
 -- test-meta-orchestration-dirty-tree-safety.sh (1247-b46r carry, shell-to-lua).
@@ -24,6 +24,10 @@
 --     and git runs with HOME pointed into it, so no global git config of
 --     this host leaks into the fixture.
 
+-- 2348-ak6u: the guard is spawned through fixture.posix_shell(). A bare bash under this
+-- PATH was, on native Windows, one that finds no git; and a refused snapshot stops here,
+-- named with the guard's stderr, because the arms after it write into its boundary.
+local fixture = require "common.fixture"
 local ROOT = text.trim(proc.run({ argv = { "git", "rev-parse", "--show-toplevel" } }).stdout or "")
 if ROOT == "" then verdict.could_not_run("meta-orchestration-dirty-tree-safety", "not inside a git checkout") end
 local GUARD = ROOT .. "/scripts/meta-orchestration-worktree-guard.sh"
@@ -40,7 +44,7 @@ local function run(argv, cwd)
     return rc, text.trim(r.stdout or ""), r.stderr or ""
 end
 local function git(...) return run({ "git", ... }) end
-local function guard(...) return run({ "bash", GUARD, ... }) end
+local function guard(...) return run({ fixture.posix_shell(), GUARD, ... }) end
 local function hash(path) local _, h = git("hash-object", "--no-filters", "--", path); return h end
 local function finish()
     proc.run({ argv = { "rm", "-rf", SB } })
@@ -66,7 +70,11 @@ local tracked_before = hash("tracked.txt")
 local untracked_before = hash("plan/issues/operator packet.md")
 
 local rc, o, e = guard("snapshot", STATE)
-if rc ~= 0 then fail("snapshot refused a dirty start (rc=" .. rc .. "): " .. o .. e) end
+if rc ~= 0 then
+    finish()
+    out.line("FAIL: snapshot refused a dirty start (rc=" .. rc .. "): " .. o .. e)
+    verdict.emit("violation:meta-orchestration-dirty-tree-safety:1", 1)
+end
 
 -- A dirty-start blocked cycle may write disposable diagnostics only outside the
 -- shared checkout. It performs no checkout, restore, reset, clean, or unlink in
