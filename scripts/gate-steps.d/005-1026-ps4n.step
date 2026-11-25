@@ -21,7 +21,7 @@ STEP_DESC="Checking a timing record outlives its supervisor (1026-ps4n)"
 STEP_LUA="scripts/lua/test-timing-supervisor-lost.lua"
 STEP_ERROR="a killed supervisor no longer leaves a named-cause timing record (1026-ps4n) — see the verdict line above"
 STEP_OK="Supervisor-loss timing check passed"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:timing-supervisor-lost:11 arms at 7f4ee5ebd"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
 STEP_LANES="timing"
