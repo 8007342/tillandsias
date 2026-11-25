@@ -2,31 +2,29 @@
 name: litmus:forge-as-only-runtime
 spec: forge-as-only-runtime
 phase: post-build
-description: Verify the forge image bakes claude, codex, opencode and bash on $PATH (the source half is litmus-forge-no-raw-podman.yaml, pre-build)
+description: Verify the forge image holds bash and, for claude, codex and opencode, the lane that installs each at launch (the source half is litmus-forge-no-raw-podman.yaml, pre-build)
 severity: critical
-size: instant
+size: quick
 
 preconditions:
   - podman is available in PATH (or via the socket-aware wrapper)
   - the tillandsias-forge image has been built (post-build check)
 
 critical_path:
-  - step: "forge image contains claude, codex, opencode, bash on $PATH"
-    # No image is a named skip (this host never built one); a podman that does not answer is red.
-    # WEAK (2349-9vaq): bash's command -v exits 0 when ANY name is found, and the image holds only bash of
-    # the four. Kept as it was until the spec or the image is decided.
-    command: "IMGS=$(podman images --format '{{.Repository}}:{{.Tag}}') || exit 1; IMG=$(awk '/^localhost\\/tillandsias-forge:v/ && !n { n = 1; print }' <<<\"$IMGS\"); if [ -z \"$IMG\" ]; then echo skip:forge-as-only-runtime:no-forge-image; exit 0; fi; podman run --rm --entrypoint /bin/sh \"$IMG\" -c 'command -v claude codex opencode bash'"
-    timeout_ms: 15000
-    expected_behavior: "succeeds"
+  # Each name is asked alone; no local forge image is a named skip, a podman that does not answer is red.
+  - step: "the forge image holds bash and the launch-time install lane of claude, codex and opencode"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-image-agents.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:forge-image-agents:7 arms"
     assert_exit: 0
 
 observability:
   traces:
     - "@trace spec:forge-as-only-runtime"
-  expected_log: "forge image bakes all four agent CLIs"
+  expected_log: "forge image holds bash and the three agent lanes"
   log_fields:
     spec: "forge-as-only-runtime"
     test: "forge-as-only-runtime"
 
 rollback:
-  on_failure: "rebuild the forge image (scripts/build-image.sh forge) and re-run; if a CLI is missing, add it to images/default/Containerfile"
+  on_failure: "rebuild the forge image (scripts/build-image.sh forge) and re-run; if a lane is missing, its entrypoint no longer calls require_<agent> or lib-common.sh no longer defines it"

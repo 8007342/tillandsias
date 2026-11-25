@@ -3627,7 +3627,7 @@ fn host_verbs_dispatch(subcommand: &str, args: &[String]) {
 /// ORDER 1401-bcd7. What `json get --help` / `yaml get --help` print, so a
 /// jq-ratchet migration reads the surface instead of probing the binary for it.
 /// `{SUB}` is replaced with `json` or `yaml`. Every "refused" line names the
-/// reshape that stays inside the subset; scripts/test-json-get-help-names-its-subset.sh
+/// reshape that stays inside the subset; scripts/lua/test-json-get-help-names-its-subset.lua
 /// pins each line against what the parser actually accepts.
 const JSON_QUERY_HELP: &str = "\
 usage: tillandsias-plan {SUB} get [flags] <filter> [file...]
