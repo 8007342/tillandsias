@@ -6912,7 +6912,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Stale-base revert guard passed"
 
     _step "Checking the stale-base revert guard's RECEIVING half (1001-i5ux)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-no-stale-base-revert-pre-receive.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-no-stale-base-revert-pre-receive.lua" 2>&1; then
         _error "the pre-receive stale-base revert guard regressed (1001-i5ux) — a fast-forward push whose merge discards the trunk would be accepted by the mirror, which --no-verify cannot be blamed for"
         exit 1
     fi

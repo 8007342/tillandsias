@@ -656,8 +656,6 @@ scripts scripts/test-must-ship-rows.sh 8
 scripts scripts/test-nix-cache-service.sh 1
 scripts scripts/test-nix-toolbox.sh 9
 scripts scripts/test-no-competing-gate.sh 2
-scripts scripts/test-no-stale-base-revert-pre-receive.sh 3
-scripts scripts/test-nvidia-cdi-stale-hostpath.sh 1
 scripts scripts/test-opencode-vault-auth-content.sh 3
 scripts scripts/test-openspec-pin.sh 2
 scripts scripts/test-orchestrate-enclave.sh 1

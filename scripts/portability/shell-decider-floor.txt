@@ -258,8 +258,6 @@ scripts/test-must-ship-rows.sh
 scripts/test-nix-cache-service.sh
 scripts/test-nix-toolbox.sh
 scripts/test-no-competing-gate.sh
-scripts/test-no-stale-base-revert-pre-receive.sh
-scripts/test-nvidia-cdi-stale-hostpath.sh
 scripts/test-opencode-entrypoint-prompt.sh
 scripts/test-opencode-render-probe.sh
 scripts/test-opencode-vault-auth-content.sh
