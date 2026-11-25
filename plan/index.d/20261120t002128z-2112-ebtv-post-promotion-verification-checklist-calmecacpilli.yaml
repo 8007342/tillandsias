@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli at the coordinator's request (macuahuitl-fedora, 2026-11-19).
+packets:
+- packet_id: the-rows-tagged-verify-on-next-stable-are-one-post-promotion-checklist-run-against-the-stable-release
+  order: 2112-ebtv
+  status: ready
+  kind: verification
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - plan
+  - verification
+  - smoke
+  estimated_hours: 6
+  title: After the next promotion to stable, the 83 rows tagged "Verify on next stable" are checked against that release from one checklist, 9 plain operator asks and 74 smoke-host checks grouped by platform
+  context: |
+    The 2026-11-19 tech-debt triage left 83 landed rows whose remaining proof is
+    live (tray, VM, podman, platform or operator). The 71-row implemented set (minus
+    1367-irnh and 1729-kg5q, closed on recorded live PASSes) plus 14 merged-fix rows
+    from batch 3. The checklist is plan/issues/post-promotion-verification-checklist-2026-11-19.md.
+  exit_criteria:
+  - 'Every row in plan/issues/post-promotion-verification-checklist-2026-11-19.md is verified (with release, host, date and result as evidence), re-opened with a falsifying observation, or re-shaped with what is left.'
+  verifiable_closure: 'No row listed in the checklist still carries the "Verify on next stable" next_action at implemented/ready without a verification event dated after the promotion.'
+  unscoreable: 'measurement-on-named-hardware: the deliverable is live checks on the stable release across platforms.'
+  next_action: 'After the next promotion to stable, smoke hosts take their platform sections; the operator answers the plain asks.'
+  provenance: 'calmecacpilli tech-debt triage 2026-11-19, coordinator ruling.'
+  events:
+  - type: filed
+    ts: '2026-11-20T00:21:28Z'
+    host: calmecacpilli
+    summary: filed with the generated checklist
