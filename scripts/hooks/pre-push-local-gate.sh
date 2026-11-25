@@ -1657,7 +1657,7 @@ attempt_plan_only_lane() {
             # It is not free, either: it would oblige every fixture that drives
             # this lane with a fragment-bearing push to provision this script in
             # its scratch tree. Measured — an earlier revision of this fix did
-            # refuse here, and broke test-gate-stamp-scope.sh case 7, whose tree
+            # refuse here, and broke test-gate-stamp-scope.lua case 7, whose tree
             # legitimately provisions a minimal set. Scope kept to the binary,
             # which is what 1124-7f3u is about.
             LANE_NOTES+=("scripts/lua/check-fragment-status-loss.lua absent — skipped")
@@ -1761,7 +1761,7 @@ attempt_plan_only_lane() {
     # it directly and the full gate fails there. So fail-closed bought nothing in
     # production and broke the instruments.
     #
-    # test-gate-stamp-scope.sh's own case-7 note records this exact substitution
+    # test-gate-stamp-scope.lua's own case-7 note records this exact substitution
     # one dependency over: without yq on macOS that arm "stopped testing the
     # lane's stamp handling and started testing tool availability". A fixture
     # that fails for want of a copied script is measuring the fixture.
@@ -1993,7 +1993,7 @@ enforce_stamp_scope() {
         # coordinator closure after a scoped land was refused here. The lane
         # validates the whole outgoing diff and declines anything that is not
         # plan-only, so a code class outside the scope still reaches the refusal
-        # below (test-gate-stamp-scope.sh case 9).
+        # below (test-gate-stamp-scope.lua case 9).
         if attempt_plan_only_lane; then
             exit 0
         fi

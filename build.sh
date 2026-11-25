@@ -5426,7 +5426,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # repo on the box, which cost six litmus suites and a red gate on
     # 2026-09-01, so the obvious implementation is the known-bad one.
     _step "Checking the forge project guard-hook install (969-nhh7)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-forge-project-guard-hooks.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-forge-project-guard-hooks.lua" 2>&1; then
         _error "the forge guard-hook install regressed — a forge may ship with no pre-push gate, or with a GLOBAL one that breaks every other repo"
         exit 1
     fi

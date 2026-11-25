@@ -273,7 +273,7 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     # before the gate — the only window that cannot race. A .step file's
     # numeric prefix is chosen at authoring time; the integrate above can
     # bring in another host's step with the same prefix, and the gate's own
-    # fixture (test-gate-step-append-no-conflict.sh, arm 7) then refuses the
+    # fixture (test-gate-step-append-no-conflict.lua, arm 7) then refuses the
     # tree after the full gate has run. MEASURED 2026-09-13 (lenovinha): 215,
     # 255 and 280 collided, the last one after following the "pick it after
     # the integrate" advice exactly; each cost a full re-gate. The allocator
