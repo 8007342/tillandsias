@@ -22,12 +22,12 @@ description: >
 
 preconditions:
   - workspace contains scripts/select-work-batch.sh
-  - workspace contains scripts/test-harness-affinity-selection.sh
+  - workspace contains scripts/lua/test-harness-affinity-selection.lua
   - target/release/tillandsias-plan is built (cargo build --release -p tillandsias-plan)
 
 critical_path:
   - step: "all six vectors hold: matching packet takes the head with harness= confessed, no-match falls back non-empty, non-forge hosts never enter the branch, an in-epic match moves without duplicating, a non-tag-shaped agent name falls back, a could-not-fold cross-branch check says so and drops nothing"
-    command: "bash scripts/test-harness-affinity-selection.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-harness-affinity-selection.lua 2>&1 | tail -1"
     timeout_ms: 60000
     expected_behavior: "ok:harness-affinity-selection:6"
 

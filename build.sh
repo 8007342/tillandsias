@@ -3230,6 +3230,14 @@ _gs_await_step_pipe() {
     kill "$_tee" 2>/dev/null || true
 }
 
+# _gs_declared_skip <output file> — ORDER 2343-3ch4: the step's verdict line when it is a
+# skip, else nothing. The verdict is the last line at column 0 (why:/remedy: are indented
+# under it); a skip: before it names one skipped arm of a run that went on. Read here, not
+# by the plan binary: classify answers ok for exit 0, and an older resolved binary would too.
+_gs_declared_skip() {
+    awk '{ sub(/\r$/, "") } /^[^ \t]/ { l = $0 } END { if (l ~ /^(skip|SKIP):/) print substr(l, 1, 200) }' "$1" 2>/dev/null
+}
+
 # _gs_verdict_token <output file> <rc> — the step's verdict as one token for a
 # flaky:/red-twice: line: its last RED verdict line's head, else rc=<n>. Never an
 # ok: line: this is only asked of a step that failed (#1441 read `ok:,ok:`).
@@ -3481,7 +3489,13 @@ _gs_one() {
         _kg_note "${_step_file##*/}" "$_step_rc" && return 0  # ORDER 2253-iher: recorded; the scheduler carries on
         return 1
     fi
+    # Exit 0 says nothing failed, not that the check ran: no STEP_OK for a skip.
+    _gs_skip="$(_gs_declared_skip "$_step_out")"
     rm -f "$_step_out"
+    if [ -n "$_gs_skip" ]; then
+        _info "skip:${_step_path##*/}:declared ($_gs_skip; check not run)"
+        return 0
+    fi
     _info "${STEP_OK:-${_step_path##*/} passed}"
     return 0
 }
@@ -4960,7 +4974,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Fragment-integrity fixture passed"
     _step "Checking the sanctioned YAML reader is present here (746-htj9)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-yaml-reader-availability.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-yaml-reader-availability.lua" 2>&1; then
         _error "no sanctioned YAML reader in this environment, or the load-failure verdict collapsed into the divergence verdict (720-24u6)"
         exit 1
     fi
@@ -6559,7 +6573,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # where a step in another lane is charged with it (#1369, #1349).
     _step "Checking the metrics-isolation fixture keeps off the shared timing log (2244-ge9s)..."
     if ! _run_lua_decider "scripts/lua/test-metrics-isolation-keeps-off-the-shared-log.lua" 2>&1; then
-        _error "test-gate-step-metrics-isolation.sh wrote a record carrying the gate's run id into a log the gate's leak check reads — keep its split in a fixture-private fallback dir with the run id unset; see the FAIL lines above (2244-ge9s)"
+        _error "test-gate-step-metrics-isolation.lua wrote a record carrying the gate's run id into a log the gate's leak check reads — keep its split in a fixture-private fallback dir with the run id unset; see the FAIL lines above (2244-ge9s)"
         exit 1
     fi
     _info "Metrics-isolation shared-log fixture passed"
