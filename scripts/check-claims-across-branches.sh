@@ -126,6 +126,31 @@ fi
 
 SIBLINGS="linux-next windows-next osx-next"
 
+# ORDER 2323-wwaa. An inherited TILLANDSIAS_PLAN_BIN may be a wrapper that already
+# passes --index (a fixture over a scratch ledger). Every fold below passes its
+# own, the binary refuses the second one, and each sibling then folded to 0 rows.
+# Such a wrapper cannot answer for a sibling, so resolve without it. Keyed on the
+# binary's own refusal: any other failing override is still the caller's choice.
+# Asked once, inside the first fold, so a killed run still cleans its extract.
+_override_checked=0
+_drop_indexed_override() {
+    [ "$_override_checked" = 0 ] && [ -n "${TILLANDSIAS_PLAN_BIN:-}" ] || return 0
+    _override_checked=1
+    case "$("$PLAN_BIN" --index "$1" capabilities 2>&1 >/dev/null)" in
+        *"unknown subcommand '--index'"*)
+            echo "note:cross-branch-claims:plan-bin-override-fixes-its-own-index — folding siblings with the checkout's own plan binary" >&2
+            unset TILLANDSIAS_PLAN_BIN
+            PLAN_BIN="$(resolve_plan_binary 2>/dev/null)" || PLAN_BIN=""
+            if [ -z "$PLAN_BIN" ]; then
+                _afford "TILLANDSIAS_PLAN_BIN fixes its own --index, so it cannot read a sibling's ledger, and no other tillandsias-plan resolved" \
+                    "build it (cargo build --release -p tillandsias-plan) or unset TILLANDSIAS_PLAN_BIN, then re-run"
+                echo "blocked:no-plan-binary"
+                exit 2
+            fi
+            ;;
+    esac
+}
+
 # ORDER 1423-ydy3 — THE EXTRACT DIES WITH THE RUN. Every fold extracts a
 # sibling's plan/ (~19 MB) into ${TMPDIR:-/tmp}/xbranch.*, and the normal paths
 # rm -rf it; a KILLED run (timeout, Ctrl-C, a cycle's lock-holder reaped) did
@@ -251,6 +276,7 @@ if [ "$BATCH" = 1 ]; then
         _is_ancestor_of_head "$b" && { checked=$((checked + 1)); continue; }
         tmp="$(mktemp -d "${TMPDIR:-/tmp}/xbranch.XXXXXX")"
         if git archive "origin/$b" plan/index.yaml plan/index.d 2>/dev/null | tar -x -C "$tmp" 2>/dev/null; then
+        _drop_indexed_override "$tmp/plan/index.yaml"
             # TWO STAGES, because `status` answers ONE id per invocation at
             # ~650ms and each invocation re-folds the ledger. A frontier of 200
             # candidates across two siblings would be 260s — unusable at the
@@ -333,6 +359,7 @@ for b in $SIBLINGS; do
     # raw presence of a claim fragment is NOT the same question (635-i6vm).
     tmp="$(mktemp -d "${TMPDIR:-/tmp}/xbranch.XXXXXX")"
     if git archive "origin/$b" plan/index.yaml plan/index.d 2>/dev/null | tar -x -C "$tmp" 2>/dev/null; then
+        _drop_indexed_override "$tmp/plan/index.yaml"
         checked=$((checked + 1))
         st="$("$PLAN_BIN" --index "$tmp/plan/index.yaml" status "$PACKET" 2>/dev/null | awk '{print $2}')"
         [ -n "$st" ] && seen_anywhere=1
