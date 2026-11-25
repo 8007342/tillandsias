@@ -17,15 +17,15 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-uninstall-confirms-before-destroying.sh
+  - workspace contains scripts/lua/test-uninstall-confirms-before-destroying.lua
 
 critical_path:
   - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-uninstall-confirms-before-destroying.sh && test -x scripts/test-uninstall-confirms-before-destroying.sh && echo 'ok: uninstall-confirms-fixture-parses'"
+    command: "test -f scripts/lua/test-uninstall-confirms-before-destroying.lua && ! test -e scripts/test-uninstall-confirms-before-destroying.sh && echo 'ok: uninstall-confirms-fixture-parses'"
     timeout_ms: 3000
     expected_behavior: "ok: uninstall-confirms-fixture-parses"
 
   - step: "cancel and no-terminal remove nothing; delete and --yes proceed; the warning is red on a terminal and plain in a pipe"
-    command: "bash scripts/test-uninstall-confirms-before-destroying.sh >/dev/null && echo 'PASS: uninstall-confirms-before-destroying'"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-uninstall-confirms-before-destroying.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "PASS: uninstall-confirms-before-destroying"
+    expected_behavior: "ok:uninstall-confirms-before-destroying:22 arms"

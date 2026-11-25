@@ -296,6 +296,31 @@ burndown:<backlog>:count=<n>:stage=<s>:window=<k>:paid=<p>:waived=<v>:silent=<q>
   those rows instead (`triggers.gentle_to_enforced`). Never edit `stage:`
   yourself: a stage move is a bar raise (`governance`).
 
+### Shell-to-Lua queue sizes (operator 2026-11-25)
+
+Canonical: `methodology/convergence.yaml` → `shell-to-lua` → `batching`.
+When you queue porting hosts:
+
+- **Fixtures (`scripts/test-*.sh`):** give each host a row of 30 ports from
+  its letter range, as three PRs of 8–10. Mutants run on each fixture's main
+  assertions only (2–3 per fixture), and survivors are named in the PR. The
+  host counts the free fixtures before promising 30.
+- **Fixtures held by stale drafts:** a fixture held by a draft with no
+  commits for 3+ days, whose edit a port makes moot, is ported anyway. The
+  draft is listed in the port PR and closed with a tombstone after the port
+  lands.
+- **Libraries, hooks, tools and gate deciders:** keep these at 3–4 ports
+  per PR with full mutants.
+- **`images/**`:** its own podman-host track, verified in a container (no
+  sudo, no layering), never mixed into fixture batches.
+- **Retire first:** sweep tests that never run and retire them, with the
+  reason in the file, instead of porting them.
+- **Darwin lines:** relay each ported step number to a macOS host, and
+  forward its verdict to the author for the next PR.
+
+Report the daily `.sh` drop each pass. The rule pays off if it rises above
+about 60 a day, the plateau measured on 2026-11-25.
+
 ---
 
 ## Stale Drafts And PR-less Work Refs: List AND Act (order 2100-vkpg)

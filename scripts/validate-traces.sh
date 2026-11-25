@@ -233,7 +233,7 @@ if [[ "${1:-}" == "--coverage-threshold" ]]; then
   # leading spaces, so on macOS this variable held "       2" and the JSON
   # below rendered `"total_active_specs":        2,`. Still valid JSON, but
   # every string-matching consumer breaks on it, and the gate fixture
-  # (test-trace-coverage.sh) correctly went red on macOS while staying green
+  # (test-trace-coverage.lua) correctly went red on macOS while staying green
   # on Linux. The padding is an accident of the platform, not a format
   # anyone chose, so it is stripped HERE rather than tolerated downstream —
   # COVERAGE_PCT never had the bug because it comes from $(( )).
