@@ -46,12 +46,10 @@ scripts/scan-litmus-expression-pinning.sh 1
 scripts/select-work-batch.sh 4
 scripts/stamp-requirement-ids.sh 2
 scripts/test-build-image-installed-version-alias.sh 1
-scripts/test-build-step-timing-attribution.sh 1
 scripts/test-check-credential-channel.sh 1
 scripts/test-clear-vault-credentials-partial-is-nonzero.sh 1
 scripts/test-clear-vault-host-credentials.sh 1
 scripts/test-cloudflare-oauth-core.sh 1
-scripts/test-codex-mcp-registration.sh 1
 scripts/test-codex-oauth-restore.sh 1
 scripts/test-codex-safe-state.sh 1
 scripts/test-concurrent-forge-shared-stack.sh 1

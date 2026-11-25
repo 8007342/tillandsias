@@ -17,23 +17,18 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-command-policy-consent.sh
+  - workspace contains scripts/lua/test-command-policy-consent.lua
 
 critical_path:
-  - step: "fixture parses and is executable"
-    command: "bash -n scripts/test-command-policy-consent.sh && test -x scripts/test-command-policy-consent.sh && echo 'ok: parse'"
-    timeout_ms: 2000
-    expected_behavior: "ok: parse"
-
   - step: "grant refused in a forge, no self-consent, one run per token, env mapping for soft-reset only"
-    command: "bash scripts/test-command-policy-consent.sh 2>&1 | tail -n 1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-command-policy-consent.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "PASS: command-policy-consent"
+    expected_behavior: "ok:command-policy-consent:"
 
 observability:
   traces:
     - "@trace spec:command-policies"
-  expected_log: "PASS: command-policy-consent"
+  expected_log: "ok:command-policy-consent:"
   log_fields:
     spec: "command-policies"
     test: "command-policy-consent-shape"
@@ -45,4 +40,4 @@ rollback:
     token that approves more than one run of its own argv is the defect: restore
     the evidence check, the soft-reset-only env mapping and the atomic spend
     first.
-  command: "bash scripts/test-command-policy-consent.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-command-policy-consent.lua 2>&1"
