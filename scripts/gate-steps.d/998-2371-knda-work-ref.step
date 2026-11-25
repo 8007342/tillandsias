@@ -1,0 +1,12 @@
+# Gate step 2371-knda — data, not code (order 1072-b7eq).
+#
+# Nothing ran this fixture: no gate step, litmus or script named it.
+# Native Windows reds are 2371-r2v9; the gate there runs in the Linux builder.
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the pre-push work-ref lane warns and the trunk gate stays (2371-knda)"
+STEP_SCRIPT="scripts/test-pre-push-work-ref-lane.sh"
+STEP_ERROR="the work-ref lane or the gate on linux-next no longer holds as pinned (1315-4a7j) — see the FAIL lines above"
+STEP_OK="pre-push-work-ref-lane fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:work-ref-lane:8/8"
+STEP_READS="scripts/land-on-platform-branch.sh scripts/lua/check-landing-provenance.lua scripts/hooks/pre-push-local-gate.sh scripts/test-pre-push-work-ref-lane.sh"
+STEP_SERIAL="adds and removes a scratch git worktree of this checkout"
