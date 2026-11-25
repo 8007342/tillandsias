@@ -76,7 +76,6 @@ scripts/test-credential-channel-affordances.sh
 scripts/test-credential-channel-names-a-locked-keyring.sh
 scripts/test-credential-channel-survives-a-killed-probe.sh
 scripts/test-credential-verdict-script.sh
-scripts/test-cycle-checkout-lock.sh
 scripts/test-daily-maintenance-day-boundary.sh
 scripts/test-e2e-preflight-live-runtime.sh
 scripts/test-enclave-network-internal-discovery.sh

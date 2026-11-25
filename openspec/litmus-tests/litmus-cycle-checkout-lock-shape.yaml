@@ -38,12 +38,12 @@ size: instant
 preconditions:
   - workspace contains scripts/cycle-checkout-lock.sh
   - workspace contains scripts/tillandsias-cycle-driver.sh
-  - workspace contains scripts/test-cycle-checkout-lock.sh
+  - workspace contains scripts/lua/test-cycle-checkout-lock.lua
   - shell utilities (git, bash, mktemp) are available in PATH
 
 critical_path:
-  - step: "lock script and suite parse and carry exec bits"
-    command: "bash -n scripts/cycle-checkout-lock.sh && bash -n scripts/test-cycle-checkout-lock.sh && test -x scripts/cycle-checkout-lock.sh && echo 'ok: checkout-lock-parses'"
+  - step: "lock script parses and carries its exec bit"
+    command: "bash -n scripts/cycle-checkout-lock.sh && test -x scripts/cycle-checkout-lock.sh && echo 'ok: checkout-lock-parses'"
     timeout_ms: 3000
     expected_behavior: "ok: checkout-lock-parses"
 
@@ -53,6 +53,6 @@ critical_path:
     expected_behavior: "ok:pid-probe:live"
 
   - step: "the full two-sided suite: lifecycle, named refusals, stale reclaim, BOTH cross-arm directions, external refusal record, and (msys only) the native-pid liveness arms with their mutation controls"
-    command: "bash scripts/test-cycle-checkout-lock.sh | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-cycle-checkout-lock.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "ok:checkout-lock-fixture:all"
+    expected_behavior: "ok:cycle-checkout-lock:"
