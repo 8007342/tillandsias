@@ -1,5 +1,5 @@
 -- @trace order:1384-bqhy, order:2375-psb9
--- @env PATH HOME
+-- @env PATH HOME TOOLBOX_PATH container TILLANDSIAS_SKIP_TOOLBOX
 --
 -- test-script-run-verb.lua — `tillandsias-plan script run` is the ONE runner for a Lua
 -- decider, and `script classify` the ONE classifier the gate loop and the preflight door both
@@ -36,6 +36,15 @@ local W = T:scratch()
 local TLOG = W.abs .. "/timing.jsonl"
 local ENV = { TILLANDSIAS_TIMING_LOG = TLOG }
 local UNSET = { "TILLANDSIAS_*" }
+-- The builder-toolbox guards (scripts/with-tillandsias-builder.sh) read TOOLBOX_PATH,
+-- container and TILLANDSIAS_SKIP_TOOLBOX. The .sh's build.sh child inherited them; the
+-- runner's base env drops the first two and env_unset strips the third, so inside a
+-- gate's toolbox arm 5's build.sh re-exec'd into a fresh toolbox and died ("TOOLBOX_PATH
+-- not set", land run 79). Carry whichever the caller has.
+for _, k in ipairs{ "TOOLBOX_PATH", "container", "TILLANDSIAS_SKIP_TOOLBOX" } do
+    local v = env.get(k)
+    if v and v ~= "" then ENV[k] = v end
+end
 
 local function lua(name, body) fs.write(W.rel .. "/" .. name .. ".lua", body .. "\n") end
 local function run(name, ...)
