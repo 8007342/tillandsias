@@ -1,0 +1,10 @@
+# Gate step 2143-z5uj P6 — data, not code (order 1072-b7eq).
+#
+# The landing pipeline's admission lane (scripts/land-admit.sh): ref shape,
+# draft, plan-only lane, native-lint hold and floor eviction, keyed to the PR
+# head sha. The fixture builds a scratch repo with a fake gh; never network.
+STEP_DESC="Checking test-land-admit (2143-z5uj P6 admission lane)"
+STEP_SCRIPT="scripts/test-land-admit.sh"
+STEP_ERROR="scripts/test-land-admit.sh failed — the admission lane may admit a draft/red/unlinted PR, or evict on a host that cannot run the floor; read the fixture output above"
+STEP_OK="admission lane fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-20 darwin ok:land-admit:8 (work/2143-p678 @ d30336963, rc=0)"
