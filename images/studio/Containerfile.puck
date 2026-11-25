@@ -7,7 +7,7 @@
 #   final    the forge image plus the studio front, the bundle, its CSS, the
 #            editor page and the studio server. No esbuild, no node_modules
 #            under /opt: React 19 exists only inside the bundle.
-#            scripts/test-studio-puck.sh checks this.
+#            scripts/lua/test-studio-puck.lua checks this.
 #
 # Licences approved by the operator 2026-11-02 (relayed by macuahuitl-fedora):
 # @measured/puck 0.20.2 MIT and its tree with React 19 (MIT 19, BSD-3-Clause 1,
@@ -22,10 +22,11 @@ FROM docker.io/library/node:22.19.0-bookworm-slim@sha256:4a4884e8a44826194dff92b
 WORKDIR /build
 COPY puck/build/package.json puck/build/package-lock.json /build/
 RUN npm ci --ignore-scripts --no-audit --no-fund
-COPY puck/build/editor.jsx puck/build/editor.html /build/
+COPY puck/build/editor.jsx puck/build/demo-config.jsx puck/build/editor.html /build/
 RUN mkdir -p /build/public \
     && node_modules/.bin/esbuild editor.jsx --bundle --minify --format=iife \
         --jsx=automatic --define:process.env.NODE_ENV='"production"' \
+        --alias:studio-config=./demo-config.jsx --alias:studio-puck=@measured/puck \
         --outfile=public/editor.js \
     && cp node_modules/@measured/puck/dist/index.css public/editor.css \
     && cp editor.html public/editor.html \
@@ -48,5 +49,8 @@ COPY studio-front.js /opt/studio/studio-front.js
 # Written by scripts/lua/build-studio-registry.lua beside data/studios.json.
 COPY studios.json /usr/local/share/tillandsias/studios.json
 COPY puck/server.mjs /opt/studio/puck/
+# 2110-pk4s: the site build (run at studio start, outside the checkout) and
+# the editor source it bundles against the site's own config.
+COPY puck/build-site.mjs puck/build/editor.jsx /opt/studio/puck/
 COPY --chmod=0755 puck/studio-puck /usr/local/bin/studio-puck
 USER 1000:1000
