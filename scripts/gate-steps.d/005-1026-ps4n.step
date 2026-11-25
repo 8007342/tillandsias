@@ -14,11 +14,11 @@
 # lower bound averaged into the real timings would corrupt the decision the log
 # exists to inform. Hermetic: scratch stamp dir and scratch log.
 #
-# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# STEP_LUA is a LITERAL path on purpose: a binding assembled from a
 # variable is invisible to every name-based scan, including the
 # bound-or-retired guard (1063-nraf). Keep it a plain string.
 STEP_DESC="Checking a timing record outlives its supervisor (1026-ps4n)"
-STEP_SCRIPT="scripts/test-timing-supervisor-lost.sh"
+STEP_LUA="scripts/lua/test-timing-supervisor-lost.lua"
 STEP_ERROR="a killed supervisor no longer leaves a named-cause timing record (1026-ps4n) — see the verdict line above"
 STEP_OK="Supervisor-loss timing check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"
@@ -28,4 +28,4 @@ STEP_LANES="timing"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/test-timing-supervisor-lost.sh scripts/timing-log.sh"
+STEP_READS="scripts/lua/test-timing-supervisor-lost.lua scripts/timing-log.sh"
