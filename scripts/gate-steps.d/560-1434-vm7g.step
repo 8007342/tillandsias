@@ -21,16 +21,16 @@
 # cfg(windows) only in a comment and must NOT be linted. Sabotage: reading
 # comments reds ARM 5.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking the Windows tray clippy decider refuses a new warning (1434-vm7g)"
-STEP_SCRIPT="scripts/test-windows-tray-clippy.sh"
+STEP_LUA="scripts/lua/test-windows-tray-clippy.lua"
 STEP_ERROR="the Windows tray clippy decider no longer refuses a clippy warning, or runs off Windows (1434-vm7g); see which arm failed above"
 STEP_OK="Windows tray clippy decider refuses warnings and skips off Windows"
-STEP_SECOND_REGIME="yolanda 2026-11-22 msys ok:windows-tray-clippy-fixture:5"
+STEP_SECOND_REGIME="yolanda 2026-11-25 msys ok:windows-tray-clippy-fixture:11 arms"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="builds with cargo into the shared target"
 STEP_LANES="cargo"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/lua/check-windows-tray-clippy.lua scripts/test-windows-tray-clippy.sh"
+STEP_READS="scripts/lua/check-windows-tray-clippy.lua scripts/lua/test-windows-tray-clippy.lua"

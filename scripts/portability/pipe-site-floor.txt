@@ -540,7 +540,6 @@ scripts scripts/test-claims-across-branches.sh 7
 scripts scripts/test-claims-fleet-visible.sh 13
 scripts scripts/test-cloudflare-login.sh 33
 scripts scripts/test-cloudflare-token-rotation.sh 16
-scripts scripts/test-cmdkey-predicate-discriminates.sh 7
 scripts scripts/test-codex-mcp-registration.sh 7
 scripts scripts/test-codex-oauth-restore.sh 1
 scripts scripts/test-command-policy-consent.sh 1
