@@ -24,7 +24,7 @@ case "$*" in
     *"699-usxc preserved"*)
         if [ "@MODE@" = refuse ]; then echo "error: refused by the hermetic shim" >&2; exit 1; fi
         "@PLAN@" "$@"; rc=$?
-        if [ "$rc" -eq 0 ] && [ "@MODE@" = kill ]; then : >"@MARK@"; sleep 15; fi
+        if [ "$rc" -eq 0 ] && [ "@MODE@" = kill ]; then echo $$ >"@MARK@"; exec sleep 15; fi
         exit "$rc" ;;
 esac
 exec "@PLAN@" "$@"
@@ -45,9 +45,11 @@ F=scripts/lua/test-append-event-archived-refusal.lua
 if [ "$MODE" = kill ]; then
     setsid "$P" script run "$F" >"$W/kill.out" 2>&1 </dev/null &
     pid=$!; n=0
-    while [ ! -e "$W/mark" ] && kill -0 "$pid" 2>/dev/null && [ "$n" -lt 600 ]; do sleep 0.2; n=$((n + 1)); done
-    [ -e "$W/mark" ] && echo yes >"$W/marked" || echo no >"$W/marked"
+    while [ ! -s "$W/mark" ] && kill -0 "$pid" 2>/dev/null && [ "$n" -lt 600 ]; do sleep 0.2; n=$((n + 1)); done
+    [ -s "$W/mark" ] && echo yes >"$W/marked" || echo no >"$W/marked"
     kill -KILL -- "-$pid" 2>/dev/null; wait "$pid" 2>/dev/null
+    # The door runs its child in a group of its own, so the shim outlives the group kill.
+    [ ! -s "$W/mark" ] || kill -KILL "$(cat "$W/mark")" 2>/dev/null
 else
     "$P" script run "$F" >"$W/$MODE.out" 2>&1 </dev/null; echo $? >"$W/$MODE.rc"
 fi
@@ -64,7 +66,7 @@ local function run(mode)
     local function read(f) return fs.exists(w.rel .. "/" .. f) and fs.read(w.rel .. "/" .. f) or "" end
     local x = { out = read(mode .. ".out"), rc = text.trim(read(mode .. ".rc")), dirt = read(mode .. ".dirt"), marked = text.trim(read("marked")) }
     x.why = "rc=" .. x.rc .. " marked=" .. x.marked .. " dirt=[" .. x.dirt:sub(1, 200) .. "] " .. x.out:sub(1, 500)
-    T:must{ "rm", "-rf", w.abs .. "/" .. mode }
+    T:run{ "rm", "-rf", w.abs .. "/" .. mode }
     return x
 end
 local x = run("kill")
