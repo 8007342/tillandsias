@@ -11,22 +11,15 @@ size: instant
 
 preconditions:
   - workspace contains scripts/census-litmus-step-enforcement.sh
-  - workspace contains scripts/test-census-enforced-reachability-split.sh
+  - workspace contains scripts/lua/test-census-enforced-reachability-split.lua
 
 critical_path:
-  - step: "the fixture parses and is executable"
-    command: "bash -n scripts/test-census-enforced-reachability-split.sh && test -x scripts/test-census-enforced-reachability-split.sh && echo 'ok: reachability-split-fixture-parses'"
-    timeout_ms: 5000
-    expected_behavior: "ok: reachability-split-fixture-parses"
-    assert_exit: 0
-    assert_output_contains: "ok: reachability-split-fixture-parses"
-
   - step: "every arm passes, including the mutation arm and the real-corpus reconcile"
-    command: "bash scripts/test-census-enforced-reachability-split.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-census-enforced-reachability-split.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "census-enforced-reachability-split: 7 passed, 0 failed"
+    expected_behavior: "ok:census-enforced-reachability-split:7 arms"
     assert_exit: 0
-    assert_output_contains: "7 passed, 0 failed"
+    assert_output_contains: "ok:census-enforced-reachability-split:7 arms"
 
   - step: "the census names the reachable half on the real corpus"
     command: "bash scripts/census-litmus-step-enforcement.sh"

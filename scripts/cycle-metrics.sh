@@ -356,7 +356,7 @@ TOKENS_LOG="${TILLANDSIAS_TOKENS_LOG:-$(_metrics_default_log tillandsias-tokens.
 # take down the step they are measuring; and an --emit-flow caller is not even
 # reading the timing log. Refusing there couples an unrelated writer to a
 # timing-log split — measured: with /tmp debris present,
-# test-cycle-flow-emit-idempotency.sh failed 12 scenarios because a FLOW emit
+# test-cycle-flow-emit-idempotency.lua failed 12 scenarios because a FLOW emit
 # was refused over a TIMING log. The split matters when numbers are PUBLISHED,
 # which is this script's reporting path, so the guard lives there.
 case "${1:-}" in
@@ -738,7 +738,7 @@ if [ "${1:-}" = "--emit-flow" ]; then
     # the omission stops being able to produce a poisoned row at all.
     #
     # `-` is now unreachable by construction, which is the pinned property
-    # (test-cycle-flow-emit-idempotency.sh scenarios 5 and 8): a sentinel that
+    # (test-cycle-flow-emit-idempotency.lua scenarios 5 and 8): a sentinel that
     # cannot be written cannot be mistaken for a cycle id, and the replace-key
     # (host+cycle) can no longer collapse every unlabelled cycle onto one row.
     #

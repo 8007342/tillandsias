@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: the port queue (macuahuitl-fedora), preferring inline build.sh blocks.
+packets:
+  - packet_id: port-runbook-tag-order-and-guest-unit-hardening-fixtures
+    order: "2262-bke7"
+    status: claimed
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, gate, guest-unit]
+    estimated_hours: 3
+    title: "Port test-release-runbook-tag-order and test-guest-unit-hardening to Lua gate steps; the guest-unit checker reads every shipped unit"
+    context: |
+      Found while porting: check-guest-unit-hardening.lua read only vz.rs. 740-3k4s hoisted the WSL unit text into
+      headless_unit(), so its cat line held a reference; wsl_lifecycle.rs and images/vm/bootstrap/20-tillandsias.sh were
+      never listed; and one file's unit being found excused a drifted other. NoNewPrivileges in the WSL unit read ok.
+    exit_criteria:
+      - "Both .sh and both inline build.sh blocks are gone; gate steps 916-2262-bke7 and 924-2262-bke7 run the Lua fixtures."
+      - "Order 308's directives in any of the four shipped units are refused, and a unit that cannot be found is named."
+    unscoreable: "pinned-elsewhere: gate steps 916-2262-bke7 and 924-2262-bke7."
+    next_action: "Land the PR with darwin and msys records."
+    provenance: "macuahuitl-fedora 2026-11-23, port queue."
+    events:
+      - {type: filed, ts: '2026-11-23T10:45:53Z', host: calmecacpilli, summary: filed and claimed; implemented in the same change}

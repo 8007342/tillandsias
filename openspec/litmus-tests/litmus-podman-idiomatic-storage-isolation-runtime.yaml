@@ -1,7 +1,8 @@
 # @trace spec:podman-idiomatic-patterns
 name: litmus:podman-idiomatic-storage-isolation-runtime
 spec: podman-idiomatic-patterns
-phase: integration
+# RETIRED (2357-42x9, 2026-11-25): each step is a new process and the helper names its label, log and scratch by its own pid, so no step can see the one before; it ran in no phase and is unbound.
+phase: retired
 description: Verify per-project storage isolation with read-only /src, read-write /workspace, and ephemeral /tmp in actual forge containers
 severity: critical
 size: e2e

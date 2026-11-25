@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-25. p-s port range, batch 7 (macuahuitl: batch 7).
+packets:
+- packet_id: port-p-s-fixtures-batch-7
+  order: 2360-psb8
+  status: implemented
+  kind: chore
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [shell-to-lua, macos, fixtures, portability]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 2
+  title: 'Three whole-file shell-to-Lua ports from the p-s range: test-set-field-yaml-shapes, test-resumable-claim-dirt, test-smoke-agent-watch'
+  ports: [scripts/test-set-field-yaml-shapes.sh, scripts/test-resumable-claim-dirt.sh, scripts/test-smoke-agent-watch.sh]
+  context: >-
+    Each port keeps its arms and moves to the common.fixture grammar. set-field-yaml-shapes drives the plan binary over
+    seven value shapes in scratch ledgers; resumable-claim-dirt builds six scratch repos with T:git_repo and runs the
+    real detector; smoke-agent-watch drives classify and watch, with arm 4's writer and watcher as proc.spawn handles.
+    Callers: build.sh (set-field, via _run_lua_decider), litmus smoke-agent-watch-shape and resumable-claim-dirt-shape
+    (the plan binary directly, no pipe), and the smoke skill's arm-4 pointer. plan-binary-probe-usage-determinism was
+    left out: open PR #1435 touches plan-binary-probe.sh.
+  exit_criteria:
+  - 'Each .lua gives the same verdict as its .sh on the trunk tree, and the same red arms under a mutant.'
+  - 'Every caller runs the .lua; the three .sh files and their floor lines are gone.'
+  verifiable_closure: 'Mutant parity in the PR; build.sh set-field step and both litmus tests green on darwin.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the mutant parity is the deliverable.'
+  next_action: >-
+    Implemented. Darwin (bash 3.2.57): ok:set-field-yaml-shapes:21 arms, ok:resumable-claim-dirt:6 arms,
+    ok:smoke-agent-watch:5 arms. Two mutants (detector predate refusal, watch's podman stop), each red on the same arm in
+    .sh and .lua. set-field's subject is the Rust binary, so it had no mutant: parity is the same 14 checks green.
+  provenance: 'tlatoanis-macbook-air 2026-11-25, on macuahuitl-fedora''s direction.'
+  related: [2348-psb6, 2350-psb7]
+  events:
+  - {type: filed, ts: '2026-11-25T14:54:12Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}

@@ -76,7 +76,7 @@
 # exists across files would trade a naming clash for the defect the row fixes.
 #
 # The classifier is sourceable for its hermetic negative control — see
-# scripts/test-vault-shutdown-fixture-classifier.sh, which is the guard that
+# scripts/lua/test-vault-shutdown-fixture-classifier.lua, which is the guard that
 # keeps all four outcomes reachable and keeps a real regression failing.
 set -uo pipefail
 
@@ -138,6 +138,16 @@ fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 3
 
+# @live-fixture TILLANDSIAS_LIVE_VAULT_FIXTURE
+# ORDER 2207-v7x2 — OPT-IN ONLY. This stops a REAL container, by default the
+# host's live vault. A land gate's changed-fixture pass ran it on yoga and left
+# the vault stopped (2026-11-21). Without TILLANDSIAS_LIVE_VAULT_FIXTURE=1 it
+# touches nothing: no podman call, a named skip, exit 3. The marker line above
+# makes preflight-fixtures-default-target.sh skip it by name.
+if [ "${TILLANDSIAS_LIVE_VAULT_FIXTURE:-}" != 1 ] && [ -z "${TILLANDSIAS_VAULT_FIXTURE_LIB:-}" ]; then
+    echo "skip:vault-shutdown:live-fixture-not-opted-in — set TILLANDSIAS_LIVE_VAULT_FIXTURE=1 to stop and restart ${TILLANDSIAS_VAULT_CONTAINER:-tillandsias-vault} for the measurement (2207-v7x2)"
+    exit 3
+fi
 CONTAINER="${TILLANDSIAS_VAULT_CONTAINER:-tillandsias-vault}"
 GRACE="${TILLANDSIAS_VAULT_STOP_GRACE:-30}"
 TREE_ENTRYPOINT="${TILLANDSIAS_VAULT_ENTRYPOINT:-images/vault/entrypoint.sh}"

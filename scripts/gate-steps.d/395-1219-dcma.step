@@ -20,9 +20,9 @@
 # ARM 4 keeps the uncovered set DERIVED from the run's own detail lines rather
 # than a second hard-coded list, which would drift the moment a service is added.
 #
-# STEP_SCRIPT is a LITERAL path (1063-nraf).
+# STEP_LUA is a LITERAL path (1063-nraf).
 STEP_DESC="Checking the enclave guard's remedy covers the service it names (1219-dcma)"
-STEP_SCRIPT="scripts/test-enclave-remedy-covers-the-named-service.sh"
+STEP_LUA="scripts/lua/test-enclave-remedy-covers-the-named-service.lua"
 STEP_ERROR="the enclave health remedy regressed (1219-dcma) — either it again prints one remedy for every service class (so an operator with a dead inference service is sent to a command that exits 0 and changes nothing), or the correction over-reached and removed the remedy that IS right for vault and proxy, or it re-opened 'podman start' whose CA-key failure 975-rsgm measured; see the failing arm above"
 STEP_OK="enclave remedy coverage check passed"
 # Exit 3 means the guard is absent — nothing was examined, and the fixture says
@@ -30,3 +30,10 @@ STEP_OK="enclave remedy coverage check passed"
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="scripts/check-enclave-service-health.sh is absent, so the remedy could not be exercised"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:enclave-remedy:5"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="drives podman"
+STEP_LANES="podman"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/check-enclave-service-health.sh scripts/lua/test-enclave-remedy-covers-the-named-service.lua"

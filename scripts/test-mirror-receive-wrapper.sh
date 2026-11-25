@@ -164,7 +164,7 @@ mode_force_push_upgraded() (
     w="$(mktemp -d)"; trap 'rm -rf "$w"' EXIT
     setup_upgraded_volume "$w" || exit 1
     git -C "$CLIENT" commit -q --amend -m rewritten
-    if git -C "$CLIENT" push -q --force "$MIRROR" main 2>"$w/force.err"; then
+    if LANGUAGE=en git -C "$CLIENT" push -q --force "$MIRROR" main 2>"$w/force.err"; then
         fail force-push-accepted-on-upgraded-volume; return 1
     fi
     grep -qiE 'non-fast-forward|denying non-fast-forward' "$w/force.err" \
@@ -267,7 +267,7 @@ echo inner:m5-fixed-path-ok'
 mode_m5_container() {
     build_image
     out="$(run_inner "$INNER_M5")"
-    if printf '%s' "$out" | grep -q 'inner:m5-fixed-path-ok'; then
+    if grep -q <<<"$out" 'inner:m5-fixed-path-ok'; then
         echo "ok:receive-fixture:m5-wrong-path-lands-in-fixed-repo"
         return 0
     fi

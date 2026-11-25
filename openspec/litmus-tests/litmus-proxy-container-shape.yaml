@@ -66,9 +66,11 @@ critical_path:
     # allowlist) + 3129 (permissive) both with ssl-bump configured.
     # A regression to single-port or non-ssl-bump would silently
     # break the spec's port-determines-policy contract.
-    command: "grep -F 'http_port 3128 ssl-bump' images/proxy/squid.conf && grep -F 'http_port 3129 ssl-bump' images/proxy/squid.conf"
+    command: "grep -E '^http_port 3128 ssl-bump' images/proxy/squid.conf && grep -E '^http_port 127[.]0[.]0[.]1:3129 ssl-bump' images/proxy/squid.conf"
     timeout_ms: 3000
-    expected_behavior: "ssl-bump"
+    assert_exit: 0
+    assert_output_contains: "http_port 127.0.0.1:3129 ssl-bump"
+    expected_behavior: "both listeners carry ssl-bump, 3129 on loopback only"
 
   - step: "squid.conf: peek only at SslBump1, bump one exact release host, splice everything else"
     # Squid 6 re-evaluates every ssl_bump rule at every step; a bare

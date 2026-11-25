@@ -78,9 +78,6 @@ local SITE_ALLOWLIST = {
   -- a '\'-continued condition line: a trailing marker comment would end the continuation
   ["scripts/check-archive-answerability.sh|stat-c|stat -f -c '%T' \"$REPO_ROOT\""] =
     "GNU file-system-mode v9fs probe; BSD fails it to empty, which correctly reads as not-9P",
-  -- YAML fixture DATA inside a heredoc: the mutation-arm guard reads it as text, nothing runs it
-  ["scripts/test-litmus-mutation-arm-guard.sh|sed-i|sed -i 's/foo/bar/' \\\"$t/f\\\""] =
-    "litmus YAML fixture data in a heredoc, read as text by the guard under test and never executed",
 }
 local SITE_ALLOWLIST_HIT = {}
 for k, why in pairs(SITE_ALLOWLIST) do

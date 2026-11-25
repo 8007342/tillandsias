@@ -8,7 +8,7 @@
 # which bash -n cannot see. Prefix 045 sits between 040 and 050; the ten-spacing
 # is there so a step can land between two without renaming either.
 #
-# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# STEP_LUA is a LITERAL path on purpose: a binding assembled from a
 # variable is invisible to every name-based scan, including the
 # bound-or-retired guard (1063-nraf). Keep it a plain string.
 #
@@ -19,7 +19,15 @@
 # exist and requires false, with the original spelling as the control;
 # elsewhere that arm skips rather than asserting from prose.
 STEP_DESC="Checking the smoke runbook's credential predicate can be false (1004-vsh2)"
-STEP_SCRIPT="scripts/test-cmdkey-predicate-discriminates.sh"
+STEP_LUA="scripts/lua/test-cmdkey-predicate-discriminates.lua"
 STEP_ERROR="the smoke runbook's credential-presence predicate cannot be false, or the helper is gone (1004-vsh2) — see the verdict line above"
 STEP_OK="Credential predicate check passed"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:cmdkey-predicate:2"
+STEP_SECOND_REGIME="yolanda 2026-11-25 msys ok:cmdkey-predicate:4 arms; macbookair 2026-11-25 darwin 2 arms (3 and 4 are Windows only)"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lua/test-cmdkey-predicate-discriminates.lua skills/smoke-curl-install-and-test-e2e/SKILL.md"
+# ORDER 2184-sinp: DECLARED INPUTS (2118-tnut grammar). The one repo file
+# the script reads is the smoke runbook whose predicate it extracts. An ATIME
+# TRACE of a real run (twice) read only that and the script.
+STEP_INPUTS="path:skills/smoke-curl-install-and-test-e2e/SKILL.md"

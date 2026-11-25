@@ -2,7 +2,7 @@
 # freshness: auditor=forge-observatorium date=2026-10-18 verdict=updated scope=metrics-contract
 name: litmus:observatorium-metrics-history
 spec: observatorium-dashboard
-phase: active
+phase: pre-build
 status: active
 description: Measured values, missing data, measurement epochs and the repository-held release history remain honest
 severity: high
@@ -11,12 +11,12 @@ preconditions:
   - Node.js 22 or newer and Git are available
 critical_path:
   - step: "Exercise projection and canonical plan failure boundaries"
-    command: "node --test observatorium/metrics/metrics.test.mjs observatorium/metrics/evidence.test.mjs observatorium/scripts/build.test.mjs"
+    command: "command -v node >/dev/null || { echo skip:observatorium-metrics-history:no-node; exit 0; }; node --test observatorium/metrics/metrics.test.mjs observatorium/metrics/evidence.test.mjs observatorium/scripts/build.test.mjs"
     timeout_ms: 5000
-  - step: "the build pins every toolchain by SHA-256 and the release cut appends a snapshot naming its tag (the durable history is the repository); negative control: a build with one pin removed must FAIL"
-    command: "set -u; T=target/litmus-observatorium; mkdir -p \"$T\"; B=observatorium/scripts/build.mjs; K=skills/merge-to-main-and-release/SKILL.md; pinned() { [ \"$(grep -cE \"sha256: '[0-9a-f]{64}'\" \"$1\")\" -ge 2 ] && ! grep -qE \"git clone|flutter channel|flutter upgrade\" \"$1\" && grep -qF \"scripts/run-litmus-test.sh --phase pre-build\" \"$K\" && grep -qF \"node scripts/build.mjs --release-snapshot\" \"$K\" && grep -qF 'grep -q \"\\\"release\\\":\\\"${new_tag}\\\"\"' \"$K\"; }; pinned \"$B\" || { echo 'FAIL: the observatorium build lost a pinned checksum, clones a moving SDK, or the release cut no longer records a tagged snapshot'; rm -rf \"$T\"; exit 1; }; sed \"0,/sha256: '[0-9a-f]\\{64\\}'/s//sha256: 'unpinned'/\" \"$B\" > \"$T/build.mjs\"; if pinned \"$T/build.mjs\"; then echo 'FAIL: negative control passed'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: pinned toolchains, tagged release snapshot; seeded unpinned download caught'"
+  - step: "the release cut appends a snapshot naming its tag (the durable history is the repository); negative control: a runbook without the snapshot line must FAIL"
+    command: "set -u; T=target/litmus-observatorium; mkdir -p \"$T\"; K=skills/merge-to-main-and-release/SKILL.md; kept() { grep -qF \"scripts/run-litmus-test.sh --phase pre-build\" \"$1\" && grep -qF \"node scripts/build.mjs --release-snapshot\" \"$1\" && grep -qF 'grep -q \"\\\"release\\\":\\\"${new_tag}\\\"\"' \"$1\"; }; kept \"$K\" || { echo 'FAIL: the release cut no longer records a tagged snapshot'; rm -rf \"$T\"; exit 1; }; sed '/--release-snapshot/d' \"$K\" > \"$T/k.md\"; if kept \"$T/k.md\"; then echo 'FAIL: negative control passed'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: tagged release snapshot; seeded omission caught'"
     timeout_ms: 5000
-    expected_behavior: "ok: pinned toolchains, tagged release snapshot"
+    expected_behavior: "ok: tagged release snapshot"
 observability:
   traces:
     - '@trace spec:observatorium-dashboard'

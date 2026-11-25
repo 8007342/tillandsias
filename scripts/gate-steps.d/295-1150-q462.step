@@ -9,9 +9,14 @@
 # Hermetic: it stubs the detector and drives the case block extracted from the
 # shipped wrapper by MARKERS, so the fixture cannot drift from what ships.
 #
-# STEP_SCRIPT is a LITERAL path (1063-nraf).
+# STEP_LUA is a LITERAL path (1063-nraf).
 STEP_DESC="Checking the competing-gate consumer tells a call-site bug apart from an unsupported host (1150-q462)"
-STEP_SCRIPT="scripts/test-competing-gate-consumer.sh"
+STEP_LUA="scripts/lua/test-competing-gate-consumer.lua"
 STEP_ERROR="the competing-gate consumer regressed (1150-q462) — exit 2 and exit 3 may now produce the same response, which makes a wiring bug read as 'this host cannot answer' and get written off; or an unknown code is being swallowed"
 STEP_OK="Competing-gate consumer check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   no verdict stops the build — the consumer stays advisory"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lua/test-competing-gate-consumer.lua scripts/with-tillandsias-builder.sh"

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-provider-usage-limit-deadline-recorded-on-one-host-holds-every-host-of-the-fleet
+    event:
+      type: completed
+      ts: "2026-11-19T23:40:02Z"
+      agent_id: linux-calmecacpilli-claude-20261119t234002z
+      host: calmecacpilli
+      summary: |
+        Tech-debt triage (calmecacpilli, 2026-11-19). PR #866 merge f6adbfa31 is an ancestor. scripts/lua/test-provider-limit-relay.lua -> ok:provider-limit-relay:18 arms: publish (A's exit publishes a fragment naming host A), refuse (B's offline fold refuses naming A), expired (B goes ahead), override (TILLANDSIAS_IGNORE_PROVIDER_LIMIT=1), wired. Covers criteria 1-3.

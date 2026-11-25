@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: never-run-fixtures-run-in-the-gate
+    order: "2371-knda"
+    status: in_progress
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, litmus, command-policies]
+    estimated_hours: 2
+    owned_files:
+      - scripts/gate-steps.d
+    title: "seven fixtures of live code that nothing runs are gate steps"
+    context: |
+      Found 2026-11-25 by a static sweep of 275 scripts/test-*.sh. Five are bound only to litmus of DRAFT specs, which
+      the runner does not select (command-policies, command-runtime, branch-discipline): test-command-policy-consent,
+      test-pretooluse-command-policy, test-host-kind-evidence-not-from-workspace, test-run-verb-agent-door,
+      test-land-discipline-probe. Two are named by nothing that runs: test-pre-push-work-ref-lane, test-change-class.
+      The first six are green on Linux (macuahuitl, 2026-11-25). Gate steps, not activation: each spec says it goes
+      active only once named packets close.
+    exit_criteria:
+      - "Each of the seven is run by a gate step with a non-Linux regime record, or has a row saying why not."
+    unscoreable: "fixture-scored: each step's own verdict line is the score"
+    provenance: "coordinator ruling 2026-11-25 (wire, do not retire), yolanda"
+    related: [1443-we89, 1443-9f5w, 1443-8pur, 1315-4a7j, 2371-r2v9]
+    events:
+      - {type: claimed, ts: "2026-11-25T17:33:14Z", host: yolanda, summary: "claimed; work ref work/2371-knda"}

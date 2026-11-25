@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-24. p-s port range, batch 3 (macuahuitl 16:49Z: continue batch 3 onward).
+packets:
+- packet_id: port-p-s-fixtures-batch-3
+  order: 2312-psb3
+  status: implemented
+  kind: chore
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [shell-to-lua, macos, fixtures, portability]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 1
+  title: 'Three whole-file shell-to-Lua ports from the p-s range: test-resolve-open-pr, test-resolve-release-run, test-summarize-pubspec'
+  ports: [scripts/test-resolve-open-pr.sh, scripts/test-resolve-release-run.sh, scripts/test-summarize-pubspec.sh]
+  context: >-
+    Each port keeps its scenarios as arms and moves to the common.fixture grammar. The two resolver stubs read their output from a
+    file instead of a printf %q literal, so the trailing-newline case is the bytes written, not a quoting round-trip. Passed over this
+    batch: test-plan-binary-probe-release-over-debug.sh, whose MSYS arm cannot be checked on darwin. Both litmus files are rewired;
+    freshness comments in the resolvers, summarize-pubspec.sh, summarize-pyproject.sh and the merge-to-main-and-release skill name the .lua.
+  exit_criteria:
+  - 'Each .lua gives the same verdict as its .sh on the trunk tree, and the same red arm under a mutant.'
+  - 'Both litmus files run the .lua; the three .sh files and their floor lines are gone.'
+  verifiable_closure: 'Mutant parity in the PR; litmus release-runbook-external-preconditions-shape and project-summarizers-shape green on darwin.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the mutant parity is the deliverable.'
+  next_action: >-
+    Implemented. Darwin (bash 3.2.57): all green. Mutants: the resolver null check removed reds arm 1 in both; gh-failed collapsed
+    into no-run reds arm 3 in both; provider_tools counted as provider reds arm 2 in both.
+  provenance: 'tlatoanis-macbook-air 2026-11-24, on macuahuitl-fedora''s 16:49Z direction.'
+  related: [2302-pspt, 2303-rttr]
+  events:
+  - {type: filed, ts: '2026-11-24T16:52:07Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}

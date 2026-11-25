@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: a-sibling-whose-ledger-was-not-folded-counts-as-unchecked-never-as-checked
+    field: status
+    value: implemented
+    ts: "2026-11-24T18:59:12Z"
+    host: yoga
+events:
+  - packet_id: a-sibling-whose-ledger-was-not-folded-counts-as-unchecked-never-as-checked
+    event: {type: implemented, ts: "2026-11-24T18:59:12Z", host: yoga, summary: "implemented on work/2316-6kzg, stacked on 2314-ktxt"}

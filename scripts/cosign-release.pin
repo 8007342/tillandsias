@@ -52,7 +52,7 @@
 # cosign_checksums.txt and its .sigstore.json, re-read the certificate identity
 # (do not carry those two lines over on faith — an upstream signing-identity
 # change is exactly the event this file exists to notice), recompute
-# checksums_sha256, and re-run scripts/test-ensure-cosign.sh, whose negative
+# checksums_sha256, and re-run scripts/lua/test-ensure-cosign.lua, whose negative
 # controls must still reject and whose platform arm must still refuse an
 # unsupported host rather than failing verification on it.
 #

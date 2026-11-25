@@ -171,7 +171,7 @@ if [ "$live_hits" -ge 1 ] && [ "$mut_hits" -eq 0 ] \
    && [ "$live_load" -ge 1 ] && [ "$mut_load" -eq 0 ]; then
     prefix_out="$(run_runner bash "$PREFIX_RUNNER" --parse-only "$TMP/dup-assert.yaml" 2>&1)"
     prefix_rc=$?
-    if [ "$prefix_rc" -eq 0 ] && printf '%s' "$prefix_out" | grep -Fq "$OK_PARSEABLE"; then
+    if [ "$prefix_rc" -eq 0 ] && grep -Fq <<<"$prefix_out" "$OK_PARSEABLE"; then
         ok "ARM 1: PRE-FIX the duplicate is reported parseable and exits 0 — the defect reproduces on demand"
     else
         bad "ARM 1: pre-fix copy did NOT reproduce the false green (rc=$prefix_rc) — the arm is not exercising the defect"
@@ -189,8 +189,8 @@ for probe in dup-assert:assert_output_contains dup-timeout:timeout_ms dup-comman
     out="$(run_runner bash "$RUNNER" --parse-only "$TMP/$f.yaml" 2>&1)"
     rc=$?
     if [ "$rc" -ne 0 ] \
-       && printf '%s' "$out" | grep -Fq "$f.yaml" \
-       && printf '%s' "$out" | grep -Fq "$key"; then
+       && grep -Fq <<<"$out" "$f.yaml" \
+       && grep -Fq <<<"$out" "$key"; then
         ok "ARM: duplicated '$key' refused, exit $rc, refusal names the file and the key"
     else
         bad "ARM: duplicated '$key' not refused as required (rc=$rc): $(printf '%s' "$out" | tail -1)"
@@ -202,7 +202,7 @@ done
 # false green with a false red.
 out="$(run_runner bash "$RUNNER" --parse-only "$TMP/clean.yaml" 2>&1)"
 rc=$?
-if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -Fq "${OK_PARSEABLE}"; then
+if [ "$rc" -eq 0 ] && grep -Fq <<<"$out" "${OK_PARSEABLE}"; then
     ok "ARM 5: a clean probe still reports parseable with its step count, exit 0"
 else
     bad "ARM 5: clean probe no longer passes (rc=$rc) — false green traded for false red"
@@ -217,46 +217,57 @@ accepted_set() {
 }
 same_set() { cmp -s "$1" "$2"; }
 if [ "$mut_hits" -eq 0 ] && [ "$mut_load" -eq 0 ]; then
-    printf '%s\n' openspec/${LIT}-tests/*.yaml > "$TMP/corpus.inputs"
+    # ORDER 2164-desp (priority:build-speed): the LIVE runner parses the whole
+    # corpus once; the BASE (neutralised) copy parses ONLY the files live
+    # refused. "This change adds no refusal" holds iff base refuses each of
+    # those too. Before, base re-parsed all ~630 files (~12 s) to compare sets.
+    printf '%s\n' openspec/${LIT}-tests/*.yaml | LC_ALL=C sort -u > "$TMP/corpus.inputs"
     corpus_ok=1
-    for variant in live base; do
-        subject="$RUNNER"; [ "$variant" != base ] || subject="$PREFIX_RUNNER"
-        run_runner bash "$subject" --parse-only openspec/${LIT}-tests/*.yaml \
-            > "$TMP/$variant.stdout" 2> "$TMP/$variant.stderr"
-        corpus_rc=$?
-        printf '%s\n' "$corpus_rc" > "$TMP/$variant.rc"
-        accepted_set "$TMP/$variant.stdout" "$TMP/$variant.accepted"
-        escape="$(printf '\033')"
-        sed "s/${escape}\[[0-9;]*m//g" "$TMP/$variant.stderr" > "$TMP/$variant.diagnostics"
-        # Every input must have an explicit verdict. A crash, unknown output or
-        # silently dropped file cannot pass merely because both counts match.
-        refused=0
-        while IFS= read -r file; do
-            if grep -Fxq "$file" "$TMP/$variant.accepted"; then continue; fi
-            if grep -Fxq "  [PARSE FAIL] $file" "$TMP/$variant.diagnostics" \
-                || grep -Fq "  [PARSE ERROR] $file:" "$TMP/$variant.diagnostics" \
-                || grep -Fxq "blocked:parse-only:not-yaml:$file" "$TMP/$variant.diagnostics"; then
-                refused=$((refused + 1))
-            else
-                printf 'unaccounted:%s:%s\n' "$variant" "$file" >&2
-                corpus_ok=0
-            fi
-        done < "$TMP/corpus.inputs"
-        while IFS= read -r file; do
-            grep -Fxq "$file" "$TMP/corpus.inputs" || corpus_ok=0
-        done < "$TMP/$variant.accepted"
-        if [ "$refused" -eq 0 ]; then [ "$corpus_rc" -eq 0 ] || corpus_ok=0
-        else [ "$corpus_rc" -eq 1 ] || corpus_ok=0; fi
-        printf 'corpus:%s:accepted=%s refused=%s rc=%s\n' "$variant" \
-            "$(wc -l < "$TMP/$variant.accepted" | tr -d ' ')" "$refused" "$corpus_rc"
-        # Shared extraction failures remain visible, not promoted to success.
-        cat "$TMP/$variant.stderr" >&2
-    done
-    if [ "$corpus_ok" -eq 1 ] && same_set "$TMP/live.accepted" "$TMP/base.accepted"; then
-        ok "ARM 6: real corpus accepted filename sets identical; all named files accounted for"
+    escape="$(printf '\033')"
+    run_runner bash "$RUNNER" --parse-only openspec/${LIT}-tests/*.yaml \
+        > "$TMP/live.stdout" 2> "$TMP/live.stderr"
+    corpus_rc=$?
+    accepted_set "$TMP/live.stdout" "$TMP/live.accepted"
+    sed "s/${escape}\[[0-9;]*m//g" "$TMP/live.stderr" > "$TMP/live.diagnostics"
+    : > "$TMP/live.refused"
+    # Every input must have an explicit verdict. A crash, unknown output or
+    # silently dropped file cannot pass.
+    while IFS= read -r file; do
+        if grep -Fxq "$file" "$TMP/live.accepted"; then continue; fi
+        if grep -Fxq "  [PARSE FAIL] $file" "$TMP/live.diagnostics" \
+            || grep -Fq "  [PARSE ERROR] $file:" "$TMP/live.diagnostics" \
+            || grep -Fxq "blocked:parse-only:not-yaml:$file" "$TMP/live.diagnostics"; then
+            printf '%s\n' "$file" >> "$TMP/live.refused"
+        else
+            printf 'unaccounted:live:%s\n' "$file" >&2
+            corpus_ok=0
+        fi
+    done < "$TMP/corpus.inputs"
+    while IFS= read -r file; do
+        grep -Fxq "$file" "$TMP/corpus.inputs" || corpus_ok=0
+    done < "$TMP/live.accepted"
+    nref="$(grep -c . "$TMP/live.refused" || true)"
+    if [ "${nref:-0}" -eq 0 ]; then [ "$corpus_rc" -eq 0 ] || corpus_ok=0
+    else [ "$corpus_rc" -eq 1 ] || corpus_ok=0; fi
+    printf 'corpus:live:accepted=%s refused=%s rc=%s\n' \
+        "$(wc -l < "$TMP/live.accepted" | tr -d ' ')" "${nref:-0}" "$corpus_rc"
+    cat "$TMP/live.stderr" >&2
+    new_refusals=""
+    if [ "${nref:-0}" -gt 0 ]; then
+        n_refused_files=0
+        set --
+        while IFS= read -r file; do set -- "$@" "$file"; n_refused_files=$((n_refused_files + 1)); done < "$TMP/live.refused"
+        run_runner bash "$PREFIX_RUNNER" --parse-only "$@" > "$TMP/base.stdout" 2> "$TMP/base.stderr"
+        accepted_set "$TMP/base.stdout" "$TMP/base.accepted"
+        # A file base ACCEPTS but live refuses is a refusal this change added.
+        new_refusals="$(cat "$TMP/base.accepted")"
+        printf 'corpus:base:checked=%s accepted-by-base=%s\n' "$n_refused_files" "$(grep -c . "$TMP/base.accepted" || true)"
+    fi
+    if [ "$corpus_ok" -eq 1 ] && [ -z "$new_refusals" ]; then
+        ok "ARM 6: every real corpus file is accounted for, and each live refusal was already refused by the base copy"
     else
-        diff -u "$TMP/base.accepted" "$TMP/live.accepted" >&2 || true
-        bad "ARM 6: corpus verdict sets differ or an invocation is incomplete (captures retained)"
+        printf 'new refusal(s): %s\n' "$new_refusals" >&2
+        bad "ARM 6: a corpus verdict is unaccounted for, or this change refuses a file the base copy accepts (captures retained)"
     fi
 else
     bad "ARM 6: no usable baseline copy"
@@ -322,7 +333,7 @@ fi
 "$READER" validate-yaml "$TMP/merged.yaml" >/dev/null 2>&1
 rc_merged_yaml=$?
 out="$(run_runner bash "$RUNNER" --parse-only "$TMP/merged.yaml" 2>&1)"
-if [ "$rc_merged_yaml" -eq 0 ] && ! printf '%s' "$out" | grep -Fq 'duplicated mapping key'; then
+if [ "$rc_merged_yaml" -eq 0 ] && ! grep -Fq <<<"$out" 'duplicated mapping key'; then
     ok "ARM 8: a merged '- name:' item is NOT reported as a duplicated key — a YAML loader accepts that file, so a duplicate refusal there is a false red"
 elif [ "$rc_merged_yaml" -ne 0 ]; then
     bad "ARM 8: premise gone — the loader now rejects the merged-item probe (rc=$rc_merged_yaml), so this arm no longer tests a false positive"

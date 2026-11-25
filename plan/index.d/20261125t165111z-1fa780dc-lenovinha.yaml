@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: port-content-movers-forge-validate-ensure-hooks-ensure-cosign-fixtures-to-lua
+    field: status
+    value: completed
+    ts: "2026-11-25T16:51:11Z"
+    host: lenovinha
+
+events:
+  - packet_id: port-content-movers-forge-validate-ensure-hooks-ensure-cosign-fixtures-to-lua
+    event:
+      type: completed
+      ts: "2026-11-25T16:51:11Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: land:7e09ea6aa4a211003bb1c45d4e55b12da83a0c29
+  - packet_id: port-content-movers-forge-validate-ensure-hooks-ensure-cosign-fixtures-to-lua
+    event:
+      type: note
+      ts: "2026-11-25T16:51:11Z"
+      host: lenovinha
+      summary: |-
+        #1564 landed in the land-train with #1561; step 846 passes on darwin (recorded in 2368-efqj).

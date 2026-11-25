@@ -1,0 +1,4 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: relay-scope-selects-a-litmus-file-with-no-phase-line-as-pre-build
+    event: {type: note, ts: "2026-11-25T02:00:09Z", host: yoga, summary: "darwin (macbookair, relayed) at 2ff45bf93: step 862 ok:mo-full-record-precedes-marker:7 arms, rc 0"}

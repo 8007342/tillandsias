@@ -150,7 +150,7 @@ if [ $# -gt 0 ]; then
 fi
 
 # The validator is resolved HERE, in the checkout, where the probe can see
-# it (the lesson of test-pre-push-plan-lane-after-merge.sh). Fail closed
+# it (the lesson of scripts/lua/test-pre-push-plan-lane-after-merge.lua). Fail closed
 # without one, exactly as the lane itself does.
 # shellcheck source=plan-binary-probe.sh
 . "$ROOT/scripts/plan-binary-probe.sh"
@@ -495,7 +495,7 @@ while :; do
         echo "ok:fragments-to-trunk:dry-run:$commit:$n"; exit 0
     fi
     rc=0
-    git push "$REMOTE" "$commit:refs/heads/$TRUNK" > "$tmp/push" 2>&1 || rc=$?
+    LANGUAGE=en git push "$REMOTE" "$commit:refs/heads/$TRUNK" > "$tmp/push" 2>&1 || rc=$?
     cat "$tmp/push" >&2
     if [ "$rc" -eq 0 ]; then
         echo "ok:fragments-on-trunk:$commit:$n"; exit 0

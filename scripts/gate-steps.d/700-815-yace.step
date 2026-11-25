@@ -4,14 +4,18 @@
 # nothing checked it: project-summarizers required six summarizers under a
 # scripts/summarizers/ directory that never existed, two never committed, and
 # its litmus grepped a cheatsheet for ONE name that exists, so it rotted green.
-# check-spec-script-paths.sh refuses any NEW unresolved `scripts/...` path an
+# check-spec-script-paths.lua (ported from .sh by 2083-6k44) refuses any NEW unresolved `scripts/...` path an
 # active spec names; the ten that predate it are a named burndown baseline.
 # The fixture pins the pre-fix project-summarizers spec (at b6fe04b4f) as red.
 # Negative control: with resolution forced true, arms 2-4 fail (3/6).
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking every script path an active spec names resolves in the tree (815-yace)"
-STEP_SCRIPT="scripts/test-spec-script-paths.sh"
+STEP_LUA="scripts/lua/test-spec-script-paths.lua"
 STEP_ERROR="a spec names a script the tree does not have, or the spec-path check stopped refusing one (815-yace); see which arm failed above"
 STEP_OK="every script path the specs name resolves, is baselined, or is marked absent on purpose"
-STEP_SECOND_REGIME="yolanda 2026-09-30 msys PASS: spec-script-paths 6/6 (rc=0, 113s, relayed by the coordinator)"
+STEP_SECOND_REGIME="yolanda 2026-11-17 msys ok:spec-script-paths-fixture:6/6 — native Windows runner over Git Bash after the Lua port (2083-6k44); with resolution forced true arms 2-4 fail (3/6), as the shell fixture did"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="openspec/specs/project-summarizers/spec.md scripts/lua/check-spec-script-paths.lua scripts/lua/test-spec-script-paths.lua"

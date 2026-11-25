@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-forge-queue-job-runs-with-the-forges-environment-and-host-kind
+    field: status
+    value: blocked
+    ts: "2026-11-25T12:03:01Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-forge-queue-job-runs-with-the-forges-environment-and-host-kind
+    event:
+      type: note
+      ts: "2026-11-25T12:03:01Z"
+      host: lenovinha
+      summary: |-
+        PR open at 3032fcd31, waits to land; red on v56.11.24.1 and green on the branch through queue.submit in a real lane

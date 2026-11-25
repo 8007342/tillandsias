@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: dirty-tree-safety-fixture-cannot-find-git-on-msys-and-hides-the-refusal
+    order: "2348-ak6u"
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [windows, portability, fixtures]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-meta-orchestration-dirty-tree-safety.lua
+    title: "test-meta-orchestration-dirty-tree-safety reds on native Windows: its guard finds no git, and the refusal is hidden by a script-error"
+    context: |
+      Measured on yolanda (msys) 2026-11-25, also on linux-next: refused:script-error, fs.write of boundary/tmp/probe.log at
+      line 74. The snapshot did NOT return 0: with its result printed it is rc=1, 'line 201: git: command not found', from
+      a guard spawned as bare bash under PATH=/usr/bin:/bin:/usr/local/bin. fail() only records it, so the next fs.write
+      dies first and no arm is named. Replacing bare bash with fixture.posix_shell() in a scratch copy: PASS, ok. It stops
+      litmus meta-orchestration-dirty-tree-safety at step 3 on Windows, so steps 4-6 never run there. A plain path change is
+      not the only candidate; which bash the bare name found was not checked.
+    exit_criteria:
+      - "On native Windows the fixture passes; pre-fix result: refused:script-error at line 74."
+      - "A refused snapshot is reported as its own failure, naming the guard's stderr, not as a script-error."
+    unscoreable: "fixture-scored: the fixture is the deliverable"
+    next_action: "Spawn the guard with fixture.posix_shell(); stop at a refused snapshot and print its stderr."
+    provenance: "coordinator macuahuitl-fedora 2026-11-25, asked for a row after #1547"
+    related: [1247-b46r, 2246-fkea, 2347-fqm2]
+    events:
+      - {type: filed, ts: "2026-11-25T11:16:48Z", host: yolanda, summary: "filed on the request of the coordinator"}

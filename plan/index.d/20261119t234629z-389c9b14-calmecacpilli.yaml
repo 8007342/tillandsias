@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-guard-activation-auditor-reports-ok-over-a-population-of-12-of-78-gate-steps-because-it-enumerates-only-check-scripts-so-a-test-fixture-is-unwired-and-wired-indistinguishably
+    field: next_action
+    value: 'STALE PATH (triage 2026-11-19): scripts/audit-guard-activation.sh is now scripts/lua/audit-guard-activation.lua (41195b9b2, 1570-25iq). Re-read the criterion against the new path before claiming.'
+    ts: "2026-11-19T23:46:29Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: the-guard-activation-auditor-reports-ok-over-a-population-of-12-of-78-gate-steps-because-it-enumerates-only-check-scripts-so-a-test-fixture-is-unwired-and-wired-indistinguishably
+    event:
+      type: note
+      ts: "2026-11-19T23:46:29Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli): cited file deleted on trunk

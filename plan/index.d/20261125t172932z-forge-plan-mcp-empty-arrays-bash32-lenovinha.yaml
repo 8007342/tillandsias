@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: forge-plan-mcp-answers-nothing-on-bash-3-2-for-an-empty-argument-array
+    order: "2371-u43z"
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [portability, macos, forge]
+    estimated_hours: 1
+    owned_files:
+      - images/default/config-overlay/mcp/forge-plan.sh
+    title: "forge-plan.sh answers nothing under bash 3.2 when a tool's argument array is empty"
+    context: |
+      macbookair on #1572 (4f8f3e1a7), relayed by macuahuitl 2026-11-25: fleet-msg-mcp arm 4 fails, 8/9. Under set -u, msg_recv with {}
+      leaves _mr_args empty and "${_mr_args[@]}" dies with "unbound variable" in bash before 4.4, so the server answers nothing.
+      msg_send's _ms_args has the same shape; plan_query's _pq_args and plan_next's _pn_args are expanded the same way.
+    exit_criteria:
+      - "Every array expansion in forge-plan.sh that can be empty is guarded. Pre-fix result on bash 3.2: FAILS, unbound variable."
+      - "fleet-msg-mcp is 9/9 on darwin."
+    unscoreable: "fixture-scored: scripts/lua/test-fleet-msg-mcp.lua arm 4 on bash 3.2"
+    next_action: "Guard the expansions; ask macbookair for 9/9."
+    provenance: "coordinator macuahuitl-fedora 2026-11-25, from macbookair"
+    related: [2368-efqj]
+    events:
+      - {type: filed, ts: "2026-11-25T17:29:32Z", host: lenovinha, summary: "filed and claimed on the coordinator's word"}

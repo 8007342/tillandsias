@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: dirty-tree-safety-fixture-cannot-find-git-on-msys-and-hides-the-refusal
+    field: status
+    value: blocked
+    ts: "2026-11-25T12:41:11Z"
+    host: lenovinha
+
+events:
+  - packet_id: dirty-tree-safety-fixture-cannot-find-git-on-msys-and-hides-the-refusal
+    event:
+      type: note
+      ts: "2026-11-25T12:41:11Z"
+      host: lenovinha
+      summary: |-
+        PR open; msys run and landing pending

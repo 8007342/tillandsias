@@ -1,0 +1,17 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: rerun-failed-rust-tests-stays-shell-pending-a-section-6-5-ruling
+    event:
+      type: list-replace
+      ts: "2026-11-22T12:49:55Z"
+      agent_id: linux-lenovinha-claude-20261122t124954z
+      host: lenovinha
+      field: depends_on
+      items:
+        - "local-ci-to-lua-slice-1-rust-test-runner-keeps-the-regime"
+      summary: |-
+        coordinator ruling 2026-11-22: blocks on local-ci.sh slice 1 (2215-beb5)

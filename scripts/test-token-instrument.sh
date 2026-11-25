@@ -38,6 +38,14 @@ CM="scripts/cycle-metrics.sh"
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/token-instr.XXXXXX")"
 trap 'rm -rf "$W"' EXIT INT TERM
+# ORDER 2150-vf2v (priority:build-speed): pin EVERY metrics log cycle-metrics.sh
+# reads to an empty scratch file. Defaulted, they are this host's real
+# .cache/metrics logs; a 95 MB usage log made this fixture 118 s instead of 3 s
+# on macuahuitl. scripts/lua/check-cycle-metrics-fixtures-pin-logs.lua refuses a
+# cycle-metrics fixture that leaves one defaulted.
+for _pin in TILLANDSIAS_EXPERT_USAGE_LOG TILLANDSIAS_CYCLE_FLOW_LOG TILLANDSIAS_EXPERT_HEALTH_LOG; do
+    : > "$W/pinned-$_pin.jsonl"; export "$_pin=$W/pinned-$_pin.jsonl"
+done
 LOG="$W/tokens.jsonl"
 # A timing log that exists and is empty: the reporting path only needs it NAMED.
 : > "$W/timing.jsonl"
@@ -86,9 +94,9 @@ emit host=h cycle=bad subagent_tokens=abc agents=-5 label=x
 _bad_row="$(grep '"cycle":"bad"' "$LOG" 2>/dev/null || true)"
 if [ -z "$_bad_row" ]; then
     bad "the coerced row was never written, so nothing here is being tested"
-elif printf '%s' "$_bad_row" | grep -q '"subagent_tokens":abc'; then
+elif grep -q <<<"$_bad_row" '"subagent_tokens":abc'; then
     bad "a non-numeric token count reached the log; the rolling average is now poisoned"
-elif printf '%s' "$_bad_row" | grep -q '"subagent_tokens":0,"agents":0'; then
+elif grep -q <<<"$_bad_row" '"subagent_tokens":0,"agents":0'; then
     ok "non-numeric counts coerce to 0 in a row that WAS written"
 else
     bad "the coerced row has an unexpected shape: $_bad_row"

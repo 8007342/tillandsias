@@ -193,7 +193,7 @@ ok "arm0: the premise holds — no plan binary resolves under the scrubbed envir
 printf 'packets: []\n' > plan/index.d/20260912t000000z-arm1.yaml
 G add -A >/dev/null; G commit -q -m "arm1: a fragment-only push"
 out="$(_run_push)"; rc=$?
-if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'full gate required'; then
+if [ "$rc" -ne 0 ] && grep -q <<<"$out" 'full gate required'; then
     ok "arm1: a fragment-bearing push with no runnable plan binary is REFUSED (full gate required)"
 else
     bad "arm1: the lane admitted a fragment-bearing push it could not fold (rc=$rc)"
@@ -201,13 +201,13 @@ else
 fi
 # The refusal must not read as a verdict about the DATA (923-ws3r / 1060-6fx7):
 # the instrument is missing, not the ledger.
-if printf '%s' "$out" | grep -qiE 'cannot (run|fold)|no runnable tillandsias-plan|does NOT run here'; then
+if grep -qiE <<<"$out" 'cannot (run|fold)|no runnable tillandsias-plan|does NOT run here'; then
     ok "arm1: the refusal names the missing INSTRUMENT, not a defect in the ledger"
 else
     bad "arm1: refusal does not say the instrument is what is missing"
 fi
 # And it must NOT have been a LANE_NOTE beside a success — the exact old shape.
-if printf '%s' "$out" | grep -qiE 'checks skipped'; then
+if grep -qiE <<<"$out" 'checks skipped'; then
     bad "arm1: the lane still prints 'checks skipped' — the 531 shape survives"
 else
     ok "arm1: no 'checks skipped' note (a skip here is a refusal, 1124-7f3u)"
@@ -217,20 +217,33 @@ fi
 # Lane SPEED is the reason the lane exists (930-i6x4). A fix that refuses
 # everything would pass arm 1 and destroy the lane, so this arm is what makes
 # arm 1 mean something.
-_probe_bin="$(bash -c '. "$1/scripts/plan-binary-probe.sh"; resolve_plan_binary' _ "$ROOT" 2>/dev/null)"
+# ORDER 2217-ab8h: resolve the control binary IN THE CHECKOUT, absolute, and
+# hand it over only if it is CURRENT for this checkout. Resolved from the
+# scratch cwd (no target/) the probe fell through to PATH and judged the lane
+# with the host's ~/.local/bin copy, so this arm went red on a host whose copy
+# was a work-branch build (lenovinha 2026-11-22: built-from a0f988e05716467c,
+# checkout 12c314a955ede6d2) and green elsewhere at the same commit.
+_probe_bin="$(cd "$ROOT" && bash -c '. "$1/scripts/plan-binary-probe.sh"; resolve_plan_binary' _ "$ROOT" 2>/dev/null)"
+case "$_probe_bin" in ./*) _probe_bin="$ROOT/${_probe_bin#./}" ;; esac
+_probe_vs="$( [ -n "$_probe_bin" ] && cd "$ROOT" && "$_probe_bin" validator-surface-hash --check 2>&1)" || true
+case "$_probe_vs" in ok:validator-surface:*) ;; *) [ -n "$_probe_bin" ] && _probe_stale="$_probe_bin"; _probe_bin="" ;; esac
 if [ -n "$_probe_bin" ] && "$_probe_bin" capabilities >/dev/null 2>&1; then
     out2="$(TILLANDSIAS_PLAN_BIN="$_probe_bin" \
         bash scripts/hooks/pre-push-local-gate.sh origin "$W/bare.git" 2>&1 <<< \
         "refs/heads/linux-next $(git rev-parse HEAD) refs/heads/linux-next $(git rev-parse origin/linux-next)")"
     rc2=$?
-    if [ "$rc2" -eq 0 ] && printf '%s' "$out2" | grep -q 'plan-only lane'; then
+    if [ "$rc2" -eq 0 ] && grep -q <<<"$out2" 'plan-only lane'; then
         ok "arm2 (negative control): with a runnable binary the fast lane still accepts the same push"
     else
         bad "arm2 (negative control): the fast lane no longer accepts a valid fragment push (rc=$rc2) — the fix would have destroyed the lane"
         printf '%s\n' "$out2" | sed 's/^/      /' >&2
     fi
 else
-    echo "note:arm2-skipped: no runnable plan binary on this host to drive the control" >&2
+    if [ -n "${_probe_stale:-}" ]; then
+        echo "note:arm2-skipped: the checkout's plan binary $_probe_stale is not current for this checkout (${_probe_vs%%$'\n'*}); the control is not judged with a stale instrument (2217-ab8h)" >&2
+    else
+        echo "note:arm2-skipped: no runnable plan binary on this host to drive the control" >&2
+    fi
 fi
 
 # ── ARM 3: NO fragments in the push, no binary → still accepted ──────────────

@@ -122,7 +122,7 @@ fi
 # --- Install pre-push hook -------------------------------------------------
 
 PREPUSH_TARGET="$GIT_HOOKS_DIR/pre-push"
-PREPUSH_MARKER="# tillandsias-pre-push-v8"
+PREPUSH_MARKER="# tillandsias-pre-push-v9"
 
 MAIN_AFFORD_REL="scripts/hooks/pre-push-main-branch-affordance.sh"
 MERGE_GATE_REL="scripts/hooks/pre-push-linux-next-merged.sh"
@@ -190,9 +190,12 @@ HOOK
 
 if [[ -f "$PREPUSH_TARGET" ]] && grep -qF "$PREPUSH_MARKER" "$PREPUSH_TARGET" 2>/dev/null; then
     echo "✓ pre-push hook (linux-next merge gate + VERSION guard + local gate) already installed"
-elif [[ -f "$PREPUSH_TARGET" ]] && grep -qE "# (version-guard-hook|tillandsias-pre-push-v[234567])" "$PREPUSH_TARGET" 2>/dev/null; then
+elif [[ -f "$PREPUSH_TARGET" ]] && grep -qE "# (version-guard-hook|tillandsias-pre-push-v[0-9]+)$" "$PREPUSH_TARGET" 2>/dev/null; then
+    # ORDER 2200-hkup: ANY older marker of ours is upgraded. The list was a
+    # hand-kept v[234567], so the v9 bump (2194-cspr) left every v8 host
+    # "unrecognized" and its guards stale. The current marker is caught above.
     install_prepush
-    echo "✓ pre-push hook upgraded to v7 (foreign-repo guard in the preamble)"
+    echo "✓ pre-push hook upgraded to ${PREPUSH_MARKER#\# }"
 elif [[ -f "$PREPUSH_TARGET" ]]; then
     echo "⚠ an unrecognized pre-push hook exists — leaving it alone" >&2
     echo "  To adopt the Tillandsias gate, move it aside and re-run this script." >&2

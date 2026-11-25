@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-plan-field-get-and-resolve-open-pr-fixtures-to-lua
+    order: 2292-62a5
+    status: ready
+    kind: debt
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua]
+    estimated_hours: 1
+    title: |
+      Port test-plan-field-get.sh and test-resolve-open-pr.sh to scripts/lua, with the field-get arms on scratch ledgers.
+    context: |
+      Both are run by one litmus step each and by nothing else; no open ref deletes either (checked 2026-11-24). test-plan-field-get.sh asks the live ledger about 1261-bn7v, so it encodes a moment: it goes red when that row is archived. Its arm 4 says it discriminates two trees that disagree, but compares trunk with origin, which usually agree.
+    exit_criteria:
+      - "both .sh files are gone, the litmus steps run the Lua, floors lowered"
+      - "every arm is red under a mutant of its subject"
+    unscoreable: "mechanical port; the arms are the deliverable."
+    next_action: "Write the Lua, mutate field-get's stub and resolve-open-pr.sh."
+    provenance: coordinator queue item 3 (macuahuitl-fedora, 2026-11-24); filed by lenovinha.
+    related: [1261-bn7v, 601-462g]
+    events:
+      - {type: filed, ts: '2026-11-24T09:36:49Z', host: lenovinha, summary: port two fixtures}

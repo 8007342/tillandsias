@@ -1,0 +1,10 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 4: the next slowest blocks,
+# measured one at a time on lenovinha). As a .step it is no build.sh edit, so it
+# never makes intake HEAVY; it runs in the pool (it writes only its own scratch).
+STEP_DESC="Verifying a MO-FULL marker cannot outrun its ledger record (974-uk95)"
+STEP_LUA="scripts/lua/test-mo-full-record-precedes-marker.lua"
+STEP_ERROR="the marker/ledger coupling regressed (974-uk95) — see the failing case above"
+STEP_OK="MO-FULL record-precedes-marker fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:mo-full-record-precedes-marker:7 arms (2326-b52d @2ff45bf93, Lua port)"
+STEP_READS="scripts/lua/test-mo-full-record-precedes-marker.lua"

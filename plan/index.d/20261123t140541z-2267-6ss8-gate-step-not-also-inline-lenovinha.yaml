@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: refuse-a-script-run-both-inline-and-as-a-gate-step
+    order: 2267-6ss8
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      Refuse a fixture that runs both as an inline build.sh --check block and as a scripts/gate-steps.d/*.step: test-land-queue.sh ran twice per gate (48 s each) from 2026-09-28 until 2266-4w3c.
+    context: |
+      Found by 2266-4w3c (the .step series batch 3): step 286 (1461-5rm6, 2026-09-28) bound test-land-queue.sh and its inline block was never removed. test-gate-step-append-no-conflict.sh refuses two .step files naming one script, but never compares a .step with build.sh's inline blocks, so the duplicate was invisible to every guard. Coordinator direction 2026-11-23: mint the guard, prove it with a mutant that re-adds the inline test-land-queue.sh copy.
+    exit_criteria:
+      - "a Lua decider refuses, naming the script and both sites, any STEP_SCRIPT or STEP_LUA that an inline _run/_run_lua_decider line in build.sh also runs"
+      - "it is green on trunk once 2266-4w3c has landed (the one known duplicate removed)"
+      - "a fixture's mutant re-adding the inline test-land-queue.sh block goes red; wired as a gate step with a second-regime record"
+    unscoreable: "unpinnable-until-the-guard-exists: the decider and its mutant are the deliverable."
+    next_action: "Write check-gate-step-not-also-inline.lua plus its fixture; stack on work/2266-4w3c."
+    provenance: coordinator direction (macuahuitl-fedora, 2026-11-23); filed by lenovinha.
+    related: [2266-4w3c, 1461-5rm6, 2253-j2at]
+    events:
+      - {type: filed, ts: '2026-11-23T14:05:41Z', host: lenovinha, summary: refuse a script run both inline and as a gate step filed and claimed}

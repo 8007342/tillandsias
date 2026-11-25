@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: harness-affinity-fixture-reads-the-live-cross-branch-check
+    order: 2323-wwaa
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [release-gate]
+    estimated_hours: 1
+    title: |
+      litmus:harness-affinity-selection-shape runs the live cross-branch claim check, so its verdict depends on which sibling branches this clone can fold.
+    context: |
+      run_selector merges stderr into the output whose first line each vector reads. When check-claims-across-branches.sh answers 2 the selector prints "cross-branch: could not fold sibling branches" first, and vector 1 fails as v1-no-harness-note (seen on the #1514 head 351481069; green on 3be73e8ff).
+      The fixture drives TILLANDSIAS_XBRANCH_CHECK with a stub that exits 0, and one vector drives a stub that exits 2 and expects the note with the batch unchanged.
+    exit_criteria:
+      - "litmus:harness-affinity-selection-shape passes on trunk and at 351481069"
+      - "a vector with a stub exiting 2 expects the could-not-fold note and a non-empty batch"
+    verifiable_closure: "litmus:harness-affinity-selection-shape"
+    next_action: "Land work/2323-wwaa."
+    provenance: coordinator triage 2026-11-24 (suggested by yolanda); filed by lenovinha.
+    related: [1034-whsp, 2319-fmgy]
+    events:
+      - {type: filed, ts: '2026-11-24T22:51:44Z', host: lenovinha, summary: non-hermetic selector fixture filed}

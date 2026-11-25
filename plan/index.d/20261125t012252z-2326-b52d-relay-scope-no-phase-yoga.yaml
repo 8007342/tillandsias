@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: relay-scope-selects-a-litmus-file-with-no-phase-line-as-pre-build
+    order: "2326-b52d"
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, preflight, vacuous-ok]
+    estimated_hours: 2
+    owned_files:
+      - scripts/litmus-covering-specs.sh
+      - scripts/lua/test-litmus-covering-relay-scope.lua
+    title: "litmus-covering-specs --relay-scope defers a litmus file with no phase: line, so a preflight skips its spec"
+    context: |
+      relay_scope reads tab-separated rows with `read`; tab is IFS whitespace, so an empty phase field collapses and the size
+      is read as the phase. The `${phase:-pre-build}` default is never reached, and the spec is deferred:phase. Ten live litmus
+      files have no phase: line on 2026-11-25. Found by an extra arm while porting the fixture (2325-qmsb).
+    exit_criteria:
+      - "A litmus file with no phase: line that a changed path selects is run as pre-build. Pre-fix result: FAILS, deferred:phase."
+      - "NEGATIVE CONTROL: an explicit non-pre-build phase still defers, and an empty size still reads as instant."
+    unscoreable: "fixture-scored: new arms of test-litmus-covering-relay-scope.lua are the guard"
+    provenance: "coordinator macuahuitl-fedora 2026-11-25, from yoga's finding on 2325-qmsb"
+    related: [1437-yfuh, 2325-qmsb]
+    events:
+      - {type: claimed, ts: "2026-11-25T01:22:52Z", host: yoga, summary: "filed and claimed on the coordinator's word; work ref work/2326-b52d"}

@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-20 at macuahuitl-fedora's direction: release blocker 7 of the failed v56.11.20.1 cut.
+packets:
+  - packet_id: mcp-expert-health-probe-litmus-reads-no-host-expert-usage-log
+    order: 2134-cmdi
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [litmus, release-blocker, metrics]
+    estimated_hours: 1
+    owned_files:
+      - openspec/litmus-tests/litmus-mcp-expert-health-probe-shape.yaml
+    title: "litmus:mcp-expert-health-probe-shape stubs the expert-usage log, so its cycle-metrics steps cost the same on every host"
+    context: |
+      The v56.11.20.1 cut failed ci-full with step 19 of litmus:mcp-expert-health-probe-shape killed at its 20 s budget
+      (steps 18-19 up to 120 s). Every cycle-metrics.sh call in the litmus stubbed the health log and the surface stamp
+      but not TILLANDSIAS_EXPERT_USAGE_LOG, so --experts-only read the HOST's real forge-expert-usage.jsonl.
+      MEASURED on yoga with step 19's own command: a 162 MB / 1.5 M-line usage log took 28019 ms; /dev/null took 293 ms.
+      Coordinator measured macuahuitl's real log at 93 MB (plus a 15 MB copy under ~/.local/bin/.cache).
+    exit_criteria:
+      - "Every cycle-metrics.sh call in the litmus passes TILLANDSIAS_EXPERT_USAGE_LOG=/dev/null, and the litmus is green."
+      - "Step 19's command takes under 2 s with a 160 MB usage log present on the host. Pre-fix: FAILS (28 s)."
+    unscoreable: "the litmus file is the measure"
+    provenance: "cut-v56.11.20.1.log excerpt relayed by the coordinator; yoga timing; coordinator's macuahuitl du."
+    events:
+      - type: filed
+        ts: "2026-11-20T11:23:42Z"
+        host: yoga
+        summary: "filed and claimed, release blocker"

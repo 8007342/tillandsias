@@ -17,7 +17,7 @@ description: >-
   document the shape). Ruby-free by construction (order 261): the check is
   the Rust policy binary, and Windows — the host class most likely to drift —
   runs it natively. The hermetic fixture
-  (scripts/test-tray-surface-parity-gate.sh, wired into ./build.sh --check)
+  (scripts/test-tray-surface-parity-gate.sh, gate step 752 of ./build.sh --check)
   pins both directions: an added surface with no row FAILS naming the id and
   the columns to fill; the same surface with a claiming row PASSES.
 severity: high

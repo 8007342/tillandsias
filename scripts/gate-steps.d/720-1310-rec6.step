@@ -9,9 +9,16 @@
 # git-daemon exists here) with the image's own healthcheck disabled; skips by
 # name without podman or the image.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking the git mirror's healthcheck writes nothing to the daemon log and still detects a dead daemon (1310-rec6)"
-STEP_SCRIPT="scripts/test-mirror-healthcheck-quiet.sh"
+STEP_LUA="scripts/lua/test-mirror-healthcheck-quiet.lua"
 STEP_ERROR="the git mirror healthcheck again writes to git-daemon's log (fatal: the remote end hung up) or no longer detects a dead daemon (1310-rec6)"
 STEP_OK="mirror healthcheck is silent and still a liveness check"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-29 darwin skip:mirror-healthcheck-quiet:no-versioned-git-image (named skip at f81e095aa: the git image lives only in the macOS guest)"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="drives podman; binds a fixed local port"
+STEP_LANES="podman port"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin skip:mirror-healthcheck-quiet:no-versioned-git-image at 9b440dd50 (named skip: Homebrew podman present, the git image lives only in the macOS guest)"
+STEP_READS="images/git/healthcheck.sh VERSION scripts/lua/test-mirror-healthcheck-quiet.lua"

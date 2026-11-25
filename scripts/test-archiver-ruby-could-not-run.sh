@@ -46,7 +46,7 @@ fi
 
 # 2. THE VERDICT MUST NOT ASSERT ANYTHING ABOUT THE LEDGER. This is the half
 #    that made the defect expensive: an agent went looking for ledger damage.
-if printf '%s' "$out" | grep -q 'would CHANGE THE READY SET'; then
+if grep -q <<<"$out" 'would CHANGE THE READY SET'; then
     fail=$((fail+1)); echo "FAIL: the run asserted a ready-set claim it never tested"
 else
     pass=$((pass+1))
@@ -56,8 +56,8 @@ fi
 #    swallowed. The ruby-dependent call site redirects stdout to /dev/null, so a
 #    refusal printed on stdout is invisible; that was the first version of this
 #    fix and this arm is why it was caught.
-if printf '%s' "$out" | grep -q 'no usable ruby in this locus' \
-   && printf '%s' "$out" | grep -q 'Remedy:'; then
+if grep -q <<<"$out" 'no usable ruby in this locus' \
+   && grep -q <<<"$out" 'Remedy:'; then
     pass=$((pass+1))
 else
     fail=$((fail+1)); echo "FAIL: refusal did not name the instrument and a remedy on stderr"
@@ -91,10 +91,29 @@ _dirt_before="$(git status --porcelain --untracked-files=all -- $_scratch_paths 
 # 4. A working lane must still WORK — the guard must not refuse a host that has
 #    ruby, natively or through the builder toolbox. Negative control: without it
 #    a guard that refused everything would satisfy arms 1-3.
-out2="$(./scripts/archive-plan-packets.sh --check 2>&1)"; rc2=$?
+# ORDER 2159-n9sa (priority:build-speed): the positive control used to run the
+# DEFAULT (Lua) backend over the whole live ledger, a ~117 s re-run of the
+# archiver check build.sh already runs, and it never exercised ruby at all. It
+# now runs the RUBY backend, the lane this fixture is about, over a scratch
+# copy with a one-row ledger, and skips only the answerability harness's
+# cargo test (a named skip). The refusal arms above are unchanged.
+_pos="$(mktemp -d "${TMPDIR:-/tmp}/archiver-ruby-pos.XXXXXX")"
+trap 'rm -rf "$STUB" "$_pos"' EXIT
+git init -q "$_pos"
+cp -R scripts "$_pos/scripts"
+mkdir -p "$_pos/plan/index.d" "$_pos/plan/archive"
+printf 'packets:\n  - packet_id: a-one-row-fixture-ledger\n    order: 9999-aaaa\n    status: ready\n    title: one row\n' > "$_pos/plan/index.yaml"
+_pos_plan="$(. scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || _pos_plan=""
+case "$_pos_plan" in ""|/*) ;; *) _pos_plan="$PWD/${_pos_plan#./}" ;; esac
+out2="$(cd "$_pos" && env TILLANDSIAS_ARCHIVER_BACKEND=ruby TILLANDSIAS_ARCHIVER_SKIP_ANSWERABILITY=1 \
+    ${_pos_plan:+"TILLANDSIAS_PLAN_BIN=$_pos_plan"} bash scripts/archive-plan-packets.sh --check 2>&1)"; rc2=$?
+case "$out2" in
+    *skip:archiver:answerability:fixture-knob*) ;;
+    *) [ "$rc2" -ne 0 ] || { rc2=99; out2="the knob did not name its skip; $out2"; } ;;
+esac
 if [ "$rc2" -eq 0 ]; then
     pass=$((pass+1))
-elif [ "$rc2" -eq 3 ] && printf '%s' "$out2" | grep -q 'no usable ruby'; then
+elif [ "$rc2" -eq 3 ] && grep -q <<<"$out2" 'no usable ruby'; then
     echo "SKIP: this host has no usable ruby in either lane, so the positive control cannot run here"
     pass=$((pass+1))
 else

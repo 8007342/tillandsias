@@ -132,7 +132,10 @@ table="$(cd "$ROOT" && {
     printf '%s\n' build.sh launch.sh scripts/install.sh scripts/install-macos.sh scripts/ensure_toolbox.sh
     # §6.5 row 2, "nor vouch for itself" (1627-hg3t)
     printf '%s\n' scripts/check-yaml-reader-availability.sh
-    # §6.5 row 6, runs before a fresh clone has a plan binary (2124-mwzr)
+    # §6.5 row 2, "nor gate the push that arrives before it exists" (2222-icbs)
+    printf '%s\n' scripts/check-issue-citation-convention.sh
+    # §6.5 bootstrap row: the pre-binary memory-floor refusal (2167-gmfl); it runs
+    # BEFORE a plan binary exists, so its .lua port cannot replace it
     printf '%s\n' scripts/check-gate-memory-floor.sh
     git ls-files -- 'scripts/*.ps1' 'scripts/hooks/*.sh' 'images/*/entrypoint*.sh'
 } | LC_ALL=C sort -u)"

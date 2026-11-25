@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-lua-door-passes-a-script-run-child-the-four-git-identity-variables-and-no-other-git-variable
+    field: next_action
+    value: 'RESHAPED 2026-11-20 (coordinator ruling; the TITLE above is now the opposite of the intent, read this instead). The original ask (pass GIT_AUTHOR_* and GIT_COMMITTER_* through the Lua door) is WITHDRAWN: identity env outranks repo-local config, so it would override every script-run child''s own scratch identity. That exact mechanism evicted #1181 when done in with-tillandsias-builder.sh (studio::the_feed_returns_each_saved_path_with_its_diff_in_commit_order: left "Tlatoani", right "user"). New intent: NO identity env crosses the Lua door; scripts that need an identity seed it at repo scope (git config user.* in their own scratch repo), as litmus:committable-branch-guard-shape does in #1203. Exit: a guard arm that FAILS if crates/tillandsias-plan/src/child_env.rs ENV_BASE_PASSTHROUGH (or any inherit profile) gains GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, GIT_COMMITTER_NAME or GIT_COMMITTER_EMAIL; pre-fix it passes trivially, so pin it with a mutation that adds one and is refused.'
+    ts: "2026-11-20T13:12:04Z"
+    host: yoga
+
+events:
+  - packet_id: the-lua-door-passes-a-script-run-child-the-four-git-identity-variables-and-no-other-git-variable
+    event:
+      type: progress
+      ts: "2026-11-20T13:12:04Z"
+      host: yoga
+      summary: |-
+        status 'RESHAPED 2026-11-20 (coordinator ruling; the TITLE above is now the opposite of the intent, read this instead). The original ask (pass GIT_AUTHOR_* and GIT_COMMITTER_* through the Lua door) is WITHDRAWN: identity env outranks repo-local config, so it would override every script-run child's own scratch identity. That exact mechanism evicted #1181 when done in with-tillandsias-builder.sh (studio::the_feed_returns_each_saved_path_with_its_diff_in_commit_order: left "Tlatoani", right "user"). New intent: NO identity env crosses the Lua door; scripts that need an identity seed it at repo scope (git config user.* in their own scratch repo), as litmus:committable-branch-guard-shape does in #1203. Exit: a guard arm that FAILS if crates/tillandsias-plan/src/child_env.rs ENV_BASE_PASSTHROUGH (or any inherit profile) gains GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, GIT_COMMITTER_NAME or GIT_COMMITTER_EMAIL; pre-fix it passes trivially, so pin it with a mutation that adds one and is refused.' (not terminal) with evidence_refs: 683f6d7a1
+  - packet_id: the-lua-door-passes-a-script-run-child-the-four-git-identity-variables-and-no-other-git-variable
+    event:
+      type: note
+      ts: "2026-11-20T13:12:04Z"
+      host: yoga
+      summary: |-
+        coordinator ruling 2026-11-20: identity env through the Lua door would override repo-local identity (evicted #1181)

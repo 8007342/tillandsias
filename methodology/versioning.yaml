@@ -518,6 +518,11 @@ stable_channel:
       e2e/smoke PASS record naming that version; --force overrides loudly
       and must be recorded as a cycle entry via `tillandsias-plan
       loop-status-append` (never an in-place rewrite of plan/loop_status.md).
+      Since 2296-pn45 it also refuses (refused:promote-gate) unless
+      scripts/lua/check-promote-gate.lua finds a smoke-record event per platform
+      for that exact tag on the row smoke-<tag>, and an idle land queue; a
+      credential-unmeasured record blocks unless --allow-unmeasured <platform> names
+      it with --approval <row>, the operator's recorded approval.
       On success it flips
       prerelease=false, marks the release "latest", moves the annotated
       `stable` git tag to the release commit, and advances

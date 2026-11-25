@@ -42,21 +42,21 @@ size: instant
 
 preconditions:
   - workspace contains scripts/land-on-platform-branch.sh
-  - workspace contains scripts/test-land-verdict-through-a-pipe.sh
+  - workspace contains scripts/lua/test-land-verdict-through-a-pipe.lua
   - shell utilities (git, bash, mktemp) are available in PATH
 
 critical_path:
   - step: "fixture and the tool it pins both parse, and the fixture carries its exec bit"
-    command: "bash -n scripts/land-on-platform-branch.sh && bash -n scripts/test-land-verdict-through-a-pipe.sh && test -x scripts/test-land-verdict-through-a-pipe.sh && echo 'ok: land-pipe-fixture-parses'"
+    command: "bash -n scripts/land-on-platform-branch.sh && test -f scripts/lua/test-land-verdict-through-a-pipe.lua && ! test -e scripts/test-land-verdict-through-a-pipe.sh && echo 'ok: land-pipe-fixture-parses'"
     timeout_ms: 3000
     expected_behavior: "ok: land-pipe-fixture-parses"
 
   - step: "the positive control and all five trap arms: a refusing gate planted in a scratch repo, read six ways"
-    command: "bash scripts/test-land-verdict-through-a-pipe.sh | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-land-verdict-through-a-pipe.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "ok:land-verdict-pipe-fixture:all"
+    expected_behavior: "ok:land-verdict-pipe-fixture:9 arms"
 
   - step: "auth-failed retry (1164-cftu): one auth failure then success lands, two refuse as before, no gh auth command on either path"
-    command: "bash scripts/test-land-auth-retry.sh | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-land-auth-retry.lua 2>/dev/null | tail -1"
     timeout_ms: 120000
     expected_behavior: "ok:land-auth-retry-fixture:all"

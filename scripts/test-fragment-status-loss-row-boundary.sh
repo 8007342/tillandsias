@@ -96,7 +96,7 @@ repo() {
     printf '%s\n' "$d"
 }
 lua_pairs() { # lua_pairs <repo> -> "pid<TAB>status" rows the port read
-    (cd "$1" && env -u TILLANDSIAS_REPO_ROOT "$PLAN" script run "$GUARD" -- --dump-declared 2>/dev/null) > "$1.dump"
+    (cd "$1" && env -u TILLANDSIAS_REPO_ROOT -u PROJECT_ROOT "$PLAN" script run "$GUARD" -- --dump-declared 2>/dev/null) > "$1.dump"
     awk -F'\t' '!/^ok:/ { print $2 "\t" $3 }' "$1.dump"
 }
 
@@ -177,7 +177,7 @@ else
         awk -v f="$f" '{ print f "\t" $0 }' "$tmp/one" >> "$tmp/pre.raw"
     done
     LC_ALL=C sort -u -o "$tmp/pre.pairs" "$tmp/pre.raw"
-    (env -u TILLANDSIAS_REPO_ROOT "$PLAN" script run "$GUARD" -- --dump-declared 2>/dev/null) > "$tmp/port.raw"
+    (env -u TILLANDSIAS_REPO_ROOT -u PROJECT_ROOT "$PLAN" script run "$GUARD" -- --dump-declared 2>/dev/null) > "$tmp/port.raw"
     awk '!/^ok:/' "$tmp/port.raw" > "$tmp/port.rows"
     LC_ALL=C sort -u -o "$tmp/port.pairs" "$tmp/port.rows"
     LC_ALL=C comm -23 "$tmp/pre.pairs" "$tmp/port.pairs" > "$tmp/lost"
@@ -209,7 +209,7 @@ e2e() { # e2e <name> <fragment> -> output, rc in E2E_RC
         '    - packet_id: fixture-prose-quotes-a-status-line' \
         '      order: 9002' '      title: "prose"' '      status: ready' '      kind: fix' '      depends_on: []' > "$d/plan/index.yaml"
     cp "$2" "$d/plan/index.d/a.yaml"
-    E2E_OUT="$(cd "$d" && env -u TILLANDSIAS_REPO_ROOT -u TILLANDSIAS_PLAN_BIN "$PLAN" script run "$GUARD" -- --plan "$PLAN" 2>&1)"
+    E2E_OUT="$(cd "$d" && env -u TILLANDSIAS_REPO_ROOT -u PROJECT_ROOT -u TILLANDSIAS_PLAN_BIN "$PLAN" script run "$GUARD" -- --plan "$PLAN" 2>&1)"
     E2E_RC=$?
 }
 sed 's/^  status: ready$/  status: completed/' "$tmp/nested.yaml" > "$tmp/nested-completed.yaml"

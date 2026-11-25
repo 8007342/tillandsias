@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-20).
+packets:
+  - packet_id: sigpipe-verdict-pipelines-h-m-batch-1-nine-fixtures
+    order: 2118-jdcy
+    status: in_progress
+    kind: debt
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixtures, sigpipe, ratchet]
+    estimated_hours: 2
+    related: [2123-ivi5]
+    owned_files:
+      - scripts/test-host-tools.sh
+      - scripts/test-ledger-write-reaches-its-reader.sh
+      - scripts/test-land-gate-refusal-names-its-step.sh
+    title: |
+      h-m part of 2123-ivi5 (reassigned from yoga's a-m half; yoga keeps a-g), batch 1: convert 68 printf/echo | grep -q verdicts in nine fixtures to here-strings.
+    context: |
+      Skipped as already converted in yoga's refs:
+      - 2131-4ibe: test-hook-phase-instrumentation, test-land-notice-names-unrun-litmus, test-lane-instrument-vs-ledger, test-ledger-ts-guard, test-long-running-view-refuses-at-completion;
+      - #1195: check-fleet-membership, land-on-platform-branch, local-ci, loop-status-metrics-audit;
+      - #1201: test-harness-contract-probe.
+      Named exceptions (subjects or comments, not verdicts): test-litmus-step-pipefail (a probe string), check-litmus-pin-claims (a comment), test-litmus-grep-escapes (fixture YAML).
+    exit_criteria:
+      - 'the nine fixtures pass; the pipe floors drop by 68'
+    unscoreable: "the census tool is the measure, per 2123-ivi5"
+    next_action: Preflight, push work/2118-jdcy, open PR; then the remaining h-m files.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-20T11:56:17Z"
+        host: lenovinha
+        summary: sigpipe h-m batch 1 (nine fixtures, 68 sites).

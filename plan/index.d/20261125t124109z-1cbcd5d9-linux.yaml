@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-forge-queue-jobs-audit-record-says-bare-metal
+    event:
+      type: note
+      ts: "2026-11-25T12:41:09Z"
+      agent_id: linux-lenovinha-claude-20261125t124108z
+      host: linux
+      summary: |-
+        REPRODUCED on lenovinha 2026-11-25, forge lane octocat/Hello-World, image and CLI v56.11.24.1, privileged=false. The record is the policy audit (TILLANDSIAS_POLICY_AUDIT_LOG): host_kind=bare-metal for proc.run and for policy eval, from podman exec, with TILLANDSIAS_HOST_KIND=forge set (then also "no container record names the forge image (image=none); a forge is not self-declared"), and from a queue.submit job. Cause: read_host_kind takes the kind from /run/.containerenv naming the forge image (589cbc3f0, 1467-c8qg), and that file is 0 bytes in a forge. podman-run(1) says it carries name/value pairs only with --privileged, and lanes run unprivileged. So every such forge is judged bare-metal, not only queue jobs, and 2329-at6p does not change it. Effect seen: policy eval of podman system reset in the forge answers consent:policy:soft-reset as on a host. Fails closed for that rule; rules that deny only in a forge were not checked. Not decided here: what evidence should count is a security boundary. Options for the ruling: the launcher bind-mounts a read-only record naming the image; or a marker baked into the image at a root-owned path.

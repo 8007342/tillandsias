@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: check-cheatsheet-refs-scans-only-at-cheatsheet-annotations-and-see-also-bullets-so-an-ordinary-markdown-inline-link-to-a-deleted-sheet-resolves-as-ok-and-the-reference-count-does-not-even-move
+    field: next_action
+    value: |-
+      Extend the extraction in scripts/check-cheatsheet-refs.sh to also match `\[[^]]*\]\(([A-Za-z0-9_./-]+\.md)\)` and feed the captured target through the existing resolve_target(), which already accepts both the cheatsheets-relative and repo-root-relative forms and needs no change. Expect the reported total to RISE (579 -> ~587 on today's corpus); that rise is the fix working and the fixture should assert it rather than pin the old number. WATCH TWO THINGS. First, inline links to ANCHORS and to non-cheatsheet paths (`../../docs/foo.md`, `#section`) must not be reported as broken -- resolve_target already requires a `.md` suffix, but a relative path escaping cheatsheets/ needs a decision rather than a crash. Second, keep the `## See also` and `@cheatsheet` arms byte- identical: this row is a widening, and a widening that perturbs existing output is indistinguishable from a rewrite when someone diffs the gate.
+
+
+      [2026-11-19T23:46:29Z calmecacpilli] STALE PATH (triage 2026-11-19): scripts/check-cheatsheet-refs.sh is now scripts/lua/check-cheatsheet-refs.lua (cdce8e4f4, 1570-k4fx). Check whether the Lua port still misses inline Markdown links before working it. Re-read the criterion against the new path before claiming.
+    ts: "2026-11-19T23:46:29Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: check-cheatsheet-refs-scans-only-at-cheatsheet-annotations-and-see-also-bullets-so-an-ordinary-markdown-inline-link-to-a-deleted-sheet-resolves-as-ok-and-the-reference-count-does-not-even-move
+    event:
+      type: note
+      ts: "2026-11-19T23:46:29Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli): cited file deleted on trunk

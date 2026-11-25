@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: disk-preflight-prunes-the-cargo-incremental-cache-below-the-floor
+    field: status
+    value: implemented
+    ts: "2026-11-25T03:10:30Z"
+    host: yoga
+events:
+  - packet_id: disk-preflight-prunes-the-cargo-incremental-cache-below-the-floor
+    event: {type: implemented, ts: "2026-11-25T03:10:30Z", host: yoga, summary: "implemented on work/2329-9etw; no caller in the repo passes the 40G floor yet"}

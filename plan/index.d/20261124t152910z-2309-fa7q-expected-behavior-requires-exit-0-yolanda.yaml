@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: litmus-expected-behavior-requires-exit-0-unless-the-step-declares-its-exit
+    order: "2309-fa7q"
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, vacuous-check]
+    estimated_hours: 6
+    owned_files:
+      - scripts/run-litmus-test.sh
+    title: "A litmus step judged by expected_behavior also needs exit 0 unless it declares assert_exit, after a census of the steps that would go red"
+    context: |
+      behavior_matches_output is a case-insensitive substring match; it takes the exit code and does not use it. A sweep on
+      2026-11-24 read 2467 steps judged that way. 2306-3hr6 and 2307-rdj6 fixed the definite members step by step.
+      WHAT EXIT 0 CLOSES: a nonzero step whose text matched anyway, including a grep chain that breaks after printing the
+      expected text. WHAT IT DOES NOT: steps that exit 0 and still match loosely, such as a bare number ("1" in "10"; 11
+      steps) or cargo test expecting "test result: ok" with a filter that matches zero tests. Those need an anchored
+      match or a count and stay separate parts of this row.
+      Some steps exit nonzero on purpose (a refusal under test), so a flip without the census would red sound steps.
+    exit_criteria:
+      - "CENSUS: a run over the corpus lists each step whose text matches and whose exit is not 0, per host regime, split into meant-nonzero, broken and not-run. The list is on the row before the rule changes."
+      - "Meant-nonzero steps declare their exit; broken ones are fixed or filed."
+      - "The rule is flipped. NEGATIVE CONTROL: a planted step that prints its expected text and exits 1 is red; the same step with assert_exit 1 is green. Pre-fix result: FAILS, green."
+      - "Bare-number and zero-test steps are red on a mutant (10 for 1; a renamed test), or are filed as their own rows."
+    unscoreable: "unpinnable-until-the-guard-exists: the census and the planted step are the first deliverables"
+    next_action: "Log text-matched-but-nonzero steps from the runner without changing a verdict, and collect it from a full Linux gate and an msys run."
+    provenance: "coordinator macuahuitl-fedora 2026-11-24, from yolanda's 2307-rdj6 sweep"
+    related: [2306-3hr6, 2307-rdj6, 1252-znbn, 661-nm73]
+    events:
+      - {type: filed, ts: '2026-11-24T15:29:10Z', host: yolanda, summary: filed on the request of the coordinator}

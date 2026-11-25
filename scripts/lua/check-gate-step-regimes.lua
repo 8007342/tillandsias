@@ -29,43 +29,46 @@ for _, f in ipairs(walked) do
 end
 table.sort(steps, function(a, b) return a.name < b.name end)
 
--- The value of the FIRST `NAME=` line, quotes stripped, or nil.
-local function field(body, name)
+-- Every `NAME=` line's value, quotes stripped (2221-vjqb: a step carries a darwin AND an msys record).
+local function fields(body, name)
+    local all = {}
     for line in (body .. "\n"):gmatch("([^\n]*)\n") do
         local v = line:match("^%s*" .. name .. "=(.*)$")
-        if v then return (v:gsub('^"', ""):gsub('"$', "")) end
+        if v then all[#all + 1] = (v:gsub('^"', ""):gsub('"$', "")) end
     end
-    return nil
+    return all
 end
 
 local SECOND = { darwin = true, msys = true }
 local missing, malformed, linuxonly, ok = 0, 0, 0, 0
+local carrying = { darwin = 0, msys = 0 }
 local detail = {}
 for _, s in ipairs(steps) do
     local body = fs.read(s.path) or ""
-    local hs = field(body, "STEP_HOST_STATE")
+    local hs = fields(body, "STEP_HOST_STATE")[1]
     if hs and hs ~= "keyring" and hs ~= "load" then
         malformed = malformed + 1
         detail[#detail + 1] = "violation:gate-step-host-state:" .. s.name .. ":" .. (hs ~= "" and hs or "empty") .. "-is-not-keyring-or-load"
     else
-        local v = field(body, "STEP_SECOND_REGIME")
-        if not v then
+        local records = fields(body, "STEP_SECOND_REGIME")
+        local why, seen = nil, {}
+        for _, v in ipairs(records) do
+            local host, date_, regime = v:match("^%s*(%S+)%s+(%S+)%s+(%S+)")
+            if not host then why = "malformed-record"
+            elseif not date_:match("^%d%d%d%d%-%d%d%-%d%d$") then why = "date-not-yyyy-mm-dd"
+            elseif not SECOND[regime] then why = "regime-" .. regime .. "-is-not-a-second-regime"
+            else seen[regime] = true end
+            if why then break end
+        end
+        if #records == 0 then
             missing = missing + 1
             detail[#detail + 1] = "violation:gate-step-single-regime:" .. s.name
+        elseif why then
+            if why:match("^regime%-") then linuxonly = linuxonly + 1 else malformed = malformed + 1 end
+            detail[#detail + 1] = "violation:gate-step-single-regime:" .. s.name .. ":" .. why
         else
-            local host, date_, regime = v:match("^%s*(%S+)%s+(%S+)%s+(%S+)")
-            if not host then
-                malformed = malformed + 1
-                detail[#detail + 1] = "violation:gate-step-single-regime:" .. s.name .. ":malformed-record"
-            elseif not date_:match("^%d%d%d%d%-%d%d%-%d%d$") then
-                malformed = malformed + 1
-                detail[#detail + 1] = "violation:gate-step-single-regime:" .. s.name .. ":date-not-yyyy-mm-dd"
-            elseif not SECOND[regime] then
-                linuxonly = linuxonly + 1
-                detail[#detail + 1] = "violation:gate-step-single-regime:" .. s.name .. ":regime-" .. regime .. "-is-not-a-second-regime"
-            else
-                ok = ok + 1
-            end
+            for r in pairs(seen) do carrying[r] = carrying[r] + 1 end
+            ok = ok + 1
         end
     end
 end
@@ -83,4 +86,5 @@ if bad > 0 then
     log.raw("  other regime, not necessarily a green one.")
     verdict.emit("violation:gate-step-single-regime:" .. bad, 1)
 end
+log.raw("  regimes: darwin=" .. carrying.darwin .. " msys=" .. carrying.msys .. " (steps carrying each; 2221-vjqb)")
 verdict.emit("ok:gate-step-regimes:" .. ok, 0)

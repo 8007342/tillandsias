@@ -1,0 +1,13 @@
+# Gate step 2243-wosv — the Lua runner's stdin primitive: a script reads its
+# own stdin only when its header says `-- @stdin <max-bytes>`; the read is
+# bounded (refused:stdin:too-large:<cap>) and EOF-safe (a closed stdin is "",
+# at once), so no decider the door runs can block a gate on an inherited stdin.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the script runner's bounded, opt-in stdin read (2243-wosv)"
+STEP_LUA="scripts/lua/test-script-stdin-read.lua"
+STEP_ERROR="the script runner's stdin read is unbounded, not opt-in, or blocks on a closed stdin (2243-wosv) — see the FAIL lines above"
+STEP_OK="Script runner stdin read is bounded and opt-in"
+STEP_READS="scripts/lua/test-script-stdin-read.lua crates/tillandsias-plan/src/script_run.rs"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:script-stdin-read:5"
+# msys record: yolanda 2026-11-22 msys ok:script-stdin-read:5 at fda7de7d3 (plan binary rebuilt natively; closed stdin read as "" in 134 ms)

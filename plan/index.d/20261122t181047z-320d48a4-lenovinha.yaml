@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: sweep-return-trap-fired-by-a-sourced-file
+    field: status
+    value: blocked
+    ts: "2026-11-22T18:10:47Z"
+    host: lenovinha
+
+events:
+  - packet_id: sweep-return-trap-fired-by-a-sourced-file
+    event:
+      type: note
+      ts: "2026-11-22T18:10:47Z"
+      host: lenovinha
+      summary: |-
+        queued for landing as PR #1348 (head bc200039f): sweep record plus the ensure_dev_cache fix, litmus:build-dev-cache-ca-trap-cleared red-first

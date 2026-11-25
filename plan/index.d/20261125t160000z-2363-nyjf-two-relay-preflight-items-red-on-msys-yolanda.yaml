@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: two-relay-preflight-items-red-on-msys-trunk
+    order: "2363-nyjf"
+    status: in_progress
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [lua, shell, windows, relay-preflight]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/check-no-python-scripts.lua
+      - scripts/test-spec-index-durable-tier-demotion.sh
+    title: "two relay-preflight items are red on trunk on native Windows: check-no-python-scripts and spec-index-durable-tier-demotion"
+    context: |
+      Measured on yolanda (msys) on linux-next and in #1561's preflight.
+      check-no-python-scripts: "spawn failed: The system cannot find the file specified", then violation:1; a spawn
+      failure is reported as a violation. Its probe runs a bare bash and spawns the path that shell prints.
+      test-spec-index-durable-tier-demotion: 2 arms fail; chmod 000 does not deny a stat under msys, the same
+      unconstructible condition the fixture already skips for root.
+    exit_criteria:
+      - "check-no-python-scripts answers ok:no-python-scripts on msys, and an unspawnable binary is could-not-run, not a violation"
+      - "the two demotion arms are named skips on a host where the condition cannot be constructed, and still run elsewhere"
+    unscoreable: "fixture-scored: the decider and the fixture are the deliverable and their own verdict lines are the score"
+    provenance: "coordinator 2026-11-25 (asked for a Windows-host row), yolanda"
+    related: [1129-3yv7, 2361-y7pf]
+    events:
+      - {type: claimed, ts: "2026-11-25T15:25:29Z", host: yolanda, summary: "claimed; work ref work/2363-nyjf"}

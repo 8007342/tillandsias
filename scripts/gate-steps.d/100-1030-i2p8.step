@@ -10,11 +10,15 @@
 # condition is currently masked on the only host that has it (interop disabled
 # there today). A host check would pass for the wrong reason.
 #
-# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# STEP_LUA is a LITERAL path on purpose: a binding assembled from a
 # variable is invisible to every name-based scan, including the
 # bound-or-retired guard (1063-nraf). Keep it a plain string.
 STEP_DESC="Checking the plan-binary probe resolves the locus-native artefact (1030-i2p8)"
-STEP_SCRIPT="scripts/test-plan-binary-locus-native.sh"
+STEP_LUA="scripts/lua/test-plan-binary-locus-native.lua"
 STEP_ERROR="the plan-binary probe resolves a foreign artefact, or the refresh touches something it did not resolve (1030-i2p8) — see the verdict line above"
 STEP_OK="Plan-binary locus-native check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok: when the ELF cannot execute, the probe falls through to its .exe candidate in the release dir"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="crates/tillandsias-plan/src/** crates/tillandsias-plan/src/main.rs scripts/plan-binary-probe.sh scripts/lua/test-plan-binary-locus-native.lua"

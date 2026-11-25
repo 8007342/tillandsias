@@ -36,19 +36,19 @@ size: instant
 
 preconditions:
   - workspace contains scripts/uninstall.sh
-  - workspace contains scripts/test-uninstall-preserves-vm.sh
+  - workspace contains scripts/lua/test-uninstall-preserves-vm.lua
   - shell utilities (bash, grep, mktemp) are available in PATH
 
 critical_path:
-  - step: "script and fixture parse and are executable"
-    command: "bash -n scripts/uninstall.sh && bash -n scripts/test-uninstall-preserves-vm.sh && test -x scripts/uninstall.sh && test -x scripts/test-uninstall-preserves-vm.sh && echo 'ok: parses'"
+  - step: "the uninstaller parses and is executable"
+    command: "bash -n scripts/uninstall.sh && test -x scripts/uninstall.sh && echo 'ok: parses'"
     timeout_ms: 5000
     expected_behavior: "ok: parses"
 
-  - step: "all six hermetic scenarios pass (macOS preserve + message + preamble, --wipe removes, Linux negative control)"
-    command: "scripts/test-uninstall-preserves-vm.sh >/dev/null 2>&1 && echo 'ok: scenarios-pass' || { scripts/test-uninstall-preserves-vm.sh; exit 1; }"
+  - step: "all seven hermetic scenarios pass (macOS preserve + message + preamble, --wipe removes, Linux negative control)"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-uninstall-preserves-vm.lua 2>&1"
     timeout_ms: 30000
-    expected_behavior: "ok: scenarios-pass"
+    expected_behavior: "ok:uninstall-preserves-vm:7"
 
   - step: "THE BREACH SHAPE: a macOS uninstall without --wipe leaves rootfs.img on disk"
     command: "d=$(mktemp -d); mkdir -p \"$d/Library/Application Support/tillandsias/lib\" \"$d/fixture-bin\"; echo rootfs > \"$d/Library/Application Support/tillandsias/rootfs.img\"; HOME=\"$d\" TILLANDSIAS_UNINSTALL_APPS_DIR=\"$d/Applications\" TILLANDSIAS_UNINSTALL_TRAY_PROC=nonce-tray-1401 TILLANDSIAS_UNINSTALL_FAKE_UNAME=Darwin TILLANDSIAS_UNINSTALL_INSTALL_DIR=\"$d/fixture-bin\" bash scripts/uninstall.sh --yes >/dev/null 2>&1; if [ -f \"$d/Library/Application Support/tillandsias/rootfs.img\" ]; then echo 'ok: vm-preserved'; else echo 'FAIL: the uninstaller deleted the VM image without --wipe'; fi; rm -rf \"$d\""
@@ -66,5 +66,5 @@ critical_path:
     expected_behavior: "ok: linux-unchanged"
 
 evidence:
-  artifact: "scripts/uninstall.sh + scripts/test-uninstall-preserves-vm.sh"
+  artifact: "scripts/uninstall.sh + scripts/lua/test-uninstall-preserves-vm.lua"
   measured_on: "macOS Mac17,3, 2026-08-17 — DATA_DIR 11.83 GiB vs CACHE_DIR 8 KB"

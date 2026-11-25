@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl, 2026-11-24. Release-skill step 8 omission found by the darwin RC smoke.
+packets:
+- packet_id: readme-release-row-for-v56-11-23-1
+  order: 2283-rpe3
+  status: implemented
+  kind: debt
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [release, docs]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 0.2
+  title: 'Add the README release-ledger row for v56.11.23.1, which the cut omitted'
+  context: >-
+    The cut recorded only the work-queue line (2e988bbd7). The curl-install smoke on darwin filed the missing README row
+    as a finding (its section 0.2b reads the row to check the release's claimed fixes). Each PR the row names was checked
+    for a land commit between v56.11.17.2 and v56.11.23.1.
+  exit_criteria:
+  - 'README.md has exactly one row for v56.11.23.1 above v56.11.7.1.'
+  verifiable_closure: 'unscoreable: a prose ledger row; the smoke section 0.2b reading it is the check.'
+  unscoreable: 'A prose row; no litmus scores README rows.'
+  next_action: 'Implemented. Edit the row (do not append) when v56.11.23.1 is promoted.'
+  provenance: 'macuahuitl-fedora 2026-11-24, RC cut follow-up.'
+  events:
+  - {type: filed, ts: '2026-11-24T01:02:26Z', host: macuahuitl, summary: 'filed with its PR, implemented'}

@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Shell-to-Lua backlog (coordinator direction, 2026-11-21).
+packets:
+  - packet_id: the-forge-policy-binary-discoverability-fixture-is-lua-and-its-sh-is-deleted
+    order: 2167-wshb
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua]
+    estimated_hours: 1
+    title: |
+      Port scripts/test-forge-policy-binary-discoverability.sh (30 lines) to scripts/lua/, repoint litmus:forge-policy-binary-discoverability, and delete the .sh.
+    context: |
+      Next shell-to-lua candidate after 2165-uu9j. Checked that no open work ref touches it (2166-dbpx duplicated #1150).
+    exit_criteria:
+      - 'the Lua fixture runs the same four steps under a redirected CARGO_TARGET_DIR and passes where the .sh passes; a broken resolution fails it; the litmus test runs the Lua; the .sh and its floor lines are gone'
+    unscoreable: 'unpinnable-until-the-guard-exists: the parity run is recorded in the PR.'
+    next_action: 'Port, prove parity, open the PR.'
+    provenance: shell-to-lua backlog; filed by lenovinha.
+    depends_on: []
+    related: [1354-uv4e, 1630-dwab]
+    events:
+      - {type: filed, ts: '2026-11-21T17:37:14Z', host: lenovinha, summary: filed the policy-discoverability port}

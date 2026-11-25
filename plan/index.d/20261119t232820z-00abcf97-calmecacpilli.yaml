@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-tray-icon-blushes-progressively-while-containers-are-created-shows-pups-when-the-work-completes-and-returns-to-plain-on-the-next-menu-open-with-a-per-platform-icon-set
+    field: next_action
+    value: |-
+      Write the openspec change (states, events, per-platform assets, resolving the Pup meaning), then the core reducer red-first; mock up the per-platform icon frames for the operator's approval before wiring the trays.
+
+
+      [2026-11-19T23:28:20Z calmecacpilli] LEFT: only criterion 1 landed (b99b32e242, the state machine). Criteria 2-6 are open; there is no per-platform blush/pups icon set on trunk. Start with per-platform icon mock-ups for operator approval (criterion 5). Exit: a build.rs test that every state x platform has an asset (fails today).
+    ts: "2026-11-19T23:28:20Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: the-tray-icon-blushes-progressively-while-containers-are-created-shows-pups-when-the-work-completes-and-returns-to-plain-on-the-next-menu-open-with-a-per-platform-icon-set
+    event:
+      type: note
+      ts: "2026-11-19T23:28:20Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

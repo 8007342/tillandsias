@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: port-liveness-probe-behaviour-skew-gate-divergence-fixtures-to-lua
+    field: status
+    value: completed
+    ts: "2026-11-25T10:50:16Z"
+    host: lenovinha
+
+events:
+  - packet_id: port-liveness-probe-behaviour-skew-gate-divergence-fixtures-to-lua
+    event:
+      type: completed
+      ts: "2026-11-25T10:50:16Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: land:fc436368b1569f165f49868ac6761a8ee46a843b
+  - packet_id: port-liveness-probe-behaviour-skew-gate-divergence-fixtures-to-lua
+    event:
+      type: note
+      ts: "2026-11-25T10:50:16Z"
+      host: lenovinha
+      summary: |-
+        #1538 landed (land(1538) fc436368b merge): forge-liveness-probe, expert-capability-behaviour-skew and gate-divergence-is-declared run as Lua.

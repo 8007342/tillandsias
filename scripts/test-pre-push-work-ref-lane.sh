@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace order:1315-4a7j, spec:ci-release
+# @trace order:1315-4a7j, order:2195-wlsh, spec:ci-release
 #
 # THE DEFECT THIS CLOSES was a contradiction across three documents, not a bug
 # in any one of them. Until 2026-09-20 the hook said a work ref was "the GATED
@@ -30,22 +30,44 @@ ok()  { printf 'ok:   %s\n' "$1"; pass=$((pass + 1)); }
 bad() { printf 'FAIL: %s\n' "$1"; fail=$((fail + 1)); }
 
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+WT="$TMP/wt"
+trap 'git -C "$ROOT" worktree remove --force "$WT" >/dev/null 2>&1; rm -rf "$TMP"' EXIT
+trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP
 
-HOOK="$ROOT/scripts/hooks/pre-push-local-gate.sh"
-[ -x "$HOOK" ] || [ -f "$HOOK" ] || { printf 'skip:work-ref-lane:no-hook\n'; exit 0; }
+[ -f "$ROOT/scripts/hooks/pre-push-local-gate.sh" ] || { printf 'skip:work-ref-lane:no-hook\n'; exit 0; }
 
-# A commit that certainly has NO gate stamp: a sha from this repo's history is
-# fine as an identifier — the hook's stamp check keys on the TREE, and no stamp
-# exists for a synthetic push line.
-SHA="$(git rev-parse HEAD 2>/dev/null || echo 0000000000000000000000000000000000000000)"
+# ORDER 2195-wlsh: THE HOOK RUNS IN A SCRATCH WORLD, NOT THIS CHECKOUT. It used
+# to run here against `git rev-parse HEAD`, so every decider judged the branch
+# under test: once 2194-cspr made the carried-obligations check refuse, ARM 1
+# went red on any carried-silent branch (work/2194-cspr before its waiver).
+# The scratch worktree sits on trunk (origin/linux-next, else this HEAD) plus
+# ONE empty commit of its own, so its change relative to trunk is empty and
+# owes nothing; the checkout's scripts/ are overlaid UNCOMMITTED, so the hook
+# and deciders under test are this tree's while the commits judged are not.
+_base="$(git rev-parse --verify --quiet origin/linux-next^{commit} || git rev-parse HEAD)"
+git worktree add --detach -q "$WT" "$_base" 2>/dev/null &&
+    cp -a "$ROOT/scripts/." "$WT/scripts/" &&
+    _sc="$(git -C "$WT" -c user.email=t@t -c user.name=t commit-tree "HEAD^{tree}" -p HEAD -m "scratch: 2195-wlsh")" &&
+    git -C "$WT" update-ref --no-deref HEAD "$_sc" ||
+    { printf 'FAIL: could not build the scratch worktree\n'; exit 2; }
+HOOK="$WT/scripts/hooks/pre-push-local-gate.sh"
+# A commit that certainly has NO gate stamp: the scratch commit is new.
+SHA="$(git -C "$WT" rev-parse HEAD)"
 ZERO=0000000000000000000000000000000000000000
+
+# ---------------------------------------------------------------- CONTROL
+# The world is the fixture's: the pushed sha is not this checkout's HEAD.
+if [ "$SHA" != "$(git -C "$ROOT" rev-parse HEAD)" ] && [ "$(git -C "$WT" rev-parse --show-toplevel)" != "$ROOT" ]; then
+    ok "CONTROL: the hook runs in a scratch worktree whose HEAD ($SHA) is not this checkout's"
+else
+    bad "CONTROL: the scratch HEAD is the checkout's HEAD — every arm below would judge the branch under test"
+fi
 
 # run_hook <remote-ref> -> prints combined output; echoes rc on the last line
 run_hook() {
     local out rc
     out="$(printf 'refs/heads/x %s %s %s\n' "$SHA" "$1" "$ZERO" \
-        | timeout 300 bash "$HOOK" origin "file://$TMP/scaffold.git" 2>&1)"
+        | (cd "$WT" && timeout 300 bash "$HOOK" origin "file://$TMP/scaffold.git") 2>&1)"
     rc=$?
     printf '%s\n__RC__%s\n' "$out" "$rc"
 }
@@ -57,7 +79,7 @@ run_hook() {
 run_hook_line() {
     local out rc
     out="$(printf 'refs/heads/x %s %s %s\n' "$1" "$2" "$3" \
-        | timeout 300 bash "$HOOK" origin "file://$TMP/scaffold.git" 2>&1)"
+        | (cd "$WT" && timeout 300 bash "$HOOK" origin "file://$TMP/scaffold.git") 2>&1)"
     rc=$?
     printf '%s\n__RC__%s\n' "$out" "$rc"
 }
@@ -120,8 +142,8 @@ a1="$(run_hook refs/heads/work/1315-4a7j)"
 rc1="${a1##*__RC__}"
 if [ "${rc1:-1}" -ne 0 ]; then
     bad "ARM 1: a work/<order> push with no stamp was REFUSED (rc=$rc1) — the lane is not open, and hosts keep using salvage/ as their everyday branch"
-elif printf '%s' "$a1" | grep -q 'prefer work branches'; then
-    if printf '%s' "$a1" | grep -qE '^warn:pre-push:'; then
+elif grep -q <<<"$a1" 'prefer work branches'; then
+    if grep -qE <<<"$a1" '^warn:pre-push:'; then
         ok "ARM 1: a work push with no stamp is ACCEPTED, each red decider prints warn:pre-push:<decider>: and the affordance follows"
     else
         ok "ARM 1: a work push with no stamp is ACCEPTED and carries the affordance (no decider was red on this tree, so no warn line to show)"
@@ -137,7 +159,7 @@ a2="$(run_hook refs/heads/linux-next)"
 rc2="${a2##*__RC__}"
 if [ "${rc2:-0}" -eq 0 ]; then
     bad "ARM 2: the SAME stampless commit was ACCEPTED to linux-next — the work lane has disabled the only safety net the trunk has"
-elif printf '%s' "$a2" | grep -qi 'stamp'; then
+elif grep -qi <<<"$a2" 'stamp'; then
     ok "ARM 2: the same stampless commit is still REFUSED to linux-next for the missing stamp — the integration gate is untouched"
 else
     ok "ARM 2: the same commit is still refused to linux-next (rc=$rc2)"
@@ -165,10 +187,10 @@ if [ -z "$rx" ]; then
     bad "ARM 4: creation_regex not found in $MD"
 else
     good=0; stray=0
-    printf '%s' "$rx" | grep -q 'work/' && good=1
+    grep -q <<<"$rx" 'work/' && good=1
     if [ "$good" -eq 1 ]; then
         # the grammar must be the packet-id shape, not a wildcard
-        if printf '%s' "$rx" | grep -qE 'work/\[0-9\]\{[0-9],[0-9]\}-\[a-z0-9\]\{4\}'; then
+        if grep -qE <<<"$rx" 'work/\[0-9\]\{[0-9],[0-9]\}-\[a-z0-9\]\{4\}'; then
             ok "ARM 4: creation_regex admits work/<order> by the PACKET-ID grammar, so work/foo remains a stray the sweep reaps"
         else
             bad "ARM 4: creation_regex admits work/ but not by the packet-id grammar — work/foo would become a legal ref and the sweep loses its grammar"
@@ -197,10 +219,10 @@ if [ ! -f "$PROV" ]; then
 else
     PLAN_BIN="${TILLANDSIAS_PLAN_BIN:-$(. "$ROOT/scripts/plan-binary-probe.sh" && resolve_plan_binary)}"
     line="$(cd "$ROOT" && TILLANDSIAS_PROVENANCE_REPO="$S" TILLANDSIAS_PROVENANCE_REF=HEAD "$PLAN_BIN" script run "$PROV" -- 50.years 2>/dev/null | head -1)"
-    if printf '%s' "$line" | grep -q 'queue=1' \
-       && printf '%s' "$line" | grep -q 'plan=1' \
-       && printf '%s' "$line" | grep -q 'relay=1' \
-       && printf '%s' "$line" | grep -q 'direct=1'; then
+    if grep -q <<<"$line" 'queue=1' \
+       && grep -q <<<"$line" 'plan=1' \
+       && grep -q <<<"$line" 'relay=1' \
+       && grep -q <<<"$line" 'direct=1'; then
         ok "ARM 5: the classifier counts one of each correctly ($line)"
     else
         bad "ARM 5: the classifier miscounted the scaffold — got: ${line:-<nothing>}"

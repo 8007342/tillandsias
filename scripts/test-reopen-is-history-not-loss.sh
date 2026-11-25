@@ -116,7 +116,7 @@ if [ "$got" != "in_progress" ]; then
     bad "ARM 1 PRECONDITION: the scratch ledger folds as '$got', not in_progress — the reopen never happened, so any verdict below is about the wrong shape"
 else
     out="$(run_guard_in reopen)"
-    if printf '%s' "$out" | grep -q 'violation:fragment-status-loss'; then
+    if grep -q 'violation:fragment-status-loss' <<<"$out"; then
         bad "ARM 1: a sanctioned reopen is still refused, so no host can land a correction: $(printf '%s' "$out" | grep -m1 'probe-reopen-subject')"
     else
         ok "ARM 1: a reopen (closure OLDER than the transition) is accepted as history"
@@ -138,7 +138,7 @@ if [ "$got" != "ready" ]; then
     bad "ARM 2 PRECONDITION: the scratch ledger folds as '$got', not ready — this is no longer an unapplied closure"
 else
     out="$(run_guard_in unapplied)"
-    if printf '%s' "$out" | grep -q 'violation:fragment-status-loss'; then
+    if grep -q 'violation:fragment-status-loss' <<<"$out"; then
         ok "NEGATIVE CONTROL: an unapplied closure (no transition) is still refused"
     else
         bad "NEGATIVE CONTROL BREACHED: a terminal event with no status transition PASSED. The fix widened what is accepted instead of comparing timestamps, and the guard no longer catches the case it exists for (11 of 21 packets on 2026-08-09)"
@@ -175,7 +175,7 @@ if [ "$got" != "in_progress" ]; then
     bad "ARM 3 PRECONDITION: the scratch ledger folds as '$got', not in_progress — the reopen this closure is supposed to race never happened"
 else
     out="$(run_guard_in racing)"
-    if printf '%s' "$out" | grep -q 'violation:fragment-status-loss'; then
+    if grep -q 'violation:fragment-status-loss' <<<"$out"; then
         ok "ARM 3: a terminal event NEWER than the transition is refused (a race, not history)"
     else
         bad "ARM 3: a closure that POSTDATES a reopen was accepted — the comparison is inverted or absent"

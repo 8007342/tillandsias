@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: a-gate-step-whose-last-verdict-is-a-skip-is-not-printed-as-passed
+    field: status
+    value: implemented
+    ts: "2026-11-25T09:38:43Z"
+    host: yoga
+events:
+  - packet_id: a-gate-step-whose-last-verdict-is-a-skip-is-not-printed-as-passed
+    event: {type: implemented, ts: "2026-11-25T09:38:43Z", host: yoga, summary: "implemented on work/2343-3ch4 in build.sh; 54 candidate steps in plan/issues/gate-steps-that-skip-at-exit-zero-2026-11-25.md; the preflight door still counts exit 0 as ran"}

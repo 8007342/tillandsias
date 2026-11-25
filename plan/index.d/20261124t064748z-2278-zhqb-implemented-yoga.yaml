@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: release-preflight-latest-read-bound-from-measurement
+    field: status
+    value: implemented
+    ts: "2026-11-24T06:47:48Z"
+    host: yoga
+
+events:
+  - packet_id: release-preflight-latest-read-bound-from-measurement
+    event:
+      type: implemented
+      ts: "2026-11-24T06:47:48Z"
+      host: yoga
+      summary: |-
+        18 s measured max, span B, 2 hosts; bound 40 s = 18 + 22 s margin; pre-fix ~120 s.
+        Span A (with tillandsias --cloud-usage inside the arm), yoga, ten idle runs in seconds, 32 31 30 30 30 30 36 30 30 30; that call alone 13.7 12.2 12.9.
+        Span B (without it), ten idle runs each. macbookair arm64 at 6a273abdf, 18 then nine of 17. yoga, 17 ten times with the call stubbed.
+        The arm was timing cloud-usage, so it now stubs that binary and fails if the stub did not run. The pre-fix gh read still reds it at 40 s, and removing the stub reds it.
+        The rule published before any number was max plus 50 percent (27 s); it was amended before yoga's numbers so that spans are not mixed, and its 27 s was set aside by the coordinator afterwards because a lower bound catches nothing more and costs loaded suites their margin.
+        A darwin run of the stubbed arm is still owed.

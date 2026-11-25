@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at the operator's direction relayed by macuahuitl-fedora (P1, 2026-11-20).
+packets:
+  - packet_id: dev-browser-lifecycle-discipline-idle-reaper-close-affordance-headless-render-throttle
+    order: 2142-3kt8
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [browser, mcp, lifecycle, resources]
+    estimated_hours: 8
+    owned_files:
+      - crates/tillandsias-browser-mcp/src/window_registry.rs
+      - crates/tillandsias-browser-mcp/src/server.rs
+      - openspec/changes/browser-window-idle-reaper/
+    title: |
+      Dev-browser lifecycle discipline, in three rows:
+      (1) an idle reaper stops a browser.open window and its forwarder after N minutes with no CDP command and no user input;
+      (2) the affordance says to close it with browser.close when done;
+      (3) a headless window nobody views stops rendering continuously.
+    context: |
+      Evidence (macuahuitl, 2026-11-20): five cannonball forge windows (tillandsias-browser-cannonball-<id> plus browser-fwd-<id> each), all --headless=new, ran 13-17 h after the work. GPU processes were at 250-300% CPU and renderers at about 50%, driving 30 GB of swap; the coordinator stopped them by hand. The registry's 24 h idle check and 48 h lifetime check had no caller, and no tool call counted as activity.
+      Rows 1 and 2 are done on work/2142-3kt8.
+      Row 3 is open. At minimum it records measured CPU for a headless window with no viewer; the macuahuitl figure above is the baseline.
+    exit_criteria:
+      - 'row 1: a fixture window with no activity past the limit is stopped with its container and the next call answers browser.closed:idle (no reaper existed before); an active window survives; the limit defaults to 15 min and is configurable'
+      - 'row 2: the browser.open result and descriptions, the browser.close description and the forge instructions say close it with browser.close when you are done; browser.close stops the window and forwarder containers'
+      - 'row 3: a headless window with no viewer is throttled or stopped from rendering continuously, with its measured CPU before and after recorded on this row'
+    verifiable_closure: |
+      cargo test -p tillandsias-browser-mcp passes an_idle_window_is_reaped_with_its_container_and_an_active_one_survives, a_headed_non_dev_window_is_not_idle_reaped and browser_open_and_close_name_the_close_affordance; row 3 adds its own measured arm.
+    next_action: Land rows 1 and 2 (PR from work/2142-3kt8). Then row 3, a headless render throttle (e.g. Emulation.setFocusEmulationEnabled or Page.setWebLifecycleState frozen when no CDP command is pending), measured with podman stats.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20; operator P1 relayed by macuahuitl-fedora.
+    events:
+      - type: filed
+        ts: "2026-11-20T18:49:58Z"
+        host: lenovinha
+        summary: dev-browser lifecycle discipline (3 rows); rows 1-2 implemented.

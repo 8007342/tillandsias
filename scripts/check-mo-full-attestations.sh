@@ -237,7 +237,7 @@ verify_file() { # verify_file <path>
                 heading="${line_no#\#\# }"
                 ts="${heading%% *}"
                 hbranch="${heading#* }"
-                if ! grep -qE "$TS_RE" <<<"$ts" || [ -z "$hbranch" ]; then
+                if [[ ! $ts =~ $TS_RE ]] || [ -z "$hbranch" ]; then
                     refuse "$f" "malformed heading at line $ln: '$line_no' (want '## <ISO-UTC-ts> <host>')"
                 fi
                 last_heading="$heading"
@@ -263,14 +263,13 @@ verify_file() { # verify_file <path>
                     COMPLETE|BLOCKED) ;;
                     *) refuse "$f" "malformed disposition '$disp' at line $ln: $marker" ;;
                 esac
-                if ! grep -qE "$SHA_RE" <<<"$local_sha" \
-                    || ! grep -qE "$SHA_RE" <<<"$remote_sha"; then
+                if [[ ! $local_sha =~ $SHA_RE || ! $remote_sha =~ $SHA_RE ]]; then
                     refuse "$f" "malformed sha at line $ln: $marker"
                 fi
                 if [ "$local_sha" != "$remote_sha" ]; then
                     refuse "$f" "unpushed commit claim at line $ln (LOCAL_SHA != REMOTE_SHA): $marker"
                 fi
-                if ! grep -qE "$BRANCH_RE" <<<"$branch"; then
+                if [[ ! $branch =~ $BRANCH_RE ]]; then
                     refuse "$f" "malformed branch '$branch' at line $ln: $marker"
                 fi
                 if [ "$f" = "$own_file" ]; then

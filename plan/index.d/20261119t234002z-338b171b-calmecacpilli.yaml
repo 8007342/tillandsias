@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-failed-on-demand-image-build-is-remembered-by-image-and-inputs-digest-and-every-later-launch-refuses-within-seconds-with-the-cause-and-remedy-until-the-inputs-change-or-the-operator-retries
+    field: next_action
+    value: |-
+      Write the Lua fixture red first (the shim is the one test-litmus-podman-preflight-trigger.sh style uses); add image_ensure_marker.rs (load/record/clear/retry_allowed, pure, unit tested); thread it into ensure_image_exists before the decision and inside the helper under the lock; add --retry-image and the tray item; reword IMAGE_BUILD_REMEDY; add the verdict line. Portable: no live podman needed, so a macOS or Windows host can take this.
+
+
+      [2026-11-19T23:40:02Z calmecacpilli] LEFT (triage 2026-11-19): merge is on trunk; the only proof left is a cargo run on a capable host: cargo test -p tillandsias-headless ensure_prints_one_verdict_line. Close on green with the merge sha.
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: a-failed-on-demand-image-build-is-remembered-by-image-and-inputs-digest-and-every-later-launch-refuses-within-seconds-with-the-cause-and-remedy-until-the-inputs-change-or-the-operator-retries
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

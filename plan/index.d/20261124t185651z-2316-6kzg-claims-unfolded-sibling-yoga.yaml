@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-sibling-whose-ledger-was-not-folded-counts-as-unchecked-never-as-checked
+    order: "2316-6kzg"
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [claims, vacuous-ok]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-claims-across-branches.sh
+      - scripts/lua/test-claims-affordance.lua
+    title: "check-claims-across-branches counts a sibling it never folded as checked, and answers ok"
+    context: |
+      When `git archive origin/<sibling> plan/index.yaml plan/index.d` or the tar extract fails, both modes have already
+      counted the sibling, and answer ok:cross-branch-claims:<n> with nothing folded. --batch does the same for an empty
+      fold, which it names as skipped and still counts. Found while porting test-claims-affordance (2314-ktxt); reproduced
+      in a scratch checkout, not seen live. Coordinator ruling: a failed archive counts as unchecked, never as checked.
+    exit_criteria:
+      - "A sibling whose ledger cannot be extracted is not counted and is named as unchecked, in both modes; with none folded the answer is blocked:no-siblings-folded, rc 2. Pre-fix result: FAILS, ok and rc 0."
+      - "The same for an empty fold in --batch."
+      - "NEGATIVE CONTROL: with one sibling folded and one unreadable, a claim on the folded one is still claimed-elsewhere, and the ok counts one."
+    unscoreable: "unpinnable-until-the-guard-exists: new arms in test-claims-affordance.lua are the guard"
+    provenance: "coordinator macuahuitl-fedora 2026-11-24, from yoga's finding on 2314-ktxt"
+    related: [2314-ktxt, 1435-ebcx, 1247-omqr]
+    events:
+      - {type: claimed, ts: "2026-11-24T18:56:51Z", host: yoga, summary: "filed and claimed on the coordinator's word"}

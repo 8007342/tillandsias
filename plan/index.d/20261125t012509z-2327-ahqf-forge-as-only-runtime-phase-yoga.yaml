@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: decide-whether-litmus-forge-as-only-runtime-runs-before-a-build
+    order: "2327-ahqf"
+    status: ready
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [litmus, forge]
+    estimated_hours: 1
+    owned_files:
+      - openspec/litmus-tests/litmus-forge-as-only-runtime.yaml
+    title: "the forge-as-only-runtime litmus has no top-level phase, so its pre-build source check does not run before a build"
+    context: |
+      The file declares `phase:` on its STEPS (step 1 post-build: the forge image holds the four CLIs; step 2 pre-build: no raw
+      podman shell-out in source) and none at the top. get_test_phase reads only the top level and answers runtime, so a
+      pre-build run skips both steps. Read on 2026-11-25; whether any step-level phase is honoured elsewhere was not checked.
+    exit_criteria:
+      - "The file declares the phase its steps need (splitting the pre-build source check from the image check if they differ), and a pre-build run executes the source check. Pre-fix result: FAILS, skipped as runtime."
+      - "NEGATIVE CONTROL: the source check is red on a planted raw podman shell-out."
+    unscoreable: "unpinnable-until-the-guard-exists: the litmus itself is the guard"
+    next_action: "Decide from the steps; not to be taken before the coordinator says so."
+    provenance: "coordinator macuahuitl-fedora 2026-11-25, from yoga's 2326-b52d"
+    related: [2326-b52d]
+    events:
+      - {type: filed, ts: "2026-11-25T01:25:09Z", host: yoga, summary: "filed on the request of the coordinator; not taken"}

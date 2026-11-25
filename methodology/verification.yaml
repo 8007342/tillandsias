@@ -687,7 +687,7 @@ verification:
         earned_by_fourfold: >
           THE SAME FILE DEMONSTRATED IT FOUR TIMES IN ONE DAY, twice inside the
           text explaining it. lenovinha, 2026-09-05, on
-          scripts/test-trace-coverage.sh: the ghost-trace ratchet flagged (1) a
+          scripts/lua/test-trace-coverage.lua: the ghost-trace ratchet flagged (1) a
           synthetic trace marker written literally in the fixture, then (2) the
           COMMENT explaining that hazard, which spelled the marker out — the
           warning reproducing the defect it warned about. A repair the same day
