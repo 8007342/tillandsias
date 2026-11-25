@@ -33,3 +33,8 @@ critical_path:
     command: "bash scripts/test-script-run-verb.sh"
     timeout_ms: 600000
     expected_behavior: "script-run-verb: 7 passed, 0 failed"
+
+  - step: "order 2343-3ch4: a gate step that skips at exit 0 is a named skip and never STEP_OK; a real pass, and a pass with one skipped arm, still print it"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-gate-step-skip-is-not-a-pass.lua 2>&1"
+    timeout_ms: 300000
+    expected_behavior: "ok:gate-step-skip-is-not-a-pass:5 arms"
