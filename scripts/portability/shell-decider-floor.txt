@@ -62,16 +62,13 @@ scripts/check-unrunnable-platform-arms.sh
 scripts/check-yaml-reader-availability.sh
 scripts/test-a-claim-names-a-workstation.sh
 scripts/test-awk-float-lc-numeric.sh
-scripts/test-branch-discipline-verb.sh
 scripts/test-build-image-installed-version-alias.sh
 scripts/test-build-step-timing-attribution.sh
 scripts/test-capture-helper.sh
-scripts/test-centicolon-extract.sh
 scripts/test-change-class.sh
 scripts/test-check-bash-dialect.sh
 scripts/test-check-carry-forward.sh
 scripts/test-check-credential-channel.sh
-scripts/test-check-test-baseline.sh
 scripts/test-claims-across-branches.sh
 scripts/test-claims-fleet-visible.sh
 scripts/test-clear-vault-credentials-partial-is-nonzero.sh
@@ -255,7 +252,6 @@ scripts/test-reopen-is-history-not-loss.sh
 scripts/test-requirement-ids.sh
 scripts/test-reset-flags-are-accepted.sh
 scripts/test-reset-state-contract.sh
-scripts/test-resumable-claim-dirt.sh
 scripts/test-run-verb-agent-door.sh
 scripts/test-running-image-freshness.sh
 scripts/test-rust-source-pin-added.sh
@@ -273,7 +269,6 @@ scripts/test-selector-drops-cross-branch-claims.sh
 scripts/test-selector-flags-host-scoped-criteria.sh
 scripts/test-set-field-prose-guard.sh
 scripts/test-set-field-refuses-unknown-flags.sh
-scripts/test-set-field-yaml-shapes.sh
 scripts/test-shipped-diagnostic-tool-dispatch.sh
 scripts/test-sidecar-staleness-stamp.sh
 scripts/test-sigpipe-guard-sees-paths-and-continuations.sh
@@ -281,7 +276,6 @@ scripts/test-sigpipe-verdict-pipelines.sh
 scripts/test-silverblue-update-skew-probe.sh
 scripts/test-skill-canonicalization-remedy.sh
 scripts/test-skills-single-source.sh
-scripts/test-smoke-agent-watch.sh
 scripts/test-smoke-evidence-dir-is-fresh.sh
 scripts/test-smoke-forge-lane-cold-host-outcome.sh
 scripts/test-smoke-verifies-a-signature.sh
