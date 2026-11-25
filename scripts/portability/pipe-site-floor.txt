@@ -609,7 +609,6 @@ scripts scripts/test-image-usability-check.sh 1
 scripts scripts/test-installer-probes-by-attempt-not-by-help.sh 2
 scripts scripts/test-installers-quiet-progress.sh 3
 scripts scripts/test-join-the-fleet-idempotent.sh 8
-scripts scripts/test-jq-multiline-capture.sh 3
 scripts scripts/test-json-get-help-names-its-subset.sh 23
 scripts scripts/test-json-query-jq-parity.sh 4
 scripts scripts/test-land-gate-refusal-names-its-step.sh 12
@@ -620,7 +619,6 @@ scripts scripts/test-ledger-write-reaches-its-reader.sh 22
 scripts scripts/test-litmus-binding-truth.sh 8
 scripts scripts/test-litmus-fake-backend-under-remote-podman.sh 1
 scripts scripts/test-litmus-fake-podman-hermetic.sh 1
-scripts scripts/test-litmus-grep-escapes.sh 1
 scripts scripts/test-litmus-kill-adjudicator.sh 14
 scripts scripts/test-litmus-missing-bound-test-reds.sh 3
 scripts scripts/test-litmus-parse-instruments-agree.sh 7

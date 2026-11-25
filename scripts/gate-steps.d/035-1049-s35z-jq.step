@@ -17,7 +17,7 @@
 # is that the SET comparison must be re-run against CURRENT trunk at resolution
 # time, not once at the start.
 #
-# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# STEP_LUA is a LITERAL path on purpose: a binding assembled from a
 # variable is invisible to every name-based scan, including the
 # bound-or-retired guard (1063-nraf). Keep it a plain string.
 #
@@ -28,11 +28,11 @@
 # sibling call sites reading a single scalar were fine. MSYS grep hides the CR;
 # only od -c shows it, so this must be a check rather than a habit.
 STEP_DESC="Checking multi-line jq captures strip carriage returns (1049-s35z)"
-STEP_SCRIPT="scripts/test-jq-multiline-capture.sh"
+STEP_LUA="scripts/lua/test-jq-multiline-capture.lua"
 STEP_ERROR="a multi-line jq capture does not strip CR, or the checker enforcing it cannot fail (1049-s35z) — see the verdict line above"
 STEP_OK="Multi-line jq capture check passed"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:jq-multiline-capture:7"
+STEP_SECOND_REGIME="macbookair 2026-11-25 darwin ok:jq-multiline-capture:8 arms"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/lua/check-jq-multiline-capture-strips-cr.lua scripts/plan-binary-probe.sh scripts/test-jq-multiline-capture.sh"
+STEP_READS="scripts/lua/check-jq-multiline-capture-strips-cr.lua scripts/plan-binary-probe.sh scripts/lua/test-jq-multiline-capture.lua"

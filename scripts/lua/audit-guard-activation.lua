@@ -102,7 +102,7 @@ local SURFACES = {
     -- bound as gate steps, one hop further than the list reached; reported as
     -- orphans for a day while actively guarding (and "fixing" that by wiring
     -- them again would have double-run them).
-    "scripts/test-jq-multiline-capture.sh",
+    "scripts/lua/test-jq-multiline-capture.lua",
     "scripts/lua/test-wt-reparse-scan.lua",
     -- 2031-zq68: lua/verify-image-usable.lua is run by build-image.sh and
     -- with-nix-builder.sh at runtime, and in the gate by this fixture (bound
