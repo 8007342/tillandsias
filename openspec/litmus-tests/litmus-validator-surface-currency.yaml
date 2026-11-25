@@ -24,14 +24,14 @@ description: >
   was written into openspec/litmus-tests/ and never bound here. A fixture that
   is not bound is not a fixture.
 preconditions:
-  - workspace contains scripts/test-validator-surface-currency.sh
+  - workspace contains scripts/lua/test-validator-surface-currency.lua
   - workspace contains crates/tillandsias-plan/validator-surface.manifest
 
 critical_path:
   - step: "the currency probe reads content, not mtimes, in both directions"
-    command: "bash scripts/test-validator-surface-currency.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-validator-surface-currency.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "ok:validator-surface-currency"
+    expected_behavior: "ok:validator-surface-currency:12 arms"
     # Eight arms, including the two mutation controls the row demands: a touch
     # with identical content must NOT move the hash (the rebase case), and a
     # real content edit MUST move it and must refuse both --check and next-order.
