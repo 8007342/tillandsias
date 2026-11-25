@@ -1,5 +1,5 @@
 -- @env PATH TMPDIR TEMP TMP SystemRoot
--- @trace order:1287-h6qn, order:1925-ided, order:1925-xbpv, order:2367-d5gx
+-- @trace order:1287-h6qn, order:1925-ided, order:2367-d5gx
 --
 -- test-validator-surface-currency.lua — the validator surface is a CONTENT probe. Pinned: a hash that
 -- moves when nothing changed (the rebase case), and one that fails to move when something did, which
