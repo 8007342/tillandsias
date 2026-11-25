@@ -22,7 +22,6 @@ scripts/check-fleet-membership.sh
 scripts/check-forge-findings-persisted.sh
 scripts/check-fragment-ts-skew.sh
 scripts/check-gate-step-regimes.sh
-scripts/check-groundtruth-regime-invariance.sh
 scripts/check-host-tools.sh
 scripts/check-issue-citation-convention.sh
 scripts/check-jq-callsite-ratchet.sh

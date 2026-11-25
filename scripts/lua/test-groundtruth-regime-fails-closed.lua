@@ -26,7 +26,7 @@
 -- or `FAIL: ...` then violation:groundtruth-regime-fails-closed:<n>.
 
 local root = text.trim(proc.run{ argv = { "pwd", "-P" } }.stdout or "")
-local CHECK = env.get("TILLANDSIAS_TEST_CHECK") or (root .. "/scripts/check-groundtruth-regime-invariance.sh")
+local CHECK = env.get("TILLANDSIAS_TEST_CHECK") or (root .. "/scripts/lua/check-groundtruth-regime-invariance.lua")
 local rel = "target/plan-scratch/gt-fails-closed-" .. tostring(time.now_ms())
 local W = root .. "/" .. rel
 proc.run{ argv = { "mkdir", "-p", W } }
@@ -34,7 +34,7 @@ local function cleanup() proc.run{ argv = { "find", W, "-delete" }, timeout_ms =
 
 -- The real plan binary, resolved as the .sh did (a script FILE, not a string).
 fs.write(rel .. "/resolve.sh", '. scripts/plan-binary-probe.sh && resolve_plan_binary\n')
-local r = proc.run{ argv = { "bash", W .. "/resolve.sh" } }
+local r = proc.run{ argv = { require("common.fixture").posix_shell(), W .. "/resolve.sh" } }
 local REAL = text.trim(r.stdout or "")
 if not r.ok or REAL == "" then
     cleanup()
@@ -47,14 +47,15 @@ local pass, fail = 0, 0
 local function ok(m) out.line("ok:   " .. m); pass = pass + 1 end
 local function bad(m) log.raw("FAIL: " .. m); fail = fail + 1 end
 
--- The fake: GT_MODE=kill|failcase, GT_SET=<basename>, GT_REGIME=live|dead.
+-- The fake: TILLANDSIAS_TEST_GT_MODE=kill|failcase, TILLANDSIAS_TEST_GT_SET=<basename>, TILLANDSIAS_TEST_GT_REGIME=live|dead.
+-- (TILLANDSIAS_-prefixed since 2220-gtri: the Lua check runs under the script runner, which passes only TILLANDSIAS_* through to the grades it spawns.)
 -- The dead regime is recognised by EXACTLY the check's closed-port endpoint.
 fs.write(rel .. "/plan", ([[#!/usr/bin/env bash
-if [ "${1:-}" = grade ] && [ -n "${GT_MODE:-}" ] && [ "$(basename "${2:-}")" = "${GT_SET:-}" ]; then
+if [ "${1:-}" = grade ] && [ -n "${TILLANDSIAS_TEST_GT_MODE:-}" ] && [ "$(basename "${2:-}")" = "${TILLANDSIAS_TEST_GT_SET:-}" ]; then
     regime=live
     [ "${TILLANDSIAS_INFERENCE_ENDPOINT:-}" = "http://127.0.0.1:1" ] && regime=dead
-    if [ "$regime" = "${GT_REGIME:-}" ]; then
-        case "$GT_MODE" in
+    if [ "$regime" = "${TILLANDSIAS_TEST_GT_REGIME:-}" ]; then
+        case "$TILLANDSIAS_TEST_GT_MODE" in
             kill)
                 "@REAL@" grade "$2" | grep -E '^(PASS|FAIL)' | head -n 1
                 kill -9 $$ ;;
@@ -88,7 +89,12 @@ local function run(extra)
         if v then e[k] = v end
     end
     for k, v in pairs(extra) do e[k] = v end
-    local p = proc.run{ argv = { "bash", CHECK, "--strict" }, env = e, timeout_ms = 600000 }
+    -- ORDER 2220-gtri: the check is Lua, run by the REAL binary; the fake is
+    -- only the GRADER it names through TILLANDSIAS_PLAN_BIN. A .sh override
+    -- (TILLANDSIAS_TEST_CHECK, for a mutant) still runs under bash.
+    local argv = { require("common.fixture").posix_shell(), CHECK, "--strict" }
+    if CHECK:match("%.lua$") then argv = { REAL, "script", "run", CHECK, "--", "--strict" } end
+    local p = proc.run{ argv = argv, env = e, timeout_ms = 600000 }
     return text.trim(p.stdout or ""), p.code
 end
 
@@ -97,7 +103,7 @@ if o:match("^ok:groundtruth%-regime%-invariant:") then
     if rc == 0 then ok("1: CONTROL: every grade completes -> " .. o) else bad("1: rc=" .. rc .. " [" .. o .. "]") end
 else bad("1: control answered [" .. o .. "] rc=" .. tostring(rc)) end
 
-o, rc = run({ GT_MODE = "kill", GT_SET = SET, GT_REGIME = "dead" })
+o, rc = run({ TILLANDSIAS_TEST_GT_MODE = "kill", TILLANDSIAS_TEST_GT_SET = SET, TILLANDSIAS_TEST_GT_REGIME = "dead" })
 if o == "unavailable:grade-incomplete:" .. SET .. ":dead" and rc == 2 then
     ok("2: a killed dead-regime grade of " .. SET .. " fails closed by name (exit 2)")
 else
@@ -105,7 +111,7 @@ else
         " (want unavailable:grade-incomplete:" .. SET .. ":dead, exit 2)")
 end
 
-o, rc = run({ GT_MODE = "failcase", GT_SET = SET, GT_REGIME = "live" })
+o, rc = run({ TILLANDSIAS_TEST_GT_MODE = "failcase", TILLANDSIAS_TEST_GT_SET = SET, TILLANDSIAS_TEST_GT_REGIME = "live" })
 if o:match("^violation:groundtruth%-regime%-dependent:") then
     ok("3: a completed grade with a failing case reads as a divergence, not as incomplete (" .. o .. ")")
 else bad("3: a completed failing grade answered [" .. o .. "] rc=" .. tostring(rc)) end

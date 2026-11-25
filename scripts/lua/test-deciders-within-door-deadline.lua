@@ -71,15 +71,19 @@ for _, h in ipairs(fs.list("scripts/hooks") or {}) do hooks = hooks .. (fs.read(
 for _, d in ipairs(DECLARED) do
     n = n + 1
     local decl = nil
-    local lines = text.lines(fs.read(DIR .. "/" .. d .. ".sh") or "")
+    -- ORDER 2220-gtri: a declared decider may be ported to scripts/lua/<d>.lua,
+    -- declaring itself with `-- preflight:`.
+    local src = fs.read(DIR .. "/" .. d .. ".sh") or fs.read(DIR .. "/lua/" .. d .. ".lua") or ""
+    local lines = text.lines(src)
     for i = 1, math.min(40, #lines) do
         local m = lines[i]:match("^# preflight: gate%-only%-decider%s*(.*)$")
+            or lines[i]:match("^%-%- preflight: gate%-only%-decider%s*(.*)$")
         if m then decl = m:gsub("^—%s*", ""):gsub("^%-%s*", ""); break end
     end
     if decl == nil or decl == "" then
         log.raw("FAIL: " .. d .. " is neither timed nor declared — it lost its '# preflight: gate-only-decider — <reason>' line, so the door would deadline-skip it in silence (1518-8p5k)")
         fail = fail + 1
-    elseif text.contains(hooks, d .. ".sh") then
+    elseif text.contains(hooks, d .. ".sh") or text.contains(hooks, d .. ".lua") then
         log.raw("FAIL: " .. d .. " declares gate-only-decider but a pre-push hook runs it; the door ignores the declaration and deadline-skips it (1518-8p5k)")
         fail = fail + 1
     else
