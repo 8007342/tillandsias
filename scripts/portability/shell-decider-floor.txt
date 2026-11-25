@@ -207,8 +207,6 @@ scripts/test-join-the-fleet-idempotent.sh
 scripts/test-jq-multiline-capture.sh
 scripts/test-json-get-help-names-its-subset.sh
 scripts/test-json-query-jq-parity.sh
-scripts/test-land-adopts-valid-stamp.sh
-scripts/test-land-affordance.sh
 scripts/test-land-gate-refusal-names-its-step.sh
 scripts/test-land-merges-trunk.sh
 scripts/test-land-push-bounded.sh
@@ -237,7 +235,6 @@ scripts/test-litmus-step-pipefail.sh
 scripts/test-litmus-structured-assert.sh
 scripts/test-litmus-terminal-verdict.sh
 scripts/test-litmus-tracked-file-kill-safety.sh
-scripts/test-long-running-view-refuses-at-completion.sh
 scripts/test-loop-status-append-input.sh
 scripts/test-lww-channel-consumers.sh
 scripts/test-macos-vsock-inference-closure.sh
@@ -249,7 +246,6 @@ scripts/test-metrics-log-path-agreement.sh
 scripts/test-mirror-discipline.sh
 scripts/test-mirror-host-cert-and-sshd.sh
 scripts/test-mirror-receive-wrapper.sh
-scripts/test-mirror-refuses-when-broken.sh
 scripts/test-mirror-sshd-posture.sh
 scripts/test-mirror-sync-state.sh
 scripts/test-mo-full-attest.sh

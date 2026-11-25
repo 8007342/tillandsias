@@ -617,7 +617,6 @@ scripts scripts/test-join-the-fleet-idempotent.sh 8
 scripts scripts/test-jq-multiline-capture.sh 3
 scripts scripts/test-json-get-help-names-its-subset.sh 23
 scripts scripts/test-json-query-jq-parity.sh 4
-scripts scripts/test-land-adopts-valid-stamp.sh 1
 scripts scripts/test-land-gate-refusal-names-its-step.sh 12
 scripts scripts/test-land-queue.sh 1
 scripts scripts/test-land-verdict-through-a-pipe.sh 1
@@ -639,7 +638,6 @@ scripts scripts/test-litmus-step-pipefail.sh 3
 scripts scripts/test-litmus-structured-assert.sh 1
 scripts scripts/test-litmus-terminal-verdict.sh 2
 scripts scripts/test-litmus-tracked-file-kill-safety.sh 2
-scripts scripts/test-long-running-view-refuses-at-completion.sh 26
 scripts scripts/test-loop-status-append-input.sh 6
 scripts scripts/test-lww-channel-consumers.sh 2
 scripts scripts/test-mcp-run-command-tool.sh 2
@@ -648,7 +646,6 @@ scripts scripts/test-metrics-log-fallback-is-loud.sh 1
 scripts scripts/test-metrics-log-path-agreement.sh 1
 scripts scripts/test-mirror-host-cert-and-sshd.sh 11
 scripts scripts/test-mirror-receive-wrapper.sh 8
-scripts scripts/test-mirror-refuses-when-broken.sh 2
 scripts scripts/test-mirror-sshd-posture.sh 5
 scripts scripts/test-mirror-sync-state.sh 5
 scripts scripts/test-mode-only-regression-887-bz88.sh 3

@@ -14,13 +14,13 @@ description: >
 
 preconditions:
   - workspace contains scripts/land-on-platform-branch.sh
-  - workspace contains scripts/test-land-affordance.sh
+  - workspace contains scripts/lua/test-land-affordance.lua
 
 critical_path:
   - step: "land refusals carry why and remedy, three executed remedies land, and no refusal site lacks an affordance"
-    command: "bash scripts/test-land-affordance.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-land-affordance.lua 2>&1"
     timeout_ms: 180000
-    expected_behavior: "PASS: land-affordance 4/4 (1247-lwek)"
+    expected_behavior: "ok:land-affordance:7 arms"
 
 observability:
   traces:
