@@ -20,6 +20,8 @@
 --                  (host-shell -/-> vault-client). Before 2248-zcqh both were
 --                  wrong: 13 of cargo's 46 edges missing, 1 extra
 --   7 LINT-OK      check-gate-changed-crate-graph.lua passes on the live tree
+--   7b LINT-WINDOWS the same graph with cargo's native-Windows C:\...\Cargo.toml
+--                  paths still matches (2253-j2at)
 --   8 LINT-MISS    an edge cargo has and the derived graph lacks is refused
 --   9 LINT-EXTRA   an edge the derived graph has alone is refused
 --  10 BUILD-BLOCK  (2250-gwfy) a build.sh diff that only adds a wired fixture
@@ -28,6 +30,18 @@
 --  11 BUILD-MACH   the same diff plus one non-block line (a variable) stays
 --                  heavy:guard:build.sh
 --  12 BUILD-LEGACY without --intake the block-only diff is still select:all
+--  13 SERIAL       (2256-mvmy) in a scratch tree, two inline build.sh fixtures
+--                  and a STEP_SERIAL step never overlap under --intake --run,
+--                  and a phase:serial-fixtures line counts them (3)
+--  14 POOL-CONTROL the same tree without --intake runs the inline pair side
+--                  by side (NEGATIVE CONTROL: arm 13 can tell)
+--  15 PLAN-LANE    a plan-only diff prints route:plan-lane and selects no
+--                  fixture
+--  16 NO-DEADLOCK  (2256-mvmy) the same tree padded past the 64 KB pipe buffer
+--                  (as the real population is, ~80 KB): a serial row's `wait`
+--                  must not sit on the loop's own input. Before the fix the
+--                  run hung in do_wait with `tr` blocked in anon_pipe_write;
+--                  it must now finish inside a 3-minute deadline
 --
 -- Verdict: ok:gate-changed-intake:<n> arms | violation:gate-changed-intake:<n>-failed
 
@@ -124,11 +138,32 @@ T:arm("6 WORKSPACE workspace-inherited deps resolve; commented-out ones do not",
 -- 7, 8, 9
 local function lint(env)
     local r = proc.run{ argv = { PB, "script", "run", LINT }, cwd = ROOT, env = env, timeout_ms = 600000 }
-    return (r.status == "exited" and r.code or -1), text.trim(r.stdout or "")
+    -- stderr kept for the arm's detail (yolanda, msys: arm 7 once read
+    -- could-not-run with no reason recorded).
+    return (r.status == "exited" and r.code or -1), text.trim(r.stdout or ""), text.trim(r.stderr or "")
 end
-rc, o = lint({})
+local lerr
+rc, o, lerr = lint({})
 T:arm("7 LINT-OK the derived graph equals cargo's on the live tree",
-    rc == 0 and text.starts_with(o, "ok:gate-changed-crate-graph:"), "rc=" .. rc .. " out=" .. o)
+    rc == 0 and text.starts_with(o, "ok:gate-changed-crate-graph:"), "rc=" .. rc .. " out=" .. o .. " err=" .. (lerr or ""):sub(1, 400))
+
+-- 7b (2253-j2at, yolanda msys): cargo metadata on native Windows prints
+-- C:\...\Cargo.toml. The same live graph, every path rewritten to that form
+-- through the lint's metadata seam, must still match (it read missing=46:extra=46
+-- when "/Cargo.toml" was stripped before the separators were normalised).
+do
+    local mr = proc.run{ argv = { "cargo", "metadata", "--format-version", "1", "--no-deps",
+        "--manifest-path", ROOT .. "/Cargo.toml" }, cwd = ROOT, timeout_ms = 300000 }
+    local meta = mr.stdout or ""
+    local root_s = ROOT:gsub("%%", "%%%%")
+    local win = meta:gsub(root_s:gsub("[%-%.%+%[%]%(%)%$%^%?%*]", "%%%0"), "C:\\\\x\\\\repo")
+    -- forward slashes inside the rewritten paths become escaped backslashes
+    win = win:gsub('("C:\\\\x\\\\repo)([^"]*)"', function(a, b) return a .. b:gsub("/", "\\\\") .. '"' end)
+    fs.write(S.rel .. "/meta-windows.json", win)
+    local wrc, wo = lint({ TILLANDSIAS_CRATE_GRAPH_METADATA = S.abs .. "/meta-windows.json" })
+    T:arm("7b LINT-WINDOWS cargo's C:\\...\\Cargo.toml paths match the derived graph",
+        wrc == 0 and text.starts_with(wo, "ok:gate-changed-crate-graph:"), "rc=" .. wrc .. " out=" .. wo)
+end
 
 local lines = {}
 for _, l in ipairs(text.lines(graph)) do if l ~= "" then lines[#lines + 1] = l end end
@@ -187,5 +222,110 @@ T:arm("11 BUILD-MACH one non-block line keeps build.sh a guard (heavy)",
 rc, o = gc_env({ "--list", "--files", BONLY }, { TILLANDSIAS_GATE_CHANGED_BUILD_DIFF = diff_file("bd-legacy", {}) })
 T:arm("12 BUILD-LEGACY without --intake a block-only build.sh diff is still select:all",
     rc == 0 and first(o, "select:all reason=guard:build.sh") ~= nil, "rc=" .. rc .. " " .. (first(o, "") or ""))
+
+-- 13-14: a scratch tree whose fixtures log their own start/end.
+do
+    local X = T:scratch("serial-tree")
+    local function w(rel, body) fs.write(X.rel .. "/" .. rel, body) end
+    proc.run{ argv = { "mkdir", "-p", X.abs .. "/scripts/gate-steps.d" } }
+    w("Cargo.toml", "[workspace]\nmembers = [\n]\n")
+    w("scripts/shared.txt", "x\n")
+    local function fx(name)
+        w("scripts/test-" .. name .. ".sh", table.concat({
+            "#!/usr/bin/env bash", 'cat "$(dirname "$0")/../scripts/shared.txt" >/dev/null',
+            'echo "start ' .. name .. ' $(date +%s%N)" >> "$SERIAL_LOG"', "sleep 1",
+            'echo "end ' .. name .. ' $(date +%s%N)" >> "$SERIAL_LOG"', "exit 0", "" }, "\n"))
+    end
+    for _, n in ipairs({ "a", "b", "c", "d" }) do fx(n) end
+    local blk = {}
+    for _, n in ipairs({ "a", "b" }) do
+        blk[#blk + 1] = '    _step "Inline ' .. n .. '..."'
+        blk[#blk + 1] = '    if ! _run bash "$SCRIPT_DIR/scripts/test-' .. n .. '.sh" 2>&1; then'
+        blk[#blk + 1] = '        _error "' .. n .. '"'
+        blk[#blk + 1] = "        exit 1"
+        blk[#blk + 1] = "    fi"
+    end
+    w("build.sh", 'if [[ "$FLAG_CHECK" == true ]]; then\n' .. table.concat(blk, "\n")
+        .. '\nelif [[ "$FLAG_TEST$FLAG_CHECK" == x ]]; then\n    :\nfi\n')
+    w("scripts/gate-steps.d/100-c.step", 'STEP_DESC="c"\nSTEP_SCRIPT="scripts/test-c.sh"\nSTEP_SERIAL="planted serial step"\n')
+    w("scripts/gate-steps.d/110-d.step", 'STEP_DESC="d"\nSTEP_SCRIPT="scripts/test-d.sh"\n')
+    T:must{ "git", "init", "-q", X.abs }
+    T:must{ "git", "-C", X.abs, "add", "-A" }
+    T:must{ "git", "-C", X.abs, "-c", "user.email=f@f", "-c", "user.name=f", "-c", "commit.gpgsign=false", "commit", "-qm", "tree" }
+    fs.write(S.rel .. "/serial-changed", "scripts/shared.txt\n")
+    local function run_tree(intake, logname)
+        fs.write(S.rel .. "/" .. logname, "")
+        local argv = { SH, GC, "--run" }
+        if intake then argv[#argv + 1] = "--intake" end
+        argv[#argv + 1] = "--files"; argv[#argv + 1] = S.abs .. "/serial-changed"
+        local r = proc.run{ argv = argv, cwd = X.abs, timeout_ms = 300000,
+            env = { TILLANDSIAS_GATE_CHANGED_ROOT = X.abs, SERIAL_LOG = S.abs .. "/" .. logname, GATE_CHANGED_JOBS = "4" } }
+        local iv = {}
+        for _, l in ipairs(text.lines(fs.read(S.rel .. "/" .. logname) or "")) do
+            local k, n, t = l:match("^(%a+) (%a) (%d+)$")
+            if k then iv[n] = iv[n] or {}; iv[n][k] = tonumber(t) end
+        end
+        return r, iv
+    end
+    local function overlap(iv, a, b)
+        local x, y = iv[a], iv[b]
+        if not (x and y and x.start and x["end"] and y.start and y["end"]) then return nil end
+        return x.start < y["end"] and y.start < x["end"]
+    end
+    local r13, iv13 = run_tree(true, "serial-intake.log")
+    local o13 = (r13.stdout or "")
+    local sline = first(o13, "phase:serial-fixtures") or ""
+    T:arm("13 SERIAL inline fixtures and a STEP_SERIAL step never overlap at intake",
+        overlap(iv13, "a", "b") == false and overlap(iv13, "a", "c") == false and overlap(iv13, "b", "c") == false
+            and sline:find(" n=3", 1, true) ~= nil,
+        "a/b=" .. tostring(overlap(iv13, "a", "b")) .. " a/c=" .. tostring(overlap(iv13, "a", "c"))
+            .. " b/c=" .. tostring(overlap(iv13, "b", "c")) .. " " .. sline .. " out=" .. o13:sub(1, 300))
+    local r14, iv14 = run_tree(false, "serial-legacy.log")
+    T:arm("14 POOL-CONTROL without --intake the inline pair runs side by side",
+        overlap(iv14, "a", "b") == true, "a/b=" .. tostring(overlap(iv14, "a", "b")) .. " out=" .. (r14.stdout or ""):sub(1, 300))
+end
+
+-- 16: the scratch tree again, padded so its population exceeds a pipe buffer.
+do
+    local X = T:scratch("deadlock-tree")
+    local function w(rel, body) fs.write(X.rel .. "/" .. rel, body) end
+    proc.run{ argv = { "mkdir", "-p", X.abs .. "/scripts/gate-steps.d" } }
+    w("Cargo.toml", "[workspace]\nmembers = [\n]\n")
+    w("scripts/shared.txt", "x\n")
+    w("scripts/test-a.sh", '#!/usr/bin/env bash\ncat "$(dirname "$0")/../scripts/shared.txt" >/dev/null\nexit 0\n')
+    w("scripts/test-b.sh", '#!/usr/bin/env bash\ncat "$(dirname "$0")/../scripts/shared.txt" >/dev/null\nexit 0\n')
+    w("build.sh", 'if [[ "$FLAG_CHECK" == true ]]; then\n'
+        .. '    _step "Inline a..."\n    if ! _run bash "$SCRIPT_DIR/scripts/test-a.sh" 2>&1; then\n        _error "a"\n        exit 1\n    fi\n'
+        .. '    _step "Inline b..."\n    if ! _run bash "$SCRIPT_DIR/scripts/test-b.sh" 2>&1; then\n        _error "b"\n        exit 1\n    fi\n'
+        .. 'elif [[ "$FLAG_TEST$FLAG_CHECK" == x ]]; then\n    :\nfi\n')
+    local pad = string.rep("padding-so-the-population-outgrows-a-pipe-buffer ", 8)
+    -- One script per filler: the population keeps one row per (path,args), so
+    -- fillers sharing a script collapse into one row and the pipe never fills.
+    for i = 1, 260 do
+        w("scripts/test-filler-" .. i .. ".sh", "#!/usr/bin/env bash\nexit 0\n")
+        w(string.format("scripts/gate-steps.d/%03d-filler.step", 100 + i),
+            'STEP_DESC="filler ' .. i .. " " .. pad .. '"\nSTEP_SCRIPT="scripts/test-filler-' .. i .. '.sh"\n')
+    end
+    T:must{ "git", "init", "-q", X.abs }
+    T:must{ "git", "-C", X.abs, "add", "-A" }
+    T:must{ "git", "-C", X.abs, "-c", "user.email=f@f", "-c", "user.name=f", "-c", "commit.gpgsign=false", "commit", "-qm", "tree" }
+    fs.write(S.rel .. "/deadlock-changed", "scripts/shared.txt\n")
+    local t0 = time.now_ms()
+    local r = proc.run{ argv = { SH, GC, "--run", "--intake", "--files", S.abs .. "/deadlock-changed" }, cwd = X.abs,
+        timeout_ms = 180000, env = { TILLANDSIAS_GATE_CHANGED_ROOT = X.abs, GATE_CHANGED_JOBS = "4" } }
+    local o16 = r.stdout or ""
+    T:arm("16 NO-DEADLOCK a serial row's wait does not sit on the loop's own input (population > 64 KB)",
+        r.status == "exited" and r.code == 0 and first(o16, "ok:gate-changed:intake") ~= nil,
+        "status=" .. tostring(r.status) .. " rc=" .. tostring(r.code) .. " ms=" .. (time.now_ms() - t0) .. " out=" .. o16:sub(1, 200))
+end
+
+-- 15: a plan-only diff goes to the plan lane.
+local PLANONLY = changes("plan-only", { "plan/index.d/README.md" })
+rc, o = gc{ "--list", "--intake", "--files", PLANONLY }
+local _, ro = gc_env({ "--run", "--intake", "--files", PLANONLY }, {})
+T:arm("15 PLAN-LANE a plan-only diff routes to the plan lane and selects no fixture",
+    first(ro, "route:plan-lane") ~= nil and count(ro, "ok:gate-changed:fixture:") == 0
+        and (first(ro, "ok:gate-changed:intake:plan-lane") ~= nil or first(ro, "fail:gate-changed:intake:plan-lane") ~= nil),
+    "out=" .. ro:sub(1, 400))
 
 T:finish()

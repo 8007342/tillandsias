@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-test-installer-reports-wsl-guest-shape-to-lua
+    order: "2296-9jg3"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, installer, lua-first, shell-to-lua]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/test-installer-reports-wsl-guest-shape.lua
+      - openspec/litmus-tests/litmus-installer-reports-wsl-guest-shape.yaml
+    title: "test-installer-reports-wsl-guest-shape runs from scripts/lua, with the shell twin deleted and mutant parity shown"
+    context: |
+      scripts/test-installer-reports-wsl-guest-shape.sh (129 lines) reads install-windows.ps1 and judges seven arms. One
+      caller, its litmus. No work ref carries a port as of 2026-11-24. The coordinator asked for one Windows-relevant port.
+    exit_criteria:
+      - "The Lua fixture prints ok:installer-reports-wsl-guest-shape:7/7 arms on trunk and the litmus runs it."
+      - "Both versions agree on each arm for the clean tree and for a set of installer mutants that reds every arm 1 to 6; a missing installer and an empty strip are could-not-run in both."
+      - "The shell file and its portability floor lines are gone."
+    unscoreable: "unpinnable-until-the-guard-exists: the Lua fixture is the deliverable"
+    next_action: "Port, compare against the shell twin under mutants, then delete it."
+    provenance: "coordinator macuahuitl-fedora 2026-11-24, queue item 4"
+    related: [1339-r9xv, 1560-uam3, 2254-y7rp]
+    events:
+      - {type: filed, ts: "2026-11-24T10:36:45Z", host: yolanda, summary: "filed and taken by yolanda on the coordinator's queue"}

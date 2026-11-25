@@ -28,14 +28,14 @@ preconditions:
 
 critical_path:
   - step: "one website-update per tag, deferred never fails promotion"
-    command: "bash scripts/test-promote-stable-enqueues-website-update.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-promote-stable-enqueues-website-update.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "PASS: step 5 enqueues one website-update per tag and never blocks promotion"
+    expected_behavior: "ok:promote-stable-enqueues-website-update:8 arms"
 
 observability:
   traces:
     - "@trace spec:ci-release"
-  expected_log: "PASS: step 5 enqueues one website-update per tag and never blocks promotion"
+  expected_log: "ok:promote-stable-enqueues-website-update:8 arms"
   log_fields:
     spec: ci-release
     test: promote-stable-enqueues-website-update

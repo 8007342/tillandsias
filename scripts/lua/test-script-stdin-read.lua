@@ -12,17 +12,15 @@
 --   5 NO-CAP     `-- @stdin` with no byte cap is refused before the script runs
 -- (A terminal stdin returns "" without reading; a tty cannot be faked here.)
 --
+-- could-not-run:script-stdin-read (stale-plan-binary) when the runner predates the
+-- directive and this tree's source declares it.
 -- Verdict: ok:script-stdin-read:<n> or violation:script-stdin-read:<failed>.
 
-local BASH = "/bin/bash"
-do
-    local ep = text.trim(proc.run({ argv = { "git", "--exec-path" }, timeout_ms = 10000 }).stdout or "")
-    if ep:find("^%a:/.*/libexec/git%-core$") then
-        BASH = (ep:gsub("/[^/]+/libexec/git%-core$", "/bin/bash.exe"))
-    end
-end
+local fixture = require("common.fixture")
+local BASH = fixture.posix_shell("/bin/bash")
 local RUNNER = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN")
-if not RUNNER or RUNNER == "" then RUNNER = "target/release/tillandsias-plan" end
+if not RUNNER or RUNNER == "" then RUNNER = fixture.plan_binary() end
+if RUNNER == "" then verdict.could_not_run("script-stdin-read", "no plan binary") end
 local rel = "target/plan-scratch/stdin-read-" .. tostring(time.now_ms())
 fs.mkdir(rel)
 
@@ -40,6 +38,22 @@ local function probe(script, input, closed)
     local t0 = time.now_ms()
     local p = proc.run{ argv = argv, stdin = input, timeout_ms = 30000 }
     return (p.stdout or "") .. (p.stderr or ""), p.code, time.now_ms() - t0
+end
+
+-- A binary built before @stdin existed refuses the directive: that is the host's
+-- binary, not the primitive. But a runner that LOST the directive answers the
+-- same words, so it is stale only when this tree's source still declares it.
+do
+    local o = probe("declared.lua", "")
+    if o:find("unknown-directive:stdin", 1, true) then
+        local src = fs.read("crates/tillandsias-plan/src/script_run.rs") or ""
+        local list = src:match("HEADER_DIRECTIVES[^=]*=%s*&?%[(.-)%]") or ""
+        if list:find('"stdin"', 1, true) then
+            proc.run{ argv = { "rm", "-rf", rel }, timeout_ms = 10000 }
+            verdict.could_not_run("script-stdin-read", "stale-plan-binary: " .. RUNNER
+                .. " predates @stdin, which this tree declares; cargo build --release -p tillandsias-plan")
+        end
+    end
 end
 
 local pass, fail = 0, 0

@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: promote-stable-asks-for-a-smoke-record-per-platform-and-an-idle-queue
+    order: "2296-pn45"
+    status: implemented
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [release, smoke, promotion, bundle-landing]
+    estimated_hours: 4
+    owned_files:
+      - scripts/promote-stable.sh
+      - scripts/lua/check-promote-gate.lua
+      - scripts/lua/test-promote-gate.lua
+      - scripts/test-promote-stable-evidence-gate.sh
+    title: "promote-stable.sh refuses unless linux, darwin and windows each have a smoke record for the exact tag and the land queue is idle"
+    context: |
+      Bundle landing phase 4. The report gate (888-p3kt) reads prose; this one reads records. A record is an event of
+      type smoke-record on the row named smoke-<tag, dots as dashes>, read folded through plan-events, and its summary
+      must match one line in full, so prose about a tag is never a record. The latest record per platform decides.
+      A credential-unmeasured record BLOCKS (2252-ck7h ruling 2 stands). The override is --allow-unmeasured <platform>
+      with --approval <row>, an operator-approval event for that platform and tag; the gate prints it and its ref.
+      The host that ran a smoke files its own record. The checkout must hold trunk's head and an unedited plan/. --force stays the operator's override.
+    exit_criteria:
+      - "scripts/lua/test-promote-gate.lua green (27 arms) and scripts/test-promote-stable-evidence-gate.sh 39/39, both run by litmus:promote-stable-refusals-carry-affordance."
+      - "The first RC smoked after this lands has a smoke-<tag> row with one record per platform, and promote-stable.sh --dry-run answers would-promote or names what is missing."
+    unscoreable: "fixture-scored: the two fixtures are the pin, bound to litmus:promote-stable-refusals-carry-affordance"
+    next_action: "Smoke skills write the record; the host that ran the smoke files its record; whether an unmeasured partial is promotable is the operator's call."
+    provenance: "coordinator macuahuitl-fedora 2026-11-24"
+    related: [2252-ck7h, 888-p3kt, 864-8tqv]
+    events:
+      - {type: implemented, ts: "2026-11-24T10:35:30Z", host: yoga, summary: "implemented on work/2296-pn45"}

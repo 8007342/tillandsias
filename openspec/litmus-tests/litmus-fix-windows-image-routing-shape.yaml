@@ -13,7 +13,8 @@ critical_path:
   - step: "verify image routing matrix in the build helper"
     command: "cargo test -p tillandsias-core image_builder::tests::build_routing_uses_type_specific_containerfiles -- --exact"
     timeout_ms: 30000
-    expected_behavior: "build_routing_uses_type_specific_containerfiles"
+    assert_exit: 0
+    assert_output_matches: "^test .*::build_routing_uses_type_specific_containerfiles [.]{3} ok$"
 
 observability:
   traces:

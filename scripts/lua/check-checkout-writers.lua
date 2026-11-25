@@ -40,7 +40,9 @@
 --
 -- Verdicts:
 --   note:checkout-writer:<path>:kept-in-checkout:<reason>                    one per writer
---   ok:checkout-writers:scanned=<n>:writers=<w>:unsafe=0:ignored-scratch=<i>:fixture-scratch=<f> exit 0
+--   ok:checkout-writers:scanned=<sh>:lua=<n>:writers=<w>:unsafe=0:ignored-scratch=<i>:fixture-scratch=<f>:lua-unresolved=<u> exit 0
+--   violation:checkout-writers:unsafe:<path>:lua-fixture-writes-the-checkout-move-it-to-scratch   exit 1
+--   violation:checkout-writers:unsafe:<path>:lua-writer-declared-without-artifacts   exit 1
 --   violation:checkout-writers:unsafe:<path>:fixture-scratch-without-exit-trap    exit 1
 --   violation:checkout-writers:unsafe:<path>:<why>                           exit 1
 --   violation:checkout-writers:stale-declared:<path>                         exit 1
@@ -61,11 +63,12 @@ if not ok_walk or #files == 0 then
 end
 table.sort(files)
 
-local declared = {}
+local declared, swept = {}, {}
 for _, l in ipairs(lines(read(DECLARED))) do
     local f, why = l:match("^%s*(%S+)%s+(%S.*)$")
     -- 1630-dwab: an optional `artifacts=<basename-glob>` token names what the
     -- writer leaves, for the preflight door to sweep when it KILLs the writer.
+    if why and f and why:find("^artifacts=%S") then swept[f] = true end
     if why then why = why:gsub("^artifacts=%S+%s*", "") end
     if f and not f:find("^#") and why ~= "" then declared[f] = why end
 end
@@ -166,6 +169,75 @@ for _, f in ipairs(files) do
         end
     end
 end
+-- ── ORDER 2287-mg7v: THE LUA POPULATION ────────────────────────────────────
+-- Until 2026-11-24 only .sh was walked, so the scan said writers=0 while three Lua
+-- fixtures wrote scripts into the live checkout (#1464 was evicted twice on one).
+-- Every fs.write( in a test-*.lua is judged by the PREFIX of its path: a literal, or
+-- a local followed through its assignments. target/ and .tillandsias/fixture-scratch/<x> are safe; a kit
+-- scratch dir (`X.rel`) is safe, because common.fixture roots it under target/; any
+-- other repo-relative literal is a WRITER. A prefix that cannot be followed (a function
+-- parameter, a call) is UNRESOLVED: counted, never read as safe, not refused.
+-- Lua runs no trap, so a Lua writer cannot have 1587-qqzs's shape. It may stay only when
+-- DECLARED with an artifacts= glob, which is what the door sweeps when it KILLs the writer.
+local function lua_assigns(src)
+    local a = {}
+    for name, expr in ("\n" .. src):gmatch("\n%s*local%s+([%a_][%w_]*)%s*=%s*([^\n]*)") do
+        a[name] = a[name] or {}; a[name][#a[name] + 1] = expr
+    end
+    for name, expr in ("\n" .. src):gmatch("\n%s*([%a_][%w_]*)%s*=%s*([^\n=][^\n]*)") do
+        a[name] = a[name] or {}; a[name][#a[name] + 1] = expr
+    end
+    return a
+end
+local function lua_prefix(expr, assigns, depth)
+    expr = (expr or ""):gsub("^%s+", ""):gsub("^%(", "")
+    if depth > 6 then return "unresolved" end
+    local lit = expr:match('^"([^"]*)') or expr:match("^'([^']*)")
+    if lit then
+        if lit:find("^target/") or lit:find("^%.tillandsias/fixture%-scratch/[^/]") then return "safe" end
+        if lit == "" then return "unresolved" end
+        return "writer"
+    end
+    if expr:match("^[%a_][%w_]*%.rel%f[^%w_]") then return "safe" end
+    local name, after = expr:match("^([%a_][%w_]*)(.?)")
+    if not name or after == "(" or after == ":" or after == "." or after == "[" then
+        -- `name .. x` has a space or a dot pair after it; a field or a call does not resolve
+        if not (name and expr:match("^[%a_][%w_]*%s*%.%.")) then return "unresolved" end
+    end
+    local got = "unresolved"
+    for _, e in ipairs(assigns[name] or {}) do
+        local r = lua_prefix(e, assigns, depth + 1)
+        if r == "writer" then return "writer" end
+        if r == "safe" then got = "safe" end
+    end
+    return got
+end
+local lua_n, lua_unresolved, unres = 0, 0, {}
+local ok_lua, lua_files = pcall(fs.walk, SCAN_DIR, { suffix = ".lua" })
+for _, f in ipairs(ok_lua and lua_files or {}) do
+    if f:match("[^/]*$"):find("^test%-") then
+        lua_n = lua_n + 1
+        local src, unresolved, writes = {}, false, false
+        for _, l in ipairs(lines(read(f))) do if not l:match("^%s*%-%-") then src[#src + 1] = l end end
+        -- an embedded shell or YAML text is data: its `d=...` is not a Lua assignment
+        local body = table.concat(src, "\n"):gsub("%[(=*)%[.-%]%1%]", "[[]]")
+        local assigns = lua_assigns(body)
+        for arg1 in body:gmatch("%f[%w_]fs%.write%(([^\n]*)") do
+            local r = lua_prefix(arg1, assigns, 0)
+            if r == "writer" then writes = true elseif r == "unresolved" then unresolved = true end
+        end
+        if writes then
+            writers = writers + 1
+            seen[f] = true
+            if declared[f] and swept[f] then
+                notes[#notes + 1] = "note:checkout-writer:" .. f .. ":kept-in-checkout:" .. declared[f]
+            else
+                violations[#violations + 1] = "violation:checkout-writers:unsafe:" .. f .. (declared[f]
+                    and ":lua-writer-declared-without-artifacts" or ":lua-fixture-writes-the-checkout-move-it-to-scratch")
+            end
+        elseif unresolved then lua_unresolved = lua_unresolved + 1; unres[#unres + 1] = f:match("[^/]*$") end
+    end
+end
 local dpaths = {}
 for f in pairs(declared) do dpaths[#dpaths + 1] = f end
 table.sort(dpaths)
@@ -174,6 +246,7 @@ for _, f in ipairs(dpaths) do
 end
 
 for _, n in ipairs(notes) do out.line(n) end
+if #unres > 0 then out.line("note:checkout-writers:lua-unresolved:" .. table.concat(unres, " ")) end
 if #violations > 0 then
     for i = 1, #violations - 1 do out.line(violations[i]) end
     log.raw("[check-checkout-writers] scratch belongs in ${TMPDIR:-/tmp}: the preflight door deletes each guard's TMPDIR")
@@ -183,5 +256,5 @@ if #violations > 0 then
     log.raw("  1587-qqzs's shape: trap cleanup EXIT; a TERM/INT/HUP handler that exits; long steps as `cmd & wait $!`.")
     verdict.emit(violations[#violations], 1)
 end
-verdict.ok("checkout-writers", "scanned=" .. #files, "writers=" .. writers, "unsafe=0",
-    "ignored-scratch=" .. ignored_n, "fixture-scratch=" .. fs_n)
+verdict.ok("checkout-writers", "scanned=" .. #files, "lua=" .. lua_n, "writers=" .. writers, "unsafe=0",
+    "ignored-scratch=" .. ignored_n, "fixture-scratch=" .. fs_n, "lua-unresolved=" .. lua_unresolved)

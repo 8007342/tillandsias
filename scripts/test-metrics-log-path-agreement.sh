@@ -486,7 +486,7 @@ rm -rf "$SD"
 # Found by measurement after 1096-p3tn first landed, and it was a real
 # regression: the guard sat before the subcommand branches, so a TIMING-log
 # split refused an unrelated --emit-flow. With the /tmp debris every host
-# carried that night, test-cycle-flow-emit-idempotency.sh failed 12 scenarios.
+# carried that night, test-cycle-flow-emit-idempotency.lua failed 12 scenarios.
 # The emit paths are best-effort by contract — they must never take down the
 # step they measure — and --emit-flow does not even read the timing log. The
 # split matters when numbers are PUBLISHED, not when a record is appended.

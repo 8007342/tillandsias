@@ -203,7 +203,7 @@ In every hourly pass, the orchestrator MUST actively analyze concurrent work and
 
 **Establish blast radius before broadcasting a land-blocker.** Where a failure
 was found is not where it bites: a guard shipped in 68d404947 failed
-`test-cycle-flow-emit-idempotency.sh`, and the coordinator relayed a
+`test-cycle-flow-emit-idempotency.lua`, and the coordinator relayed a
 land-blocker reading to six hosts before checking that the fixture's only
 caller is a litmus test outside both `--check` and the land path — no host
 was actually blocked, and the alarm had to be un-told within the hour. Before

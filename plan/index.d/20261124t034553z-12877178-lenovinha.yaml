@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: move-inline-check-blocks-to-gate-step-files-batch-4
+    field: status
+    value: completed
+    ts: "2026-11-24T03:45:53Z"
+    host: lenovinha
+
+events:
+  - packet_id: move-inline-check-blocks-to-gate-step-files-batch-4
+    event:
+      type: completed
+      ts: "2026-11-24T03:45:53Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: land:02f7e1ba541095e5c19f05f50da07f85c1b8a2b1
+  - packet_id: move-inline-check-blocks-to-gate-step-files-batch-4
+    event:
+      type: note
+      ts: "2026-11-24T03:45:53Z"
+      host: lenovinha
+      summary: |-
+        landed as PR #1438

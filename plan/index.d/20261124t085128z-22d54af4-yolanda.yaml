@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: four-gate-fixtures-red-under-native-msys
+    field: status
+    value: completed
+    ts: "2026-11-24T08:51:28Z"
+    host: yolanda
+
+events:
+  - packet_id: four-gate-fixtures-red-under-native-msys
+    event:
+      type: completed
+      ts: "2026-11-24T08:51:28Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: landed 7b4907deefd6ef9fe5ddcaac52f6e566525035c4 (PR 1453)
+  - packet_id: four-gate-fixtures-red-under-native-msys
+    event:
+      type: note
+      ts: "2026-11-24T08:51:28Z"
+      host: yolanda
+      summary: |-
+        Verified on origin/linux-next by content: the three fixture fixes and the msys records on steps 746, 754, 756, 758 are there. The crate-graph separator fix landed separately as bbb650ffd.

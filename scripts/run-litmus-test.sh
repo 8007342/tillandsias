@@ -188,7 +188,8 @@ if [[ "\${args[0]:-}" == "run" || "\${args[0]:-}" == "create" ]]; then
     fi
 fi
 
-mkdir -p "\$(dirname "\$calls_file")"
+case "\$calls_file" in /*/*) _dir="\${calls_file%/*}" ;; *) _dir="\$(dirname "\$calls_file")" ;; esac
+[ -d "\$_dir" ] || mkdir -p "\$_dir"
 {
     printf '%s\t' "\$(date -u +%FT%TZ)"
     printf 'podman'
@@ -339,6 +340,11 @@ mkdir -p "$LITMUS_STEP_STDERR_DIR" 2>/dev/null || true
 LITMUS_YQ_DEGRADED_LOG="$LITMUS_RUNTIME_DIR/yq-degraded-steps"
 LITMUS_YQ_DEGRADED=0
 : >"$LITMUS_YQ_DEGRADED_LOG" 2>/dev/null || true
+# ORDER 2309-fa7q, CENSUS ONLY: no verdict reads this. One entry per step whose
+# success_pattern matched while its command exited nonzero. (An expected_behavior
+# step like that FAILS.) In memory, because a nested runner in the same runtime
+# dir would truncate a file.
+NONZERO_TEXT_MATCHES=()
 if ! command -v yq &>/dev/null && [[ ! -x "$LITMUS_RUNTIME_DIR/bin/yq" ]]; then
     LITMUS_YQ_DEGRADED=1
     printf 'warn:litmus-degraded-no-yq — yq is not on PATH and could not be provisioned from the tillandsias-builder toolbox. Steps whose commands call yq will fail or return empty. (The runner'\''s OWN metadata reads use the compiled tillandsias-plan reader when one resolves — order 746-htj9 — and fall back to grep only without it.) Install yq on the host, or create the toolbox (see scripts/with-tillandsias-builder.sh), before trusting a verdict from this run.\n' >&2
@@ -402,7 +408,7 @@ fi
 # TILLANDSIAS_LITMUS_ALLOW_NO_PLAN_BIN=1 (the pre-1419 behaviour).
 # ONLY ON PATHS THAT EXECUTE TESTS: --parse-only and --list never run a step,
 # so they must not be gated on a binary they do not use. It first ran at top
-# level and refused test-litmus-item-opener-refused.sh ARM 3, whose mutant copy
+# level and refused test-litmus-item-opener-refused ARM 3, whose mutant copy
 # of this runner does --parse-only from a $TMP root with no binary (land57).
 _litmus_require_plan_binary() {
     [[ "${TILLANDSIAS_LITMUS_ALLOW_NO_PLAN_BIN:-}" != "1" ]] || return 0
@@ -2130,7 +2136,7 @@ run_litmus_test_file() {
             if [[ "$_lt_retried" -eq 0 && "${LITMUS_TIMEOUT_RETRY:-1}" == 1 \
                   && ( "$exit_code" -eq 124 || "$exit_code" -eq 137 ) && ! -s "$step_capture" ]]; then
                 _lt_retried=1
-                printf ' flaky:%s#%s timed out after %ss with no output (rc=%s); re-running it once\n' \
+                printf ' flaky:%s#%s timed out after %ss with no stdout (rc=%s); re-running it once\n' \
                     "$(basename "${test_file%.yaml}")" "$step_index" "$timeout_sec" "$exit_code" >&2
                 : >"$step_capture"; : >"$step_errcap"
                 continue
@@ -2363,11 +2369,23 @@ run_litmus_test_file() {
                 printf '%s\n' "         note: this expectation contains (a|b) alternation, but expectations are matched as a LITERAL SUBSTRING, not a regex — rewrite it as the longest literal all accepted outputs share (868-p8xi)" >&2
             fi
             return 1
+        elif [[ -n "$step_expected" && "$exit_code" -ne 0 ]]; then
+            # ORDER 2309-fa7q. The text matched and the command failed: a grep
+            # chain that broke after printing it, or a check whose FAIL line
+            # came after its ok line. A step that means to exit nonzero says so.
+            printf ' %b[FAIL]%b rc=%s\n' "${RED}" "${NC}" "$exit_code" >&2
+            printf '%s\n' "         the expected text matched but the command exited ${exit_code}; if that is meant, declare assert_exit: ${exit_code} and assert_output_contains (2309-fa7q)" >&2
+            _lt_print_output
+            return 1
         fi
 
         # Step matched expected behavior — surface success only after validation.
         _t_pass=$((_t_pass+1))
         printf ' %b[OK]%b\n' "${GREEN}" "${NC}" >&2
+        # 2309-fa7q: a success_pattern is logged, never judged by its exit.
+        if [[ -z "$step_structured" && "$exit_code" -ne 0 && -n "$step_success_pattern" ]]; then
+            NONZERO_TEXT_MATCHES+=("$test_name#$step_index rc=$exit_code success_pattern")
+        fi
     done
 
     for failure in "${failure_criteria[@]}"; do
@@ -2725,6 +2743,14 @@ print_summary() {
     # would make the test line's `skipped=` incommensurable with the step line's.
     # So: `skipped=` is VERDICT skips only, and `not-run=` is what was never
     # attempted. Neither is in the rate's denominator, and neither ever was.
+    # 2309-fa7q: the census, printed on every run that has a member.
+    if [[ ${#NONZERO_TEXT_MATCHES[@]} -gt 0 ]]; then
+        printf 'Nonzero text matches (2309-fa7q, log only): %d\n' "${#NONZERO_TEXT_MATCHES[@]}" >&2
+        local _nz
+        for _nz in ${NONZERO_TEXT_MATCHES[@]+"${NONZERO_TEXT_MATCHES[@]}"}; do
+            printf 'census:nonzero-text-match %s\n' "$_nz" >&2
+        done
+    fi
     # 2093-gfak: a quarantine is a known, cited, UNPROVEN property. Name each
     # one so a green summary cannot hide it.
     if [[ ${#QUARANTINED[@]} -gt 0 ]]; then

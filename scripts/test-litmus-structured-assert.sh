@@ -69,16 +69,19 @@ run_with() { # <runner> -> rc
     bash "$1" znbn-probe >/dev/null 2>&1
 }
 
-# The pre-fix control: HEAD's adjudication, this branch's discovery.
+# The pre-fix control: HEAD's adjudication, this branch's discovery, and no exit
+# rule (2309-fa7q): HEAD carries that rule, and the case's command exits 3.
 git show HEAD:scripts/run-litmus-test.sh \
   | sed 's|^readonly LITMUS_BINDINGS="${PROJECT_ROOT}/openspec/litmus-bindings.yaml"|readonly LITMUS_BINDINGS="${TILLANDSIAS_LITMUS_BINDINGS:-${PROJECT_ROOT}/openspec/litmus-bindings.yaml}"|; s|^readonly LITMUS_TESTS_DIR="${PROJECT_ROOT}/openspec/litmus-tests"|readonly LITMUS_TESTS_DIR="${TILLANDSIAS_LITMUS_TESTS_DIR:-${PROJECT_ROOT}/openspec/litmus-tests}"|' \
-  | sed 's|\$(dirname "\${BASH_SOURCE\[0\]}")|'"$ROOT"'/scripts|g' > "$PREFIX_RUNNER" 2>/dev/null
+  | sed 's|\$(dirname "\${BASH_SOURCE\[0\]}")|'"$ROOT"'/scripts|g; s|elif \[\[ -n "$step_expected" && "$exit_code" -ne 0 \]\]; then|elif false; then # no-exit-rule|' > "$PREFIX_RUNNER" 2>/dev/null
 
 # ── ARM 0: the control is genuinely equalized ───────────────────────────────
 # Asserted BEFORE any verdict is read from it. An unequalized control cannot
 # find the suite and returns 1 for a reason unrelated to adjudication.
 if grep -q 'BASH_SOURCE' "$PREFIX_RUNNER" 2>/dev/null; then
     bad "ARM 0: the control still resolves a path from its own location (BASH_SOURCE), so it cannot run from \$TMP; pin the new lookup"
+elif [ "$(grep -c '# no-exit-rule$' "$PREFIX_RUNNER")" -ne 1 ]; then
+    bad "ARM 0: the control still carries the 2309-fa7q exit rule (its line moved); cut it again"
 elif [ -s "$PREFIX_RUNNER" ] && [ "$(grep -c 'TILLANDSIAS_LITMUS_' "$PREFIX_RUNNER")" -ge 2 ]; then
     write_case "hello" ""
     if run_with "$PREFIX_RUNNER"; then
@@ -157,14 +160,19 @@ else
     bad "ARM 6c: a silent step passed assert_output_nonempty — silence must be the failure"
 fi
 
-# ── ARM 6: a legacy step is untouched ───────────────────────────────────────
-# The regression guard. Declaring no assert_* must leave the old path exactly
-# as it was, which ARM 1's literal case already exercised on the control.
+# ── ARM 6: a step with no assert_* matches text AND needs exit 0 (2309-fa7q) ─
+# The case's command prints hello and exits 3: until 2309-fa7q that passed.
 write_case "hello" ""
-if run_with "$RUNNER"; then
-    ok "ARM 6: a step declaring no assert_* still adjudicates by the legacy path"
+if ! run_with "$RUNNER"; then
+    ok "ARM 6: matching text at exit 3 fails without a declared exit"
 else
-    bad "ARM 6: a legacy step changed verdict under the new runner"
+    bad "ARM 6: matching text at exit 3 passed without a declared exit"
+fi
+sed -i.bak 's|command: "echo hello; exit 3"|command: "echo hello"|' "$TMP/lt/litmus-znbn-probe.yaml"
+if run_with "$RUNNER"; then
+    ok "ARM 6d: the same step at exit 0 adjudicates by its text"
+else
+    bad "ARM 6d: matching text at exit 0 failed"
 fi
 
 printf '\n'

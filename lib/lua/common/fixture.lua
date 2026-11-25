@@ -116,6 +116,15 @@ function M.plan_binary()
     return M.native_path(p)
 end
 
+-- ORDER 2253-j2at. An absolute path in either spelling the fleet produces:
+-- /x on Linux, macOS and MSYS, and a drive path C:/x or C:\x on native
+-- Windows. A check written `p:sub(1, 1) == "/"` reads every Windows path as
+-- relative (macuahuitl relayed: the Mac's attest-smoke hit the same bug).
+function M.is_abs(p)
+    if type(p) ~= "string" or p == "" then return false end
+    return p:sub(1, 1) == "/" or p:find("^%a:[/\\]") ~= nil
+end
+
 local SCRATCH = "target/plan-scratch"
 
 -- ORDER 2158-vrb7. scratch.mkdir returns a Windows verbatim path (\\?\C:\...).
@@ -148,7 +157,12 @@ function T:arm(name, cond, got)
         self.passed = self.passed + 1
         out.line("ok:   " .. name)
     else
-        out.line("FAIL: " .. name .. " — got: " .. tostring(got))
+        -- ORDER 2322-a756: a diagnostic cut at a byte count can end inside a UTF-8 character,
+        -- and out.line refuses it: the arm's failure became a script error naming no arm.
+        local line = "FAIL: " .. name .. " — got: " .. tostring(got)
+        if not pcall(out.line, line) then
+            out.line("FAIL: " .. name .. " — got: " .. (tostring(got):gsub("[\128-\255]", "?")))
+        end
         self.failed[#self.failed + 1] = name
     end
     return cond
@@ -177,10 +191,14 @@ function T:short_scratch()
 end
 
 -- proc.run with argv given positionally; named fields pass through.
+-- ORDER 2305-zm8j. proc.run hands a child every TILLANDSIAS_* name and
+-- CARGO_TARGET_DIR, and a gate exports both. A fixture whose subject reads one
+-- drops it: env_unset = { "TILLANDSIAS_*", "CARGO_TARGET_DIR" } (the call's own
+-- env still wins).
 function T:run(spec)
     local argv = {}
     for i, a in ipairs(spec) do argv[i] = a end
-    return proc.run{ argv = argv, cwd = spec.cwd, env = spec.env, stdin = spec.stdin,
+    return proc.run{ argv = argv, cwd = spec.cwd, env = spec.env, env_unset = spec.env_unset, stdin = spec.stdin,
         timeout_ms = spec.timeout_ms or 120000 }
 end
 

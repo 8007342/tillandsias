@@ -6,7 +6,7 @@
 #
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking the hash sha256 / time now verbs are portable and millisecond-true (1375-8g5t)"
-STEP_SCRIPT="scripts/test-plan-hash-time-verbs.sh"
+STEP_LUA="scripts/lua/test-plan-hash-time-verbs.lua"
 STEP_ERROR="hash sha256 or time now diverges, or the verbs are absent (1375-8g5t)"
 STEP_OK="hash sha256 matches the vector and the host tool; time now --ms advances in milliseconds"
 STEP_SKIP_EXIT=3
@@ -15,4 +15,4 @@ STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin PASS: plan-hash-time
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/plan-binary-probe.sh scripts/test-plan-hash-time-verbs.sh"
+STEP_READS="scripts/lua/test-plan-hash-time-verbs.lua"

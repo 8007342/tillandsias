@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: image-build-convergence-step1-is-slow-not-hung-on-msys
+    field: status
+    value: completed
+    ts: "2026-11-24T15:06:47Z"
+    host: yolanda
+
+events:
+  - packet_id: image-build-convergence-step1-is-slow-not-hung-on-msys
+    event:
+      type: completed
+      ts: "2026-11-24T15:06:47Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: 0253b2760
+  - packet_id: image-build-convergence-step1-is-slow-not-hung-on-msys
+    event:
+      type: note
+      ts: "2026-11-24T15:06:47Z"
+      host: yolanda
+      summary: |-
+        #1492 landed; step 1 passes inside 30 s in three runs from less work, the cost is named, the runner says no stdout, the sleeping stub is still red

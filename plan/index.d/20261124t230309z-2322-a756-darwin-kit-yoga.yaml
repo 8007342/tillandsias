@@ -1,0 +1,4 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: litmus-runner-and-ledger-ts-fixtures-ported-to-lua
+    event: {type: note, ts: "2026-11-24T23:03:09Z", host: yoga, summary: "darwin (macbookair, relayed) at 3ade6204d: ok:common-fixture:14 arms, arm 14 ok; msys pending"}
