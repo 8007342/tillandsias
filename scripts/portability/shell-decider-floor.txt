@@ -361,7 +361,6 @@ scripts/test-stranded-plan-writes.sh
 scripts/test-subdomain-routing.sh
 scripts/test-sync-image-cheatsheets-for-commit.sh
 scripts/test-timing-clock-resolution.sh
-scripts/test-timing-record-carries-reproduced.sh
 scripts/test-timing-record-carries-root.sh
 scripts/test-token-instrument.sh
 scripts/test-tool-dispatch-lib.sh

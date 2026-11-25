@@ -732,7 +732,6 @@ scripts scripts/test-support/litmus-fake-podman-guard.sh 1
 scripts scripts/test-support/podman-mock.sh 25
 scripts scripts/test-support/secret-tool-fake.sh 1
 scripts scripts/test-timing-clock-resolution.sh 2
-scripts scripts/test-timing-record-carries-reproduced.sh 2
 scripts scripts/test-timing-record-carries-root.sh 3
 scripts scripts/test-token-instrument.sh 2
 scripts scripts/test-tool-dispatch-lib.sh 18
