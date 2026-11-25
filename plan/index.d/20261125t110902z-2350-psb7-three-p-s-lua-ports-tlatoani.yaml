@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-25. p-s port range, batch 6 (macuahuitl: batch 6).
+packets:
+- packet_id: port-p-s-fixtures-batch-6
+  order: 2350-psb7
+  status: implemented
+  kind: chore
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [shell-to-lua, macos, fixtures, portability]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 2
+  title: 'Three whole-file shell-to-Lua ports from the p-s range: test-salvage-preserves-exec-bits, test-session-tokens, test-smoke-skill-reset-env-matches-policy'
+  ports: [scripts/test-salvage-preserves-exec-bits.sh, scripts/test-session-tokens.sh, scripts/test-smoke-skill-reset-env-matches-policy.sh]
+  context: >-
+    Each port keeps its arms and moves to the common.fixture grammar. The salvage restore block is still cut from the
+    tool and run in a bash child; session-tokens drives session-tokens.sh and cycle-metrics.sh with every metrics log
+    pinned; the smoke-skill port extracts the prefix pair from each SKILL.md and asks the plan binary's run door and
+    bridge, with a stub tillandsias, as before. Callers: gate steps 421 and 271 (STEP_LUA, fresh darwin second-regime
+    lines), litmus smoke-skill-reset-env-matches-policy (no pipe; the parse step went with the .sh), and the
+    agent-observability methodology pointer. The p-s studio-puck/decap/tina fixtures stay with a podman host.
+  exit_criteria:
+  - 'Each .lua gives the same verdict as its .sh on the trunk tree, and the same red arms under a mutant.'
+  - 'Every caller runs the .lua; the three .sh files and their floor lines are gone.'
+  verifiable_closure: 'Mutant parity in the PR; gate steps 421 and 271 and the litmus green on darwin.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the mutant parity is the deliverable.'
+  next_action: >-
+    Implemented. Darwin (bash 3.2.57): ok:salvage-exec-bits:4 arms, ok:session-tokens:5 arms,
+    ok:smoke-skill-reset-env:9 arms. Four mutants, each red on the same arms in .sh and .lua.
+  provenance: 'tlatoanis-macbook-air 2026-11-25, on macuahuitl-fedora''s direction.'
+  related: [2340-psb5, 2348-psb6]
+  events:
+  - {type: filed, ts: '2026-11-25T11:09:02Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}
