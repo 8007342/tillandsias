@@ -151,7 +151,6 @@ scripts/test-gate-memory-wsl2-guest.sh
 scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh
 scripts/test-gate-stamp-memoization.sh
 scripts/test-gate-stamp-names-content-movers.sh
-scripts/test-gate-stamp-scope.sh
 scripts/test-gate-stamp.sh
 scripts/test-gate-step-append-no-conflict.sh
 scripts/test-gate-step-prefix-allocation.sh
