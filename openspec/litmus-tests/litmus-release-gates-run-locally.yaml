@@ -137,9 +137,9 @@ critical_path:
   # anything, and the stamp must survive the COMMIT of those deletions, which
   # is where the first attempt at this fix broke.
   - step: "the stamp accepts a compaction-shaped tree and still refuses a modified one"
-    command: "bash scripts/test-gate-stamp.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-gate-stamp.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "PASS: gate-stamp ("
+    expected_behavior: "ok:gate-stamp:16 arms"
 
   # Order 765-dt8h. A fresh stamp proves the gate ran against these bytes; it
   # does NOT prove the gate validated what is being pushed. Every scoping
