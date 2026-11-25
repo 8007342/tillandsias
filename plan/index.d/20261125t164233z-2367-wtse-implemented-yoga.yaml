@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: nine-a-c-shell-fixtures-ported-to-lua-batch-5
+    field: status
+    value: implemented
+    ts: "2026-11-25T16:42:33Z"
+    host: yoga
+events:
+  - packet_id: nine-a-c-shell-fixtures-ported-to-lua-batch-5
+    event: {type: implemented, ts: "2026-11-25T16:42:33Z", host: yoga, summary: "implemented on work/2367-wtse"}

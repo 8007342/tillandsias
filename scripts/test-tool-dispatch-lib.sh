@@ -115,7 +115,7 @@ ok "curl-piped installer and toolbox bootstrap wrappers stay self-contained"
 # PASS -> FAIL because two substituted lines were inside a heredoc emitting a
 # stub `opencode`; in the stub $JQ is unset, so the pipeline ran with an empty
 # command and the rollback assertion failed with no hint as to why.
-# test-bench-prompt-uniqueness.sh had the same shape in a generated `curl` stub —
+# test-bench-prompt-uniqueness.lua had the same shape in a generated `curl` stub —
 # and there the heredoc is UNQUOTED, so $JQ would expand at generation time and
 # bake a literal `toolbox run --container tillandsias-builder jq` into the stub,
 # which breaks on exactly the jq-less host the sweep exists to serve. Wrong in

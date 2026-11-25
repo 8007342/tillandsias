@@ -5175,7 +5175,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # which would retire 873-zcim while every positive case stayed green.
 
     _step "Checking the checkout-lock attested-release fixture (899-q9di)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-cycle-lock-attested-release.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-cycle-lock-attested-release.lua" 2>&1; then
         _error "the checkout-lock attested-release fixture regressed — either a finished cycle strands its lock again, or the lock stopped refusing concurrent agents"
         exit 1
     fi
@@ -5551,7 +5551,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # which never advances in the parent — is invisible to any test that calls
     # the helper directly.
     _step "Checking bench prompt uniqueness (858-ihcb)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-bench-prompt-uniqueness.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-bench-prompt-uniqueness.lua" 2>&1; then
         _error "bench-inference-floor.sh can reach a measured call with a reused prompt — prefill numbers would be cache hits"
         exit 1
     fi

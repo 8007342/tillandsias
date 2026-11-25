@@ -146,7 +146,7 @@ fi
 # ORDERING: `kill -0` stays first and answers alone on linux and darwin, so
 # this is a no-op off Windows by construction rather than by test — which is
 # also why it cannot disturb the green arms of
-# scripts/test-cycle-lock-attested-release.sh.
+# scripts/test-cycle-lock-attested-release.lua.
 pid_is_live() {
     local p="${1:-}"
     [ -n "$p" ] || return 1
@@ -317,7 +317,7 @@ case "$cmd" in
         # empty. CLAUDE_PID is a verified anchor since 1091-zh6d, so testing
         # the variable would refuse the harness path that resolves correctly
         # and break the CLAUDE_PID-only control in
-        # test-cycle-lock-attested-release.sh. Only the invoking-shell
+        # test-cycle-lock-attested-release.lua. Only the invoking-shell
         # fallback is refused; explicit and harness-env still acquire, and a
         # dead EXPLICIT anchor keeps its existing warn.
         case "$anchor_source" in
