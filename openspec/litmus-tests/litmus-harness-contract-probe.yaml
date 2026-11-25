@@ -25,13 +25,13 @@ description: >
 
 preconditions:
   - workspace contains images/default/lib-common.sh
-  - workspace contains scripts/test-harness-contract-probe.sh
+  - workspace contains scripts/lua/test-harness-contract-probe.lua
 
 critical_path:
   - step: "contract probe detects a missing flag, names it, and tolerates ambiguous help"
-    command: "scripts/test-harness-contract-probe.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-harness-contract-probe.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "PASS: harness contract probe fixture (order 439)"
+    expected_behavior: "ok:harness-contract-probe:7 arms"
 
   - step: "harness_probe checks contracts, not only liveness"
     command: "grep -Fq 'harness_contract_ok' images/default/lib-common.sh && sed -n '/^harness_probe()/,/^}/p' images/default/lib-common.sh | grep -Fq 'harness_contract_ok' && echo 'ok: probe is contract-aware'"
