@@ -280,7 +280,6 @@ scripts/test-portability-idioms.sh
 scripts/test-pre-push-empty-ref-list.sh
 scripts/test-pre-push-honours-a-live-freeze.sh
 scripts/test-pre-push-linux-next-merged.sh
-scripts/test-pre-push-main-branch-affordance.sh
 scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh
 scripts/test-pre-push-version-guard-sigpipe.sh
 scripts/test-pre-push-version-guard.sh
@@ -329,7 +328,6 @@ scripts/test-set-field-prose-guard.sh
 scripts/test-set-field-refuses-unknown-flags.sh
 scripts/test-set-field-yaml-shapes.sh
 scripts/test-shipped-diagnostic-tool-dispatch.sh
-scripts/test-sidecar-arch-derivation.sh
 scripts/test-sidecar-staleness-stamp.sh
 scripts/test-sigpipe-guard-sees-paths-and-continuations.sh
 scripts/test-sigpipe-verdict-measured.sh
@@ -352,7 +350,6 @@ scripts/test-ssh-lane-sidecar.sh
 scripts/test-status-channel-absent-is-first-class.sh
 scripts/test-stranded-plan-writes.sh
 scripts/test-subdomain-routing.sh
-scripts/test-sync-image-cheatsheets-for-commit.sh
 scripts/test-timing-clock-resolution.sh
 scripts/test-timing-record-carries-root.sh
 scripts/test-token-instrument.sh

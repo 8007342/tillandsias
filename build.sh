@@ -5398,7 +5398,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # commit-time guard re-syncs into the same commit; this pins it, including
     # the mutation arm that proves the drift is real without it.
     _step "Checking the commit-time cheatsheet image sync (448)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-sync-image-cheatsheets-for-commit.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-sync-image-cheatsheets-for-commit.lua" 2>&1; then
         _error "the commit-time cheatsheet sync regressed — an authored cheatsheet can again strand every other host's push"
         exit 1
     fi

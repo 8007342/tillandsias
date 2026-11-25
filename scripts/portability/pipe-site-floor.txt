@@ -709,7 +709,6 @@ scripts scripts/test-set-field-prose-guard.sh 1
 scripts scripts/test-set-field-refuses-unknown-flags.sh 8
 scripts scripts/test-set-field-yaml-shapes.sh 1
 scripts scripts/test-shipped-diagnostic-tool-dispatch.sh 4
-scripts scripts/test-sidecar-arch-derivation.sh 1
 scripts scripts/test-sidecar-staleness-stamp.sh 2
 scripts scripts/test-sigpipe-verdict-measured.sh 1
 scripts scripts/test-sigpipe-verdict-pipelines.sh 3
