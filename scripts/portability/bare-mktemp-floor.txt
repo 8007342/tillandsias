@@ -67,14 +67,12 @@ scripts/test-default-vault-cli-security.sh 1
 scripts/test-e2e-preflight-live-runtime.sh 2
 scripts/test-enclave-network-internal-discovery.sh 2
 scripts/test-exec-bits-guard-end-to-end.sh 1
-scripts/test-expert-capability-behaviour-skew.sh 1
 scripts/test-expire-claims-list-live-rows.sh 1
 scripts/test-expire-claims-write-is-opt-in.sh 1
 scripts/test-fake-cloudflare.sh 1
 scripts/test-fixture-git-dir-scope.sh 1
 scripts/test-fleet-msg-store.sh 1
 scripts/test-forge-gitconfig-bidirectional-quarantine.sh 1
-scripts/test-forge-launch-openspec-init-clean.sh 1
 scripts/test-forge-runtime-ca-trust.sh 1
 scripts/test-forge-seeds-from-salvage-ref.sh 1
 scripts/test-forge-standard-gitconfig-path.sh 1
@@ -96,7 +94,6 @@ scripts/test-git-mirror-vault-agent-auto-auth.sh 1
 scripts/test-groundtruth-corpus-declaration.sh 3
 scripts/test-guest-binaries-nix-lane.sh 1
 scripts/test-guest-staging-refuses-a-wireless-binary.sh 2
-scripts/test-hardware-fingerprint.sh 4
 scripts/test-harness-byte-cheap.sh 1
 scripts/test-harness-contract-probe.sh 1
 scripts/test-harness-rollback.sh 1

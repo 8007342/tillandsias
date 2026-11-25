@@ -583,10 +583,8 @@ scripts scripts/test-fragment-batch-never-collapses-verdicts.sh 1
 scripts scripts/test-fragment-events-land-callsite.sh 8
 scripts scripts/test-fragment-status-loss.sh 7
 scripts scripts/test-freshness-regime-budget.sh 22
-scripts scripts/test-gate-divergence-is-declared.sh 6
 scripts scripts/test-gate-memory-refusal.sh 1
 scripts scripts/test-gate-stamp-names-content-movers.sh 5
-scripts scripts/test-gate-stamp-portable-digest.sh 1
 scripts scripts/test-gate-stamp-scope.sh 9
 scripts scripts/test-gate-step-append-no-conflict.sh 11
 scripts scripts/test-gate-step-prefix-allocation.sh 8
@@ -600,7 +598,6 @@ scripts scripts/test-git-mirror-vault-agent-auto-auth.sh 18
 scripts scripts/test-github-token-auto-rotation.sh 1
 scripts scripts/test-groundtruth-corpus-declaration.sh 8
 scripts scripts/test-guest-binaries-nix-lane.sh 9
-scripts scripts/test-hardware-fingerprint.sh 1
 scripts scripts/test-harness-affinity-selection.sh 10
 scripts scripts/test-harness-byte-cheap.sh 1
 scripts scripts/test-harness-contract-probe.sh 1
@@ -734,8 +731,6 @@ scripts scripts/test-tray-asset-placeholder-refused.sh 1
 scripts scripts/test-tray-surface-parity-gate.sh 1
 scripts scripts/test-unrunnable-platform-arms.sh 9
 scripts scripts/test-vault-shutdown-forwards-sigterm.sh 2
-scripts scripts/test-wsl-exec-channel-carries-exit-status.sh 2
-scripts scripts/test-wt-reparse-scan.sh 2
 scripts scripts/tillandsias-cycle-driver.sh 2
 scripts scripts/tillandsias-host-push-cert.sh 2
 scripts scripts/timing-log.sh 4
