@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: never-run-fixtures-run-in-the-gate
+    field: status
+    value: completed
+    ts: "2026-11-25T21:54:27Z"
+    host: yolanda
+
+events:
+  - packet_id: never-run-fixtures-run-in-the-gate
+    event:
+      type: completed
+      ts: "2026-11-25T21:54:27Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: PR #1574 merged to linux-next as 6d33f265b6b4e9c56ad63b86ced8afdd99dcd2f4
+  - packet_id: never-run-fixtures-run-in-the-gate
+    event:
+      type: note
+      ts: "2026-11-25T21:54:27Z"
+      host: yolanda
+      summary: |-
+        landed on linux-next in the coordinator's land run; relay-preflight was ok on macuahuitl

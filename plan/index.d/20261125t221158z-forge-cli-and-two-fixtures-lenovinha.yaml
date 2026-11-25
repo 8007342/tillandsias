@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: forge-discovery-cli-and-two-msys-red-fixtures-to-lua
+    order: "2380-ds8v"
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge]
+    estimated_hours: 6
+    title: "Forge discovery commands (inventory, services, models) and two fixtures to Lua"
+    context: |
+      images/default/cli/{tillandsias-inventory,-services,-models} become stock Lua 5.4 commands in place (the forge ships lua; lua-edit and
+      forge-guard are the precedent), same name, output and exit codes, verified in a podman container. Their litmus steps that read the shell
+      source move with them. tillandsias-logs: installed or dead, decided on evidence. tillandsias-doctor and tellme follow in a later batch.
+      ports: images/default/cli/tillandsias-inventory images/default/cli/tillandsias-services images/default/cli/tillandsias-models scripts/test-mode-only-regression-887-bz88.sh scripts/test-initialize-bare-metal-host-idempotent.sh
+      The two fixtures are red on msys as .sh; taken over from yolanda's 2379-p5dq owned_files (macuahuitl asked, yolanda told).
+    exit_criteria:
+      - "the three commands give byte-identical text and equal JSON to the shell versions on the same stubbed inputs, in a container"
+      - "each fixture gives the same verdict and the same red arm under two or three mutants; callers run the .lua; the .sh files are deleted"
+    unscoreable: "unpinnable-until-the-guard-exists: output parity and mutant parity are the deliverable."
+    next_action: "port, verify in a container, PR."
+    provenance: filed by lenovinha; order agreed with macuahuitl 2026-11-25.
+    related: [2374-wy4f, 2375-ch7i]
+    events:
+      - {type: filed, ts: '2026-11-25T22:11:58Z', host: lenovinha, summary: forge cli batch}

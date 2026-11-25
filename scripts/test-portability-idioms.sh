@@ -114,7 +114,6 @@ _pre_fix_has 737bd10c5 scripts/test-plan-binary-freshness.sh \
 
 # ── HALF 2: it does not flag those same files now ──────────────────────────
 for f in audit-guard-activation.sh check-cheatsheet-refs.sh \
-         test-gate-stamp-does-not-memoize-guard-owned-paths.sh \
          test-plan-binary-freshness.sh; do
     if grep -q <<<"$OUT" "$f"; then
         bad "HALF 2: $f still flagged after its fix"
@@ -192,10 +191,12 @@ for _cf in manage-cache.sh pre-commit-openspec.sh; do
         || ok "COUNTERPART: ${_cf}'s GNU-first date chain is not flagged"
 done
 
-# AND THE CONTROL: a `date -d` with NO counterpart must still be named.
-# test-check-bash-dialect.sh:77 writes one into a fixture as its SUBJECT — the
-# same self-flagging shape as this file's own HALF-1 lines, and correct.
-grep -qE <<<"$OUT" 'test-check-bash-dialect\.sh:[0-9]+' \
+# AND THE CONTROL: a bare GNU date with NO counterpart must still be named. Planted in a scratch
+# tree: the witness was a live test script until 2377-znx4 ported it to Lua.
+_cw="$_W/counterpart-control"; mkdir -p "$_cw/scripts"
+printf '#!/usr/bin/env bash\nwhen="$(date -%s yesterday +%%Y)"\necho "$when"\n' "$_D" > "$_cw/scripts/planted-bare-date.sh"
+_co="$(TILLANDSIAS_PORTABILITY_ROOT="${_cw#"$ROOT"/}" run_guard 2>&1)"
+grep -qE <<<"$_co" 'planted-bare-date\.sh:[0-9]+' \
     && ok "COUNTERPART control: a bare GNU date idiom IS still flagged" \
     || bad "COUNTERPART control: the date fallback rule is swallowing bare idioms"
 
