@@ -48,7 +48,7 @@ fail() {
     exit 1
 }
 
-REAL_PLAN="$(resolve_plan_binary)" || fail "no-plan-binary (cargo build --release -p tillandsias-plan)"
+REAL_PLAN="$(cd "$ROOT" && resolve_plan_binary)" || fail "no-plan-binary (cargo build --release -p tillandsias-plan)"
 
 # Fixture ledger A: the harness packet lives OUTSIDE the general epic.
 cat > "$WORK/ledger-a.yaml" <<'EOF'
