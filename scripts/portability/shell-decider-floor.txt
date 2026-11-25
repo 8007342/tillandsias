@@ -220,7 +220,6 @@ scripts/test-ledger-write-reaches-its-reader.sh
 scripts/test-litmus-binding-truth.sh
 scripts/test-litmus-bindings.sh
 scripts/test-litmus-budget-tally.sh
-scripts/test-litmus-covering-relay-scope.sh
 scripts/test-litmus-diff-scope.sh
 scripts/test-litmus-fake-backend-under-remote-podman.sh
 scripts/test-litmus-fake-podman-hermetic.sh
