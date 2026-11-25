@@ -387,13 +387,18 @@ const USAGE: &str = concat!(
     "                                     emits the plan_query projection array.\n",
     "           burndown <milestone>      release-target children with statuses\n",
     "           answer <question...>      the CITED answer envelope as JSON (order 394b)\n",
-    "           disk-preflight [--repo D] [--target D] [--l0] [--dry-run]\n",
+    "           disk-preflight [--repo D] [--target D] [--l0] [--floor-gib N] [--cargo-target D] [--no-worktrees] [--dry-run]\n",
     "                                     ORDER 1878-2cwt. Before a new worktree: when free\n",
     "                                     space on --target (default --repo, default .) is\n",
     "                                     below max(2 GiB, 15%) (--l0: 25%), evict CLEAN and\n",
     "                                     PUSHED worktrees, oldest HEAD first. Prints ok:disk-\n",
     "                                     preflight:... (exit 0) or refused:disk-low:<path>:<free>\n",
     "                                     (exit 1). Never evicts dirty or unpushed worktrees.\n",
+    "                                     First prunes <cargo target>/debug/incremental (oldest\n",
+    "                                     session first; never deps/ or build/; not while a build\n",
+    "                                     holds the target) and prints pruned:incremental:<dir>:\n",
+    "                                     dirs=<n>:freed=<bytes>. --floor-gib sets the floor;\n",
+    "                                     --no-worktrees evicts none (2329-9etw).\n",
     "           decompose <query...>      adversarial query decomposition via LLM\n",
     "                                     (order 920-pxg6). Returns a JSON array of\n",
     "                                     {prompt, kind} variants for concurrent dispatch.\n",
@@ -9429,6 +9434,7 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
             let mut repo = PathBuf::from(".");
             let mut target: Option<PathBuf> = None;
             let (mut l0, mut dry) = (false, false);
+            let (mut floor, mut cargo_target, mut worktrees) = (None, None, true);
             let mut i = 1;
             while i < args.len() {
                 match args[i].as_str() {
@@ -9441,11 +9447,27 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                         }
                         i += 1;
                     }
+                    "--floor-gib" if i + 1 < args.len() => {
+                        let Ok(n) = args[i + 1].parse::<u64>() else {
+                            eprintln!(
+                                "disk-preflight: --floor-gib wants whole GiB, got {:?}",
+                                args[i + 1]
+                            );
+                            std::process::exit(2);
+                        };
+                        floor = Some(n << 30);
+                        i += 1;
+                    }
+                    "--cargo-target" if i + 1 < args.len() => {
+                        cargo_target = Some(PathBuf::from(&args[i + 1]));
+                        i += 1;
+                    }
+                    "--no-worktrees" => worktrees = false,
                     "--l0" => l0 = true,
                     "--dry-run" => dry = true,
                     other => {
                         eprintln!(
-                            "usage: tillandsias-plan disk-preflight [--repo D] [--target D] [--l0] [--dry-run] (unknown {other:?})"
+                            "usage: tillandsias-plan disk-preflight [--repo D] [--target D] [--l0] [--floor-gib N] [--cargo-target D] [--no-worktrees] [--dry-run] (unknown {other:?})"
                         );
                         std::process::exit(2);
                     }
@@ -9457,7 +9479,20 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 println!("refused:disk-preflight:not-a-repo:{}", repo.display());
                 std::process::exit(2);
             };
-            let out = dp::run(
+            let wts = if worktrees { wts } else { Vec::new() };
+            // 2329-9etw: the regenerable cache before anybody's worktree.
+            if let Some(ct) = cargo_target.or_else(|| dp::cargo_target_of(&repo)) {
+                let limit = dp::space_of(&target)
+                    .map(|s| floor.unwrap_or_else(|| dp::threshold(s.total, l0)))
+                    .unwrap_or(0);
+                let pruned =
+                    dp::prune_incremental(&ct, &target, limit, dry, || dp::space_of(&target));
+                if let Some(line) = dp::prune_line(&ct, &pruned, dry) {
+                    println!("{line}");
+                }
+            }
+            let out = dp::run_to(
+                floor,
                 &wts,
                 l0,
                 || dp::space_of(&target),
