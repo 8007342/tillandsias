@@ -5085,7 +5085,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # the live-writer hint 864-q7dm built it to be. Hermetic: every arm stamps
     # in a throwaway repo, never this checkout.
     _step "Checking the stale-stamp refusal names content movers (970-7fqk)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-gate-stamp-names-content-movers.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-gate-stamp-names-content-movers.lua" 2>&1; then
         _error "the stale-stamp refusal regressed — it can again name files that are not the cause and omit the one that is"
         exit 1
     fi

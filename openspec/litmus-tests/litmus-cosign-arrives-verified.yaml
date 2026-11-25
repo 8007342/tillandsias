@@ -42,9 +42,9 @@ preconditions:
   - workspace contains scripts/cosign-release.pin
 critical_path:
   - step: "the trust anchor and both verification directions hold, and every negative control is rejected"
-    command: "bash scripts/test-ensure-cosign.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run --timeout 14m scripts/lua/test-ensure-cosign.lua 2>&1 | tail -1"
     timeout_ms: 900000
-    expected_behavior: "ok:ensure-cosign-fixture: (or skip:no-network / skip:unsupported-platform, which are could-not-run and never a pass)"
+    expected_behavior: "ok:ensure-cosign-fixture: (or skip:ensure-cosign-fixture:no-network / :unsupported-platform, which are could-not-run and never a pass)"
     assert_output_contains: "ok:ensure-cosign-fixture:"
     assert_output_nonempty: true
   - step: "the pin is read KEY-ANCHORED, so prose discussing sha256= cannot be read as the value"

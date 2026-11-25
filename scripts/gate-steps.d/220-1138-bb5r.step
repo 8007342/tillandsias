@@ -5,13 +5,13 @@
 # exited 0 having examined zero references — and every consumer of the one
 # dispatch definition inherited it.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking a present-but-unusable host tool is not resolved as available (1138-bb5r)"
-STEP_SCRIPT="scripts/test-tool-dispatch-rejects-unusable-host-tool.sh"
+STEP_LUA="scripts/lua/test-tool-dispatch-rejects-unusable-host-tool.lua"
 STEP_ERROR="resolve_tool accepts a present-but-unusable host tool again, so a guard can pass having examined nothing (1138-bb5r) — see the verdict line above"
 STEP_OK="Unusable-host-tool rejection passed"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"
+STEP_SECOND_REGIME="yolanda 2026-11-25 msys ok:tool-dispatch-rejects-unusable-host-tool:6 arms"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/lib/tool-dispatch.sh scripts/test-tool-dispatch-rejects-unusable-host-tool.sh"
+STEP_READS="scripts/lib/tool-dispatch.sh scripts/lua/test-tool-dispatch-rejects-unusable-host-tool.lua"

@@ -11,17 +11,17 @@ size: quick
 preconditions:
   - workspace contains scripts/forge-validate.sh
   - workspace contains scripts/lua/check-forge-service-health.lua
-  - workspace contains scripts/test-forge-validate.sh
+  - workspace contains scripts/lua/test-forge-validate.lua
 
 critical_path:
   - step: "validate deterministic forge report classifications"
-    command: "scripts/test-forge-validate.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-validate.lua 2>&1"
     timeout_ms: 10000
-    expected_behavior: "PASS: forge validation profile classifies PASS/SKIP/FAIL deterministically"
-    assert_output_contains: "PASS: forge validation profile classifies PASS/SKIP/FAIL deterministically"
+    expected_behavior: "ok:forge-validate:7 arms"
+    assert_output_contains: "ok:forge-validate:7 arms"
 
   - step: "validate production profile shell syntax"
-    command: "bash -n scripts/forge-validate.sh scripts/test-forge-validate.sh && test -f scripts/lua/check-forge-service-health.lua && echo 'ok: validation scripts parse successfully'"
+    command: "bash -n scripts/forge-validate.sh && test -f scripts/lua/check-forge-service-health.lua && echo 'ok: validation scripts parse successfully'"
     timeout_ms: 2000
     expected_behavior: "ok: validation scripts parse successfully"
 
@@ -35,4 +35,4 @@ observability:
 
 rollback:
   on_failure: "inspect validator classification and fixture command isolation"
-  command: "scripts/test-forge-validate.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-validate.lua 2>&1"
