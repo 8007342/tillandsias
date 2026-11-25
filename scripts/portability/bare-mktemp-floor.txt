@@ -114,8 +114,6 @@ scripts/test-ledger-prose-roundtrip.sh 1
 scripts/test-ledger-write-reaches-its-reader.sh 3
 scripts/test-litmus-bindings.sh 1
 scripts/test-litmus-budget-tally.sh 1
-scripts/test-litmus-covering-relay-scope.sh 1
-scripts/test-litmus-mutation-arm-guard.sh 1
 scripts/test-litmus-runner-reports-rc.sh 2
 scripts/test-litmus-tracked-file-kill-safety.sh 2
 scripts/test-loop-status-audit-reads-current-emitter.sh 1
@@ -123,7 +121,6 @@ scripts/test-metrics-log-fallback-is-loud.sh 1
 scripts/test-metrics-log-path-agreement.sh 1
 scripts/test-mirror-host-cert-and-sshd.sh 2
 scripts/test-mirror-receive-wrapper.sh 5
-scripts/test-mo-full-record-precedes-marker.sh 1
 scripts/test-no-competing-gate.sh 1
 scripts/test-opencode-entrypoint-prompt.sh 1
 scripts/test-opencode-render-probe.sh 1
@@ -167,7 +164,6 @@ scripts/test-tool-materialize-litmus-surfaces-arm.sh 1
 scripts/test-trace-coverage.sh 1
 scripts/test-tray-asset-placeholder-refused.sh 1
 scripts/test-uninstall-matcher-spares-bystanders.sh 1
-scripts/test-uninstall-path-block.sh 1
 scripts/test-validator-surface-currency.sh 1
 scripts/test-vault-shutdown-forwards-sigterm.sh 1
 scripts/test-version-bump-isolation-scope.sh 1

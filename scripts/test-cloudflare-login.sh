@@ -140,6 +140,9 @@ past_auth() { ledger_paths "$1" | awk 'seen { print } $0 == "/oauth2/auth" { see
 
 # run_bin <name> <extra-env...> -- <args...>: the real binary, isolated from
 # this host's Vault, podman, D-Bus and proxies, with a 60 s watchdog.
+# The fake podman fails every build, and a failed image build is retried after
+# 30 s and 120 s (1776-brk3): past the watchdog, so the arm read rc=143 and never
+# the refusal. The fixture seam shortens the backoff.
 run_bin() {
     local name="$1"; shift
     local envs=()
@@ -153,7 +156,7 @@ run_bin() {
         PATH="$FAKEBIN:$PATH" HOME="$scratch/home" XDG_RUNTIME_DIR="$scratch/run" \
         DBUS_SESSION_BUS_ADDRESS='unix:path=/nonexistent/bus' \
         TILLANDSIAS_PODMAN_BIN="$FAKEBIN/podman" TILLANDSIAS_PODMAN_REFUSE_REAL=1 \
-        TILLANDSIAS_NO_TRAY=1 NO_COLOR=1 \
+        TILLANDSIAS_NO_TRAY=1 NO_COLOR=1 TILLANDSIAS_IMAGE_RETRY_BASE_MS=50 \
         TILLANDSIAS_CLOUDFLARE_BASE_URL="$FAKE_URL" TILLANDSIAS_CLOUDFLARE_CLIENT_ID=fake-client \
         CF_FAKE_BROWSER_DIR="$scratch/$name.browser" \
         "${envs[@]+"${envs[@]}"}" \

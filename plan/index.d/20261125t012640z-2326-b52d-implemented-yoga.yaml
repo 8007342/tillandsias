@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: relay-scope-selects-a-litmus-file-with-no-phase-line-as-pre-build
+    field: status
+    value: implemented
+    ts: "2026-11-25T01:26:40Z"
+    host: yoga
+events:
+  - packet_id: relay-scope-selects-a-litmus-file-with-no-phase-line-as-pre-build
+    event: {type: implemented, ts: "2026-11-25T01:26:40Z", host: yoga, summary: "on work/2326-b52d: split fixed, default is runtime as the runner's; title predates the ruling"}

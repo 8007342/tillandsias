@@ -209,7 +209,7 @@ critical_path:
   # stamps — including every fail-closed refusal and the negative control that
   # keeps "refuse everything" from satisfying them.
   - step: "gate-stamp memoization decides correctly and fails closed (765-tkq2)"
-    command: "bash scripts/test-gate-stamp-memoization.sh 2>&1 | tail -1"
+    command: "bash scripts/test-gate-stamp-memoization.sh 2>&1 | grep -vE '^ok: '"
     timeout_ms: 900000
     expected_behavior: "ok:gate-stamp-memoization-fixture:15"
 

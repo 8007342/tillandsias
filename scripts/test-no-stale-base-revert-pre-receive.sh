@@ -4,7 +4,7 @@
 #
 # Fixture for the RECEIVING half of the stale-base revert guard.
 #
-# The sibling fixture (scripts/test-no-stale-base-revert.sh) drives the
+# The sibling fixture (scripts/lua/test-no-stale-base-revert.lua) drives the
 # client-side pre-push hook. This one drives images/git/pre-receive-hook.sh
 # against a real bare remote, and every arm pushes with --no-verify — the
 # invocation the client half structurally cannot reach, which is the packet's
