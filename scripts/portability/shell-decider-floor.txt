@@ -242,11 +242,9 @@ scripts/test-loop-status-append-input.sh
 scripts/test-loop-status-audit-reads-current-emitter.sh
 scripts/test-lww-channel-consumers.sh
 scripts/test-macos-vsock-inference-closure.sh
-scripts/test-mcp-plan-resolver-pinning.sh
 scripts/test-mcp-run-command-tool.sh
 scripts/test-mcp-transport-death-trace.sh
 scripts/test-memo-hit-observability.sh
-scripts/test-meta-orchestration-opsx-sync-merge.sh
 scripts/test-metrics-log-fallback-is-loud.sh
 scripts/test-metrics-log-path-agreement.sh
 scripts/test-mirror-discipline.sh
@@ -262,7 +260,6 @@ scripts/test-nix-cache-service.sh
 scripts/test-nix-toolbox.sh
 scripts/test-no-competing-gate.sh
 scripts/test-no-stale-base-revert-pre-receive.sh
-scripts/test-no-stale-base-revert.sh
 scripts/test-nvidia-cdi-stale-hostpath.sh
 scripts/test-opencode-entrypoint-prompt.sh
 scripts/test-opencode-render-probe.sh

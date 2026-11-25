@@ -17,18 +17,18 @@ size: instant
 preconditions:
   - workspace contains scripts/lua/check-opsx-generated-dirt.lua
   - workspace contains scripts/test-check-opsx-generated-dirt.sh
-  - workspace contains scripts/test-meta-orchestration-opsx-sync-merge.sh
+  - workspace contains scripts/lua/test-meta-orchestration-opsx-sync-merge.lua
   - workspace contains scripts/meta-orchestration-worktree-guard.sh
   - workspace contains scripts/lua/test-meta-orchestration-dirty-tree-safety.lua
 
 critical_path:
-  - step: "opsx detector and its fixtures are executable"
-    command: "test -f scripts/lua/check-opsx-generated-dirt.lua && test -x scripts/test-check-opsx-generated-dirt.sh && test -x scripts/test-meta-orchestration-opsx-sync-merge.sh && echo 'ok: executable'"
+  - step: "opsx detector and its fixture are present"
+    command: "test -f scripts/lua/check-opsx-generated-dirt.lua && test -x scripts/test-check-opsx-generated-dirt.sh && echo 'ok: executable'"
     timeout_ms: 1000
     expected_behavior: "ok: executable"
 
   - step: "scripts parse under bash"
-    command: "bash -n scripts/test-check-opsx-generated-dirt.sh scripts/test-meta-orchestration-opsx-sync-merge.sh && echo 'ok: syntax'"
+    command: "bash -n scripts/test-check-opsx-generated-dirt.sh && echo 'ok: syntax'"
     timeout_ms: 1000
     expected_behavior: "ok: syntax"
 
@@ -42,9 +42,9 @@ critical_path:
     # PASSES on windows in ~18s standalone (measured 2026-08-16) but the old
     # 10s budget was priced on linux. Same treatment as 770-f6u4; see
     # plan/issues/windows-red-meta-orchestration-litmus-2026-08-16.md.
-    command: "scripts/test-meta-orchestration-opsx-sync-merge.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-meta-orchestration-opsx-sync-merge.lua 2>&1"
     timeout_ms: 90000
-    expected_behavior: "PASS: 1440-w8g8 launch opsx dirt refused, never committed (a)-(d)"
+    expected_behavior: "ok:meta-orchestration-opsx-sync-merge:5 arms"
 
   - step: "ordinary dirty-start fixture stays byte-identical fail-closed"
     # 90s: same fixture as dirty-tree-safety's step above, same 9.4s windows
