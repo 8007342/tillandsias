@@ -58,7 +58,7 @@ W="$(mktemp -d "$_tmpbase/gate-step-prefix.XXXXXX")"
 trap 'rm -rf "$W"' EXIT INT TERM
 G() { git -c user.email=t@t -c user.name=t "$@"; }
 alloc() { bash "$ALLOC" "$@"; }
-# The arm-7 check of test-gate-step-append-no-conflict.sh over a directory.
+# The arm-7 check of test-gate-step-append-no-conflict.lua over a directory.
 dups() { for f in "$1"/*.step; do [ -e "$f" ] || continue; b="${f##*/}"; printf '%s\n' "${b%%-*}"; done | sort | uniq -d | tr '\n' ' '; }
 step() { printf 'STEP_DESC="%s"\nSTEP_SCRIPT="scripts/test-%s.sh"\n' "$1" "$1" > "scripts/gate-steps.d/$1"; }
 names() { ls scripts/gate-steps.d | tr '\n' ' '; }

@@ -125,7 +125,6 @@ scripts/test-expire-claims-list-live-rows.sh
 scripts/test-expire-claims-reads-the-status-write.sh
 scripts/test-expire-claims-write-is-opt-in.sh
 scripts/test-fake-cloudflare.sh
-scripts/test-fixture-git-dir-scope.sh
 scripts/test-fleet-activity.sh
 scripts/test-fleet-heartbeat-sees-a-ledger-filed-blocker.sh
 scripts/test-fleet-msg-mcp.sh
@@ -134,7 +133,6 @@ scripts/test-fleet-msg-store.sh
 scripts/test-forge-findings-persisted.sh
 scripts/test-forge-gitconfig-bidirectional-quarantine.sh
 scripts/test-forge-localization-staged.sh
-scripts/test-forge-project-guard-hooks.sh
 scripts/test-forge-project-trust-seeds.sh
 scripts/test-forge-runtime-ca-trust.sh
 scripts/test-forge-src-budget-report.sh
@@ -146,13 +144,11 @@ scripts/test-fragment-events-land-callsite.sh
 scripts/test-fragment-status-loss-row-boundary.sh
 scripts/test-fragment-status-loss.sh
 scripts/test-freshness-regime-budget.sh
-scripts/test-gate-memory-refusal.sh
 scripts/test-gate-memory-wsl2-guest.sh
 scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh
 scripts/test-gate-stamp-memoization.sh
 scripts/test-gate-stamp-names-content-movers.sh
 scripts/test-gate-stamp.sh
-scripts/test-gate-step-append-no-conflict.sh
 scripts/test-gate-step-prefix-allocation.sh
 scripts/test-gate-step-regimes.sh
 scripts/test-gate-step-skip-exit.sh

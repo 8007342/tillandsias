@@ -8,7 +8,7 @@
 --
 -- WHY. Step 286 (1461-5rm6) bound scripts/test-land-queue.sh on 2026-09-28 and
 -- its inline block was never removed, so every gate ran it twice (48 s each)
--- until 2266-4w3c. test-gate-step-append-no-conflict.sh refuses two .step
+-- until 2266-4w3c. test-gate-step-append-no-conflict.lua refuses two .step
 -- files naming one script, but never compares a .step with build.sh, so the
 -- duplicate passed every guard for eight weeks.
 --
