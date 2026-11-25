@@ -103,7 +103,7 @@ critical_path:
     # the source grep this step used to be was replaced by running the test.
     command: "cargo test -q -p tillandsias-core --lib container_profile::tests::forge_profiles_have_fourteen_env_vars -- --exact"
     timeout_ms: 300000
-    expected_behavior: "1 passed"
+    expected_behavior: "test result: ok. 1 passed"
 
 observability:
   traces:
