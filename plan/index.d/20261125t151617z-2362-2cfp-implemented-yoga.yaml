@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: centicolon-ratchet-opsx-dirt-and-bound-litmus-fixtures-ported-to-lua
+    field: status
+    value: implemented
+    ts: "2026-11-25T15:16:17Z"
+    host: yoga
+events:
+  - packet_id: centicolon-ratchet-opsx-dirt-and-bound-litmus-fixtures-ported-to-lua
+    event: {type: implemented, ts: "2026-11-25T15:16:17Z", host: yoga, summary: "implemented on work/2362-2cfp"}
