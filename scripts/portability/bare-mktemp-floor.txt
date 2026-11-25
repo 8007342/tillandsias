@@ -100,7 +100,6 @@ scripts/test-plan-field-get.sh 1
 scripts/test-plan-fragments-lane-affordance.sh 1
 scripts/test-plan-orders-fragment-fold.sh 1
 scripts/test-podman-sync-budgets.sh 1
-scripts/test-pre-push-version-guard-sigpipe.sh 1
 scripts/test-pre-push-version-guard.sh 1
 scripts/test-pre-push-work-ref-lane.sh 1
 scripts/test-pre-receive-yaml-gate.sh 1
@@ -109,13 +108,11 @@ scripts/test-pretooluse-command-policy.sh 1
 scripts/test-provider-device-auth.sh 1
 scripts/test-reclaim-stranded-claims.sh 1
 scripts/test-release-tier-freshness.sh 1
-scripts/test-requirement-ids.sh 1
 scripts/test-reset-state-contract.sh 2
 scripts/test-running-image-freshness.sh 1
 scripts/test-salvage-audit.sh 1
 scripts/test-salvage-net.sh 1
 scripts/test-set-field-refuses-unknown-flags.sh 1
-scripts/test-sidecar-staleness-stamp.sh 1
 scripts/test-sigpipe-verdict-pipelines.sh 1
 scripts/test-silverblue-update-skew-probe.sh 1
 scripts/test-skill-canonicalization-remedy.sh 1

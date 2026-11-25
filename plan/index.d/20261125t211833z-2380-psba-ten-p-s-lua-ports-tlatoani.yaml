@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-25. p-s fixtures, PR 2 of 3 (macuahuitl: 8-10 ports per PR, operator rule 2026-11-25).
+packets:
+- packet_id: port-p-s-fixtures-pr-2-of-3
+  order: 2380-psba
+  status: implemented
+  kind: chore
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [shell-to-lua, macos, fixtures, portability]
+  size: M
+  implementer_tier: sonnet
+  estimated_hours: 4
+  title: 'Ten whole-file shell-to-Lua ports from the p-s range (PR 2 of 3)'
+  ports: [scripts/test-refusal-names-the-ungated-lane.sh, scripts/test-salvage-refs-ledger.sh, scripts/test-pre-push-version-guard-sigpipe.sh, scripts/test-release-freeze-audit.sh, scripts/test-requirement-ids.sh, scripts/test-project-info-grep-code-recall.sh, scripts/test-subdomain-routing.sh, scripts/test-set-field-prose-guard.sh, scripts/test-selector-flags-host-scoped-criteria.sh, scripts/test-sidecar-staleness-stamp.sh]
+  context: >-
+    Each port keeps its arms and moves to the common.fixture grammar, carrying the env each child read (the 2375-psb9
+    lesson: a Lua child does not inherit the gate env). Callers: gate steps 320, 325, 460, 340, 370 (STEP_LUA, fresh
+    darwin regime lines), build.sh (release-freeze-audit, requirement-ids, subdomain-routing via _run_lua_decider),
+    litmus versioning-shape and sidecar-staleness-stamp-shape (no pipes; the two isolation steps now match the .lua's
+    own arm lines), and two comment pointers. spec-index-durable-tier-demotion and podman-sync-budgets were left for a
+    later PR because they drive podman.
+  exit_criteria:
+  - 'Each .lua gives the same verdict as its .sh on the trunk tree, and the same red arms under a mutant.'
+  - 'Every caller runs the .lua; the ten .sh files and their floor lines are gone.'
+  verifiable_closure: 'Mutant parity in the PR; the five gate steps and both litmus tests green on darwin and in the Linux land gate.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the mutant parity is the deliverable.'
+  next_action: 'Implemented. Darwin green on all ten; set-field-prose-guard has no mutant (its subject is the Rust binary).'
+  provenance: 'tlatoanis-macbook-air 2026-11-25, on macuahuitl-fedora''s direction.'
+  related: [2375-psb9, 2360-psb8]
+  events:
+  - {type: filed, ts: '2026-11-25T21:18:33Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}
