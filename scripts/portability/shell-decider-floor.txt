@@ -125,7 +125,6 @@ scripts/test-enclave-service-health.sh
 scripts/test-ensure-cosign.sh
 scripts/test-ensure-toolbox-properties.sh
 scripts/test-exec-bits-guard-end-to-end.sh
-scripts/test-expert-accuracy-record-shape.sh
 scripts/test-expert-capability-behaviour-skew.sh
 scripts/test-expire-claims-list-live-rows.sh
 scripts/test-expire-claims-reads-the-status-write.sh
@@ -233,7 +232,6 @@ scripts/test-litmus-podman-preflight-diagnosis.sh
 scripts/test-litmus-podman-preflight-trigger.sh
 scripts/test-litmus-runner-reads-without-jq.sh
 scripts/test-litmus-runner-reports-rc.sh
-scripts/test-litmus-scalar-unescape.sh
 scripts/test-litmus-step-model.sh
 scripts/test-litmus-step-pipefail.sh
 scripts/test-litmus-structured-assert.sh

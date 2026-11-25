@@ -21,9 +21,11 @@
 #     moved to the head, no duplicate, batch size unchanged
 #   5 charset guard: a non-tag-shaped TILLANDSIAS_AGENT value -> no harness=,
 #     batch intact
+#   6 a cross-branch check that could not fold (rc 2) -> the note says so and
+#     the batch is offered unchanged
 #
 # GRAMMAR (exactly one line on stdout, last line):
-#   ok:harness-affinity-selection:5
+#   ok:harness-affinity-selection:6
 #   fail:<detail>
 # Exit 0 on ok, 1 on fail.
 
@@ -46,7 +48,7 @@ fail() {
     exit 1
 }
 
-REAL_PLAN="$(resolve_plan_binary)" || fail "no-plan-binary (cargo build --release -p tillandsias-plan)"
+REAL_PLAN="$(cd "$ROOT" && resolve_plan_binary)" || fail "no-plan-binary (cargo build --release -p tillandsias-plan)"
 
 # Fixture ledger A: the harness packet lives OUTSIDE the general epic.
 cat > "$WORK/ledger-a.yaml" <<'EOF'
@@ -117,9 +119,13 @@ mk_plan() {
 
 # Common env: pin the tier (a 4-core CI host must not trip the low-end gate)
 # and the capability set (host-tool probes stay out of the fixture).
+# 2323-wwaa: the cross-branch check is a stub too. The live one folds whatever
+# sibling branches this clone has, and its note took the line vector 1 reads.
+printf '#!/usr/bin/env bash\nexit "${XB_STUB_RC:-0}"\n' > "$WORK/xbranch"
+chmod +x "$WORK/xbranch"
 run_selector() {
     TILLANDSIAS_PLAN_BIN="$WORK/plan" TILLANDSIAS_HOST_TIER=general \
-        TILLANDSIAS_HOST_CAPS="nix" \
+        TILLANDSIAS_HOST_CAPS="nix" TILLANDSIAS_XBRANCH_CHECK="$WORK/xbranch" \
         "$@" bash "$SELECTOR" linux --release v0.5 --budget 3 --seed harness-fixture 2>&1
 }
 
@@ -159,5 +165,16 @@ printf '%s\n' "$out" | head -1 | grep -q ' harness=' && fail "v5-harness-note-ba
 n="$(printf '%s\n' "$out" | grep -c "^packet$(printf '\t')")"
 [ "${n:-0}" -ge 1 ] || fail "v5-empty-batch"
 
-echo "ok:harness-affinity-selection:5"
+# ── 6: could-not-fold is said, and nothing is dropped ───────────────────────
+clean="$out"
+out="$(run_selector env XB_STUB_RC=2 TILLANDSIAS_HOST_KIND=forge TILLANDSIAS_AGENT='opencode; rm -rf /')"
+case "$out" in
+    *"cross-branch: could not fold sibling branches"*) ;;
+    *) fail "v6-no-fold-note" ;;
+esac
+case "$clean" in *"cross-branch: "*) fail "v6-control-fold-note-on-clean" ;; esac
+n6="$(grep -c "^packet$(printf '\t')" <<<"$out")"
+[ "$n6" = "$n" ] || fail "v6-size-$n6-want-$n"
+
+echo "ok:harness-affinity-selection:6"
 exit 0
