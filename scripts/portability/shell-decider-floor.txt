@@ -212,7 +212,6 @@ scripts/test-land-adopts-valid-stamp.sh
 scripts/test-land-affordance.sh
 scripts/test-land-gate-refusal-names-its-step.sh
 scripts/test-land-merges-trunk.sh
-scripts/test-land-notice-names-unrun-litmus.sh
 scripts/test-land-push-bounded.sh
 scripts/test-land-queue.sh
 scripts/test-land-verdict-through-a-pipe.sh
@@ -227,7 +226,6 @@ scripts/test-litmus-diff-scope.sh
 scripts/test-litmus-fake-backend-under-remote-podman.sh
 scripts/test-litmus-fake-podman-hermetic.sh
 scripts/test-litmus-grep-escapes.sh
-scripts/test-litmus-item-opener-refused.sh
 scripts/test-litmus-kill-adjudicator.sh
 scripts/test-litmus-missing-bound-test-reds.sh
 scripts/test-litmus-mutation-arm-guard.sh
@@ -246,7 +244,6 @@ scripts/test-litmus-tracked-file-kill-safety.sh
 scripts/test-long-running-view-refuses-at-completion.sh
 scripts/test-loop-status-append-input.sh
 scripts/test-loop-status-audit-reads-current-emitter.sh
-scripts/test-lww-channel-alias.sh
 scripts/test-lww-channel-consumers.sh
 scripts/test-macos-vsock-inference-closure.sh
 scripts/test-mcp-plan-resolver-pinning.sh

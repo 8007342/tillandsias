@@ -408,7 +408,7 @@ fi
 # TILLANDSIAS_LITMUS_ALLOW_NO_PLAN_BIN=1 (the pre-1419 behaviour).
 # ONLY ON PATHS THAT EXECUTE TESTS: --parse-only and --list never run a step,
 # so they must not be gated on a binary they do not use. It first ran at top
-# level and refused test-litmus-item-opener-refused.sh ARM 3, whose mutant copy
+# level and refused test-litmus-item-opener-refused ARM 3, whose mutant copy
 # of this runner does --parse-only from a $TMP root with no binary (land57).
 _litmus_require_plan_binary() {
     [[ "${TILLANDSIAS_LITMUS_ALLOW_NO_PLAN_BIN:-}" != "1" ]] || return 0

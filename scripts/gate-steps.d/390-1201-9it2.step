@@ -20,15 +20,13 @@
 # skip it — the same end state as no notice, reached more expensively. And no
 # failing exit inside the block, so it can never refuse a land.
 #
-# STEP_SCRIPT is a LITERAL path (1063-nraf).
+# STEP_LUA is a LITERAL path (1063-nraf).
 STEP_DESC="Checking the land tool names the litmus arms this gate did not run (1201-9it2)"
-STEP_SCRIPT="scripts/test-land-notice-names-unrun-litmus.sh"
+STEP_LUA="scripts/lua/test-land-notice-names-unrun-litmus.lua"
 STEP_ERROR="the pre-push litmus notice regressed (1201-9it2) — either the land tool no longer names the arms asserting on the changed files (so a red rides a green gate to trunk unseen, as it did three times: 2026-08-15, 921-vtf4 on 2026-08-28, and 4fc7be930 on 2026-09-15), or the notice has become a refusal, which 748-tkjx says trades a visibility gap for a bypass problem; see the failing arm above"
 STEP_OK="land-time litmus notice check passed"
 # Exit 3 means the land tool or the covering-specs map is absent — nothing was
 # exercised, and the fixture says so by name rather than passing.
-STEP_SKIP_EXIT=3
-STEP_SKIP_DESC="scripts/land-on-platform-branch.sh or scripts/litmus-covering-specs.sh is absent, so the notice could not be exercised"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:land-notice:5"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
@@ -36,4 +34,4 @@ STEP_LANES="timing"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="images/default/lib-common.sh scripts/land-on-platform-branch.sh scripts/litmus-covering-specs.sh scripts/test-land-notice-names-unrun-litmus.sh"
+STEP_READS="images/default/lib-common.sh scripts/land-on-platform-branch.sh scripts/litmus-covering-specs.sh scripts/lua/test-land-notice-names-unrun-litmus.lua"

@@ -620,7 +620,6 @@ scripts scripts/test-json-get-help-names-its-subset.sh 23
 scripts scripts/test-json-query-jq-parity.sh 4
 scripts scripts/test-land-adopts-valid-stamp.sh 1
 scripts scripts/test-land-gate-refusal-names-its-step.sh 12
-scripts scripts/test-land-notice-names-unrun-litmus.sh 2
 scripts scripts/test-land-queue.sh 1
 scripts scripts/test-land-verdict-through-a-pipe.sh 1
 scripts scripts/test-ledger-prose-roundtrip.sh 8
@@ -629,7 +628,6 @@ scripts scripts/test-litmus-binding-truth.sh 8
 scripts scripts/test-litmus-fake-backend-under-remote-podman.sh 1
 scripts scripts/test-litmus-fake-podman-hermetic.sh 1
 scripts scripts/test-litmus-grep-escapes.sh 1
-scripts scripts/test-litmus-item-opener-refused.sh 5
 scripts scripts/test-litmus-kill-adjudicator.sh 14
 scripts scripts/test-litmus-missing-bound-test-reds.sh 3
 scripts scripts/test-litmus-parse-instruments-agree.sh 7
@@ -645,7 +643,6 @@ scripts scripts/test-litmus-tracked-file-kill-safety.sh 2
 scripts scripts/test-long-running-view-refuses-at-completion.sh 26
 scripts scripts/test-loop-status-append-input.sh 6
 scripts scripts/test-loop-status-audit-reads-current-emitter.sh 2
-scripts scripts/test-lww-channel-alias.sh 3
 scripts scripts/test-lww-channel-consumers.sh 2
 scripts scripts/test-mcp-plan-resolver-pinning.sh 2
 scripts scripts/test-mcp-run-command-tool.sh 2
