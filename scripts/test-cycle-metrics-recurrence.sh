@@ -257,6 +257,26 @@ check "(m) --recur-window-days moves skippable's window token too" \
   "$(report "$M" --recur-window-days 10 | line skippable)" \
   "skippable: window=10d candidates=1 floor_ms=2000 min_runs=5 top3=widewin:runs=5:avg_ms=4000:fail_pct=0:saved_ms_upper=16000 source=$M"
 
+# ── (n) ORDER 2135-z6gh: the usage log is read through a bounded, NAMED window
+# Past TILLANDSIAS_EXPERT_USAGE_WINDOW_BYTES the experts:/mcp: figures cover the
+# log's tail from its first whole line and say ` window=tail:<bytes>`; under
+# the cap the lines are byte-identical to an uncapped read. Pre-fix: the capped
+# run counted all 40 rows and printed no window token.
+N="$W/n-usage.jsonl"; : > "$N"
+for i in $(seq 1 30); do printf '{"ts":"t","server":"forge-plan","tool":"plan_next","outcome":"unsupported"}\n' >> "$N"; done
+for i in $(seq 1 10); do printf '{"ts":"t","server":"forge-plan","tool":"plan_next","outcome":"answered"}\n' >> "$N"; done
+_rowlen=$(head -1 "$N" | wc -c); _rowlen=${_rowlen//[!0-9]/}
+_cap=$(( _rowlen * 10 + _rowlen / 2 ))   # lands mid-row: 10 whole rows after the partial one is dropped
+nl_capped="$(TILLANDSIAS_EXPERT_USAGE_LOG="$N" TILLANDSIAS_EXPERT_USAGE_WINDOW_BYTES="$_cap" report "$A" --experts-only | line experts)"
+check "(n) a capped read counts only the whole rows in the tail window" \
+  "$(sed -n 's/^experts: calls=\([0-9]*\) answered=\([0-9]*\) unsupported=\([0-9]*\).*/\1 \2 \3/p' <<<"$nl_capped")" "10 10 0"
+check "(n) a capped read names its window" "$(grep -o ' window=tail:[0-9]*$' <<<"$nl_capped")" " window=tail:$_cap"
+nl_big="$(TILLANDSIAS_EXPERT_USAGE_LOG="$N" TILLANDSIAS_EXPERT_USAGE_WINDOW_BYTES=100000000 report "$A" --experts-only | line experts)"
+nl_off="$(TILLANDSIAS_EXPERT_USAGE_LOG="$N" TILLANDSIAS_EXPERT_USAGE_WINDOW_BYTES=0 report "$A" --experts-only | line experts)"
+check "(n) under the cap the line is byte-identical to an uncapped read, with no window token" "$nl_big" "$nl_off"
+check "(n) under the cap all rows count (answer_rate over 40)" \
+  "$(sed -n 's/.* answer_rate=\([^ ]*\) .*/\1/p' <<<"$nl_big")" "25%"
+
 total=$((pass+fail))
 if [ "$fail" -eq 0 ]; then echo "ok:cycle-metrics-recurrence-fixture:${total}"; exit 0; fi
 echo "fail: cycle-metrics-recurrence ${fail}/${total} red (1001-q3zf)"; exit 1
