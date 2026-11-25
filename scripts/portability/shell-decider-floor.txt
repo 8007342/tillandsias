@@ -201,7 +201,6 @@ scripts/test-litmus-diff-scope.sh
 scripts/test-litmus-fake-backend-under-remote-podman.sh
 scripts/test-litmus-fake-podman-hermetic.sh
 scripts/test-litmus-kill-adjudicator.sh
-scripts/test-litmus-missing-bound-test-reds.sh
 scripts/test-litmus-parse-instruments-agree.sh
 scripts/test-litmus-parse-only-duplicate-key.sh
 scripts/test-litmus-podman-preflight-diagnosis.sh
