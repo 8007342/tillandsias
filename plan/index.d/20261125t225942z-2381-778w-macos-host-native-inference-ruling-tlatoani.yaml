@@ -1,0 +1,183 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air (Claude), 2026-11-25, recording an operator ruling given in this session.
+packets:
+- packet_id: macos-inference-host-native-krunkit-vm-layer-ruling
+  order: 2381-778w
+  status: implemented
+  kind: decision
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [macos, inference, vm, decision]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 1
+  title: 'Operator ruling 2026-11-25: krunkit is the macOS VM direction; inference runs host-native by default; small models on host and in containers share one budget'
+  context: >-
+    Operator, verbatim, in the tlatoanis-macbook-air session, 2026-11-25: "Excellent. I approve krunkit as the
+    direction to follow, please triage it appropriately and relay to /list-agents macuahuitl-fedora these updates,
+    make sure the specs and plan are updated accordingly. I approve your suggestions on what we should reconsider.
+    As per the token limits, our fleet leader /list-agents macuahuitl-fedora is also planning on using small models
+    to run babysitter jobs on the metal, and inside the containers, all of these need to be resource-aware and
+    plan-aware, they all play together, and should compliment each other."
+    The four suggestions approved were:
+    (1) host-native inference as the macOS default, not opt-in;
+    (2) krunkit narrowed to a better VM layer, not the inference path;
+    (3) Apple Foundation Models as an optional first tier;
+    (4) benchmark on this base M5 before choosing an engine.
+    The operator confirmed the ruling in macuahuitl-fedora's session the same day ("Yes that was me").
+    DIRECTION ONLY, NOT RULED (operator 2026-11-25, relayed by macuahuitl-fedora, paraphrased closely):
+    - Pool local inference for LAN workers, each host making the best use of its own hardware (NPU, unified memory).
+    - Later, share models across trusted fleet workers, so low-end hosts (calmecacpilli, pirria, the Mac Neos)
+      can use "LAN agents", and later "WAN agents" over tunnels.
+    - Next to look at: NPU performance, macOS krunkit, and a low-overhead encrypted socket like the
+      host-to-VM one.
+    - A worker with lots of RAM and an NPU will join the fleet soon.
+    The pooling design comes later. Nothing in this row rules it, but SLOT-10's per-VM credential and caps,
+    and 2381-zueb's one-budget rule, should not preclude a remote caller.
+    Research: plan/issues/macos-containers-and-apple-silicon-inference-research-2026-11-25.md.
+    Spec: openspec/changes/macos-host-native-inference (SLOT-10, SLOT-11), plus the 2094-65yz edits
+    (job-admission-queue: one budget for every model; watchdog-judge-placement: the macOS ruling).
+  exit_criteria:
+  - 'The ruling is quoted verbatim, dated, in this row and in the change proposal.'
+  - 'Every affected row carries a note naming this ruling: 1921-kr7v, 1653-77bt, 1654-6me6, 2094-65yz.'
+  verifiable_closure: 'grep -l 2381-778w openspec/changes/macos-host-native-inference/proposal.md plan/index.d/*2381-778w*'
+  unscoreable: 'a decision record: its deliverable is the recorded ruling and the notes on the rows it affects, which nothing scores'
+  next_action: 'Recorded. The work is in 2381-tfna, 2381-iy9u, 2381-t39p, 2381-zueb and 2381-rt4e.'
+  provenance: 'Operator, in session, 2026-11-25.'
+  related: [1921-kr7v, 1653-77bt, 1654-6me6, 2094-65yz, 2081-z7sh]
+  events:
+  - {type: filed, ts: '2026-11-25T22:59:42Z', host: tlatoanis-macbook-air, summary: 'operator ruling recorded verbatim'}
+- packet_id: macos-inference-engine-benchmark-on-base-m5
+  order: 2381-tfna
+  status: ready
+  kind: research
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [macos, inference, benchmark]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 3
+  title: 'Measure Ollama-MLX vs mlx_lm.server vs llama-server on a base M5 16 GB: small-model chat, embeddings, resident memory'
+  context: >-
+    No published source covers small models on a base M5 with 16 GB. Published comparisons conflict (one bench has MLX ~1.75x
+    llama.cpp decode on an M4 Max; Docker measured llama.cpp ahead of vllm-metal). M5 gains are mostly prefill,
+    which is most of classification, summarising and embedding. The engine choice in 2381-iy9u waits on these numbers.
+  exit_criteria:
+  - 'Decode and prefill tok/s for 0.5B, 1.7B and 4B class 4-bit models on each engine, three runs each, same prompts.'
+  - 'Embedding throughput for Qwen3-Embedding-0.6B and EmbeddingGemma on the engines that serve them.'
+  - 'Resident memory per model per engine, recorded as the reserves 2381-zueb admits against.'
+  verifiable_closure: 'plan/issues/macos-inference-engine-benchmark-<date>.md with the raw runs.'
+  unscoreable: 'a measurement: its deliverable is the dated benchmark record with raw runs, not a pass/fail test'
+  next_action: 'Upgrade host Ollama to >= 0.40.17 (operator-approved host install required), pin models, write the harness.'
+  provenance: 'Operator ruling 2381-778w.'
+  related: [2381-778w, 2381-iy9u, 2381-zueb]
+  events:
+  - {type: filed, ts: '2026-11-25T22:59:42Z', host: tlatoanis-macbook-air, summary: 'filed from ruling 2381-778w'}
+- packet_id: macos-host-native-inference-service-is-the-default-slot
+  order: 2381-iy9u
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  blocked_by: [2381-tfna, 2381-t39p]
+  capability_tags: [macos, inference, tray]
+  size: M
+  implementer_tier: opus
+  estimated_hours: 10
+  title: 'The tray runs and leases a host-native inference service and binds SLOT-6 to it by default on macOS'
+  context: >-
+    Spec SLOT-10 (openspec/changes/macos-host-native-inference). Today the host route is opt-in via
+    TILLANDSIAS_HOST_VSOCK_PORT (crates/tillandsias-macos-tray/src/action_host.rs, host_vsock_forward.rs), and
+    every macOS model runs on the guest CPU. Forge containers keep http://inference:11434. The guest-CPU
+    slot stays as the named fallback.
+  exit_criteria:
+  - 'On a Mac with the service healthy, --diagnose --json names the host slot; with it absent, it names the fallback and why. A test pins both and fails on today''s code.'
+  - 'The service listens on loopback or a unix socket only; the guest reaches it only through the vsock relay.'
+  verifiable_closure: 'cargo test -p tillandsias-macos-tray host_inference_is_the_default_slot_and_falls_back_by_name'
+  next_action: 'After 2381-tfna picks the engine: lease the service from the tray and make the relay default-on.'
+  provenance: 'Operator ruling 2381-778w.'
+  related: [2381-778w, 1654-6me6, 2381-zueb]
+  events:
+  - {type: filed, ts: '2026-11-25T22:59:42Z', host: tlatoanis-macbook-air, summary: 'filed from ruling 2381-778w'}
+- packet_id: macos-host-inference-allowlist-credential-and-caps
+  order: 2381-t39p
+  status: ready
+  kind: security
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [macos, inference, security]
+  size: M
+  implementer_tier: opus
+  estimated_hours: 8
+  title: 'Allowlist between the vsock relay and the host inference service: two operations, tier-table models, per-VM credential, caps'
+  context: >-
+    SLOT-10.3 and SLOT-10.4. Precedents: Ollama DNS rebinding (CVE-2024-28224); a 0.0.0.0-bound Ollama let a web
+    page rewrite a chat template via /api/create (Aug 2026); mlx_lm.server does "basic security checks" only.
+    A guest with no caps can exhaust the Mac's unified memory.
+  exit_criteria:
+  - 'Only chat-completions and embeddings for tier-table models pass; pull, create, copy, delete, push and template edits are refused by name; a test sends each and fails on a pass-through proxy.'
+  - 'A missing or wrong per-VM credential is refused; concurrency, token and context caps refuse rather than queue without bound.'
+  verifiable_closure: 'cargo test -p tillandsias-vm-layer host_inference_allowlist_refuses_model_management'
+  next_action: 'Write the refusal tests first against a stub service.'
+  provenance: 'Operator ruling 2381-778w.'
+  related: [2381-778w, 2381-iy9u, 1654-6me6]
+  events:
+  - {type: filed, ts: '2026-11-25T22:59:42Z', host: tlatoanis-macbook-air, summary: 'filed from ruling 2381-778w'}
+- packet_id: one-memory-budget-for-every-model-on-a-host
+  order: 2381-zueb
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  blocked_by: [2094-65yz]
+  capability_tags: [admission, inference, babysitter, memory]
+  size: M
+  implementer_tier: opus
+  estimated_hours: 8
+  title: 'Every model load (container slot, host service, watchdog judge) is admitted against one host memory budget; on a Mac the guest and the host share one pool'
+  context: >-
+    job-admission-queue requirement "Every model on a host is admitted against one memory budget" (added under
+    2094-65yz by this ruling). Operator: small models "on the metal, and inside the containers ... need to be
+    resource-aware and plan-aware, they all play together, and should compliment each other."
+  exit_criteria:
+  - 'A model load is refused with reason memory when the snapshot does not cover its reserve; on a Mac the guest allocation is counted against the same pool; a test pins the 16 GiB scenario.'
+  - 'A refused judge falls to a smaller tier or rules-only at once.'
+  verifiable_closure: 'the admission fixture for the 16 GiB unified-memory scenario, red before the rule'
+  unscoreable: 'unpinnable-until-the-guard-exists: the admission queue it extends (2094-65yz) is not built; the fixture is scripts/lua/test-admission-one-memory-budget.lua, written with the rule'
+  next_action: 'Coordinate with the 2094-65yz implementer (macuahuitl): reserves come from 2381-tfna''s measured residency.'
+  provenance: 'Operator ruling 2381-778w.'
+  related: [2381-778w, 2094-65yz, 2081-z7sh, 2381-tfna]
+  events:
+  - {type: filed, ts: '2026-11-25T22:59:42Z', host: tlatoanis-macbook-air, summary: 'filed from ruling 2381-778w'}
+- packet_id: macos-foundation-models-optional-first-tier
+  order: 2381-rt4e
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  blocked_by: [2381-iy9u]
+  capability_tags: [macos, inference, foundation-models]
+  size: M
+  implementer_tier: opus
+  estimated_hours: 8
+  title: 'Apple Foundation Models as an optional first tier for classification and routing, falling through to the host service'
+  context: >-
+    SLOT-11. macOS 26+ on-device ~3B model: guided generation, tool calling, 8,192-token context, no embeddings
+    API; requires Apple Intelligence enabled and a supported language. On this host /usr/bin/fm exists and its
+    licence is not accepted. Accepting it is the operator's step, never an agent's.
+  exit_criteria:
+  - 'Availability is probed and an unavailable model is skipped with a named reason; requests fall through to SLOT-10.'
+  - 'Embeddings and over-context requests never take this tier.'
+  verifiable_closure: 'a fixture with a stubbed availability probe covering both skip reasons'
+  unscoreable: 'unpinnable-until-the-guard-exists: scripts/lua/test-foundation-models-tier-skips-by-name.lua, written with the tier'
+  next_action: 'Decide in-process Swift vs fm respond --schema, after 2381-iy9u.'
+  provenance: 'Operator ruling 2381-778w.'
+  related: [2381-778w, 2381-iy9u]
+  events:
+  - {type: filed, ts: '2026-11-25T22:59:42Z', host: tlatoanis-macbook-air, summary: 'filed from ruling 2381-778w'}
