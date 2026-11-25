@@ -64,11 +64,6 @@ if mint.code ~= 0 then verdict.could_not_run(NAME, "openssl req failed") end
 local CRT = DIR .. "/trust/intermediate.crt"
 local want = text.trim((run({ "sha256sum", CRT }, 30000).stdout or ""):match("^(%x+)") or "")
 if #want ~= 64 then verdict.could_not_run(NAME, "sha256sum of the minted CA failed") end
--- SELinux: give the scratch the label the launcher's state dir carries.
-if run({ "selinuxenabled" }, 10000).code == 0 then
-    run({ "chcon", "-R", "-t", "container_file_t", DIR }, 30000)
-end
-
 local TAG = "localhost/tillandsias-git:litmus-cabd"
 local CTAG = "localhost/tillandsias-git:litmus-cabd-control"
 local function build(tag, file)
@@ -77,6 +72,10 @@ local function build(tag, file)
 end
 build(TAG, ROOT .. "/" .. CF)
 build(CTAG, DIR .. "/Containerfile.control")
+-- SELinux: podman gives the scratch the label the launcher's state dir carries.
+-- Not chcon behind selinuxenabled: inside the gate's toolbox that answers no while
+-- the host that runs the containers enforces, and every bind read "unreadable".
+run({ "podman", "run", "--rm", "--network=none", "-v", DIR .. ":/label:ro,z", "--entrypoint", "/bin/sh", TAG, "-c", ":" }, 120000)
 
 local PROBE = "if test -r /etc/tillandsias/ca.crt; then sha256sum < /etc/tillandsias/ca.crt | cut -c1-64; else echo unreadable; fi"
 local ARMS = {

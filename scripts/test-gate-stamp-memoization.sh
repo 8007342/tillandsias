@@ -29,6 +29,7 @@ else
 fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT" || exit 3  # the gate under test resolves its tools from the checkout
 GATE_STAMP="$ROOT/scripts/gate-stamp.sh"
 fail=0
 pass=0
