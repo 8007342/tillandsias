@@ -120,7 +120,6 @@ scripts/test-if-not-pipeline-guard.sh
 scripts/test-image-build-convergence.sh
 scripts/test-image-usability-check.sh
 scripts/test-initialize-bare-metal-host-idempotent.sh
-scripts/test-installers-quiet-progress.sh
 scripts/test-join-the-fleet-idempotent.sh
 scripts/test-json-query-jq-parity.sh
 scripts/test-land-gate-refusal-names-its-step.sh
@@ -147,9 +146,6 @@ scripts/test-litmus-terminal-verdict.sh
 scripts/test-litmus-tracked-file-kill-safety.sh
 scripts/test-loop-status-append-input.sh
 scripts/test-macos-vsock-inference-closure.sh
-scripts/test-mcp-transport-death-trace.sh
-scripts/test-memo-hit-observability.sh
-scripts/test-metrics-log-fallback-is-loud.sh
 scripts/test-metrics-log-path-agreement.sh
 scripts/test-mo-full-attest.sh
 scripts/test-mode-only-regression-887-bz88.sh
@@ -157,10 +153,7 @@ scripts/test-must-ship-rows.sh
 scripts/test-nix-cache-service.sh
 scripts/test-nix-toolbox.sh
 scripts/test-no-competing-gate.sh
-scripts/test-opencode-render-probe.sh
 scripts/test-opencode-vault-auth-content.sh
-scripts/test-openspec-pin.sh
-scripts/test-orchestrate-enclave.sh
 scripts/test-order-citations-resolve.sh
 scripts/test-packet-tier-fields.sh
 scripts/test-pending-capability-row-does-not-wedge.sh
