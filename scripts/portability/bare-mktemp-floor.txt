@@ -45,7 +45,6 @@ scripts/refusal-calibration/apply-relabelled-561.sh 1
 scripts/scan-litmus-expression-pinning.sh 1
 scripts/select-work-batch.sh 4
 scripts/stamp-requirement-ids.sh 2
-scripts/test-append-vs-origin-fold.sh 1
 scripts/test-build-image-installed-version-alias.sh 1
 scripts/test-build-step-timing-attribution.sh 1
 scripts/test-check-credential-channel.sh 1
@@ -55,11 +54,9 @@ scripts/test-cloudflare-oauth-core.sh 1
 scripts/test-codex-mcp-registration.sh 1
 scripts/test-codex-oauth-restore.sh 1
 scripts/test-codex-safe-state.sh 1
-scripts/test-command-policy-evaluator.sh 1
 scripts/test-concurrent-forge-shared-stack.sh 1
 scripts/test-credential-verdict-script.sh 1
 scripts/test-cycle-checkout-lock.sh 1
-scripts/test-cycle-lock-attested-release.sh 1
 scripts/test-default-vault-cli-security.sh 1
 scripts/test-e2e-preflight-live-runtime.sh 2
 scripts/test-enclave-network-internal-discovery.sh 2

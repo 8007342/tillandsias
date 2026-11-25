@@ -56,8 +56,6 @@
 12 scripts/refusal-calibration/measure-recall-at-k.sh
 1 scripts/run-litmus-test.sh
 8 scripts/spec-index-ensure.sh
-1 scripts/test-bench-prompt-uniqueness.sh
-1 scripts/test-build-sh-ci-full-install-prep.sh
 1 scripts/test-build-step-timing-attribution.sh
 1 scripts/test-codex-mcp-registration.sh
 7 scripts/test-convergence-dashboard.sh

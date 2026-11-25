@@ -3,7 +3,7 @@
 # Order 1137-da83. A fixture that nothing invokes is the vacuous-green shape
 # this repository keeps paying for, and scripts/test-*.sh is NOT globbed by
 # build.sh. A fixture reaches the gate by EITHER of two routes: an explicit
-# `_run bash` line in build.sh (how test-cycle-lock-attested-release.sh runs) or
+# `_run bash` line in build.sh (how test-cycle-lock-attested-release.lua runs) or
 # a binding here (how test-cycle-checkout-lock.sh runs — it appears in build.sh
 # not at all). Neither is automatic; a fixture with NEITHER is a file.
 #

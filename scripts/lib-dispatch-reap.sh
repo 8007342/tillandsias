@@ -29,7 +29,7 @@
 # with a real gate mid-run: after SIGTERM reaped the host side, the
 # container-side `bash ./build.sh --check` was still alive with a live child
 # writing a test transcript. pirria measured one still running TWELVE MINUTES
-# after its launcher was stopped, with test-archiver-ruby-could-not-run.sh as
+# after its launcher was stopped, with test-archiver-ruby-could-not-run.lua as
 # its live child, concurrent with a second gate.
 #
 # A MARKER, NEVER A COMMAND-LINE MATCH. A stray and a healthy concurrent gate

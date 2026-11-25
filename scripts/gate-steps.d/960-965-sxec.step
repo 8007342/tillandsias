@@ -9,15 +9,15 @@
 # TMPDIR; the archiver --check it drives builds in its own mktemp scratch
 # (1132-r4mt), and the real-checkout run only READS the tree.
 #
-# STEP_SCRIPT is a LITERAL path (1063-nraf).
+# STEP_LUA is a LITERAL path (1063-nraf).
 STEP_DESC="Checking a missing ruby reads as could-not-run, not as a ledger verdict (965-sxec)"
-STEP_SCRIPT="scripts/test-archiver-ruby-could-not-run.sh"
+STEP_LUA="scripts/lua/test-archiver-ruby-could-not-run.lua"
 STEP_ERROR="an absent ruby does not route to the could-not-run channel (965-sxec) — see the verdict line above"
 STEP_OK="Archiver could-not-run channel check passed"
 # msys too: yolanda 2026-11-22 (Git Bash, target/ not cleared, work/2185-inst @
 # fcc5fc2b0 + linux-next) rc=0 "PASS: archiver could-not-run on absent ruby 5/5 (965-sxec)".
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-21 darwin PASS: archiver could-not-run on absent ruby 5/5 (965-sxec) (work/2185-inst @ 0a095694d)"
-STEP_READS="scripts/archive-plan-packets.sh scripts/plan-binary-probe.sh scripts/test-archiver-ruby-could-not-run.sh"
+STEP_READS="scripts/archive-plan-packets.sh scripts/plan-binary-probe.sh scripts/lua/test-archiver-ruby-could-not-run.lua"
 # ORDER 2185-inst: DECLARED INPUTS (2118-tnut grammar). An ATIME TRACE of two
 # real runs (every tracked file's atime backdated, the step run, the tracked
 # non-symlink reads listed): it reads all 1463 tracked files under scripts/
