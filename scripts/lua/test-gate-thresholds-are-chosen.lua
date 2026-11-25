@@ -22,7 +22,7 @@ local fixture = require "common.fixture"
 local T = fixture.new("gate-thresholds-are-chosen")
 local CRED = "scripts/test-check-credential-channel.sh"
 local SELECTOR = "scripts/test-selector-drops-cross-branch-claims.sh"
-local HOOKS = "scripts/test-forge-project-guard-hooks.sh"
+local HOOKS = "scripts/lua/test-forge-project-guard-hooks.lua"
 local CONTROL = "scripts/test-precommit-zero-trace-scan-scope.sh"
 local src = {}
 for _, f in ipairs({ CRED, SELECTOR, HOOKS, CONTROL }) do
@@ -54,7 +54,7 @@ T:arm("4 POOL that ledger is a fixture the file owns", has(SELECTOR, "_FIXTURE_I
 -- INSTALLATION rather than at the stale list.
 T:arm("5 LIST the transcribed hook list is gone from " .. HOOKS, not has(HOOKS, "for h in pre-commit-openspec.sh"),
     "a ninth hook will fail here as an installation fault")
-T:arm("6 LIST the hook set is derived from install-hooks.sh", has(HOOKS, "install-hooks.sh") and has(HOOKS, "grep -oE 'scripts/hooks/"),
+T:arm("6 LIST the hook set is derived from install-hooks.sh", has(HOOKS, "install-hooks.sh") and has(HOOKS, 'gmatch("scripts/hooks/'),
     "the coupling is undeclared again")
 
 T:arm("7 NEGATIVE CONTROL the declared vacuity floor is untouched", has(CONTROL, "-gt 20"),

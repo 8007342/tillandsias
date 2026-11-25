@@ -560,14 +560,12 @@ scripts scripts/test-expire-claims-list-live-rows.sh 8
 scripts scripts/test-expire-claims-reads-the-status-write.sh 9
 scripts scripts/test-expire-claims-write-is-opt-in.sh 4
 scripts scripts/test-fake-cloudflare.sh 11
-scripts scripts/test-fixture-git-dir-scope.sh 2
 scripts scripts/test-fleet-activity.sh 7
 scripts scripts/test-fleet-heartbeat-sees-a-ledger-filed-blocker.sh 13
 scripts scripts/test-fleet-msg-mcp.sh 3
 scripts scripts/test-fleet-msg-same-host.sh 5
 scripts scripts/test-fleet-msg-store.sh 3
 scripts scripts/test-forge-gitconfig-bidirectional-quarantine.sh 2
-scripts scripts/test-forge-project-guard-hooks.sh 1
 scripts scripts/test-forge-project-trust-seeds.sh 1
 scripts scripts/test-forge-src-budget-report.sh 1
 scripts scripts/test-forge-standard-gitconfig-path.sh 2
@@ -576,9 +574,7 @@ scripts scripts/test-fragment-batch-never-collapses-verdicts.sh 1
 scripts scripts/test-fragment-events-land-callsite.sh 8
 scripts scripts/test-fragment-status-loss.sh 7
 scripts scripts/test-freshness-regime-budget.sh 22
-scripts scripts/test-gate-memory-refusal.sh 1
 scripts scripts/test-gate-stamp-names-content-movers.sh 5
-scripts scripts/test-gate-step-append-no-conflict.sh 11
 scripts scripts/test-gate-step-prefix-allocation.sh 8
 scripts scripts/test-gate-step-skip-exit.sh 3
 scripts scripts/test-git-credential-helper.sh 5
