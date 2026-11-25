@@ -353,7 +353,9 @@ fi
 # Now the runtime bin joins PATH — after the extraction above, and carrying the
 # shim it may just have written, so both this runner's own yaml_get and every
 # litmus step command resolve the same real yq.
-export PATH="$LITMUS_RUNTIME_DIR/bin:$PATH"
+# 2310-eji3 (yolanda, msys): as this shell spells it. A C:/ runtime dir prepended raw splits
+# at its drive colon, and the whole shim dir, podman and yq included, was off PATH.
+export PATH="$(cd "$LITMUS_RUNTIME_DIR/bin" && pwd):$PATH"
 
 # ── ORDER 746-htj9: the sanctioned YAML read path for the runner's OWN reads ─
 # Metadata reads (phase/host_kind/size/inputs, bindings queries) try
