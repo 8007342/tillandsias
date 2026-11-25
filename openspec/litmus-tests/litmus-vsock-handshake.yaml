@@ -1,7 +1,7 @@
 # @trace spec:vsock-transport
 name: litmus:vsock-handshake
 spec: vsock-transport
-phase: 2
+phase: runtime
 description: >
   Exercise the maintained headless vsock listener fixture, exchange the real
   Hello/HelloAck schema at wire version 2, and prove the same typed framing on

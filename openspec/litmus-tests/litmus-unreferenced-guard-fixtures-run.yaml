@@ -16,7 +16,7 @@ preconditions:
   - workspace contains scripts/check-added-test-is-referenced.sh
 critical_path:
   - step: "bash composition-hazard lint names the pre-fix pipeline and not the comment"
-    command: "bash scripts/test-bash-composition-hazards.sh 2>&1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-bash-composition-hazards.lua 2>&1"
     expected_behavior: "ok:bash-composition-hazards:"
     assert_exit: 0
     assert_output_contains: "ok:bash-composition-hazards:"

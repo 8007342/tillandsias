@@ -46,7 +46,6 @@ scripts/scan-litmus-expression-pinning.sh 1
 scripts/select-work-batch.sh 4
 scripts/stamp-requirement-ids.sh 2
 scripts/test-append-vs-origin-fold.sh 1
-scripts/test-bash-composition-hazards.sh 1
 scripts/test-build-image-installed-version-alias.sh 1
 scripts/test-build-step-timing-attribution.sh 1
 scripts/test-check-credential-channel.sh 1

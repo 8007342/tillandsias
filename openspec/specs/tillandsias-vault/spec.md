@@ -711,7 +711,7 @@ Codex's own device flow usable without inventing a destination. Non-TTY and
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:vault-auto-unseal-no-prompt` - asserts the no-prompt property.
+- `litmus:vault-auto-unseal-no-prompt` - RETIRED and unbound (2357-5quw): its commands no longer exist, so no test asserts the no-prompt property today.
 - `litmus:vault-policy-forge-cannot-read-github-token` - asserts
   forge-policy 403s on token path.
 - `litmus:git-mirror-safe-refspec-push` - transitively checks the git mirror
