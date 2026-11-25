@@ -33,9 +33,9 @@ local function corpus(bound)
     for _, n in ipairs(bound) do y = y .. "- spec_id: x\n  litmus_tests:\n  - " .. L .. n .. "\n" end
     fs.write(d.rel .. "/bind.yaml", y)
 end
--- declared / command: a path, or nil. A nil phase writes no phase line: the default is pre-build.
+-- declared / command: a path, or nil.
 local function mk(file, name, spec, phase, size, declared, command)
-    fs.write(d.rel .. "/tests/" .. file .. ".yaml", "name: " .. L .. name .. "\nspec: " .. spec .. (phase and "\nphase: " .. phase or "") .. "\nsize: " .. size .. "\npreconditions:\n"
+    fs.write(d.rel .. "/tests/" .. file .. ".yaml", "name: " .. L .. name .. "\nspec: " .. spec .. "\nphase: " .. phase .. "\nsize: " .. size .. "\npreconditions:\n"
         .. (declared and "  - workspace contains " .. declared .. "\n" or "") .. 'critical_path:\n  - step: "s"\n    command: "test -f ' .. (command or "-") .. '"\n')
 end
 local function map(real, ...)
@@ -50,7 +50,7 @@ local function has(x, line) return text.contains("\n" .. x.out, "\n" .. line .. 
 
 corpus{ "decl-long", "cmd-instant", "cmd-long", "post", "selfish" }
 mk("a", "decl-long", "s-decl", "pre-build", "long", "lib/d.sh")
-mk("b", "cmd-instant", "s-cmdi", nil, "instant", nil, "lib/c.sh")
+mk("b", "cmd-instant", "s-cmdi", "pre-build", "instant", nil, "lib/c.sh")
 mk("c", "cmd-long", "s-cmdl", "pre-build", "long", nil, "lib/c.sh")
 mk("d", "post", "s-post", "post-build", "instant", "lib/d.sh")
 mk("e", "orphan", "s-orph", "pre-build", "instant", "lib/d.sh")
