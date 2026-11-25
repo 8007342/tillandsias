@@ -1549,6 +1549,20 @@ behavior_matches_output() {
     # BEFORE this function is reached. What remains is the honest fallback the
     # interpreter always ended in: case-insensitive fixed-string containment.
 
+    # ORDER 2309-fa7q. Two expectations containment cannot judge: a bare number ("1"
+    # is in "10") is the whole output, spaces aside; and `test result: ok` with no
+    # count, which a filter matching no test prints too, needs a test that passed.
+    case "$expected_lc" in
+        *[!0-9]*) ;;
+        *) [[ "$(printf '%s' "$output" | tr -d ' \t\r')" == "$expected_lc" ]]; return ;;
+    esac
+    case "$expected_lc" in
+        "test result: ok" | "test result: ok.")
+            grep -Eq 'test result: ok\. [1-9][0-9]* passed' <<<"$output"
+            return
+            ;;
+    esac
+
     if grep -Fqi "$expected" <<<"$output" || grep -Fqi "$expected_lc" <<<"$output_lc"; then
         return 0
     fi
