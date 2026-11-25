@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: land-tool-mirror-and-long-running-view-fixtures-ported-to-lua
+    order: "2331-8emp"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/test-land-adopts-valid-stamp.lua
+      - scripts/lua/test-land-affordance.lua
+      - scripts/lua/test-mirror-refuses-when-broken.lua
+      - scripts/lua/test-long-running-view-refuses-at-completion.lua
+    title: "four shell fixtures ported to Lua: land stamp adoption, land refusal affordance, broken-mirror refusal, long-running view completion refusal"
+    context: |
+      ports: test-land-adopts-valid-stamp, test-land-affordance, test-mirror-refuses-when-broken, test-long-running-view-refuses-at-completion.
+      Claimed by yoga before the work, in the coordinator's test-[i-o]* range.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its subject is mutated; callers run the .lua; the four .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by two gate steps and two litmus tests"
+    provenance: "coordinator queue 2026-11-25 (test-[i-o]* range), yoga"
+    related: [1174-u5wp, 1247-lwek, 1310-rec6, 1211-q9bm]
+    events:
+      - {type: claimed, ts: "2026-11-25T06:25:59Z", host: yoga, summary: "claimed; work ref work/2331-8emp"}
