@@ -101,7 +101,7 @@ _expect "reachable volume wins rung 3 with no demotion" "$out" \
 # 09-04 one.
 #
 # The idiom is the project's own, stated in
-# test-tray-asset-placeholder-refused.sh: a probe that cannot run its own arm
+# test-tray-asset-placeholder-refused.lua: a probe that cannot run its own arm
 # must say so rather than fail the tree. The arms still RUN for every non-root
 # host, which is where the rootless-podman shape 1003-v3dc fixes actually
 # occurs, so the teeth are intact exactly where the condition is real.

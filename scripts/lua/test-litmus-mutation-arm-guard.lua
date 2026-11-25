@@ -44,7 +44,7 @@ arm("6 redirections to /dev/null and fd 2 are not mutations", "flagged",
     step("MUTATION: the reader must fail once the field is gone", "grep -q 'field' src/x.rs >/dev/null 2>&1 && echo ok"))
 -- The boundary before a script path is usually a QUOTE in a YAML scalar (order 147).
 arm("7 a delegation written as a bare quoted path passes", "passed",
-    step("MUTATION CONTROL: the guard catches a lost static and a retry loop", "scripts/test-tray-refresh-no-polling.sh"))
+    step("MUTATION CONTROL: the guard catches a lost static and a retry loop", "scripts/test-fragment-status-loss.sh"))
 -- 8-10 (2325-qmsb): a fixture in Lua is a fixture. Running it delegates; naming it as another command's
 -- argument does not.
 arm("8 a MUTATION step that runs a scripts/lua fixture passes", "passed",
