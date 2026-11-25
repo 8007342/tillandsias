@@ -293,7 +293,6 @@ litmus openspec/litmus-tests/litmus-skills-canonical-and-mcp-first-shape.yaml 1
 litmus openspec/litmus-tests/litmus-smoke-agent-watch-shape.yaml 1
 litmus openspec/litmus-tests/litmus-smoke-consecutive-lanes-shape.yaml 1
 litmus openspec/litmus-tests/litmus-smoke-release-channel-shape.yaml 2
-litmus openspec/litmus-tests/litmus-smoke-skill-reset-env-matches-policy.yaml 1
 litmus openspec/litmus-tests/litmus-socket-cleanup.yaml 2
 litmus openspec/litmus-tests/litmus-spawn-failure-names-program.yaml 3
 litmus openspec/litmus-tests/litmus-spec-script-paths.yaml 1
@@ -475,7 +474,6 @@ scripts scripts/orchestrate-enclave.sh 16
 scripts scripts/plan-binary-probe.sh 7
 scripts scripts/preflight-fixtures-default-target.sh 3
 scripts scripts/probe-complement-selfcheck.sh 5
-scripts scripts/probe-credential-cold-state.sh 4
 scripts scripts/probe-silverblue-update-skew.sh 4
 scripts scripts/promote-stable.sh 12
 scripts scripts/push-plan-fragments-to-trunk.sh 19
@@ -519,7 +517,6 @@ scripts scripts/terminology-check-memo.sh 3
 scripts scripts/test-a-claim-names-a-workstation.sh 5
 scripts scripts/test-append-event-archived-refusal.sh 4
 scripts scripts/test-append-vs-origin-fold.sh 7
-scripts scripts/test-archiver-could-not-run-is-self-naming.sh 1
 scripts scripts/test-archiver-ruby-could-not-run.sh 8
 scripts scripts/test-awk-float-lc-numeric.sh 6
 scripts scripts/test-bash-composition-hazards.sh 2
@@ -528,7 +525,6 @@ scripts scripts/test-bound-litmus-is-runnable.sh 5
 scripts scripts/test-branch-discipline-verb.sh 1
 scripts scripts/test-build-sh-ci-full-install-prep.sh 1
 scripts scripts/test-build-step-timing-attribution.sh 1
-scripts scripts/test-capabilities-envelope-names-its-source.sh 4
 scripts scripts/test-capability-routing.sh 24
 scripts scripts/test-capture-helper.sh 4
 scripts scripts/test-centicolon-extract.sh 3
@@ -547,7 +543,6 @@ scripts scripts/test-competing-gate-consumer.sh 2
 scripts scripts/test-credential-channel-affordances.sh 1
 scripts scripts/test-credential-channel-host-push-lane.sh 1
 scripts scripts/test-credential-channel-names-a-locked-keyring.sh 6
-scripts scripts/test-credential-cold-state-probe.sh 2
 scripts scripts/test-cycle-checkout-lock.sh 9
 scripts scripts/test-cycle-metrics-recurrence.sh 1
 scripts scripts/test-cycle-preflight-cargo-resolution.sh 3
@@ -596,7 +591,6 @@ scripts scripts/test-git-mirror-vault-agent-auto-auth.sh 18
 scripts scripts/test-github-token-auto-rotation.sh 1
 scripts scripts/test-groundtruth-corpus-declaration.sh 8
 scripts scripts/test-guest-binaries-nix-lane.sh 9
-scripts scripts/test-harness-affinity-selection.sh 10
 scripts scripts/test-harness-byte-cheap.sh 1
 scripts scripts/test-harness-contract-probe.sh 1
 scripts scripts/test-harness-rollback.sh 6
@@ -696,7 +690,6 @@ scripts scripts/test-seam-writers-canonical.sh 7
 scripts scripts/test-secrets.sh 7
 scripts scripts/test-selector-drops-cross-branch-claims.sh 6
 scripts scripts/test-selector-flags-host-scoped-criteria.sh 4
-scripts scripts/test-session-tokens.sh 2
 scripts scripts/test-set-field-prose-guard.sh 1
 scripts scripts/test-set-field-refuses-unknown-flags.sh 8
 scripts scripts/test-set-field-yaml-shapes.sh 1

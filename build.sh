@@ -4974,7 +4974,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Fragment-integrity fixture passed"
     _step "Checking the sanctioned YAML reader is present here (746-htj9)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-yaml-reader-availability.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-yaml-reader-availability.lua" 2>&1; then
         _error "no sanctioned YAML reader in this environment, or the load-failure verdict collapsed into the divergence verdict (720-24u6)"
         exit 1
     fi
@@ -6573,7 +6573,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # where a step in another lane is charged with it (#1369, #1349).
     _step "Checking the metrics-isolation fixture keeps off the shared timing log (2244-ge9s)..."
     if ! _run_lua_decider "scripts/lua/test-metrics-isolation-keeps-off-the-shared-log.lua" 2>&1; then
-        _error "test-gate-step-metrics-isolation.sh wrote a record carrying the gate's run id into a log the gate's leak check reads — keep its split in a fixture-private fallback dir with the run id unset; see the FAIL lines above (2244-ge9s)"
+        _error "test-gate-step-metrics-isolation.lua wrote a record carrying the gate's run id into a log the gate's leak check reads — keep its split in a fixture-private fallback dir with the run id unset; see the FAIL lines above (2244-ge9s)"
         exit 1
     fi
     _info "Metrics-isolation shared-log fixture passed"

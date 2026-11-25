@@ -42,7 +42,6 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FIXTURES=(
     scripts/test-check-credential-channel.sh
     scripts/test-credential-channel-survives-a-killed-probe.sh
-    scripts/test-credential-cold-state-probe.sh
     scripts/test-credential-channel-names-a-locked-keyring.sh
     scripts/test-credential-channel-affordances.sh
     scripts/test-clear-vault-host-credentials.sh

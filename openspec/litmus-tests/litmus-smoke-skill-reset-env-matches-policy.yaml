@@ -8,30 +8,25 @@ description: >
   TILLANDSIAS_SKILL=<the skill's own name>), and no longer say "unset or 1".
   The fixture extracts the pair from each skill's text and, on bare-metal
   evidence, checks that `policy eval` answers
-  ok:policy:soft-reset:env-preauthorised (consent_source=env) and that the
+  the run door runs a stub reset (consent_source=env) and that the
   Bash-tool bridge allows the reset as prescribed and asks without the pair;
   hard reset stays a consent under both. In a forge the eval arms are a NAMED skip.
 severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-smoke-skill-reset-env-matches-policy.sh
+  - workspace contains scripts/lua/test-smoke-skill-reset-env-matches-policy.lua
 
 critical_path:
-  - step: "fixture parses and is executable"
-    command: "bash -n scripts/test-smoke-skill-reset-env-matches-policy.sh && test -x scripts/test-smoke-skill-reset-env-matches-policy.sh && echo 'ok: parse'"
-    timeout_ms: 2000
-    expected_behavior: "ok: parse"
-
   - step: "skill text, policy eval and the bridge agree on the smoke reset env"
-    command: "bash scripts/test-smoke-skill-reset-env-matches-policy.sh 2>&1 | tail -n 1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-smoke-skill-reset-env-matches-policy.lua"
     timeout_ms: 60000
-    expected_behavior: "PASS: smoke-skill-reset-env-matches-policy"
+    expected_behavior: "ok:smoke-skill-reset-env:9 arms"
 
 observability:
   traces:
     - "@trace spec:command-policies"
-  expected_log: "PASS: smoke-skill-reset-env-matches-policy"
+  expected_log: "ok:smoke-skill-reset-env:9 arms"
   log_fields:
     spec: "command-policies"
     test: "smoke-skill-reset-env-matches-policy"
@@ -42,4 +37,4 @@ rollback:
     A skill that tells an agent to set an env the engine does not honour, or a
     bridge that disagrees with `policy eval`, is the defect: fix the text or
     route the bridge through command_policy::env_preauthorises, never the token arm.
-  command: "bash scripts/test-smoke-skill-reset-env-matches-policy.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-smoke-skill-reset-env-matches-policy.lua"

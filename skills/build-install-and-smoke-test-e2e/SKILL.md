@@ -304,7 +304,7 @@ test "$RESET_RC" -eq 0
   # asserted 0 containers / 0 volumes / 0 images and reported cold while a
   # fallback_vault-shamir-share-v1 had survived every reset since 2026-09-01 —
   # the resync path was never exercised. Metadata only — never the secret.
-  scripts/probe-credential-cold-state.sh 2>&1 | tee "$LOG_DIR/02-credential-state.txt" || true
+  "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" script run scripts/lua/probe-credential-cold-state.lua 2>&1 | tee "$LOG_DIR/02-credential-state.txt" || true
 CONTAINERS="$(podman ps -aq)"; VOLUMES="$(podman volume ls -q)"; IMAGES="$(podman images -q)"
 printf '[containers]\n%s\n[volumes]\n%s\n[images]\n%s\n' "$CONTAINERS" "$VOLUMES" "$IMAGES" \
   | tee "$LOG_DIR/02-empty-store.txt"

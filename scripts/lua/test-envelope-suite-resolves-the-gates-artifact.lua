@@ -1,7 +1,7 @@
 -- @trace order:1179-yshc, order:2303-h6qe, spec:accel-capability-probe
 --
 -- test-envelope-suite-resolves-the-gates-artifact.lua — the envelope suite
--- (test-capabilities-envelope-names-its-source.sh) grades the binary the GATE
+-- (test-capabilities-envelope-names-its-source.lua) grades the binary the GATE
 -- built, not whatever artifact sits in-tree. Ported from the .sh (2303-h6qe).
 --
 -- Where the builder re-execs with CARGO_TARGET_DIR redirected (every Windows
@@ -24,7 +24,7 @@
 
 local fixture = require "common.fixture"
 local T = fixture.new("envelope-suite-resolves-the-gates-artifact")
-local SUITE = "scripts/test-capabilities-envelope-names-its-source.sh"
+local SUITE = "scripts/lua/test-capabilities-envelope-names-its-source.lua"
 local block, on = {}, false
 for _, l in ipairs(text.lines(fs.read(SUITE))) do
     if not on and l == 'if [ -n "${TILLANDSIAS_BIN:-}" ]; then' then on = true end

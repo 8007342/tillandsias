@@ -30,7 +30,7 @@ TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
 scripts/clear-vault-host-credentials.sh 2>&1 | tee target/smoke-e2e/02-clear-credentials.log || true
 
 # Record which state this run actually started in (criterion 2), metadata only.
-scripts/probe-credential-cold-state.sh 2>&1 | tee target/smoke-e2e/02-credential-state.txt || true
+"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" script run scripts/lua/probe-credential-cold-state.lua 2>&1 | tee target/smoke-e2e/02-credential-state.txt || true
 
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \

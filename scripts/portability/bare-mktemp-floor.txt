@@ -49,7 +49,6 @@ scripts/test-append-vs-origin-fold.sh 1
 scripts/test-bash-composition-hazards.sh 1
 scripts/test-build-image-installed-version-alias.sh 1
 scripts/test-build-step-timing-attribution.sh 1
-scripts/test-census-enforced-reachability-split.sh 1
 scripts/test-check-credential-channel.sh 1
 scripts/test-clear-vault-credentials-partial-is-nonzero.sh 1
 scripts/test-clear-vault-host-credentials.sh 1
@@ -82,7 +81,6 @@ scripts/test-gate-memory-wsl2-guest.sh 1
 scripts/test-gate-stamp-memoization.sh 1
 scripts/test-gate-stamp-scope.sh 1
 scripts/test-gate-stamp.sh 1
-scripts/test-gate-step-metrics-isolation.sh 1
 scripts/test-git-credential-helper.sh 1
 scripts/test-git-mirror-existing-volume-hardening.sh 1
 scripts/test-git-mirror-ref-convergence.sh 1
@@ -158,8 +156,6 @@ scripts/test-uninstall-matcher-spares-bystanders.sh 1
 scripts/test-validator-surface-currency.sh 1
 scripts/test-vault-shutdown-forwards-sigterm.sh 1
 scripts/test-version-bump-isolation-scope.sh 1
-scripts/test-windows-only-sources-verified.sh 1
-scripts/test-windows-tray-clippy.sh 1
 scripts/test-wsl-builder-kill-reaches-guest.sh 1
 scripts/update-convergence-dashboard.sh 2
 scripts/validate-traces.sh 1

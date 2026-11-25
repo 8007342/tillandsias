@@ -63,7 +63,6 @@ scripts/check-yaml-reader-availability.sh
 scripts/test-a-claim-names-a-workstation.sh
 scripts/test-append-event-archived-refusal.sh
 scripts/test-append-vs-origin-fold.sh
-scripts/test-archiver-could-not-run-is-self-naming.sh
 scripts/test-archiver-ruby-could-not-run.sh
 scripts/test-awk-float-lc-numeric.sh
 scripts/test-bash-composition-hazards.sh
@@ -73,7 +72,6 @@ scripts/test-branch-discipline-verb.sh
 scripts/test-build-image-installed-version-alias.sh
 scripts/test-build-sh-ci-full-install-prep.sh
 scripts/test-build-step-timing-attribution.sh
-scripts/test-capabilities-envelope-names-its-source.sh
 scripts/test-capability-routing.sh
 scripts/test-capture-helper.sh
 scripts/test-centicolon-extract.sh
@@ -105,7 +103,6 @@ scripts/test-credential-channel-affordances.sh
 scripts/test-credential-channel-host-push-lane.sh
 scripts/test-credential-channel-names-a-locked-keyring.sh
 scripts/test-credential-channel-survives-a-killed-probe.sh
-scripts/test-credential-cold-state-probe.sh
 scripts/test-credential-verdict-script.sh
 scripts/test-cycle-checkout-lock.sh
 scripts/test-cycle-lock-attested-release.sh
@@ -135,7 +132,6 @@ scripts/test-fleet-msg-mcp.sh
 scripts/test-fleet-msg-same-host.sh
 scripts/test-fleet-msg-store.sh
 scripts/test-forge-findings-persisted.sh
-scripts/test-forge-git-identity-source.sh
 scripts/test-forge-gitconfig-bidirectional-quarantine.sh
 scripts/test-forge-localization-staged.sh
 scripts/test-forge-project-guard-hooks.sh
@@ -158,7 +154,6 @@ scripts/test-gate-stamp-names-content-movers.sh
 scripts/test-gate-stamp-scope.sh
 scripts/test-gate-stamp.sh
 scripts/test-gate-step-append-no-conflict.sh
-scripts/test-gate-step-metrics-isolation.sh
 scripts/test-gate-step-prefix-allocation.sh
 scripts/test-gate-step-regimes.sh
 scripts/test-gate-step-skip-exit.sh
@@ -173,7 +168,6 @@ scripts/test-groundtruth-corpus-declaration.sh
 scripts/test-guest-binaries-nix-lane.sh
 scripts/test-guest-crashloop-detection.sh
 scripts/test-guest-staging-refuses-a-wireless-binary.sh
-scripts/test-harness-affinity-selection.sh
 scripts/test-harness-byte-cheap.sh
 scripts/test-harness-contract-probe.sh
 scripts/test-harness-rollback.sh
@@ -296,7 +290,6 @@ scripts/test-running-image-freshness.sh
 scripts/test-rust-source-pin-added.sh
 scripts/test-salvage-audit.sh
 scripts/test-salvage-net.sh
-scripts/test-salvage-preserves-exec-bits.sh
 scripts/test-salvage-refs-ledger.sh
 scripts/test-scorable-closure-quoting.sh
 scripts/test-scorable-obligation-gate.sh
@@ -307,7 +300,6 @@ scripts/test-seam-writers-canonical.sh
 scripts/test-secrets.sh
 scripts/test-selector-drops-cross-branch-claims.sh
 scripts/test-selector-flags-host-scoped-criteria.sh
-scripts/test-session-tokens.sh
 scripts/test-set-field-prose-guard.sh
 scripts/test-set-field-refuses-unknown-flags.sh
 scripts/test-set-field-yaml-shapes.sh
@@ -322,7 +314,6 @@ scripts/test-skills-single-source.sh
 scripts/test-smoke-agent-watch.sh
 scripts/test-smoke-evidence-dir-is-fresh.sh
 scripts/test-smoke-forge-lane-cold-host-outcome.sh
-scripts/test-smoke-skill-reset-env-matches-policy.sh
 scripts/test-smoke-verifies-a-signature.sh
 scripts/test-spawn-failure-names-program.sh
 scripts/test-spec-index-durable-tier-demotion.sh
@@ -352,10 +343,5 @@ scripts/test-unrunnable-platform-arms.sh
 scripts/test-validator-surface-currency.sh
 scripts/test-vault-shutdown-forwards-sigterm.sh
 scripts/test-version-bump-isolation-scope.sh
-scripts/test-windows-only-sources-verified.sh
-scripts/test-windows-tray-clippy.sh
-scripts/test-worktree-boundary-guard.sh
-scripts/test-wsl2-builder-shell-options.sh
-scripts/test-yaml-reader-availability.sh
 scripts/verify-closure.sh
 scripts/verify-version-monotonic.sh
