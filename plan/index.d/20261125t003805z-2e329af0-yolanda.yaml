@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: order-citations-checker-cannot-judge-on-native-windows
+    field: status
+    value: completed
+    ts: "2026-11-25T00:38:05Z"
+    host: yolanda
+
+events:
+  - packet_id: order-citations-checker-cannot-judge-on-native-windows
+    event:
+      type: completed
+      ts: "2026-11-25T00:38:05Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: PR 1522 landed as 6c64886e4. At 1463b3263: msys, darwin (macbookair) and Linux (macuahuitl) all ok:order-citations-resolve:1010 checked, 2 declared; fixture 7/7 on msys and darwin with the planted citation caught; litmus:unreferenced-lane-fixtures-run passed on Linux
+  - packet_id: order-citations-checker-cannot-judge-on-native-windows
+    event:
+      type: note
+      ts: "2026-11-25T00:38:05Z"
+      host: yolanda
+      summary: |-
+        both exit criteria met; same verdict on three platforms
