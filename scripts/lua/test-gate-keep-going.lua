@@ -18,6 +18,10 @@
 --   5 MUTANT     _gs_one's record-and-continue line removed from a copy of
 --                build.sh: arm 2's world names only a — arm 2 has teeth
 --
+--   6 UID 0      step 345 run as uid 0 is a named skip, never STEP_OK (2332-rxkr)
+--   7 FALSE GREEN the same run at exit 0 prints STEP_OK: arm 6 has teeth
+--   8 a red static arm outranks the skip
+--
 -- Usage: tillandsias-plan script run scripts/lua/test-gate-keep-going.lua
 -- Verdict: ok:gate-keep-going:<n> arms | violation:gate-keep-going:<n>-failed
 
@@ -96,4 +100,36 @@ else
     T:arm("5 MUTANT without record-and-continue only a is named: arm 2 has teeth",
         nd == 1 and nc == 1 and rc ~= 0 and has(o, "step-a-ran") and not has(o, "red-step:300-c.step"), "nd=" .. nd .. " nc=" .. nc .. " rc=" .. tostring(rc) .. "\n" .. o)
 end
+
+-- 6-8 (2332-rxkr): step 345 as it ships, its Lua copied with the uid read as 0, through the
+-- real loop. The fixture's own exit code does not show what the gate prints.
+local STEP, LUA = "345-1183-j9dk.step", "scripts/lua/test-inference-mkdir-fatal-1183-j9dk.lua"
+local stepsrc, luasrc = fs.read("scripts/gate-steps.d/" .. STEP), fs.read(LUA)
+local PASSED = stepsrc:match('\nSTEP_OK="([^"]*)"')
+local function root345(name, subs)
+    local body, n = luasrc, 0
+    for _, s in ipairs(subs) do
+        local k
+        body, k = body:gsub(s[1]:gsub("%p", "%%%0"), function() return s[2] end, 1)
+        n = n + k
+    end
+    local d = { rel = S.rel .. "/" .. name, abs = S.abs .. "/" .. name }
+    fs.mkdir(d.rel .. "/scripts/gate-steps.d"); fs.mkdir(d.rel .. "/scripts/lua")
+    fs.write(d.rel .. "/scripts/gate-steps.d/" .. STEP, stepsrc)
+    fs.write(d.rel .. "/" .. LUA, body)
+    return d, n == #subs
+end
+local UID0 = { '$(id -u)" != 0 ]', '0" != 0 ]' }
+local d, applied = root345("uid0", { UID0 })
+rc, o = gate(B, d)
+T:arm("6 UID 0 step 345 is a named skip and never its STEP_OK",
+    applied and rc == 0 and has(o, "could-not-run:inference-mkdir-fatal:uid-0-static-arms-only") and has(o, "could-not-run (exit 3;") and not has(o, PASSED), "applied=" .. tostring(applied) .. " rc=" .. tostring(rc) .. "\n" .. o)
+d, applied = root345("uid0-at-0", { UID0, { 'uid-0-static-arms-only", 3)', 'uid-0-static-arms-only", 0)' }, { '"could-not-run:inf', '"skip:inf' } })
+rc, o = gate(B, d)
+T:arm("7 FALSE GREEN the same run at exit 0 prints STEP_OK: arm 6 has teeth",
+    applied and rc == 0 and has(o, "skip:inference-mkdir-fatal:uid-0-static-arms-only") and has(o, PASSED), "applied=" .. tostring(applied) .. " rc=" .. tostring(rc) .. "\n" .. o)
+d, applied = root345("uid0-red", { UID0, { 'text.contains(GUARD, "id -u")', "false" } })
+rc, o = gate(B, d)
+T:arm("8 a red static arm outranks the skip",
+    applied and rc == 1 and has(o, "violation:inference-mkdir-fatal:") and not has(o, "could-not-run (exit"), "applied=" .. tostring(applied) .. " rc=" .. tostring(rc) .. "\n" .. o)
 T:finish()

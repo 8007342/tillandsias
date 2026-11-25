@@ -11,12 +11,13 @@
 --   6 the refusal and the checker name the same moment
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-long-running-view-refuses-at-completion.lua
--- Verdict: ok:long-running-completion:<n> arms | violation:...
+-- Verdict: ok:long-running-completion:<n> arms | violation:... | could-not-run:... (exit 3)
 
 local fixture = require "common.fixture"
 local T = fixture.new("long-running-completion")
 local PLAN = fixture.plan_binary()
-if PLAN == "" then T:skip("no-plan-binary") end
+-- Exit 3: the gate step nominates it as its skip; exit 0 would be booked as a pass.
+if PLAN == "" then verdict.emit("could-not-run:long-running-completion:no-plan-binary", 3) end
 -- 245 is multi_cycle in the committed ledger; 278 is not.
 local MC, PLAIN = "245", "278"
 local INDEX = fs.read("plan/index.yaml")

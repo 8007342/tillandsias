@@ -187,13 +187,10 @@ scripts/test-host-tools.sh
 scripts/test-if-not-pipeline-guard.sh
 scripts/test-image-build-convergence.sh
 scripts/test-image-usability-check.sh
-scripts/test-inference-engine-pinned-and-npu-honest.sh
-scripts/test-inference-mkdir-fatal-1183-j9dk.sh
 scripts/test-initialize-bare-metal-host-idempotent.sh
 scripts/test-installer-probes-by-attempt-not-by-help.sh
 scripts/test-installers-quiet-progress.sh
 scripts/test-join-the-fleet-idempotent.sh
-scripts/test-jq-multiline-capture.sh
 scripts/test-json-get-help-names-its-subset.sh
 scripts/test-json-query-jq-parity.sh
 scripts/test-land-gate-refusal-names-its-step.sh
@@ -210,7 +207,6 @@ scripts/test-litmus-budget-tally.sh
 scripts/test-litmus-diff-scope.sh
 scripts/test-litmus-fake-backend-under-remote-podman.sh
 scripts/test-litmus-fake-podman-hermetic.sh
-scripts/test-litmus-grep-escapes.sh
 scripts/test-litmus-kill-adjudicator.sh
 scripts/test-litmus-missing-bound-test-reds.sh
 scripts/test-litmus-parse-instruments-agree.sh
