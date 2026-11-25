@@ -272,7 +272,6 @@ scripts/test-reopen-is-history-not-loss.sh
 scripts/test-requirement-ids.sh
 scripts/test-reset-flags-are-accepted.sh
 scripts/test-reset-state-contract.sh
-scripts/test-resumable-claim-dirt.sh
 scripts/test-run-verb-agent-door.sh
 scripts/test-running-image-freshness.sh
 scripts/test-rust-source-pin-added.sh
@@ -290,7 +289,6 @@ scripts/test-selector-drops-cross-branch-claims.sh
 scripts/test-selector-flags-host-scoped-criteria.sh
 scripts/test-set-field-prose-guard.sh
 scripts/test-set-field-refuses-unknown-flags.sh
-scripts/test-set-field-yaml-shapes.sh
 scripts/test-shipped-diagnostic-tool-dispatch.sh
 scripts/test-sidecar-staleness-stamp.sh
 scripts/test-sigpipe-guard-sees-paths-and-continuations.sh
@@ -298,7 +296,6 @@ scripts/test-sigpipe-verdict-pipelines.sh
 scripts/test-silverblue-update-skew-probe.sh
 scripts/test-skill-canonicalization-remedy.sh
 scripts/test-skills-single-source.sh
-scripts/test-smoke-agent-watch.sh
 scripts/test-smoke-evidence-dir-is-fresh.sh
 scripts/test-smoke-forge-lane-cold-host-outcome.sh
 scripts/test-smoke-verifies-a-signature.sh

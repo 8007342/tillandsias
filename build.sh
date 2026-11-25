@@ -4988,7 +4988,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Exit-status canary sound"
 
     _step "Checking set-field emits valid YAML for every value shape..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-set-field-yaml-shapes.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-set-field-yaml-shapes.lua" 2>&1; then
         _error "set-field can write an unparseable ledger fragment — the ledger is append-only"
         exit 1
     fi

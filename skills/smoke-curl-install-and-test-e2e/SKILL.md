@@ -1353,7 +1353,7 @@ stops the forge container so the lane returns in minutes instead of never.
 **Do not replace this with a timeout.** A budget tuned to the ~70-minute
 working figure kills long healthy lanes and still waits 70 minutes to notice a
 death at minute 2; any agent activity after an error resets the watch, which
-is the negative control (`scripts/test-smoke-agent-watch.sh` arm 4).
+is the negative control (`scripts/lua/test-smoke-agent-watch.lua` arm 4).
 To classify a lane by hand: `scripts/smoke-agent-watch.sh classify
 target/smoke-e2e/04-opencode-agent.log`.
 LIMIT, by name: the watch finds the forge by `podman ps` on THIS host, so on
