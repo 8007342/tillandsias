@@ -16,8 +16,8 @@
 # ENOSPC with 1.2 TB free. Wired here because the defect is invisible on any
 # host with a roomy /tmp, which is every host that runs this gate.
 STEP_DESC="Checking the spec-index builder stages where the payload fits (964-zedm)"
-STEP_SCRIPT="scripts/test-spec-index-staging-capacity.sh"
+STEP_LUA="scripts/lua/test-spec-index-staging-capacity.lua"
 STEP_ERROR="the spec-index builder stages into the ambient TMPDIR (964-zedm) — see the verdict line above"
 STEP_OK="Spec-index staging capacity check passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin PASS spec-index staging capacity 6/6 at 35680bdf4 (run directly, idle host)"
-STEP_READS="scripts/test-spec-index-staging-capacity.sh"
+STEP_READS="scripts/spec-index-ensure.sh scripts/lua/test-spec-index-staging-capacity.lua"

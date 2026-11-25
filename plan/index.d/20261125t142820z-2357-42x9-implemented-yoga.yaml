@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: podman-event-and-storage-isolation-litmus-are-rewritten-so-their-steps-share-state
+    order: "2359-tfa6"
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [litmus, podman]
+    estimated_hours: 4
+    owned_files:
+      - scripts/litmus-helper-event-driven.sh
+      - scripts/litmus-helper-storage-isolation.sh
+    title: "no test runs the podman event-stream and storage-isolation properties: both litmus name their label, log and scratch by a pid that differs in every step"
+    context: |
+      Retired and unbound by 2357-42x9. Read on 2026-11-25: each step is a new process of the helper, whose TEST_LABEL, EVENTS_LOG and
+      TEST_ROOT default to its own pid; verify-timing says verified with no event; the image grep matches no localhost/ name. The
+      event helper's cleanup kills the first pid that pidof podman answers, which can be any podman of the user's. The macOS and
+      Windows tray-menu litmus were retired in the same change because their probes (scripts/litmus/*) do not exist.
+    exit_criteria:
+      - "One fixture per property keeps its own state and is red on a planted failure (an event not seen; a workspace shared by two projects). Pre-fix result: FAILS, no such test."
+      - "No test signals a process it did not start."
+    unscoreable: "unpinnable-until-the-guard-exists: the fixtures are the deliverable"
+    next_action: "Not taken."
+    provenance: "yoga 2026-11-25, from 2357-42x9"
+    related: [2357-42x9]
+    events:
+      - {type: filed, ts: "2026-11-25T14:28:20Z", host: yoga, summary: "filed; not taken"}
+status:
+  - packet_id: a-litmus-top-level-phase-outside-the-readmes-four-is-refused
+    field: status
+    value: implemented
+    ts: "2026-11-25T14:28:20Z"
+    host: yoga
+events:
+  - packet_id: a-litmus-top-level-phase-outside-the-readmes-four-is-refused
+    event: {type: implemented, ts: "2026-11-25T14:28:20Z", host: yoga, summary: "implemented on work/2357-42x9; 12 files: five given a phase and run green, seven retired with the reason, 2359-tfa6 filed for two of them"}

@@ -302,7 +302,6 @@ scripts/test-smoke-verifies-a-signature.sh
 scripts/test-spawn-failure-names-program.sh
 scripts/test-spec-index-durable-tier-demotion.sh
 scripts/test-spec-index-endpoint-classification.sh
-scripts/test-spec-index-staging-capacity.sh
 scripts/test-squid-supervisor.sh
 scripts/test-ssh-lane-sidecar.sh
 scripts/test-status-channel-absent-is-first-class.sh

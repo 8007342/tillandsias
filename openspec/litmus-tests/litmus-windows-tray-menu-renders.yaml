@@ -1,7 +1,8 @@
 # @trace spec:windows-native-tray
 name: litmus:windows-tray-menu-renders
 spec: windows-native-tray, host-shell-architecture
-phase: 4
+# RETIRED (2357-42x9, 2026-11-25): its probes (scripts/litmus/*) do not exist; it ran in no phase.
+phase: retired
 description: >
   On a Windows 11 host, spawn tillandsias-tray.exe. Assert the NotifyIcon is
   registered via Shell_NotifyIcon, and the right-click menu items match the

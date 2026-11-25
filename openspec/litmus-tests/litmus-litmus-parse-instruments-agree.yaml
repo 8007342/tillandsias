@@ -59,7 +59,7 @@ critical_path:
 
   - step: "order 2349-b3u2: a phase: on a litmus step is refused by line; a top-level phase, a block scalar and another section are not"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-step-phase.lua 2>&1"
-    expected_behavior: "ok:litmus-step-phase-fixture:8 arms"
+    expected_behavior: "ok:litmus-step-phase-fixture:14 arms"
     assert_exit: 0
     timeout_ms: 60000
 

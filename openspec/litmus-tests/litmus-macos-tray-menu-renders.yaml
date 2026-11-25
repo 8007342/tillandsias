@@ -1,7 +1,8 @@
 # @trace spec:macos-native-tray
 name: litmus:macos-tray-menu-renders
 spec: macos-native-tray, host-shell-architecture
-phase: 5
+# RETIRED (2357-42x9, 2026-11-25): its probes (scripts/litmus/*) do not exist; it ran in no phase.
+phase: retired
 description: >
   On a macOS 14+ host, launch tillandsias-tray.app. Assert NSStatusItem
   exists in the menu bar, menu items match the parity contract, and the
