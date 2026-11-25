@@ -1,7 +1,7 @@
 -- @trace order:2244-ge9s
 --
 -- test-metrics-isolation-keeps-off-the-shared-log.lua — gate step 380
--- (scripts/test-gate-step-metrics-isolation.sh) runs in the litmus lane BESIDE
+-- (scripts/lua/test-gate-step-metrics-isolation.lua) runs in the litmus lane BESIDE
 -- the checkout lane (2156-glan). Its negative control provokes a split on
 -- purpose, and it used to provoke it into the host's shared
 -- /tmp/tillandsias-timing.jsonl while carrying the gate's inherited run id, so
@@ -36,7 +36,7 @@ set -u
 fb="$(mktemp -d "${TMPDIR:-/tmp}/probe2244-gatefb.XXXXXX")" || exit 3
 trap 'rm -rf "$fb"' EXIT
 TILLANDSIAS_TIMING_RUN_ID="$RUN" TILLANDSIAS_METRICS_FALLBACK_DIR="$fb" \
-    bash scripts/test-gate-step-metrics-isolation.sh >"$fb.out" 2>&1 &
+    "$TILLANDSIAS_PLAN_BIN" script run scripts/lua/test-gate-step-metrics-isolation.lua >"$fb.out" 2>&1 &
 pid=$!
 hs=0; hp=0
 probe() {

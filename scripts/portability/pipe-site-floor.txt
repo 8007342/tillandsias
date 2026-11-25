@@ -597,7 +597,6 @@ scripts scripts/test-git-mirror-vault-agent-auto-auth.sh 18
 scripts scripts/test-github-token-auto-rotation.sh 1
 scripts scripts/test-groundtruth-corpus-declaration.sh 8
 scripts scripts/test-guest-binaries-nix-lane.sh 9
-scripts scripts/test-harness-affinity-selection.sh 10
 scripts scripts/test-harness-byte-cheap.sh 1
 scripts scripts/test-harness-contract-probe.sh 1
 scripts scripts/test-harness-rollback.sh 6
