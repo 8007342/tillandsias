@@ -2,7 +2,7 @@
 --
 -- common/cargotest.lua — cargo builds and named unit tests for a fixture that drives them.
 --
---   local C = require("common.cargotest").new(T)          -- skips T with no cargo or no linker
+--   local C = require("common.cargotest").new(T)          -- skips T with no cargo, and any build that finds no linker
 --   local bin = C:build("tillandsias-headless", "name")   -- the debug binary's absolute path
 --   local x = C:test({ "-p", ... }, { FAKE = bin })       -- x.rc, x.out; x:ok("mod::tests::name")
 
@@ -12,7 +12,6 @@ C.__index, X.__index = C, X
 
 function M.new(T)
     if not fixture.which("cargo") then T:skip("no-cargo") end
-    if not (fixture.which("cc") or fixture.which("gcc") or fixture.which("clang") or fixture.which("link")) then T:skip("no-linker") end
     return setmetatable({ T = T, root = fixture.repo_root() }, C)
 end
 
@@ -23,7 +22,10 @@ function C:cargo(argv, e)
     local a = { fixture.posix_shell(), "-s", "--" }
     for _, v in ipairs(argv) do a[#a + 1] = v end
     local r = proc.run{ argv = a, cwd = self.root, stdin = pre .. 'exec cargo "$@" </dev/null 2>&1\n', timeout_ms = 840000 }
-    return setmetatable({ rc = r.code, out = "\n" .. (r.stdout or ""):gsub("\r", ""), status = r.status, why = tostring(r.why or "") }, X)
+    local out = "\n" .. (r.stdout or ""):gsub("\r", "")
+    -- A bare host has cargo and no linker: what a toolbox runs is not measured there.
+    if r.code ~= 0 and text.contains(out, "linker `cc` not found") then self.T:skip("no-linker") end
+    return setmetatable({ rc = r.code, out = out, status = r.status, why = tostring(r.why or "") }, X)
 end
 
 function C:build(package, ...)
