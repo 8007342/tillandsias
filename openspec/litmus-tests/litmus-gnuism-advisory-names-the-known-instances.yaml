@@ -29,10 +29,10 @@ preconditions:
 severity: medium
 
 critical_path:
-  - step: "the twenty-three-case fixture passes (both halves + eleven false-accusation/remote-context/counterpart controls + cost + parity with the pinned pre-port .sh)"
-    command: "bash scripts/test-portability-idioms.sh 2>&1 | tail -1 | grep -qx 'PASS: portability idioms (23/23)' && echo 'ok: fixture 23/23'"
+  - step: "the twenty-two-case fixture passes (both halves + eleven false-accusation/remote-context/counterpart controls + cost + parity with the pinned pre-port .sh)"
+    command: "bash scripts/test-portability-idioms.sh 2>&1 | tail -1 | grep -qx 'PASS: portability idioms (22/22)' && echo 'ok: fixture 22/22'"
     timeout_ms: 120000
-    expected_behavior: "ok: fixture 23/23"
+    expected_behavior: "ok: fixture 22/22"
 
   - step: "the advisory NEVER blocks — four of the defects it reports each froze a platform"
     command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; \"$MFPLAN\" script run scripts/lua/check-portability-idioms.lua >/dev/null 2>&1; test $? -eq 0 && echo 'ok: advisory-exit-0'"

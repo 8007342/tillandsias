@@ -12,7 +12,7 @@
 #   2. T7 upgrade closure: hardening reaches a PRE-EXISTING volume via the
 #      entrypoint's every-start migration, and a force push (branch rewind)
 #      is refused on that upgraded volume. (Primary evidence for the relay
-#      half lives in scripts/test-git-mirror-existing-volume-hardening.sh —
+#      half lives in scripts/lua/test-git-mirror-existing-volume-hardening.lua —
 #      the order-579 suite; this scenario pins the receive-config half.)
 #   3. receive.fsckObjects=true is EFFECTIVE on the upgraded volume: a
 #      malformed commit object is refused, and the same push is accepted by
