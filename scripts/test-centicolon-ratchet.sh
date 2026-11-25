@@ -10,7 +10,7 @@
 # `tombstone:` for an obsoleted spec, or an openspec/changes record); lost =
 # vanished with no record, or a state moving down. Only lost warns.
 #
-# Hermetic corpus (the shape test-centicolon-grade.sh builds): requirement a is
+# Hermetic corpus (the shape test-centicolon-grade.lua builds): requirement a is
 # satisfied by an enforced, bound, pre-build litmus step with a green record.
 # Arms, in order against one snapshot:
 #   1 first run              -> regime=baseline, added/retired/lost 0
