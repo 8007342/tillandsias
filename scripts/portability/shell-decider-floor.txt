@@ -20,8 +20,6 @@ scripts/check-enclave-network-internal.sh
 scripts/check-enclave-service-health.sh
 scripts/check-fleet-membership.sh
 scripts/check-forge-findings-persisted.sh
-scripts/check-fragment-ts-skew.sh
-scripts/check-gate-step-regimes.sh
 scripts/check-groundtruth-regime-invariance.sh
 scripts/check-host-tools.sh
 scripts/check-issue-citation-convention.sh
@@ -108,7 +106,6 @@ scripts/test-fragment-status-loss.sh
 scripts/test-gate-memory-wsl2-guest.sh
 scripts/test-gate-stamp-memoization.sh
 scripts/test-gate-step-prefix-allocation.sh
-scripts/test-gate-step-regimes.sh
 scripts/test-gate-step-skip-exit.sh
 scripts/test-git-credential-helper.sh
 scripts/test-git-mirror-vault-agent-auto-auth.sh
@@ -160,11 +157,6 @@ scripts/test-mcp-transport-death-trace.sh
 scripts/test-memo-hit-observability.sh
 scripts/test-metrics-log-fallback-is-loud.sh
 scripts/test-metrics-log-path-agreement.sh
-scripts/test-mirror-discipline.sh
-scripts/test-mirror-host-cert-and-sshd.sh
-scripts/test-mirror-receive-wrapper.sh
-scripts/test-mirror-sshd-posture.sh
-scripts/test-mirror-sync-state.sh
 scripts/test-mo-full-attest.sh
 scripts/test-mode-only-regression-887-bz88.sh
 scripts/test-must-ship-rows.sh
@@ -200,7 +192,6 @@ scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh
 scripts/test-pre-push-version-guard-sigpipe.sh
 scripts/test-pre-push-version-guard.sh
 scripts/test-pre-push-work-ref-lane.sh
-scripts/test-pre-receive-yaml-gate.sh
 scripts/test-precommit-zero-trace-scan-scope.sh
 scripts/test-preflight-fixtures-default-target.sh
 scripts/test-preflight-front-door.sh
@@ -253,7 +244,6 @@ scripts/test-spawn-failure-names-program.sh
 scripts/test-spec-index-durable-tier-demotion.sh
 scripts/test-spec-index-endpoint-classification.sh
 scripts/test-squid-supervisor.sh
-scripts/test-ssh-lane-sidecar.sh
 scripts/test-status-channel-absent-is-first-class.sh
 scripts/test-stranded-plan-writes.sh
 scripts/test-subdomain-routing.sh

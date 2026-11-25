@@ -1,6 +1,7 @@
--- @trace order:1313-w78k, order:1581-d9ig
+-- @env TILLANDSIAS_PLAN_BIN
+-- @trace order:1313-w78k, order:1581-d9ig, order:2124-mwzr
 --
--- test-fragment-ts-skew.lua — both directions of check-fragment-ts-skew.sh's
+-- test-fragment-ts-skew.lua — both directions of check-fragment-ts-skew.lua's
 -- asymmetric rule, and the asymmetry IS the contract: a future ts is refused
 -- with no declaration that admits it, a past ts is accepted and printed. A
 -- fixture that only proved the refusal would pass a checker that refused
@@ -23,7 +24,9 @@
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-fragment-ts-skew.lua
 
-local CHECK = "scripts/check-fragment-ts-skew.sh"
+local CHECK = "scripts/lua/check-fragment-ts-skew.lua"
+local PLAN = env.get("TILLANDSIAS_PLAN_BIN")
+if not PLAN or PLAN == "" then verdict.could_not_run("fragment-ts-skew-fixture", "set TILLANDSIAS_PLAN_BIN to the plan binary under test") end
 local function run(argv, opts)
     local spec = { argv = argv, timeout_ms = 120000 }
     for k, v in pairs(opts or {}) do spec[k] = v end
@@ -69,7 +72,7 @@ local function plant(ts)
     fs.write(WT_REL .. "/" .. PROBE, ("events:\n  - packet_id: probe\n    event:\n      type: note\n      ts: \"%s\"\n      agent_id: probe\n      host: probe\n      summary: probe\n"):format(ts))
 end
 local function checker()
-    local r = run({ "bash", CHECK }, { cwd = WT })
+    local r = run({ PLAN, "script", "run", CHECK }, { cwd = WT })
     return (r.status == "exited" and r.code or -1), (r.stdout or "") .. (r.stderr or "")
 end
 local function has(s, sub) return s:find(sub, 1, true) ~= nil end

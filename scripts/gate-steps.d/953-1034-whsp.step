@@ -8,4 +8,4 @@ STEP_OK="Cross-branch claim visibility passed"
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
 STEP_READS="plan/index.d/** plan/index.d/README.md plan/index.yaml scripts/check-claims-across-branches.sh scripts/plan-binary-probe.sh scripts/lua/test-claims-across-branches.lua"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-21 darwin ok:claims-across-branches:15"
+STEP_SECOND_REGIME="macbookair 2026-11-25 darwin ok:claims-across-branches:17 arms"
