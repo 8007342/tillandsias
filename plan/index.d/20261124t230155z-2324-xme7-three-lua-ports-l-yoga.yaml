@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: lww-alias-item-opener-and-land-notice-fixtures-ported-to-lua
+    order: "2324-xme7"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures, litmus]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/test-lww-channel-alias.lua
+      - scripts/lua/test-litmus-item-opener-refused.lua
+      - scripts/lua/test-land-notice-names-unrun-litmus.lua
+    title: "three shell fixtures ported to Lua: LWW channel alias, litmus item opener, land notice"
+    context: |
+      ports: test-lww-channel-alias, test-litmus-item-opener-refused, test-land-notice-names-unrun-litmus.
+      Claimed by yoga before the work, in the coordinator's test-[i-o]* range.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its subject is mutated; callers run the .lua; the three .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by their gate steps and litmus"
+    provenance: "coordinator queue 2026-11-24 (test-[i-o]* range), yoga"
+    related: [642-fedr, 1252-znbn, 1201-9it2]
+    events:
+      - {type: claimed, ts: "2026-11-24T23:01:55Z", host: yoga, summary: "claimed; work ref work/2324-xme7"}

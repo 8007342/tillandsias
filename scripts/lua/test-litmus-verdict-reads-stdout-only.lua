@@ -24,10 +24,12 @@
 --   4 EXPLICIT MERGE    the same token, the step writing `2>&1` itself -> PASSES
 --   5 NAMED ON FAILURE  a failing step's [FAIL] detail carries stderr=<path>,
 --                       and that file holds what the step wrote to stderr
---   6 CENSUS            (2309-fa7q) a step that prints its text and exits 1 is
---                       named in the log-only census and still passes
---   7 CENSUS CONTROL    a text match that exits 0, and one that declares
---                       assert_exit 1, are not in the census
+--   6 EXIT              (2309-fa7q) a step that prints its expected_behavior and
+--                       exits 1 FAILS, and is told how to declare the exit
+--   7 EXIT CONTROL      a text match that exits 0, and one that declares
+--                       assert_exit 1, pass and are not in the census
+--   8 CENSUS            a success_pattern match that exits 1 passes and is named
+--   9 MUTATION          arm 6's step passes in a runner without the exit rule
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-litmus-verdict-reads-stdout-only.lua
 
@@ -67,6 +69,7 @@ write_case("fx87-named", "printf 'not the token\\\\n'; printf 'the-reason-is-her
     "    expected_behavior: \"ok: never-printed\"\n")
 
 write_case("fa7q-nonzero", "printf 'ok: token\\\\n'; exit 1", "    expected_behavior: \"ok: token\"\n")
+write_case("fa7q-pattern", "printf 'ok: token\\n'; exit 1", "    success_pattern: \"^ok: token$\"\n")
 write_case("fa7q-declared", "printf 'ok: token\\\\n'; exit 1",
     "    assert_exit: 1\n    assert_output_contains: \"ok: token\"\n")
 
@@ -75,7 +78,7 @@ write_case("fa7q-declared", "printf 'ok: token\\\\n'; exit 1",
 local bind = "version: '1.0'\ndescription: throwaway bindings for the 1268-fx87 fixture\nspecs:\n"
     .. "- spec_id: fx87-probe\n  status: active\n  litmus_tests:\n"
 for _, nm in ipairs({ "fx87-contam", "fx87-stderr-only", "fx87-explicit", "fx87-named",
-    "fa7q-nonzero", "fa7q-declared" }) do
+    "fa7q-nonzero", "fa7q-declared", "fa7q-pattern" }) do
     bind = bind .. "  - " .. LIT .. ":" .. nm .. "\n"
 end
 bind = bind .. "  coverage_ratio: 100\n"
@@ -147,15 +150,31 @@ end
 check("5 a failing step names its stderr log, and the log holds the stderr",
     rc == 1 and path ~= nil and held, "rc=" .. rc .. " path=" .. tostring(path) .. " held=" .. tostring(held))
 
--- 6 CENSUS, and 7 its control
+-- 6 EXIT, 7 its controls, 8 CENSUS, 9 MUTATION
 local CENSUS = "census:nonzero-text-match "
 rc, o = litmus(RUNNER, "fa7q-nonzero")
-check("6 a nonzero text match is in the census and its verdict is unchanged",
-    rc == 0 and text.contains(o, CENSUS .. LIT .. ":fa7q-nonzero#1 rc=1 expected_behavior"), "rc=" .. rc .. " " .. short(o))
+check("6 an expected text at a nonzero exit fails, and names assert_exit",
+    rc == 1 and text.contains(o, "[FAIL]") and text.contains(o, "declare assert_exit: 1"), "rc=" .. rc .. " " .. short(o))
 for _, name in ipairs({ "fx87-explicit", "fa7q-declared" }) do
     rc, o = litmus(RUNNER, name)
     check("7 " .. name .. " passes and is not in the census",
         rc == 0 and text.contains(o, "[OK]") and not text.contains(o, CENSUS), "rc=" .. rc .. " " .. short(o))
+end
+
+rc, o = litmus(RUNNER, "fa7q-pattern")
+check("8 a nonzero success_pattern match passes and is in the census",
+    rc == 0 and text.contains(o, CENSUS .. LIT .. ":fa7q-pattern#1 rc=1 success_pattern"), "rc=" .. rc .. " " .. short(o))
+local RULE = 'elif [[ -n "$step_expected" && "$exit_code" -ne 0 ]]; then'
+local rs, re = src:find(RULE, 1, true)
+if rs == nil or src:find(RULE, re + 1, true) then
+    check("9 the exit rule is there exactly once", false, "rule line moved")
+else
+    local body, pinned = (src:sub(1, rs - 1) .. "elif false; then" .. src:sub(re + 1))
+        :gsub("\nreadonly PROJECT_ROOT=[^\n]*", function() return "\nreadonly PROJECT_ROOT=\"" .. ROOT .. "\"" end, 1)
+    fs.write(REL .. "/fa7q-mutant-runner.sh", body)
+    rc, o = litmus(W .. "/fa7q-mutant-runner.sh", "fa7q-nonzero")
+    check("9 without the exit rule the same step passes", pinned == 1 and rc == 0 and text.contains(o, "[OK]"),
+        "pinned=" .. pinned .. " rc=" .. rc .. " " .. short(o))
 end
 
 run({ "rm", "-rf", W })
