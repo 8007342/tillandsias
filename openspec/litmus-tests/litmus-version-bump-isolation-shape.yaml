@@ -45,9 +45,9 @@ critical_path:
   # "check nothing", and only a locally-authored sweep still being refused
   # separates the narrowing from a repeal.
   - step: "Req: the default range policies only commits this push publishes first"
-    command: "bash scripts/test-version-bump-isolation-scope.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-version-bump-isolation-scope.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "PASS: version-bump-isolation scope 5/5"
+    expected_behavior: "ok:version-bump-isolation-scope:7 arms"
 
 observability:
   traces:

@@ -68,7 +68,6 @@ scripts/test-fleet-msg-store.sh 1
 scripts/test-forge-gitconfig-bidirectional-quarantine.sh 1
 scripts/test-forge-runtime-ca-trust.sh 1
 scripts/test-forge-standard-gitconfig-path.sh 1
-scripts/test-forge-validate.sh 1
 scripts/test-fragment-batch-never-collapses-verdicts.sh 1
 scripts/test-fragment-status-loss.sh 1
 scripts/test-gate-memory-wsl2-guest.sh 1
@@ -142,11 +141,9 @@ scripts/test-ssh-lane-sidecar.sh 1
 scripts/test-timing-record-carries-root.sh 1
 scripts/test-tool-materialize-litmus-surfaces-arm.sh 1
 scripts/test-trace-coverage.sh 1
-scripts/test-tray-asset-placeholder-refused.sh 1
 scripts/test-uninstall-matcher-spares-bystanders.sh 1
 scripts/test-validator-surface-currency.sh 1
 scripts/test-vault-shutdown-forwards-sigterm.sh 1
-scripts/test-version-bump-isolation-scope.sh 1
 scripts/test-wsl-builder-kill-reaches-guest.sh 1
 scripts/update-convergence-dashboard.sh 2
 scripts/validate-traces.sh 1
