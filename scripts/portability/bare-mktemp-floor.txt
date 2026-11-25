@@ -47,12 +47,9 @@ scripts/select-work-batch.sh 4
 scripts/stamp-requirement-ids.sh 2
 scripts/test-build-image-installed-version-alias.sh 1
 scripts/test-check-credential-channel.sh 1
-scripts/test-clear-vault-credentials-partial-is-nonzero.sh 1
-scripts/test-clear-vault-host-credentials.sh 1
 scripts/test-cloudflare-oauth-core.sh 1
 scripts/test-codex-oauth-restore.sh 1
 scripts/test-concurrent-forge-shared-stack.sh 1
-scripts/test-credential-verdict-script.sh 1
 scripts/test-cycle-checkout-lock.sh 1
 scripts/test-e2e-preflight-live-runtime.sh 2
 scripts/test-enclave-network-internal-discovery.sh 2
@@ -65,14 +62,11 @@ scripts/test-fragment-status-loss.sh 1
 scripts/test-gate-memory-wsl2-guest.sh 1
 scripts/test-gate-stamp-memoization.sh 1
 scripts/test-git-credential-helper.sh 1
-scripts/test-git-mirror-existing-volume-hardening.sh 1
-scripts/test-git-mirror-relay-token-expiry.sh 1
 scripts/test-git-mirror-vault-agent-auto-auth.sh 1
 scripts/test-groundtruth-corpus-declaration.sh 3
 scripts/test-guest-binaries-nix-lane.sh 1
 scripts/test-guest-staging-refuses-a-wireless-binary.sh 2
 scripts/test-harness-byte-cheap.sh 1
-scripts/test-harness-contract-probe.sh 1
 scripts/test-harness-rollback.sh 1
 scripts/test-headless-env-lock-is-single.sh 1
 scripts/test-hook-mover-enumeration-is-batched.sh 2
