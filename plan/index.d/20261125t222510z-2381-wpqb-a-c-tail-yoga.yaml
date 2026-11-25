@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-a-c-tail-two-fixtures-ported-to-lua
+    order: "2381-wpqb"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 6
+    owned_files:
+      - scripts/lua/test-claims-fleet-visible.lua
+      - scripts/lua/test-cycle-checkout-lock.lua
+    title: "the a-c tail: two fixtures ported to Lua"
+    context: |
+      ports: claims-fleet-visible cycle-checkout-lock. Claimed by yoga before the work.
+      Not ported: awk-float-lc-numeric (its TERM trap is the subject of test-awk-float-lc-numeric-signal.lua), capture-helper (the live
+      converted example test-bare-mktemp.lua reads), build-image-installed-version-alias (named by the open lua-door-environment-inheritance
+      change), concurrent-forge-shared-stack (its name is in the Rust sources).
+      The same change records macbookair's darwin results for 427, 230 and 350.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its main assertions are mutated; callers run the .lua; the two .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by litmus tests"
+    provenance: "coordinator 2026-11-25 (a-c tail), yoga"
+    related: [2378-hcxg]
+    events:
+      - {type: claimed, ts: "2026-11-25T22:25:10Z", host: yoga, summary: "claimed; work ref work/2381-wpqb"}

@@ -7231,7 +7231,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Requirement-id fixture passed"
 
-    # ORDER 2118-9kqp: test-credential-verdict-script.sh (995-srbf) runs ONCE, in
+    # ORDER 2118-9kqp: test-credential-verdict-script.lua (995-srbf) runs ONCE, in
     # gate step 350-1903-djsq, under the sentinel session bus.
 
     _step "Checking the freshness budget is regime-named and still catches a regression (1038-d7vw)..."
