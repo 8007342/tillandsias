@@ -4,7 +4,7 @@
 # whitespace-separated values for a stream). FLAGS is `_` for none, because
 # bash `read` collapses consecutive tabs. Expected output lives in
 # jq-subset-golden.txt, generated from host jq by
-# `scripts/test-json-query-jq-parity.sh --regenerate`, so the fixture runs on
+# `scripts/lua/test-json-query-jq-parity.lua -- --regenerate`, so the fixture runs on
 # hosts without jq. Filters are the bucket A/B shapes harvested from scripts/
 # and openspec/litmus-tests on 2026-09-26, plus the edge cases they rely on.
 _	.	{"answer":"ok","confidence":"exact","citations":[{"path":"a.md","line_start":1,"line_end":3,"commit":"abc","authority":{"yaml_path":"x.y"}},{"path":"b.md","line_start":5,"line_end":9}],"result":{"content":[{"type":"text","text":"hello"}]},"data":[{"embedding":[0.5,1,2]}],"freshness":{"indexed_at":"2026-09-26","source_commit":"def"},"n":null,"empty":[],"obj":{}}
