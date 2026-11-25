@@ -16,7 +16,7 @@ preconditions:
   - workspace contains scripts/check-added-test-is-referenced.sh
 critical_path:
   - step: "a blocked push is refused within a bound, not silence"
-    command: "bash scripts/test-land-push-bounded.sh 2>&1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-land-push-bounded.lua 2>&1"
     expected_behavior: "ok:land-push-bounded:"
     assert_exit: 0
     assert_output_contains: "ok:land-push-bounded:"

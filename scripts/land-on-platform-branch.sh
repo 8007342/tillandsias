@@ -804,7 +804,7 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         rm -f "$_plog"; exit 7
     fi
     # END ORDER 1131-iax2 push bound — this marker is load-bearing: the mutation
-    # control in test-land-push-bounded.sh strips from the ORDER banner to here
+    # control in test-land-push-bounded.lua strips from the ORDER banner to here
     # to rebuild the pre-fix (unbounded) push. If it moves, that arm refuses to
     # prove anything rather than passing vacuously.
     if [ "$rc" -ne 0 ]; then

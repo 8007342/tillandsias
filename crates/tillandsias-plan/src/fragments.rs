@@ -89,7 +89,7 @@ pub(crate) const LWW_CHANNELS: &[&str] = &["fields", "status"];
 /// the one that looks for an omission, which reported a missing next_action on
 /// a packet whose next_action had been set. The canonical list existed and was
 /// not canonical, because nothing forced a consumer to use it.
-/// `scripts/test-lww-channel-consumers.sh` now refuses a fragment-channel read
+/// `scripts/lua/test-lww-channel-consumers.lua` now refuses a fragment-channel read
 /// written anywhere but here, so a fourth consumer cannot reintroduce it.
 ///
 /// The const above and this `pub` are two halves of one guarantee and arrived

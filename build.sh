@@ -5191,7 +5191,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # through `| tail`, the worst of them accusing land-on-platform-branch.sh
     # of the exact defect its header exists to prevent.
     _step "Checking the land-verdict-through-a-pipe fixture (1137-da83)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-land-verdict-through-a-pipe.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-land-verdict-through-a-pipe.lua" 2>&1; then
         _error "the land-verdict pipe fixture regressed — either the land tool stopped exiting 3 and naming a refused gate, or the trap it documents changed shape and the row's guidance is now wrong"
         exit 1
     fi
@@ -6552,7 +6552,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Linux installer soft-reset fixture passed"
 
     _step "Checking the litmus step model (901-jtvi)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-step-model.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-litmus-step-model.lua" 2>&1; then
         _error "the litmus step model regressed — a producer's failure or its stderr can go missing again (901-jtvi)"
         exit 1
     fi

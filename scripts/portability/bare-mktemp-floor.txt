@@ -82,7 +82,6 @@ scripts/test-headless-env-lock-is-single.sh 1
 scripts/test-hook-mover-enumeration-is-batched.sh 2
 scripts/test-host-slug-resolution.sh 2
 scripts/test-image-build-convergence.sh 1
-scripts/test-land-merges-trunk.sh 1
 scripts/test-land-queue.sh 1
 scripts/test-ledger-node-claim-resolution.sh 1
 scripts/test-ledger-prose-roundtrip.sh 1
@@ -96,7 +95,6 @@ scripts/test-metrics-log-path-agreement.sh 1
 scripts/test-mirror-host-cert-and-sshd.sh 2
 scripts/test-mirror-receive-wrapper.sh 5
 scripts/test-no-competing-gate.sh 1
-scripts/test-opencode-entrypoint-prompt.sh 1
 scripts/test-opencode-render-probe.sh 1
 scripts/test-opencode-vault-auth-content.sh 1
 scripts/test-plan-binary-probe-usage-determinism.sh 2
