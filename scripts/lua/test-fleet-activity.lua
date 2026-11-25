@@ -55,8 +55,14 @@ end
 local o = activity({ TILLANDSIAS_FLEET_ACTIVITY_ROOT = W.abs }, 20000, "--ref", "HEAD", "--since", "10.years")
 T:arm("1 --ref and the root seam are honoured (4 commits)", o:find("ref=HEAD", 1, true) and o:find("commits=4", 1, true), o:sub(1, 300))
 
-local shared = ct("--author=@gmail\\.com", "origin/linux-next")
-if not shared then
+-- A one-commit export has no origin/linux-next: the arms over the real history skip by name.
+local has_ref = T:run{ "git", "-C", ROOT, "rev-parse", "--verify", "-q", "origin/linux-next^{commit}" }.code == 0
+local REAL = has_ref and "origin/linux-next" or "HEAD"
+if not has_ref then out.line("note: no origin/linux-next here; arms 2 to 4 skip, 8 reads HEAD") end
+local shared = has_ref and ct("--author=@gmail\\.com", "origin/linux-next")
+if not has_ref then
+    out.line("skip: arms 2 to 4 — no origin/linux-next in this checkout")
+elseif not shared then
     out.line("skip: arms 2 to 4 — no shared-provider author anywhere in this checkout's history")
 else
     o = activity(nil, 120000, "--since", (now - shared + 3600) .. ".seconds")
@@ -71,7 +77,11 @@ else
     else out.line("skip: arm 4 — no .local author in the arm 2 window") end
 end
 
-o = last(activity(nil, 60000, "--since", "1.seconds"))
+-- Backdated, so a checkout committed within the second cannot fill the window.
+local Q = T:git_repo("quiet")
+T:must{ "git", "-C", Q.abs, "commit", "-q", "--amend", "--no-edit", "--date", "2001-01-01T00:00:00Z", env_unset = { "GIT_*" },
+    env = { GIT_COMMITTER_DATE = "2001-01-01T00:00:00Z" } }
+o = last(activity({ TILLANDSIAS_FLEET_ACTIVITY_ROOT = Q.abs }, 60000, "--ref", "HEAD", "--since", "1.seconds"))
 T:arm("5 an empty window is skipped, not zero hosts", o:find("^skipped:fleet%-activity:no%-commits:"), o)
 o = last(activity(nil, 60000, "--ref", "refs/heads/no-such-ref-1223"))
 T:arm("6 an unresolvable ref refuses", o:find("^fail:fleet%-activity:bad%-ref:"), o)
@@ -84,7 +94,7 @@ end
 local newest = ct() or now
 local why = {}
 for _, w in ipairs{ (now - newest + 3600) .. ".seconds", "1.seconds" } do
-    local joined = activity(nil, 120000, "--since", w):gsub("%s+", " "):upper()
+    local joined = activity(nil, 120000, "--ref", REAL, "--since", w):gsub("%s+", " "):upper()
     if not joined:find("IDLENESS IS ESTABLISHED BY ASKING", 1, true) then why[#why + 1] = w end
 end
 T:arm("8 every run says absence is not idleness", #why == 0, "not in window " .. table.concat(why, ", "))
