@@ -644,10 +644,8 @@ scripts scripts/test-long-running-view-refuses-at-completion.sh 26
 scripts scripts/test-loop-status-append-input.sh 6
 scripts scripts/test-loop-status-audit-reads-current-emitter.sh 2
 scripts scripts/test-lww-channel-consumers.sh 2
-scripts scripts/test-mcp-plan-resolver-pinning.sh 2
 scripts scripts/test-mcp-run-command-tool.sh 2
 scripts scripts/test-memo-hit-observability.sh 1
-scripts scripts/test-meta-orchestration-opsx-sync-merge.sh 2
 scripts scripts/test-metrics-log-fallback-is-loud.sh 1
 scripts scripts/test-metrics-log-path-agreement.sh 1
 scripts scripts/test-mirror-host-cert-and-sshd.sh 11
@@ -661,7 +659,6 @@ scripts scripts/test-nix-cache-service.sh 1
 scripts scripts/test-nix-toolbox.sh 9
 scripts scripts/test-no-competing-gate.sh 2
 scripts scripts/test-no-stale-base-revert-pre-receive.sh 3
-scripts scripts/test-no-stale-base-revert.sh 4
 scripts scripts/test-nvidia-cdi-stale-hostpath.sh 1
 scripts scripts/test-opencode-vault-auth-content.sh 3
 scripts scripts/test-openspec-pin.sh 2

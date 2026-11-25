@@ -6921,7 +6921,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Framing ratchet passed"
 
     _step "Checking the stale-base revert guard (1000-rqmx)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-no-stale-base-revert.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-no-stale-base-revert.lua" 2>&1; then
         _error "the stale-base revert guard regressed (1000-rqmx) — a force push whose diff reverts untouched files would not be refused"
         exit 1
     fi
