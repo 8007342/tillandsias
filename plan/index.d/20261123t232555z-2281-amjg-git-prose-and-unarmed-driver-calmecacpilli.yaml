@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: scripts-that-grep-git-prose-force-the-c-locale
+    order: 2281-amjg
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [portability, git]
+    estimated_hours: 3
+    title: "Scripts that match git's human output force LC_ALL=C on that git call, or read porcelain or an exit code instead"
+    context: |
+      Measured on calmecacpilli 2026-11-23 (LANG=fr_FR.UTF-8): git prints "CONFLIT", so a scan grepping CONFLICT reported zero conflicts where there were at least six. First sweep, for the owner to complete: land-on-platform-branch.sh lines 874 and 882 match "non-fast-forward|fetch first|stale info|cannot lock ref" (1524-7gn7's ancestry check softens a miss); push-plan-fragments-to-trunk.sh line 526 picks a reason line by "rejected"; test-mirror-receive-wrapper.sh line 170 and test-git-mirror-existing-volume-hardening.sh line 162 match non-fast-forward wording, whose source (git or the mirror's own hook) was not checked. Lua callers were swept by pattern only.
+    exit_criteria:
+      - "every site in scripts/, lib/ and build.sh that matches git's own wording runs that git with LC_ALL=C or reads porcelain or an exit code; each site left alone is listed with the reason"
+      - "a fixture runs one fixed site with LANG=fr_FR.UTF-8 and gets the English verdict; with the fix reverted it reds, or says could-not-run where git ships no French catalogue"
+    unscoreable: "unpinnable-until-the-sweep-exists: the fixture is the deliverable."
+    next_action: "Complete the sweep, separating git's wording from our own hooks' wording."
+    provenance: "measured by calmecacpilli; requested by coordinator macuahuitl-fedora 2026-11-23"
+    related: [1524-7gn7]
+    events:
+      - {type: filed, ts: '2026-11-23T23:25:55Z', host: calmecacpilli, summary: locale-dependent git prose filed}
+  - packet_id: preflight-says-when-the-floor-merge-driver-is-unarmed
+    order: 2281-uq72
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [preflight, git]
+    estimated_hours: 1
+    title: "Preflight and the fleet membership check print an advisory when merge.tillandsias-floor.driver is not set in the clone"
+    context: |
+      check-hooks-armed.lua already reports an unarmed driver, but preflight and check-fleet-membership.sh were not found to run it. calmecacpilli merged 187 trunk commits 2026-11-23 with the driver unarmed and nothing said so; scripts/ensure-hooks.sh armed it. Unarmed, git merges the floor files textually: in a replay of six historical merges, all six conflicted on a floor or divergence file that way and none did with the driver.
+    exit_criteria:
+      - "in a clone shipping scripts/merge-floor-driver.sh with the config unset, preflight and the fleet check each print an advisory naming scripts/ensure-hooks.sh, and their exit codes do not change"
+      - "an armed clone prints no advisory; a tree without the driver prints none"
+    unscoreable: "unpinnable-until-the-advisory-exists: a fixture over both clone states is the deliverable."
+    next_action: "Reuse check-hooks-armed.lua's driver test; do not write a second reader of the config."
+    provenance: "measured by calmecacpilli; requested by coordinator macuahuitl-fedora 2026-11-23"
+    related: [2118-asur]
+    events:
+      - {type: filed, ts: '2026-11-23T23:25:55Z', host: calmecacpilli, summary: unarmed merge driver advisory filed}

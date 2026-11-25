@@ -64,6 +64,9 @@ local SURFACES = {
     -- orphan while bound this way (2026-09-06).
     "scripts/gate-steps.d",
     "scripts/local-ci.sh",
+    -- 2231-zmzd: local-ci.sh's "Recently Landed Guards" are rows of this
+    -- roster, and local-ci.sh runs every row; the names left local-ci.sh.
+    "scripts/lua/local-ci-landed-guards.lua",
     "scripts/run-litmus-test.sh",
     "scripts/mo-full-attest.sh",
     "openspec/litmus-tests",
@@ -99,8 +102,8 @@ local SURFACES = {
     -- bound as gate steps, one hop further than the list reached; reported as
     -- orphans for a day while actively guarding (and "fixing" that by wiring
     -- them again would have double-run them).
-    "scripts/test-jq-multiline-capture.sh",
-    "scripts/test-wt-reparse-scan.sh",
+    "scripts/lua/test-jq-multiline-capture.lua",
+    "scripts/lua/test-wt-reparse-scan.lua",
     -- 2031-zq68: lua/verify-image-usable.lua is run by build-image.sh and
     -- with-nix-builder.sh at runtime, and in the gate by this fixture (bound
     -- as gate step 105-1073-dqtx); the .sh it replaced was outside the

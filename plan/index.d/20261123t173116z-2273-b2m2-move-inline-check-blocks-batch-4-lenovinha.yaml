@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: move-inline-check-blocks-to-gate-step-files-batch-4
+    order: 2273-b2m2
+    status: ready
+    kind: debt
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      Move the next nine slowest inline --check blocks out of build.sh into gate-step files (batch 4), and make the two consumers that asserted their inline wiring accept a gate step that RUNS them.
+    context: |
+      Coordinator direction 2026-11-23: .step batch 4 from the measured list. After batches 1-3, the next ten slowest inline blocks are ~56 s; one (check-groundtruth-regime-invariance.sh --strict) takes an argument a step cannot pass and stays inline. Nine move: eight pool-safe (each read: scratch-only pushes and git config), test-gate-changed-parallel-fixtures STEP_SERIAL on lane timing (it asserts wall-clock bounds). Two consumers grepped build.sh for a moved script and would have gone red: litmus mo-full-attestation-ledger-shape and test-long-running-view-refuses-at-completion.sh; both now match a RUN (a STEP_SCRIPT binding or an inline _run line), not a mention, since step 385 names check-long-running-view.sh in a comment.
+    exit_criteria:
+      - "each moved block becomes one .step with the same text and fixture; the inline block is deleted"
+      - "gate-changed.sh's population is identical; no script runs both inline and as a step"
+      - "both wiring assertions are green wired and red unwired"
+      - "each new step carries a second-regime record before the PR leaves draft"
+    unscoreable: "mechanical move; the per-step verdicts are unchanged by construction."
+    next_action: "Second-regime records, then un-draft."
+    provenance: coordinator direction (macuahuitl-fedora, 2026-11-23); filed by lenovinha.
+    related: [2253-j2at, 2264-6pxd, 2266-4w3c, 2267-6ss8]
+    events:
+      - {type: filed, ts: '2026-11-23T17:31:16Z', host: lenovinha, summary: move inline check blocks batch 4 filed}

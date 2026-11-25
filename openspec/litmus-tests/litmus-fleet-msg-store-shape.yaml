@@ -18,18 +18,13 @@ severity: critical
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-fleet-msg-store.sh
+  - workspace contains scripts/lua/test-fleet-msg-store.lua
   - workspace contains crates/tillandsias-plan/src/msg_store.rs
   - workspace contains crates/tillandsias-plan/src/msg_shape.rs
   - a built tillandsias-plan (resolved by scripts/plan-binary-probe.sh)
 
 critical_path:
-  - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-fleet-msg-store.sh && test -x scripts/test-fleet-msg-store.sh && echo 'ok: fleet-msg-fixture-parses'"
-    timeout_ms: 3000
-    expected_behavior: "ok: fleet-msg-fixture-parses"
-
-  - step: "twelve arms: shape, secret (with the LAX negative control), duplicate, queued, recv, status, ttl, expiry, reply, gap, no-lane, surface"
-    command: "out=$(bash scripts/test-fleet-msg-store.sh); rc=$?; case \"$out\" in (*'ok:fleet-msg-store:12/12'*) [ \"$rc\" = 0 ] && echo 'ok: fleet-msg-store 12/12' ;; (*) printf '%s\\n' \"$out\"; exit 1 ;; esac"
+  - step: "thirteen arms: shape, secret (with the LAX negative control), duplicate, queued, recv, status, ttl, expiry, reply, gap, no-lane, surface"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-fleet-msg-store.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "ok: fleet-msg-store 12/12"
+    expected_behavior: "ok:fleet-msg-store:13/13"

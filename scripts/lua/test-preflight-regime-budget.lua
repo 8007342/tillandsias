@@ -66,13 +66,18 @@ if budget_fn == "" or judge_fn == "" then
         "build.sh has no _pf_budget or test-preflight-front-door.sh no judge_budget (1616-njfd)")
 end
 
+-- On msys ROOT is C:/..., which a colon-separated PATH splits at the drive
+-- (yolanda 2026-11-24): the shims were never found. /c/... works; elsewhere
+-- ROOT is unchanged.
+local PATH_ROOT = ROOT:match("^%a:/") and ("/" .. ROOT:sub(1, 1):lower() .. ROOT:sub(3)) or ROOT
+
 -- ── 1 the regime table ─────────────────────────────────────────────────────
 fs.write(REL .. "/shim/uname", "#!/bin/sh\necho \"$FAKE_UNAME\"\n")
 fs.write(REL .. "/shim/ps", "#!/bin/sh\necho \"  $FAKE_PRI\"\n")
 proc.run({ argv = { "chmod", "+x", ROOT .. "/" .. REL .. "/shim/uname", ROOT .. "/" .. REL .. "/shim/ps" }, timeout_ms = 10000 })
 fs.write(REL .. "/budget.sh", budget_fn .. '\nPATH="$SHIM:$PATH"\n_pf_budget\necho "$_PF_BUDGET $_PF_BUDGET_REGIME $_PF_DECIDER_DEADLINE"\n')
 local function regime(uname, pri, override)
-    local e = { SHIM = ROOT .. "/" .. REL .. "/shim", FAKE_UNAME = uname, FAKE_PRI = pri }
+    local e = { SHIM = PATH_ROOT .. "/" .. REL .. "/shim", FAKE_UNAME = uname, FAKE_PRI = pri }
     if override then e.TILLANDSIAS_PREFLIGHT_BUDGET_S = override end
     return text.trim(proc.run({ argv = { "bash", ROOT .. "/" .. REL .. "/budget.sh" }, env = e, timeout_ms = 10000 }).stdout or "")
 end
@@ -111,6 +116,70 @@ arm("4 OLD-DOOR a summary with no budget= is judged against the floor's 150 s",
 o = judge("last", "note: a guard printed wall=1s in its own output\n" .. SUMMARY_380, "150")
 arm("5 LAST-LINE a guard's own wall=1s before the summary is not the run's wall",
     o:find("380s > 150s", 1, true) ~= nil, o)
+
+-- ── 5b the settled budget (2272-cuxh, coordinator ruling (2) 2026-11-23) ───
+local fd = fs.read("scripts/test-preflight-front-door.sh")
+local settled = { "ok()  { printf 'OK %s\\n' \"$1\"; }", "bad() { printf 'BAD %s\\n' \"$1\"; }", judge_fn }
+for _, n in ipairs({ "_summary", "_contended", "_over_budget", "judge_settled_budget" }) do
+    local fn = extract(fd, n)
+    if fn == "" then
+        -- a one-line function
+        for _, l in ipairs(text.lines(fd)) do if l:sub(1, #n + 2) == n .. "()" then fn = l end end
+    end
+    if fn == "" then verdict.emit("violation:preflight-regime-budget:no-subject:" .. n, 1, "test-preflight-front-door.sh has no " .. n) end
+    settled[#settled + 1] = fn
+end
+settled[#settled + 1] = '_budget_door() { i=$(( $(cat "$D/n") + 1 )); echo $i > "$D/n"; cat "$D/$i"; }'
+settled[#settled + 1] = 'judge_settled_budget; echo "doors=$(cat "$D/n")"'
+fs.write(REL .. "/settled.sh", table.concat(settled, "\n") .. "\n")
+local function door(wall, benched, cont)
+    return "partial:preflight:ran=280 declared-skip=10 skipped-by-deadline=3 benched=" .. benched ..
+        " could-not-run=2 refused=0 sum=339 isolation=session budget=150s budget-regime=floor contention=" .. cont .. " wall=" .. wall .. "s\n"
+end
+local QUIET, LOUD = "cpu-some:0%,foreign:5%", "cpu-some:2%,foreign:54%"
+local function settle(name, d1, d2, d3)
+    local d = REL .. "/settled-" .. name
+    fs.mkdir(d); fs.write(d .. "/n", "0")
+    fs.write(d .. "/1", d1); fs.write(d .. "/2", d2 or ""); fs.write(d .. "/3", d3 or "")
+    return text.trim(proc.run({ argv = { require("common.fixture").posix_shell(), ROOT .. "/" .. REL .. "/settled.sh" }, env = { D = ROOT .. "/" .. d }, timeout_ms = 10000 }).stdout or "")
+end
+local function has(s, w) return s:find(w, 1, true) ~= nil end
+local s1 = settle("inside", door(140, 0, QUIET))
+local s2 = settle("benched", door(158, 0, QUIET), door(158, 0, QUIET), door(80, 44, QUIET))
+local s3 = settle("slow", door(158, 0, QUIET), door(158, 0, QUIET), door(170, 44, QUIET))
+local s4 = settle("slow-unbenched", door(158, 0, QUIET), door(158, 0, QUIET), door(158, 0, QUIET))
+local s5 = settle("loud", door(184, 0, LOUD), door(182, 0, LOUD), door(182, 0, LOUD))
+local s6 = settle("loud-inside", door(140, 0, LOUD))
+local s7 = settle("loud-benched", door(158, 0, QUIET), door(158, 0, QUIET), door(170, 44, LOUD))
+arm("5b SETTLED door 1 inside passes alone; else door 3 decides, with benched= and the unbenched wall",
+    has(s1, "OK ") and has(s1, "doors=1") and has(s1, "door=1 benched=0 contention=cpu-some:0%,foreign:5%")
+        and has(s2, "OK ") and has(s2, "80s <= 150s") and has(s2, "door=3 benched=44 unbenched-wall=158s contention=cpu-some:0%,foreign:5%") and has(s2, "doors=3")
+        and has(s3, "BAD ") and has(s3, "170s > 150s") and has(s4, "BAD "),
+    s1 .. " | " .. s2 .. " | " .. s3 .. " | " .. s4)
+arm("5c CONTENDED only an over-budget door with nothing benched on a contended host is named not-judged, never ok",
+    has(s5, "not-judged:preflight-front-door:budget") and not has(s5, "OK ") and not has(s5, "BAD ")
+        and has(s6, "OK ") and has(s7, "BAD "),
+    s5 .. " | " .. s6 .. " | " .. s7)
+
+-- ── 5d where only the start load can be read, a door waits out the one before it
+local settle_fn = extract(fd, "_settle_start_load")
+if settle_fn == "" then verdict.emit("violation:preflight-regime-budget:no-subject:_settle_start_load", 1, "test-preflight-front-door.sh has no _settle_start_load") end
+fs.mkdir(REL .. "/mac")
+fs.write(REL .. "/mac/sysctl", '#!/bin/sh\ncase "$2" in hw.ncpu) echo 10; exit 0 ;; esac\nn=$(( $(cat "$D/n") + 1 )); echo $n > "$D/n"\n' ..
+    '[ "$LC_ALL" = C ] || { echo "{ 0,10 0,10 0,10 }"; exit 0; }\n[ "$n" -gt "$CALM" ] && echo "{ 1.20 2.00 2.00 }" || echo "{ 3.30 2.00 2.00 }"\n')
+fs.write(REL .. "/mac/sleep", "#!/bin/sh\nexit 0\n")
+proc.run({ argv = { "chmod", "+x", ROOT .. "/" .. REL .. "/mac/sysctl", ROOT .. "/" .. REL .. "/mac/sleep" }, timeout_ms = 10000 })
+fs.write(REL .. "/settle.sh", settle_fn .. '\nPATH="$SHIM:$PATH"\n_settle_start_load 60; echo "reads=$(cat "$D/n")"\n')
+local function settle_reads(calm, procfile)
+    fs.write(REL .. "/mac/n", "0")
+    return text.trim(proc.run({ argv = { require("common.fixture").posix_shell(), ROOT .. "/" .. REL .. "/settle.sh" },
+        env = { D = ROOT .. "/" .. REL .. "/mac", CALM = calm, _SETTLE_PROC = procfile, LC_ALL = "fr_CH.UTF-8",
+            -- set in the shell: Git's bash.exe prepends its own dirs to an inherited PATH
+            SHIM = PATH_ROOT .. "/" .. REL .. "/mac" }, timeout_ms = 20000 }).stdout or "")
+end
+local w1, w2, w3 = settle_reads("2", "/nonexistent"), settle_reads("99", "/nonexistent"), settle_reads("99", ROOT .. "/build.sh")
+arm("5d SETTLE it waits until the load drains, gives up at its bound, and never waits where /proc answers",
+    w1 == "reads=3" and w2 == "reads=6" and w3 == "reads=0", w1 .. " | " .. w2 .. " | " .. w3)
 
 -- ── 6 the clock, observed ──────────────────────────────────────────────────
 if now_fn == "" then
@@ -163,4 +232,4 @@ proc.run({ argv = { "rm", "-rf", ROOT .. "/" .. REL }, timeout_ms = 30000 })
 if #failed > 0 then
     verdict.emit("violation:preflight-regime-budget:" .. #failed .. "-failed", 1)
 end
-verdict.ok("preflight-regime-budget", "7 arms")
+verdict.ok("preflight-regime-budget", "10 arms")

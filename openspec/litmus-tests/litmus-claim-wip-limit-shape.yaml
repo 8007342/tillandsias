@@ -20,19 +20,14 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-claim-wip-limit.sh
+  - workspace contains scripts/lua/test-claim-wip-limit.lua
   - a runnable tillandsias-plan is resolvable, or the fixture skips by name
 
 critical_path:
-  - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-claim-wip-limit.sh && test -x scripts/test-claim-wip-limit.sh && echo 'ok: claim-wip-limit-parses'"
-    timeout_ms: 5000
-    expected_behavior: "ok: claim-wip-limit-parses"
-
   - step: "the WIP limit, story unit, release, override and other-host arms all hold"
-    command: "bash scripts/test-claim-wip-limit.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-claim-wip-limit.lua 2>&1"
     timeout_ms: 300000
-    expected_behavior: "claim-wip-limit: 5 passed, 0 failed"
+    expected_behavior: "ok:claim-wip-limit:5 arms"
 
   - step: "the cap lives in one place: methodology declares it and the binary reads that key"
     command: "grep -q '^    wip_limit: [0-9]' methodology/distributed-work.yaml && grep -q '\"wip_limit\"' crates/tillandsias-plan/src/main.rs && echo 'ok: wip-limit-read-from-methodology'"

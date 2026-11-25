@@ -12,9 +12,17 @@
 --   7 T:scratch().abs is accepted by rm -rf
 --     (6, 7 pre-2158-vrb7 on msys: .abs was \\?\C:\..., refused by both)
 --   8 plain_path strips \\?\ and \\?\UNC\, leaves other paths unchanged
+--  10 native_path: /c/x -> C:/x and \\?\C:\x -> C:/x on native Windows; identity
+--     for /c/x elsewhere (a legal directory there)
+--  11 plan_binary is absolute, native, and runs
+--  12 which finds a spawnable tool on PATH, nil when absent (2257-qnt7)
+--  13 is_abs accepts /x, C:/x and C:\x, and nothing relative
+--  14 a failing arm is named even when its diagnostic was cut inside a character (2322-a756)
+--   9 posix_shell is Git's bash.exe on native Windows, else the caller's default ("bash" when none)
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-common-fixture.lua
 -- Verdict: ok:common-fixture:<n> arms | violation:common-fixture:<n>-failed
+-- msys record: yolanda 2026-11-22 msys ok:common-fixture:11 arms (at 1eb143c62, 3 runs; one earlier red on arm 11 with --version, unexplained, now probed with build-id and reported)
 
 local fixture = require "common.fixture"
 local V = require "common.verdict"
@@ -66,5 +74,75 @@ local d = T:scratch()
 fs.write(d.rel .. "/x", "y")
 T:cleanup()
 T:arm("5 cleanup removes every scratch dir", not fs.exists(d.rel) and not fs.exists(repo.rel), d.rel)
+
+-- 9 (2246-fkea). Native Windows: Git's own bash, whatever default is asked.
+-- Elsewhere: the default the caller names, "bash" when it names none.
+do
+    local ep = text.trim(proc.run{ argv = { "git", "--exec-path" }, timeout_ms = 10000 }.stdout or "")
+    local a, b = fixture.posix_shell(), fixture.posix_shell("/bin/bash")
+    local native_win = ep:find("^%a:/.*/libexec/git%-core$") ~= nil
+    T:arm("9 posix_shell is Git's bash on native Windows, else the caller's default",
+        native_win and (a == b and a:find("/bin/bash%.exe$") ~= nil)
+            or (not native_win and a == "bash" and b == "/bin/bash"),
+        "exec-path=" .. ep .. " posix_shell()=" .. a .. " posix_shell(\"/bin/bash\")=" .. b)
+end
+
+-- 10, 11 (2246-fkea): the third Windows trap, an msys path a native spawn
+-- cannot resolve.
+do
+    local win = fixture.posix_shell() ~= "bash"
+    local a, b = fixture.native_path("/c/Users/x"), fixture.native_path("\\\\?\\C:\\a\\b")
+    T:arm("10 native_path makes an msys drive path native on Windows and leaves it alone elsewhere",
+        b == "C:/a/b" and ((win and a == "C:/Users/x") or (not win and a == "/c/Users/x"))
+            and fixture.native_path("/home/x") == "/home/x" and fixture.native_path("C:/a") == "C:/a",
+        "win=" .. tostring(win) .. " /c/Users/x->" .. a .. " verbatim->" .. b)
+    local pb = fixture.plan_binary()
+    local abs = pb:sub(1, 1) == "/" or pb:find("^%a:/") ~= nil
+    -- `build-id` exits 0 with no stderr; `--version` is not a subcommand and
+    -- printed ~40 KB of usage (rc 2), and once on msys the arm went red with
+    -- no reason recorded (yolanda, 2026-11-22). The detail now says why.
+    local r = pb ~= "" and proc.run{ argv = { pb, "build-id" }, timeout_ms = 60000 } or {}
+    local ran = r.status == "exited" and r.code == 0
+    T:arm("11 plan_binary is absolute, native and spawnable",
+        abs and ran and not (win and pb:find("^/%a/")),
+        "plan_binary()=" .. pb .. " build-id status=" .. tostring(r.status) .. " code=" .. tostring(r.code)
+            .. " why=" .. tostring(r.why or r.reason))
+end
+
+-- 12 ORDER 2257-qnt7: the PATH search needs no `which` binary (the WSL builder has none).
+do
+    local w = T:scratch()
+    fs.write(w.rel .. "/only-here-tool", "#!/bin/sh\nexit 0\n")
+    T:must{ "chmod", "+x", w.abs .. "/only-here-tool" }
+    local bash = fixture.which("bash")
+    local dir = text.trim(proc.run{ argv = { fixture.posix_shell(), "-s", "--", w.abs }, stdin = 'cd "$1" && pwd\n', timeout_ms = 10000 }.stdout or "")
+    local found = fixture.which("only-here-tool", dir)
+    -- A hit must be SPAWNABLE, not just found (msys: /usr/bin/bash is not).
+    local ran = bash and proc.run{ argv = { bash, "--version" }, timeout_ms = 10000 } or {}
+    T:arm("12 which finds a tool on PATH in a spawnable spelling, nil when absent or only a builtin",
+        bash ~= nil and bash:find("bash", 1, true) ~= nil and ran.status == "exited" and ran.code == 0
+            and fixture.which("no-such-tool-2246") == nil
+            and fixture.which("cd", dir) == nil and fixture.which("only-here-tool") == nil
+            and tostring(found):find("/only-here-tool", 1, true) ~= nil,
+        "bash=" .. tostring(bash) .. " spawn=" .. tostring(ran.status) .. " found=" .. tostring(found))
+end
+
+-- 13 (2253-j2at): is_abs accepts both spellings of an absolute path.
+T:arm("13 is_abs takes /x and a drive path C:/x or C:\\x, and nothing relative",
+    fixture.is_abs("/home/x") and fixture.is_abs("C:/a") and fixture.is_abs("c:\\a")
+        and not fixture.is_abs("a/b") and not fixture.is_abs("./a") and not fixture.is_abs("C:a")
+        and not fixture.is_abs("") and not fixture.is_abs(nil),
+    "is_abs(C:/a)=" .. tostring(fixture.is_abs("C:/a")))
+
+-- 14 ORDER 2322-a756: a failing arm is named even when its diagnostic was cut inside a UTF-8
+-- character. In a child, so its FAIL line is never this fixture's own output.
+do
+    local w = T:scratch("cut")
+    fs.write(w.rel .. "/cut.lua", 'local T = require("common.fixture").new("cut")\nT:arm("named", false, ("caf\\195\\169"):sub(1, 4))\nT:finish()\n')
+    local r = proc.run{ argv = { fixture.plan_binary(), "script", "run", w.rel .. "/cut.lua" }, cwd = root, timeout_ms = 60000 }
+    local o = (r.stdout or "") .. (r.stderr or "")
+    T:arm("14 a failing arm is named even when its diagnostic ends inside a UTF-8 character",
+        r.code == 1 and text.contains(o, "FAIL: named") and text.contains(o, "caf?") and text.contains(o, "violation:cut:1-failed"), tostring(r.code) .. " " .. o:gsub("[\128-\255]", "?"))
+end
 
 T:finish()

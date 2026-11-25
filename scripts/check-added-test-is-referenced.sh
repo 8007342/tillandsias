@@ -129,7 +129,7 @@ for f in scripts/test-*.sh; do
     _is_referenced "$b" "$_shell_files" || standing=$((standing + 1))
 done
 
-if ! git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
+if ! git rev-parse --verify --quiet "$base_ref^{commit}" >/dev/null 2>&1; then
     echo "ok:added-test-referenced:0 checked standing=$standing surfaces=$surfaces"
     echo "  note: base ref '$base_ref' unavailable — added-test enforcement skipped" >&2
     exit 0

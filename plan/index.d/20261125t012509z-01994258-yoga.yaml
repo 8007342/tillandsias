@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: relay-scope-selects-a-litmus-file-with-no-phase-line-as-pre-build
+    event:
+      type: list-replace
+      ts: "2026-11-25T01:25:09Z"
+      agent_id: linux-yoga-claude-20261125t020000z
+      host: yoga
+      field: exit_criteria
+      items:
+        - "In litmus-covering-specs.sh an empty phase field is no longer read as the size: a litmus file with no phase: line prints deferred:phase with its real size. Pre-fix result: FAILS, the size is read as the phase."
+        - "The reader's default phase is the runner's get_test_phase default (runtime); an arm reads both from the code and is red if either drifts."
+        - "NEGATIVE CONTROL: an explicit non-pre-build phase still defers with its own size, and a pre-build file with no size line still runs as instant."
+      summary: |-
+        coordinator ruling 2026-11-25: the runner reads a missing phase as runtime and skips it before a build, so selecting it as pre-build would be the false green

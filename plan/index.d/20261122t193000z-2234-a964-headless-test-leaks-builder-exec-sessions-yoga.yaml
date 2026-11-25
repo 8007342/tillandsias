@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-22 at the coordinator's direction (macuahuitl-fedora).
+packets:
+  - packet_id: headless-pty-test-leaks-a-login-shell-per-run-into-the-builder
+    order: "2234-a964"
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [land-queue, toolbox, tests]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-headless/src/pty_handler.rs
+      - scripts/land-queue.sh
+      - scripts/test-land-queue.sh
+    title: "Every headless test run leaks an idle /bin/bash -l into tillandsias-builder; the keyring quota then fails crun and the queue evicts rc=255"
+    context: |
+      macuahuitl run 29: 189 idle `/bin/bash -l` exec sessions in tillandsias-builder, each with its conmon and a
+      kernel session keyring; uid 1000 hit the 200-key quota, crun failed "join keyctl: Disk quota exceeded", and 14 PRs
+      were evicted rc=255. yoga had 25 such shells, every one with cwd <worktree>/crates/tillandsias-headless.
+      Source: pty_handler.rs test duplicate_session_id_returns_error opened a real interactive `/bin/bash -l` on a pty
+      and returned right after shutdown_all(); interactive bash ignores SIGTERM and spawn_terminator's SIGKILL (after a
+      2 s grace) never fires because the test runtime is dropped first. Control on yoga: the old test leaves one
+      `/bin/bash -l` per run; the fixed one leaves none.
+      Second half: land-queue recorded rc=255 as an eviction (gate-aborted) with a PR comment; rc>=128 is this host's
+      state, so it is now could-not-run:host like the host door (ARM 34).
+    exit_criteria:
+      - "duplicate_session_id_returns_error asserts its child is gone before returning; running the headless tests leaves zero /bin/bash -l under the builder's conmon."
+      - "land-queue reports a gate rc>=128 as could-not-run:host:gate-aborted:rc=N, evicts and comments nobody (test-land-queue ARM 18)."
+    unscoreable: "the leak count is a property of the builder container on a live host; the Rust test pins the child's death, ARM 18 pins the queue half"
+    provenance: "coordinator 2026-11-22 (macuahuitl run 29 eviction storm); yoga /proc census of builder conmon children"
+    events:
+      - type: filed
+        ts: "2026-11-22T19:30:00Z"
+        host: yoga
+        summary: "filed with the fix: leaked login shell per headless test run; rc=255 no longer evicts"

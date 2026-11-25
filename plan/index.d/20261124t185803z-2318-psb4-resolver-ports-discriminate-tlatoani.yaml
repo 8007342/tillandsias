@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-24. Repairs two vacuous arms in 2312-psb3 (#1500, merged), on lenovinha's 2292-62a5 note.
+packets:
+- packet_id: resolver-port-arms-discriminate-the-tr-and-the-argv
+  order: 2318-psb4
+  status: implemented
+  kind: debt
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [shell-to-lua, macos, fixtures]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 0.5
+  title: 'The open-PR and release-run resolver ports: arm 5 goes red when the tr is removed, and a new arm checks what gh was asked'
+  context: >-
+    lenovinha's 2292-62a5 park note: the trailing-newline arm feeds "81\n", which the resolver's $(...) already strips, so removing
+    tr -d '[:space:]' leaves it green. Measured on darwin: 2312-psb3's test-resolve-open-pr.lua read 5/5 with the tr removed, and
+    test-resolve-release-run.lua has the same arm. Both now feed a leading space and CR LF, which survive the substitution. The stub gh
+    records its argv, and a new arm checks base/head (open-PR) and workflow, event and branch (release-run).
+  exit_criteria:
+  - 'Mutants red: tr removed reds arm 5 in both; --base/--head swapped reds open-PR arm 6; --event=push reds release-run arm 7.'
+  - 'litmus release-runbook-external-preconditions-shape expects 6 and 7 arms and is green.'
+  verifiable_closure: 'Mutant output in the PR; scripts/run-litmus-test.sh ci-release --test litmus:release-runbook-external-preconditions-shape green on darwin.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the mutants are the deliverable.'
+  next_action: 'Implemented. Darwin: ok:open-pr-resolver:6 arms, ok:release-run-resolver:7 arms; all four mutants red on their arm.'
+  provenance: 'tlatoanis-macbook-air 2026-11-24, from lenovinha''s 2292-62a5 note.'
+  related: [2312-psb3, 2292-62a5]
+  events:
+  - {type: filed, ts: '2026-11-24T18:58:03Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}

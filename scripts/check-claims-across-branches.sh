@@ -52,6 +52,7 @@
 #
 # Verdict grammar, one line on stdout:
 #   ok:cross-branch-claims:<n> sibling branch(es) checked          exit 0
+#     <n> counts folded siblings only; ", unchecked: <b>..." names the rest (2316-6kzg)
 #   claimed-elsewhere:<packet>:<branch>:<host>                     exit 1
 #   blocked:<reason>                                               exit 2
 set -uo pipefail
@@ -125,6 +126,31 @@ fi
 
 SIBLINGS="linux-next windows-next osx-next"
 
+# ORDER 2323-wwaa. An inherited TILLANDSIAS_PLAN_BIN may be a wrapper that already
+# passes --index (a fixture over a scratch ledger). Every fold below passes its
+# own, the binary refuses the second one, and each sibling then folded to 0 rows.
+# Such a wrapper cannot answer for a sibling, so resolve without it. Keyed on the
+# binary's own refusal: any other failing override is still the caller's choice.
+# Asked once, inside the first fold, so a killed run still cleans its extract.
+_override_checked=0
+_drop_indexed_override() {
+    [ "$_override_checked" = 0 ] && [ -n "${TILLANDSIAS_PLAN_BIN:-}" ] || return 0
+    _override_checked=1
+    case "$("$PLAN_BIN" --index "$1" capabilities 2>&1 >/dev/null)" in
+        *"unknown subcommand '--index'"*)
+            echo "note:cross-branch-claims:plan-bin-override-fixes-its-own-index — folding siblings with the checkout's own plan binary" >&2
+            unset TILLANDSIAS_PLAN_BIN
+            PLAN_BIN="$(resolve_plan_binary 2>/dev/null)" || PLAN_BIN=""
+            if [ -z "$PLAN_BIN" ]; then
+                _afford "TILLANDSIAS_PLAN_BIN fixes its own --index, so it cannot read a sibling's ledger, and no other tillandsias-plan resolved" \
+                    "build it (cargo build --release -p tillandsias-plan) or unset TILLANDSIAS_PLAN_BIN, then re-run"
+                echo "blocked:no-plan-binary"
+                exit 2
+            fi
+            ;;
+    esac
+}
+
 # ORDER 1423-ydy3 — THE EXTRACT DIES WITH THE RUN. Every fold extracts a
 # sibling's plan/ (~19 MB) into ${TMPDIR:-/tmp}/xbranch.*, and the normal paths
 # rm -rf it; a KILLED run (timeout, Ctrl-C, a cycle's lock-holder reaped) did
@@ -170,18 +196,22 @@ _claim_host_on_branch() { # _claim_host_on_branch <archived-tree> <packet-id-or-
         printf '%s' "$TILLANDSIAS_XBRANCH_CLAIM_HOST"
         return 0
     fi
-    local tree="$1" who="$2" f best_ts="" best_host=""
-    for f in "$tree"/plan/index.d/*.yaml; do
-        [ -e "$f" ] || continue
-        # A status entry names the packet, the field, and its host. Read the
-        # block that mentions this packet and carries `field: status`.
-        awk -v want="$who" '
+    local tree="$1" who="$2"
+    # A status entry names the packet, the field, and its host. Read the
+    # block that mentions this packet and carries `field: status`.
+    # ONE awk over every fragment (2271-5v9r), not one per file: ~6,500 fragments
+    # per sibling made a claimed packet's check spend ~36 s spawning awk.
+    # The block state resets at each file's first line, as the per-file
+    # spawn did; xargs -0 keeps a large fragment count under ARG_MAX.
+    [ -d "$tree/plan/index.d" ] || return 0
+    find "$tree/plan/index.d" -maxdepth 1 -name '*.yaml' -type f -print0 2>/dev/null |
+        LC_ALL=C sort -z | xargs -0 -r awk -v want="$who" '
+            FNR == 1 { inblk = 0; pid = ""; f = ""; t = ""; h = "" }
             /^[[:space:]]*-[[:space:]]*packet_id:/ { pid=$0; sub(/^[^:]*:[[:space:]]*/,"",pid); inblk=(index(pid,want)>0 || index(want,pid)>0); f=""; t=""; h="" }
             inblk && /^[[:space:]]*field:[[:space:]]*status[[:space:]]*$/ { f=1 }
             inblk && /^[[:space:]]*ts:/ { t=$0; sub(/^[^:]*:[[:space:]]*/,"",t); gsub(/"/,"",t) }
             inblk && /^[[:space:]]*host:/ { h=$0; sub(/^[^:]*:[[:space:]]*/,"",h); if (f && t != "" && h != "") print t "\t" h }
-        ' "$f" 2>/dev/null
-    done | sort -r | head -1 | cut -f2
+        ' 2>/dev/null | sort -r | head -1 | cut -f2
 }
 
 # BOTH VOCABULARIES COUNT AS "ME", and 1012-hu7d is why: a claim written with
@@ -226,17 +256,27 @@ if [ "$NO_FETCH" = 0 ]; then
     }
 fi
 
+# ORDER 2316-6kzg. A sibling counts as checked only once its ledger was FOLDED. Both
+# modes counted it first, so a failed `git archive` answered ok with nothing compared.
+unchecked=""
+_unfolded() { # _unfolded <branch>
+    unchecked="${unchecked:+$unchecked }$1"
+    echo "unchecked:$1" >&2
+    _afford "origin/$1's ledger could not be extracted, so nothing on that branch was compared and it is not counted as checked" \
+        "run git archive origin/$1 plan/index.yaml plan/index.d | tar -t to see why, then re-run; never read an unchecked branch as unclaimed"
+}
+
 if [ "$BATCH" = 1 ]; then
     checked=0
     hits=0
     for b in $SIBLINGS; do
         git rev-parse --verify -q "origin/$b" >/dev/null 2>&1 || continue
         [ "$b" = "$CURRENT" ] && continue
-        checked=$((checked + 1))
         # 1948-xbaf: HEAD already folded all of it.
-        _is_ancestor_of_head "$b" && continue
+        _is_ancestor_of_head "$b" && { checked=$((checked + 1)); continue; }
         tmp="$(mktemp -d "${TMPDIR:-/tmp}/xbranch.XXXXXX")"
         if git archive "origin/$b" plan/index.yaml plan/index.d 2>/dev/null | tar -x -C "$tmp" 2>/dev/null; then
+        _drop_indexed_override "$tmp/plan/index.yaml"
             # TWO STAGES, because `status` answers ONE id per invocation at
             # ~650ms and each invocation re-folds the ledger. A frontier of 200
             # candidates across two siblings would be 260s — unusable at the
@@ -256,11 +296,13 @@ if [ "$BATCH" = 1 ]; then
                 # The fold produced no ready set at all: treat as unusable
                 # rather than as "everything is claimed".
                 echo "blocked:empty-fold:$b" >&2
-                _afford "the plan binary folded origin/$b's ledger into an empty ready set, which cannot be told apart from everything being claimed, so that branch is skipped" \
+                _afford "the plan binary folded origin/$b's ledger into an empty ready set, which cannot be told apart from everything being claimed, so that branch is skipped and not counted as checked" \
                     "check the binary can read that ledger: git archive origin/$b plan/index.yaml plan/index.d | tar -t, then tillandsias-plan --index <extract>/plan/index.yaml ready any"
+                unchecked="${unchecked:+$unchecked }$b"
                 rm -rf "$tmp"; tmp=""
                 continue
             fi
+            checked=$((checked + 1))
             for id in $BATCH_IDS; do
                 case "
 $ready_here
@@ -277,6 +319,8 @@ $id
                     hits=$((hits + 1))
                 fi
             done
+        else
+            _unfolded "$b"
         fi
         rm -rf "$tmp"; tmp=""
     done
@@ -284,13 +328,13 @@ $id
         # No sibling could be folded. Saying "none claimed" here is the false
         # negative this file exists to prevent.
         echo "blocked:no-siblings-folded" >&2
-        _afford "no sibling platform branch resolved as origin/<branch> (other than the current one), so nothing was compared" \
+        _afford "no sibling platform branch (other than the current one) resolved as origin/<branch> and had its ledger folded${unchecked:+ (unchecked: $unchecked)}, so nothing was compared" \
             "fetch the sibling branches (git fetch origin), confirm they resolve with git branch -r, then re-run"
         echo "blocked:no-siblings-folded"
         exit 2
     fi
     n_ids="$(printf '%s\n' $BATCH_IDS | grep -c . || true)"
-    echo "ok:cross-branch-claims:$checked sibling branch(es) checked, ${n_ids} packet(s)"
+    echo "ok:cross-branch-claims:$checked sibling branch(es) checked, ${n_ids} packet(s)${unchecked:+, unchecked: $unchecked}"
     [ "$hits" -gt 0 ] && exit 1
     exit 0
 fi
@@ -310,12 +354,13 @@ mine=""
 for b in $SIBLINGS; do
     git rev-parse --verify -q "origin/$b" >/dev/null 2>&1 || continue
     [ "$b" = "$CURRENT" ] && continue
-    checked=$((checked + 1))
     # Fold that branch's ledger and ask it directly, rather than grepping
     # fragments: status is LWW and a later fragment can release a claim, so the
     # raw presence of a claim fragment is NOT the same question (635-i6vm).
     tmp="$(mktemp -d "${TMPDIR:-/tmp}/xbranch.XXXXXX")"
     if git archive "origin/$b" plan/index.yaml plan/index.d 2>/dev/null | tar -x -C "$tmp" 2>/dev/null; then
+        _drop_indexed_override "$tmp/plan/index.yaml"
+        checked=$((checked + 1))
         st="$("$PLAN_BIN" --index "$tmp/plan/index.yaml" status "$PACKET" 2>/dev/null | awk '{print $2}')"
         [ -n "$st" ] && seen_anywhere=1
         # 1948-xbaf: an ancestor still proves the packet exists (above), but
@@ -339,6 +384,8 @@ for b in $SIBLINGS; do
                 found="${found:+$found }$b"
             fi
         fi
+    else
+        _unfolded "$b"
     fi
     rm -rf "$tmp"; tmp=""
 done
@@ -351,7 +398,7 @@ done
 # blocked:* as STOP (advance-work-from-plan §2) already handles it.
 if [ "$checked" -eq 0 ]; then
     echo "blocked:no-siblings-folded" >&2
-    _afford "no sibling platform branch resolved as origin/<branch> (other than the current one), so nothing was compared for $PACKET" \
+    _afford "no sibling platform branch (other than the current one) resolved as origin/<branch> and had its ledger folded${unchecked:+ (unchecked: $unchecked)}, so nothing was compared for $PACKET" \
         "fetch the sibling branches (git fetch origin), confirm they resolve with git branch -r, then re-run; never read this as unclaimed"
     echo "blocked:no-siblings-folded"
     exit 2
@@ -369,7 +416,7 @@ if [ -z "$found" ] && [ -n "$mine" ]; then
     echo "  not going to finish it. Measured cost of the old answer: a day of finished work" >&2
     echo "  left stranded because the tool said 'NOT yours to implement' about its author's" >&2
     echo "  own claim." >&2
-    echo "ok:cross-branch-claims:$checked sibling branch(es) checked; own claim reflected by $(printf '%s' "$mine" | wc -w | tr -d ' ')"
+    echo "ok:cross-branch-claims:$checked sibling branch(es) checked; own claim reflected by $(printf '%s' "$mine" | wc -w | tr -d ' ')${unchecked:+, unchecked: $unchecked}"
     exit 0
 fi
 
@@ -395,7 +442,7 @@ if [ "$seen_anywhere" -eq 0 ]; then
     echo "  not exist, or that its author has not pushed yet." >&2
     _afford "no sibling branch and no local fold knows $PACKET" \
         "check the reference with tillandsias-plan status $PACKET after git pull; if its author has not pushed yet, wait for the push; otherwise correct the id or order"
-    echo "unknown-packet:$PACKET:$checked sibling branch(es) checked"
+    echo "unknown-packet:$PACKET:$checked sibling branch(es) checked${unchecked:+, unchecked: $unchecked}"
     exit 2
 fi
-echo "ok:cross-branch-claims:$checked sibling branch(es) checked"
+echo "ok:cross-branch-claims:$checked sibling branch(es) checked${unchecked:+, unchecked: $unchecked}"

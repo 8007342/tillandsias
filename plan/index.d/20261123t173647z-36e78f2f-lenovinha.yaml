@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: salvage-audit-fixture-audits-a-constructed-repo-not-the-live-refs
+    field: status
+    value: completed
+    ts: "2026-11-23T17:36:47Z"
+    host: lenovinha
+
+events:
+  - packet_id: salvage-audit-fixture-audits-a-constructed-repo-not-the-live-refs
+    event:
+      type: completed
+      ts: "2026-11-23T17:36:47Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: land:b53fac719419fe308f6c577e4aa72ecbd51f2f41
+  - packet_id: salvage-audit-fixture-audits-a-constructed-repo-not-the-live-refs
+    event:
+      type: note
+      ts: "2026-11-23T17:36:47Z"
+      host: lenovinha
+      summary: |-
+        landed as PR #1436

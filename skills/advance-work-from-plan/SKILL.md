@@ -16,6 +16,28 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
 
 ---
 
+## Remote unreachable: STOP — check FIRST, and on the first GitHub failure (order 2239-rmun)
+
+The user's direction (2026-11-22): a host that cannot push code to the remote
+must stop work entirely, not retry with exponential backoff, and not keep
+doing local work. A host whose gh token went bad kept merging and porting for
+~25 minutes because every symptom ("Failed to connect to github.com:443",
+"graphql: i/o timeout") read as a flaky network.
+
+1. At the start of every loop, AND the moment any GitHub operation fails (a
+   push, `gh pr ...`, `git fetch`/`ls-remote`, an API timeout), run the probe
+   once:
+   `tillandsias-plan script run scripts/lua/probe-remote-reachable.lua`
+2. `ok:remote-reachable` → continue. Anything that is neither `ok:` nor
+   `blocked:remote-unreachable:` (a script error, a stale plan binary) judged
+   nothing: rebuild the plan binary and re-run it; never suspend on it.
+3. `blocked:remote-unreachable:<cause>` → **SUSPEND**: tell the user and the
+   coordinator (by name, with the cause and the probe's why/remedy), push and
+   claim nothing, start no further local work, and do not retry or back off.
+   Wait for a human to restore access, then run the probe again.
+4. Never run `gh auth login` or `gh auth refresh` yourself; restoring access
+   is the human's step on that host.
+
 ## 1 — Orient & Discover Environment
 
 1.  **Git Check**: Run:
@@ -341,6 +363,12 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
         wrong number.
     -   **In-forge self-service** (canonical: `methodology/distributed-work.yaml` → `in_forge_agent_self_service`): if you are running INSIDE the forge and hit a missing tool/capability/fix, unblock your FUTURE launches by filing in the SHARED CHECKOUT (the forge is rebuilt from sources each launch): a capability/tool proposal → `plan/forge-improvements/proposals/<date>-<slug>.md`; a forge bug → a `plan/issues/` packet `capability_tags: [forge, …]` `owner_host: linux|any`. If the packet is `forge`-tagged/`any` and fits the forge budget, just do it. Always shaped + verifiable + pushed (a finding that dies with the container is lost).
     -   **A LARGE packet is ELIGIBLE — size is not a skip reason** (The Tlatoāni 2026-07-17; canonical: `methodology/distributed-work.yaml` → `large_packet_is_eligible_work`). Do NOT scan a queue of big packets, judge them all "too large", and reach for an old, small, near-obsolete task instead — that inverts the queue's value order and churns work that later specs will supersede. Rank by VALUE and RELEVANCE, never by smallness: a large, fresh, release-targeted packet OUTRANKS a small, stale one. When you claim a packet you cannot finish this cycle, end in ONE of three valid outcomes, each a complete successful cycle: **(a) partial slice** — smallest vertical slice under a verifiable constraint + a `progress` event with `partial_artifact_refs` and an updated `next_action`; **(b) split** — decompose into smaller `ready` child packets at ownership/dependency/evidence boundaries (`split_into`), the shaping commit IS the cycle's output (this generalizes the forge-only order-264 split rule to every host); **(c) audit-dispose** — if it is stale/superseded, retire it (obsolete/tombstone) per the freshness class. A near-obsolete-looking packet is a signal to AUDIT it, not to implement it as busywork.
+    -   **Shell-to-Lua port size** (operator 2026-11-25; canonical: `methodology/convergence.yaml` → `shell-to-lua` → `batching`):
+        -   **Fixtures:** a PR porting `scripts/test-*.sh` fixtures carries **8–10 ports**. Run mutants on each fixture's main assertions only (2–3 per fixture), and name every survivor in the PR.
+        -   **Libraries, hooks, tools and gate deciders:** stay at 3–4 ports with full mutants.
+        -   **Tests that never run:** retire them, with the reason in the file, rather than porting them.
+        -   **`images/**`:** its own track, verified in a container on a podman host.
+        -   **Before taking a 30-port row:** count which fixtures in your range are free.
 4.  **Long-running packets** (`multi_cycle: true`): claims are CYCLE-SCOPED — you claim one session's slice, not the packet. A `ready` multi_cycle packet with prior progress events is claimable (that's the design, not a stale lease). Canonical rules: `methodology/distributed-work.yaml` → `long_running_packets`.
 5.  **Constraint**: ONE logical commit per batch/cycle. If an individual slice estimates >2h, split it and ship the first half. (Unattended litmus-hosted sessions (`TILLANDSIAS_LITMUS_STEP`) drain **at most ONE packet per session** to fit the 600s timeout; autonomous/pairing forge cycles execute **adaptive batches of 3–6 packets** to maximize the work-to-orchestration ratio. Decided by The Tlatoāni, order 707-3x9d; canonical: `methodology/distributed-work.yaml` `worker_agent_protocol.forge_cycle_budget`.)
 6.  **Standing FRESHNESS audit class** (order 372, methodology `component_freshness`): each cycle, after worker drain, pick ONE component the `freshness-advisory` CI phase flagged as stale (or any unstamped component) and re-validate it against the audit question — *last properly looked at and confirmed still meaningful, useful, efficient, sound, and complete?* End in exactly one disposition: **refreshed** (re-validated, update its `# freshness:` stamp), **updated** (fixed/tuned, update stamp), or **obsoleted** (delete/tombstone with a same-commit removal of dependents). Apply the **discard-over-repair bias**: discard a stale component rather than repair it when a fresh implementation would be better. Record a `# freshness: auditor=<id> date=<ISO> verdict=<...> scope=<one-line>` stamp (grammar in methodology.yaml). `scripts/freshness-inventory.sh` emits the coverage report + the top stale components each `./build.sh --ci` run.
@@ -671,12 +699,19 @@ Cite the unblock in your commit body (`unblock-noop: <path>:<line>`) so the sibl
 
 ```bash
 cargo fmt --all
-./build.sh --check
+./build.sh --floor                      # REQUIRED before a work/* push: ok:floor (2130-fl0r)
+./build.sh --check                      # where memory allows; the landing queue gates anyway
 cargo test -p <crate-you-touched>      # targeted, fast
 ./build.sh --test                       # cross-cutting changes only
 ```
 
 Hard rules:
+- **`./build.sh --floor` is the required local check before a work/* push
+  (operator 2026-11-20, order 2130-fl0r).** It replaces the worker-side
+  `--preflight` requirement: the landing queue runs the full preflight and
+  gate on arrival and evicts with the log. Push only on `ok:floor:…`; a
+  `violation:floor:<what>` names the fix. Run `--preflight` or `--check` too
+  where memory allows, to catch a red before the queue does.
 - **Detach any gate longer than a couple of minutes from the harness, and
   never launch one by hand inside a WSL distro.** The harness reaps its own
   `run_in_background` waiters under memory pressure: on macuahuitl two

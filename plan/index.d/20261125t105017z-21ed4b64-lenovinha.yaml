@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: port-relay-ack-salvage-seed-fast-refusals-hook-phase-fixtures-to-lua
+    field: status
+    value: completed
+    ts: "2026-11-25T10:50:17Z"
+    host: lenovinha
+
+events:
+  - packet_id: port-relay-ack-salvage-seed-fast-refusals-hook-phase-fixtures-to-lua
+    event:
+      type: completed
+      ts: "2026-11-25T10:50:17Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: land:cd2bc20644e52797590fb18d4957e89efc6307d1
+  - packet_id: port-relay-ack-salvage-seed-fast-refusals-hook-phase-fixtures-to-lua
+    event:
+      type: note
+      ts: "2026-11-25T10:50:17Z"
+      host: lenovinha
+      summary: |-
+        #1539 landed: git-mirror-relay-verified-ack, forge-seeds-from-salvage-ref, gate-fast-refusals and hook-phase-instrumentation run as Lua. Step 175 passes on darwin (relayed by macuahuitl); its record goes in the next batch.

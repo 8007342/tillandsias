@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: four-t-v-fixtures-ported-to-lua-batch-1
+    order: "2361-y7pf"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/test-tray-refresh-no-polling.lua
+      - scripts/lua/test-tool-dispatch-rejects-unusable-host-tool.lua
+      - scripts/lua/test-tray-asset-placeholder-refused.lua
+      - scripts/lua/test-version-bump-isolation-scope.lua
+    title: "four shell fixtures ported to Lua: tray refresh no-polling, unusable host tool, tray asset placeholder, version-bump scope"
+    context: |
+      ports: test-tray-refresh-no-polling, test-tool-dispatch-rejects-unusable-host-tool,
+      test-tray-asset-placeholder-refused, test-version-bump-isolation-scope.
+      Claimed by yolanda in the coordinator's test-[t-v]* range. Not taken: test-uninstall-matcher-spares-bystanders
+      (Darwin processes; for a Mac).
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its subject is mutated; callers run the .lua; the four .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by two gate steps and two litmus tests"
+    provenance: "coordinator 2026-11-25 (test-[t-v]* range), yolanda"
+    related: [147, 1138-bb5r, 1059-ry6t, 723-b9cn]
+    events:
+      - {type: claimed, ts: "2026-11-25T15:03:07Z", host: yolanda, summary: "claimed; work ref work/2361-y7pf"}

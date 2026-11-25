@@ -1909,7 +1909,7 @@ ensure_forge_spec_index() {
 #
 # Pure and argument-fed so the policy is testable without an endpoint, an
 # accelerator, or a forge — the same reason format_seed_staleness exists on the
-# Rust side. scripts/test-warm-tier-model.sh exercises every branch.
+# Rust side. scripts/lua/test-warm-tier-model.lua exercises every branch.
 #
 # THE LADDER IS THE INFERENCE CONTAINER'S, NOT A SECOND ONE. images/inference/
 # entrypoint.sh classifies by VRAM/RAM and pulls T2 (qwen2.5:7b) .. T5; this

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: grep-escapes-jq-capture-and-inference-entrypoint-fixtures-ported-to-lua
+    order: "2332-rxkr"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/test-litmus-grep-escapes.lua
+      - scripts/lua/test-jq-multiline-capture.lua
+      - scripts/lua/test-inference-engine-pinned-and-npu-honest.lua
+      - scripts/lua/test-inference-mkdir-fatal-1183-j9dk.lua
+    title: "four shell fixtures ported to Lua: litmus grep escapes, jq multi-line capture, pinned inference engine, fatal models mkdir"
+    context: |
+      ports: test-litmus-grep-escapes, test-jq-multiline-capture, test-inference-engine-pinned-and-npu-honest, test-inference-mkdir-fatal-1183-j9dk.
+      Claimed by yoga before the work, in the coordinator's test-[i-o]* range. The same change lands macbookair's darwin
+      lines for gate steps 335, 385 and 902 in their step files.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its subject is mutated; callers run the .lua; the four .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by three gate steps and local-ci"
+    provenance: "coordinator queue 2026-11-25 (test-[i-o]* range), yoga"
+    related: [901-jtvi, 1049-s35z, 1118-d3b6, 1183-j9dk]
+    events:
+      - {type: claimed, ts: "2026-11-25T07:51:14Z", host: yoga, summary: "claimed; work ref work/2332-rxkr"}

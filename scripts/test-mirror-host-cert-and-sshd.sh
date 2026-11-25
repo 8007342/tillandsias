@@ -80,7 +80,7 @@ CERT=/tmp/tillandsias-sshd/ssh_host_ed25519_key-cert.pub'
 INNER_CERT_EXACT='
 out="$(/usr/local/bin/sshd-identity.sh request-cert)" || { echo "inner:request-failed:$out"; exit 90; }
 L="$(ssh-keygen -L -f "$CERT")" || { echo "inner:cert-unreadable"; exit 91; }
-echo "$L" | grep -q "host certificate" || { echo "inner:not-host-cert"; exit 92; }
+grep -q <<<"$L" "host certificate" || { echo "inner:not-host-cert"; exit 92; }
 P="$(echo "$L" | awk "/^ *Principals:/{f=1;next} /^ *(Critical Options|Extensions):/{f=0} f&&NF{print \$1}")"
 [ "$(printf "%s\n" "$P" | grep -c .)" = "1" ] || { echo "inner:principal-count:$P"; exit 93; }
 [ "$P" = "git-'"$MID"'" ] || { echo "inner:principal-value:$P"; exit 94; }
@@ -95,7 +95,7 @@ out="$(ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/fx/kh \
     -o GlobalKnownHostsFile=/dev/null -o IdentitiesOnly=yes \
     -o HostKeyAlias=git-'"$MID"' \
     -i /tmp/fx/client/key -p 2222 git@127.0.0.1 true 2>/tmp/fx/ssh.err)"
-echo "$out" | grep -q RECEIVE-MARKER || { echo inner:cert-client-not-accepted; sed -n "1,6p" /tmp/fx/ssh.err >&2; exit 91; }
+grep -q <<<"$out" RECEIVE-MARKER || { echo inner:cert-client-not-accepted; sed -n "1,6p" /tmp/fx/ssh.err >&2; exit 91; }
 printf "@cert-authority git-'"$MID"' %s\n" "$(cat /tmp/fx/ca/client_ca.pub)" > /tmp/fx/kh-wrong
 if ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/fx/kh-wrong \
     -o GlobalKnownHostsFile=/dev/null -o IdentitiesOnly=yes \
@@ -117,7 +117,7 @@ if out="$(ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/fx/kh \
     -i /tmp/fx/client/plain -p 2222 git@127.0.0.1 true 2>/tmp/fx/ssh.err)"; then
   echo inner:plain-key-accepted; exit 91
 fi
-echo "$out" | grep -q RECEIVE-MARKER && { echo inner:plain-key-ran-command; exit 92; }
+grep -q <<<"$out" RECEIVE-MARKER && { echo inner:plain-key-ran-command; exit 92; }
 grep -qi "permission denied" /tmp/fx/ssh.err || { echo inner:plain-key-wrong-cause; sed -n "1,6p" /tmp/fx/ssh.err >&2; exit 93; }
 L="$(cat /tmp/tillandsias-sshd/authorized_principals)"
 [ "$L" = "til:forge-push:'"$MID"'" ] || { echo inner:principals-content; exit 94; }
@@ -127,12 +127,12 @@ echo inner:outside-ca-refused'
 INNER_NEGATIVES='
 out="$(FIXTURE_EVIL_PRINCIPALS=1 /usr/local/bin/sshd-identity.sh request-cert)"; rc=$?
 [ $rc -ne 0 ] || { echo inner:evil-cert-accepted; exit 90; }
-echo "$out" | grep -q "fail:sshd-identity:cert-principal-violation" || { echo "inner:evil-cert-wrong-cause:$out"; exit 91; }
+grep -q <<<"$out" "fail:sshd-identity:cert-principal-violation" || { echo "inner:evil-cert-wrong-cause:$out"; exit 91; }
 mkdir -p /tmp/tillandsias-sshd
 printf "til:forge-push:'"$MID"'\nevil-extra-line\n" > /tmp/tillandsias-sshd/authorized_principals
 out="$(/usr/local/bin/sshd-identity.sh render-config)"; rc=$?
 [ $rc -ne 0 ] || { echo inner:extra-line-accepted; exit 92; }
-echo "$out" | grep -q "fail:sshd-identity:principals-violation" || { echo "inner:extra-line-wrong-cause:$out"; exit 93; }
+grep -q <<<"$out" "fail:sshd-identity:principals-violation" || { echo "inner:extra-line-wrong-cause:$out"; exit 93; }
 echo inner:negatives-refused'
 
 INNER_RENEWAL='
@@ -183,7 +183,7 @@ mode_render_default() {
 run_mode() {
     inner="$1"; want="$2"; okline="$3"
     out="$(run_inner "$inner")"
-    if printf '%s' "$out" | grep -q "$want"; then
+    if grep -q <<<"$out" "$want"; then
         echo "$okline"
         return 0
     fi

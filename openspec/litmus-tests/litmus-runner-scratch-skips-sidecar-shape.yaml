@@ -13,12 +13,18 @@ size: quick
 
 preconditions:
   - workspace contains scripts/lua/test-runner-scratch-skips-sidecar.lua
+  - workspace contains scripts/lua/test-litmus-bare-plan-binary.lua
 
 critical_path:
   - step: "a scratch runner start skips sidecar staging; build-sidecar.sh refuses without its crate; negative control: the staging condition still holds in this checkout"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-runner-scratch-skips-sidecar.lua 2>&1"
     timeout_ms: 120000
     expected_behavior: "ok:runner-scratch-skips-sidecar:3/3"
+
+  - step: "order 2310-eji3: a step that calls a bare tillandsias-plan gets the binary the runner resolved; control: a step with its own PATH finds none"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-bare-plan-binary.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:litmus-bare-plan-binary:5 arms"
 
 observability:
   traces:

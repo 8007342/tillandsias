@@ -9,14 +9,14 @@ severity: critical
 size: quick
 
 preconditions:
-  - workspace contains scripts/test-forge-runtime-ca-trust.sh
+  - workspace contains scripts/lua/test-forge-runtime-ca-trust.lua
   - localhost/tillandsias-forge:latest exists
 
 critical_path:
   - step: "representative clients trust one runtime CA through system defaults"
-    command: "scripts/test-forge-runtime-ca-trust.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run --timeout 6m scripts/lua/test-forge-runtime-ca-trust.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "PASS: rootless forge runtime CA trust uses system defaults"
+    expected_behavior: "ok:forge-runtime-ca-trust:9 arms"
 
   - step: "production default-image entrypoints contain no per-client CA mesh"
     command: "! grep -R -E 'GIT_SSL_CAINFO|SSL_CERT_FILE|REQUESTS_CA_BUNDLE|NODE_EXTRA_CA_CERTS' images/default/entrypoint-*.sh && echo 'ok: no entrypoint CA override mesh'"
@@ -38,4 +38,4 @@ observability:
 
 rollback:
   on_failure: "inspect the image system-bundle symlink, /run ownership, and lib-common initializer"
-  command: "scripts/test-forge-runtime-ca-trust.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run --timeout 6m scripts/lua/test-forge-runtime-ca-trust.lua 2>&1"

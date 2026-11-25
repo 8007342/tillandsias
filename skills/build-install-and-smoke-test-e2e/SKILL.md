@@ -304,7 +304,7 @@ test "$RESET_RC" -eq 0
   # asserted 0 containers / 0 volumes / 0 images and reported cold while a
   # fallback_vault-shamir-share-v1 had survived every reset since 2026-09-01 —
   # the resync path was never exercised. Metadata only — never the secret.
-  scripts/probe-credential-cold-state.sh 2>&1 | tee "$LOG_DIR/02-credential-state.txt" || true
+  "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" script run scripts/lua/probe-credential-cold-state.lua 2>&1 | tee "$LOG_DIR/02-credential-state.txt" || true
 CONTAINERS="$(podman ps -aq)"; VOLUMES="$(podman volume ls -q)"; IMAGES="$(podman images -q)"
 printf '[containers]\n%s\n[volumes]\n%s\n[images]\n%s\n' "$CONTAINERS" "$VOLUMES" "$IMAGES" \
   | tee "$LOG_DIR/02-empty-store.txt"
@@ -504,7 +504,7 @@ findings.
 # shared hosted free tier (a full loop is 100+ requests; 2026-11-01 ended in a
 # 429 with Retry-After 78443). The token is spelled out so the prompt text
 # cannot satisfy the grep.
-SMOKE_PROMPT='Smoke check, one turn only. Run `bash scripts/check-credential-channel.sh` in the checkout and show its last line. Then reply with the word SMOKE-AGENT, a hyphen, and the word OK, all on one line with no spaces. Load no skill and do nothing else.'
+SMOKE_PROMPT='Smoke check, one turn only. Run `bash scripts/check-credential-channel.sh` in the checkout and show its last line. Then reply with the word SMOKE-AGENT, a hyphen, and the word OK, as plain text with no spaces, alone on its own line. That word only reports that you answered: print it whatever the check said. Load no skill and do nothing else.'
 TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
   scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- \
   env TILLANDSIAS_NO_TRAY=1 tillandsias --cloud 8007342/tillandsias --opencode \
@@ -512,7 +512,7 @@ TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
   | tee "$LOG_DIR/04-meta-orchestration.log"
 FORGE_RC=${PIPESTATUS[0]}; printf 'forge_exit=%s\n' "$FORGE_RC" | tee "$LOG_DIR/04-forge-exit.txt"
 test "$FORGE_RC" -eq 0
-grep -q 'SMOKE-AGENT-OK' "$LOG_DIR/04-meta-orchestration.log"
+grep -Eq '^[[:space:]]*SMOKE-AGENT-OK[[:space:]]*$' "$LOG_DIR/04-meta-orchestration.log"
 ```
 
 The agent runs one turn and exits. It no longer runs a cycle, so it files and

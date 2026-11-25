@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-real-litmus-asserts-the-vault-unseals-with-no-prompt-and-keeps-its-key-off-disk
+    order: "2358-stq5"
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [litmus, vault, security]
+    estimated_hours: 6
+    owned_files:
+      - openspec/litmus-tests/litmus-vault-auto-unseal-no-prompt.yaml
+    title: "no test asserts that the vault unseals with no prompt and keeps its unseal key off persistent disk, since the litmus that did was retired for calling programs that do not exist"
+    context: |
+      Retired and unbound by 2357-5quw on 2026-11-25. The invariants it named: no-passphrase-prompt-ever, unseal-key-tmpfs-only
+      (openspec/specs/tillandsias-vault/spec.md).
+    exit_criteria:
+      - "A litmus that a named run selects starts the product's vault in a scratch runtime with no TTY, sees it unsealed within the spec's bound, and finds the unseal key only on tmpfs. Pre-fix result: FAILS, no such test."
+      - "NEGATIVE CONTROL: red when the key is written to the volume, and when the start waits on input."
+      - "It never touches the host's live vault or keyring."
+    unscoreable: "unpinnable-until-the-guard-exists: the litmus is the deliverable"
+    next_action: "Not taken."
+    provenance: "coordinator macuahuitl-fedora 2026-11-25, from yoga's 2357-5quw"
+    related: [2357-5quw]
+    events:
+      - {type: filed, ts: "2026-11-25T12:43:43Z", host: yoga, summary: "filed on the request of the coordinator; not taken"}
+status:
+  - packet_id: three-spec-bound-litmus-that-no-phase-run-selects-run-somewhere-named
+    field: status
+    value: implemented
+    ts: "2026-11-25T12:43:43Z"
+    host: yoga
+events:
+  - packet_id: three-spec-bound-litmus-that-no-phase-run-selects-run-somewhere-named
+    event: {type: implemented, ts: "2026-11-25T12:43:43Z", host: yoga, summary: "implemented on work/2357-5quw: policy and vsock run in the runtime residual litmus of build.sh --ci-full; auto-unseal retired and unbound, 2358-stq5 filed for a real one"}

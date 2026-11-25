@@ -15,6 +15,7 @@
 # fixtures rather than this script's decision. The stub makes the decision the
 # only variable.
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHECK="$ROOT/scripts/check-claims-across-branches.sh"
 [ -x "$CHECK" ] || { echo "blocked:no-check"; exit 2; }
@@ -24,7 +25,7 @@ ok()  { pass=$((pass+1)); echo "ok   $1"; }
 bad() { fail=$((fail+1)); echo "FAIL $1" >&2; [ -n "${2:-}" ] && echo "     $2" >&2; }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/xbranch-fx.XXXXXX")"
-trap 'rm -rf "$W"' EXIT INT TERM
+scratch_trap 'rm -rf "$W"'
 
 # 1948-xbaf: the stub arms below run against THIS checkout's origin/* refs,
 # whose ancestry to HEAD changes as the fleet pushes. They test the fold
@@ -156,6 +157,35 @@ case "$_parsed" in
     *newer-host*) ok "the attribution parser takes the status entry with the greatest ts" ;;
     *) bad "the parser did not read the winning entry's host" "got [$_parsed]" ;;
 esac
+
+# 2b (2271-5v9r): the parser reads every fragment in ONE awk, so its block state
+# must reset at each FILE, as the old one-awk-per-file loop did. File a ends
+# inside some-packet-name's block; file b opens with status-shaped lines (a
+# newer ts, another host) before any packet_id. Carried across the boundary,
+# b's lines would be read as a's packet and win on ts.
+mkdir -p "$W/tree2/plan/index.d"
+cat > "$W/tree2/plan/index.d/a.yaml" <<'FRAG'
+packets:
+  - packet_id: some-packet-name
+    field: status
+    value: in_progress
+    ts: "2026-01-01T00:00:00Z"
+    host: first-host
+FRAG
+cat > "$W/tree2/plan/index.d/b.yaml" <<'FRAG'
+    field: status
+    ts: "2027-01-01T00:00:00Z"
+    host: leaked-host
+packets:
+  - packet_id: unrelated-packet
+FRAG
+if [ -s "$W/parser.sh" ]; then
+    _parsed2="$( . "$W/parser.sh"; _claim_host_on_branch "$W/tree2" some-packet-name 2>/dev/null )" || true
+    case "$_parsed2" in
+        first-host) ok "the parser's block state resets at each fragment file (no status leaks across files)" ;;
+        *) bad "a status block leaked across a fragment boundary" "got [$_parsed2], want [first-host]" ;;
+    esac
+fi
 
 # 3. THE FALSE NEGATIVE THAT MATTERS. No plan binary means the folds cannot be
 #    read at all. That MUST block: reporting ok would say "nobody holds it"
@@ -289,7 +319,7 @@ mkdir -p "$R/scripts" "$R/plan/index.d"
 cp "$CHECK" "$ROOT/scripts/plan-binary-probe.sh" "$R/scripts/"
 printf 'packets: []\n' > "$R/plan/index.yaml"
 printf '# keep\n' > "$R/plan/index.d/README.md"
-_g() { git -C "$R" -c user.email=fx@example.invalid -c user.name=fx -c commit.gpgsign=false "$@"; }
+_g() { scratch_git "$R" -c user.email=fx@example.invalid -c user.name=fx -c commit.gpgsign=false "$@"; }
 _g init -q -b main
 _g add -A && _g commit -q --no-verify -m "sibling's ledger"
 _anc="$(_g rev-parse HEAD)"
@@ -327,6 +357,25 @@ if [ "$rc" -eq 1 ] && grep -q '^claimed-elsewhere:SOME-PKT:osx-next' <<<"$out"; 
     ok "a diverged sibling's claim is still reported"
 else
     bad "a diverged sibling's claim must still be reported" "rc=$rc out=[$out]"
+fi
+
+# 9. ORDER 2323-wwaa — AN OVERRIDE THAT ALREADY PASSES --index. The binary refuses
+#    a second --index, so every sibling folded to nothing. The checkout's own
+#    binary (planted in the scratch repo) answers instead. RED ON PRE-FIX CODE.
+mkdir -p "$R/built/release"
+cat > "$R/built/release/tillandsias-plan" <<'EOF'
+#!/bin/sh
+[ "$1" = --index ] && shift 2
+[ "$1" = --index ] && { echo "error: unknown subcommand '--index'" >&2; exit 2; }
+echo "PKT	in_progress	some-packet-name"
+EOF
+printf '#!/bin/sh\nexec "%s" --index /scratch/index.yaml "$@"\n' "$R/built/release/tillandsias-plan" > "$W/indexed-plan"
+chmod +x "$R/built/release/tillandsias-plan" "$W/indexed-plan"
+out="$(cd "$R" && CARGO_TARGET_DIR="$R/built" TILLANDSIAS_PLAN_BIN="$W/indexed-plan" bash "$R/scripts/check-claims-across-branches.sh" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
+if [ "$rc" -eq 1 ] && grep -q '^claimed-elsewhere:SOME-PKT:osx-next' <<<"$out"; then
+    ok "an override that fixes its own --index does not blind the sibling fold"
+else
+    bad "an override that fixes its own --index must not blind the sibling fold" "rc=$rc out=[$out]"
 fi
 
 echo "claims-across-branches: $pass passed, $fail failed"

@@ -22,20 +22,20 @@
 # copied no scripts/, never reached the runner, and wrote nothing — passing the
 # absence check for a reason with nothing to do with the subject.
 #
-# STEP_SCRIPT is a LITERAL path (1063-nraf).
+# STEP_LUA is a LITERAL path (1063-nraf).
 STEP_DESC="Checking a gate step cannot write into the host's shared metrics log (1204-3s2s)"
-STEP_SCRIPT="scripts/test-gate-step-metrics-isolation.sh"
+STEP_LUA="scripts/lua/test-gate-step-metrics-isolation.lua"
 STEP_ERROR="a gate step reached the host's shared metrics path (1204-3s2s) — one fixture writing /tmp/tillandsias-timing.jsonl splits the timing log, cycle-metrics then refuses every number, arms driving it read zero, and check-release-tier-freshness answers never:release-tier on this host from then on; see the failing arm above"
 STEP_OK="gate-step metrics isolation check passed"
 # Exit 3 means the subject fixture is absent — nothing was exercised, and the
 # fixture says so by name rather than passing.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="scripts/test-litmus-budget-tally.sh is absent, so the isolation could not be exercised"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:step-metrics-isolation:4"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:step-metrics-isolation:4 at b022b6b85 (the Lua fixture, 2344-zk8r; bash 3.2, relayed by macuahuitl)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="runs the litmus runner (it wipes its runtime dirs)"
 STEP_LANES="litmus"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="openspec/litmus-bindings.yaml openspec/litmus-tests/** scripts/plan-binary-probe.sh scripts/run-litmus-test.sh scripts/test-gate-step-metrics-isolation.sh scripts/test-litmus-budget-tally.sh"
+STEP_READS="openspec/litmus-bindings.yaml openspec/litmus-tests/** scripts/plan-binary-probe.sh scripts/run-litmus-test.sh scripts/lua/test-gate-step-metrics-isolation.lua scripts/test-litmus-budget-tally.sh"

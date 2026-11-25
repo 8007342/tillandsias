@@ -18,7 +18,7 @@ export TILLANDSIAS_CCC_NO_LANE=1
 # ORDER 2224-gdir — NEVER INHERIT A REPO LOCATION. Git exports GIT_DIR (and,
 # in some hooks, GIT_WORK_TREE / GIT_INDEX_FILE) to every hook it runs. The
 # pre-push hook runs the preflight door, the door runs this fixture, and every
-# `git -C "$d" ...` below then followed GIT_DIR to the REAL checkout: on
+# `scratch_git "$d" ...` below then followed GIT_DIR to the REAL checkout: on
 # calmecacpilli 2026-11-22 it rewrote the real repo's origin to
 # $W/does-not-exist.git (the next push failed with "does not appear to be a
 # git repository") and set credential.helper=manager. Each scratch repo here
@@ -31,8 +31,19 @@ fail=0
 ok()  { echo "ok: $1"; }
 bad() { echo "FAIL: $1" >&2; fail=1; }
 
-W="$(mktemp -d "${TMPDIR:-/tmp}/cred-channel-test.XXXXXX")"
-trap 'rm -rf "$W"' EXIT INT TERM
+W="$(mktemp -d "${TMPDIR:-/tmp}/cred-channel-test.XXXXXX")" || { echo "FAIL: no scratch dir" >&2; exit 2; }
+# ORDER 2244-crgd: INT/TERM EXIT. A trap that only cleans up lets bash RESUME
+# after a kill (the preflight door's deadline kills the group), with $W gone
+# and a `D="$(...)"` left empty, and `git -C ""` is this process's cwd: the
+# REAL checkout. calmecacpilli 2026-11-22: origin became $W/does-not-exist.git
+# after a plain ./build.sh --preflight, with 2224-gdir's GIT_DIR fix in place.
+trap 'rm -rf "$W"' EXIT
+trap 'rm -rf "$W"; exit 143' TERM
+trap 'rm -rf "$W"; exit 130' INT
+# Every scratch git call goes through the shared guard (2245-scgt): it refuses
+# an empty path or one whose git dir is the real checkout's.
+. "$REAL_ROOT/scripts/test-support/scratch-git.sh"
+D_ok() { [ -n "${D:-}" ] && [ -d "$D" ] || { echo "FAIL: scratch repo path is empty or missing: [${D:-}] (2244-crgd)" >&2; exit 2; }; }
 
 mkdir -p "$W/bin" "$W/bin-noauth"
 cat > "$W/bin/gh" <<'STUB'
@@ -71,8 +82,8 @@ scratch() {
     # instead of this fixture's. Pin it per repo. Same defect as 889-twhe
     # and 877-mynm; found by sweeping for the class rather than by being
     # blocked, because neither of these fixtures is wired into build.sh.
-    git -C "$d" config core.hooksPath .git/hooks
-    git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m x
+    scratch_git "$d" config core.hooksPath .git/hooks
+    scratch_git "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m x
     printf '%s' "$d"
 }
 
@@ -87,19 +98,19 @@ run_guard() {
 }
 
 # ── 1. THE INCIDENT SHAPE: gh green + probe fails + interactive helper ──────
-D="$(scratch a)"
-git -C "$D" config credential.helper manager
+D="$(scratch a)"; D_ok
+scratch_git "$D" config credential.helper manager
 out="$(run_guard "$D" "false")"; rc=$?
 case "$out" in
     *blocked:interactive-credential-helper*) ok "gh-green + GCM helper -> blocked, not ok (rc=$rc)" ;;
     *) bad "incident shape returned: $out (rc=$rc)" ;;
 esac
 [ "$rc" -ne 0 ] || bad "incident shape must exit non-zero"
-grep -q "credential-store --file" "$D/.stderr" && ok "remedy names the repo-local seeding" \
+grep -q "gh auth git-credential" "$D/.stderr" && ! grep -q "credential-store --file" "$D/.stderr" && ok "remedy points git at gh (keyring), never a plaintext store (2222-xjgu)" \
     || bad "remedy missing from stderr"
 
 # ── 2. gh green + probe fails + NO interactive helper -> distinct verdict ───
-D="$(scratch b)"
+D="$(scratch b)"; D_ok
 out="$(run_guard "$D" "false")"; rc=$?
 case "$out" in
     # ORDER 894-scxy replaced the generic blocked:gh-cli-only with a verdict
@@ -126,7 +137,7 @@ esac
 #
 # It also pins the SEPARATION 1106-k2df turns on: a 403 is AUTHORIZATION and a
 # 401 is AUTHENTICATION, they need opposite remedies, and neither may seed.
-D="$(scratch k2df)"
+D="$(scratch k2df)"; D_ok
 _denied="$W/probe-403"
 cat > "$_denied" <<'PROBE'
 #!/usr/bin/env bash
@@ -146,7 +157,7 @@ esac
 [ "$rc" -ne 0 ] || bad "1106-k2df: the authenticates-cannot-push class must exit non-zero"
 
 # ── 3. gh green + probe SUCCEEDS -> the verified ok ─────────────────────────
-D="$(scratch c)"
+D="$(scratch c)"; D_ok
 out="$(run_guard "$D" "true")"; rc=$?
 case "$out" in
     ok:gh-keyring-push-verified) ok "working channel -> ok:gh-keyring-push-verified (rc=$rc)" ;;
@@ -154,29 +165,28 @@ case "$out" in
 esac
 [ "$rc" -eq 0 ] || bad "verified ok must exit 0"
 
-# ── 4. ORDER 1004-8p76: the store arm PROBES its own channel ───────────────
-# The arm used to answer on the store file's PRESENCE (first ok:, then 1092-uv3k's
-# unverified:). MEASURED on esmeraldinha 2026-09-04: a present store file over a
-# dead gho_ token read green while the dry-run push said "Invalid username or
-# token". It is still checked FIRST (gh is stubbed healthy-or-not irrelevantly).
-D="$(scratch d)"
-printf 'x\n' > "$(git -C "$D" rev-parse --absolute-git-dir)/.gh-credentials"
-out="$(run_guard "$D" "false")"; rc=$?
-case "$out" in
-    blocked:gh-credentials-store-push-refused) ok "4a: a present store file whose push is refused is NOT green ($out)" ;;
-    ok:*|unverified:*) bad "4a: a dead credential behind a present store file read as $out (1004-8p76)" ;;
-    *) bad "4a: store arm with a refused probe returned: $out" ;;
-esac
-[ "$rc" -ne 0 ] || bad "4a: a refused store probe must exit non-zero"
-out="$(run_guard "$D" "true")"; rc=$?
-[ "$out" = "ok:gh-credentials-store-push-verified" ] && [ "$rc" -eq 0 ] \
-    && ok "4b: a store file whose push authenticates -> $out" \
-    || bad "4b: store + passing probe returned: $out rc=$rc"
-# No override and no origin: the probe cannot run, and says so.
-out="$(run_guard "$D" "")"; rc=$?
-[ "$out" = "unverified:gh-credentials-store" ] && [ "$rc" -eq 0 ] \
-    && ok "4c: a store file with no origin to probe is unverified:, not ok: ($out)" \
-    || bad "4c: store + unrunnable probe returned: $out rc=$rc"
+# ── 4. ORDER 2222-xjgu: a store file is REFUSED, whatever its probe says ──────
+# It used to be arm 1, probed (1004-8p76) and ranked green on a passing push.
+# A GitHub token in plaintext on durable disk violates credentials_at_rest
+# (methodology/philosophy.yaml), so the file itself is the defect: a refused,
+# a passing and an unrunnable probe all answer blocked:plaintext-credential-store,
+# the remedy never re-seeds a store, and the guard leaves the file in place.
+D="$(scratch d)"; D_ok
+_st="$(scratch_git "$D" rev-parse --absolute-git-dir)/.gh-credentials"
+printf 'x\n' > "$_st"
+for probe in false true ""; do
+    out="$(run_guard "$D" "$probe")"; rc=$?
+    if [ "$out" = "blocked:plaintext-credential-store" ] && [ "$rc" -ne 0 ]; then
+        ok "4: a store file with probe [${probe:-none}] is refused -> $out"
+    else
+        bad "4: a store file with probe [${probe:-none}] returned: $out rc=$rc (want blocked:plaintext-credential-store, rc!=0)"
+    fi
+done
+grep -q 'tillandsias --github-login' "$D/.stderr" && ! grep -q 'credential-store --file\|credential.helper "store' "$D/.stderr" \
+    && ok "4: the remedy is the operator's keyring sign-in, never a plaintext store" \
+    || bad "4: the store refusal's remedy re-seeds a store or omits the sign-in: $(tr '\n' ' ' < "$D/.stderr" | cut -c1-300)"
+[ -s "$_st" ] && ok "4: the guard leaves the file in place (removal is the operator's)" \
+    || bad "4: the guard removed or emptied the store file"
 # GH_TOKEN / GITHUB_TOKEN presence alone is not a green.
 for v in GH_TOKEN GITHUB_TOKEN; do
     arm="gh-token-env"; [ "$v" = GITHUB_TOKEN ] && arm="github-token-env"
@@ -215,8 +225,8 @@ esac
 OLD="$W/old-guard.sh"
 sed -e 's/ok:gh-keyring-push-verified/ok:gh-keyring/' \
     -e 's/^\( *\)_probe_cmd=.*/\1_probe_cmd="true"/' "$GUARD" > "$OLD"
-D="$(scratch e)"
-git -C "$D" config credential.helper manager
+D="$(scratch e)"; D_ok
+scratch_git "$D" config credential.helper manager
 out="$( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN PATH="$W/bin:$PATH" bash "$OLD" 2>/dev/null )"
 case "$out" in
     ok:gh-keyring)
@@ -244,17 +254,17 @@ with_remote() { # with_remote <name> <hook-body> ; echoes the repo path
     local d="$W/hookrepo-$1" bare="$W/bare-$1.git"
     git init -q --bare "$bare"
     git init -q -b main "$d"
-    git -C "$d" config core.hooksPath .git/hooks
-    git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m x
-    git -C "$d" remote add origin "$bare"
-    git -C "$d" push -q origin main 2>/dev/null
-    git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m y
+    scratch_git "$d" config core.hooksPath .git/hooks
+    scratch_git "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m x
+    scratch_git "$d" remote add origin "$bare"
+    scratch_git "$d" push -q origin main 2>/dev/null
+    scratch_git "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m y
     printf '#!/usr/bin/env bash\n%s\n' "$2" > "$d/.git/hooks/pre-push"
     chmod +x "$d/.git/hooks/pre-push"
     printf '%s' "$d"
 }
 
-D="$(with_remote refuse 'echo "✗ pre-push refused: the tree changed since ./build.sh --check last passed" >&2; exit 1')"
+D="$(with_remote refuse 'echo "✗ pre-push refused: the tree changed since ./build.sh --check last passed" >&2; exit 1')"; D_ok
 out="$(run_guard_default "$D")"; rc=$?
 case "$out" in
     ok:gh-keyring-push-verified-hook-refused)
@@ -275,8 +285,8 @@ grep -q 'credential-store --file' "$D/.stderr" \
 # When the push cannot authenticate at ALL, --no-verify does not rescue it and
 # the verdict must still be blocked. Here the remote path does not exist, so
 # both probes fail for a real transport/auth reason.
-D="$(with_remote broken 'exit 0')"
-git -C "$D" remote set-url origin "$W/does-not-exist.git"
+D="$(with_remote broken 'exit 0')"; D_ok
+scratch_git "$D" remote set-url origin "$W/does-not-exist.git"
 out="$(run_guard_default "$D")"; rc=$?
 case "$out" in
     blocked:*) ok "an unreachable remote is still blocked:* (rc=$rc) — the retry rescues nothing real" ;;
@@ -290,7 +300,7 @@ esac
 PRE="$W/pre-876-guard.sh"
 awk '/# ORDER 876-exg2\./{skip=1} skip && /# END-OF-PROBE-RETRIES/{skip=0} skip{next} {print}' \
     "$GUARD" > "$PRE"
-D="$(with_remote mutation 'echo refused >&2; exit 1')"
+D="$(with_remote mutation 'echo refused >&2; exit 1')"; D_ok
 out="$( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
         PATH="$W/bin:$PATH" bash "$PRE" 2>/dev/null )"
 case "$out" in
@@ -312,19 +322,19 @@ behind_repo() { # behind_repo <name>; echoes a repo whose branch is behind origi
     local d="$W/behindrepo-$1" bare="$W/bare-behind-$1.git"
     git init -q --bare -b main "$bare"
     git init -q -b main "$d"
-    git -C "$d" config core.hooksPath .git/hooks
-    git -C "$d" remote add origin "$bare"
-    git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
-    git -C "$d" push -q origin main
+    scratch_git "$d" config core.hooksPath .git/hooks
+    scratch_git "$d" remote add origin "$bare"
+    scratch_git "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
+    scratch_git "$d" push -q origin main
     # Advance origin, then rewind the local branch: strictly behind, clean tree.
-    git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m ahead
-    git -C "$d" push -q origin main
-    git -C "$d" reset -q --hard HEAD~1
+    scratch_git "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m ahead
+    scratch_git "$d" push -q origin main
+    scratch_git "$d" reset -q --hard HEAD~1
     printf '#!/usr/bin/env bash\nexit 0\n' > "$d/.git/hooks/pre-push"
     chmod +x "$d/.git/hooks/pre-push"
     printf '%s' "$d"
 }
-D="$(behind_repo one)"
+D="$(behind_repo one)"; D_ok
 # precondition: the plain probe really is refused, and for the ref-state reason
 if ( cd "$D" && git push --dry-run --no-verify origin HEAD >/dev/null 2>&1 ); then
     bad "fixture is not actually behind — arm 8b would pass vacuously"
@@ -368,7 +378,7 @@ esac
 # forbidding an unpushed exit, so the host was wedged rather than delayed.
 
 # ── 10. reverify passes through a healthy channel unchanged. ─────────────────
-D="$(with_remote reverify_ok 'exit 0')"
+D="$(with_remote reverify_ok 'exit 0')"; D_ok
 out="$( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
         PATH="$W/bin:$PATH" bash "$GUARD" reverify 2>/dev/null )"; rc=$?
 case "$out" in
@@ -380,7 +390,7 @@ esac
 # ── 11. THE HEADLINE: a credential that DIED reads differently from one that ─
 #        was never there. Same repair cost, very different diagnosis, and the
 #        guard previously reported both as missing:no-credential-channel.
-D="$(with_remote reverify_died 'exit 0')"
+D="$(with_remote reverify_died 'exit 0')"; D_ok
 # a pass is recorded...
 ( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
   PATH="$W/bin:$PATH" bash "$GUARD" >/dev/null 2>&1 )
@@ -388,7 +398,7 @@ D="$(with_remote reverify_died 'exit 0')"
     && ok "a passing verdict records a stamp" \
     || bad "no stamp written on a pass — reverify cannot tell died from absent"
 # ...then the channel dies (unreachable remote + no token anywhere)
-git -C "$D" remote set-url origin "$W/does-not-exist.git"
+scratch_git "$D" remote set-url origin "$W/does-not-exist.git"
 out="$( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
         PATH="$W/bin-noauth:$PATH" bash "$GUARD" reverify 2>"$D/.rv" )"; rc=$?
 case "$out" in
@@ -412,8 +422,8 @@ grep -q 'salvage-dirty-worktree' "$D/.rv" \
 # ── 12. NEGATIVE CONTROL: with NO prior pass, reverify must NOT claim expiry. ─
 # A host that never had a credential has not lost one. Claiming otherwise sends
 # the reader to refresh a token that never existed.
-D="$(with_remote reverify_never 'exit 0')"
-git -C "$D" remote set-url origin "$W/does-not-exist.git"
+D="$(with_remote reverify_never 'exit 0')"; D_ok
+scratch_git "$D" remote set-url origin "$W/does-not-exist.git"
 rm -f "$D/.git/tillandsias-credential-verified"
 out="$( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
         PATH="$W/bin-noauth:$PATH" bash "$GUARD" reverify 2>/dev/null )"; rc=$?
@@ -508,9 +518,9 @@ layer_case() { # layer_case <name> <gh-api-user-rc> <gh-api-user-stderr>
     local d="$W/layer-$name" bin="$W/layerbin-$name"
     rm -rf "$d" "$bin"; mkdir -p "$bin"
     git init -q -b main "$d"
-    git -C "$d" config core.hooksPath .git/hooks
-    git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m x
-    git -C "$d" remote add origin "$W/does-not-exist.git"   # push always fails
+    scratch_git "$d" config core.hooksPath .git/hooks
+    scratch_git "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m x
+    scratch_git "$d" remote add origin "$W/does-not-exist.git"   # push always fails
     cat >"$bin/gh" <<GHEOF
 #!/usr/bin/env bash
 case "\$1 \${2:-}" in
@@ -662,7 +672,7 @@ for v in blocked:credential-rejected-by-github \
          blocked:credential-unretrievable-keyring-locked \
          blocked:credential-plaintext-token-rejected \
          blocked:credential-accepted-but-push-refused; do
-    printf '%s\n' "$v" | grep -qE '^(ok:[a-z0-9-]+|blocked:[a-z0-9-]+|missing:no-credential-channel)$' \
+    grep -qE <<<"$v" '^(ok:[a-z0-9-]+|blocked:[a-z0-9-]+|missing:no-credential-channel)$' \
         || bad "verdict breaks litmus:credential-channel-check-shape: $v"
 done
 ok "all five 894-scxy verdicts match the pinned grammar"
@@ -688,8 +698,8 @@ printf '%s\n' "ok:gh-keyring-push-verified-hook-refused" | grep -qE "$grammar" \
 _auth_src_with() {   # $1 = the ref path under refs/tillandsias/upstream-auth/
     local d; d="$(mktemp -d)"
     git init -q --bare "$d"
-    local blob; blob="$(printf '' | git -C "$d" hash-object -w --stdin)"
-    git -C "$d" update-ref "refs/tillandsias/upstream-auth/$1" "$blob"
+    local blob; blob="$(printf '' | scratch_git "$d" hash-object -w --stdin)"
+    scratch_git "$d" update-ref "refs/tillandsias/upstream-auth/$1" "$blob"
     printf '%s' "$d"
 }
 # The guard ends in a standalone block that runs and exits, so it cannot be
@@ -723,6 +733,19 @@ do
     esac
     rm -rf "$src"
 done
+
+# ── 2244-crgd: THE GUARD BITES. An empty scratch path, or one whose git dir
+# is the REAL checkout's, is refused before git runs (each in a subshell, so
+# its exit 2 ends only that subshell). Pre-fix, `git -C ""` ran in the cwd.
+before_url="$(git -C "$REAL_ROOT" remote get-url origin 2>/dev/null)"
+( scratch_git "" remote set-url origin "$W/does-not-exist.git" ) 2>/dev/null; rc_empty=$?
+( scratch_git "$REAL_ROOT" remote set-url origin "$W/does-not-exist.git" ) 2>/dev/null; rc_real=$?
+after_url="$(git -C "$REAL_ROOT" remote get-url origin 2>/dev/null)"
+if [ "$rc_empty" -eq 2 ] && [ "$rc_real" -eq 2 ] && [ "$before_url" = "$after_url" ]; then
+    ok "2244-crgd: an empty or real-checkout scratch target is refused, and the real origin is untouched"
+else
+    bad "2244-crgd: guard did not bite (empty rc=$rc_empty, real rc=$rc_real) or origin moved: [$before_url] -> [$after_url]"
+fi
 
 if [ "$fail" -eq 0 ]; then
     echo "ok:credential-channel-fixture:all"

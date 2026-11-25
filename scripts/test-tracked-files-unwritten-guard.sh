@@ -48,7 +48,7 @@ _vrc()    { bash scripts/check-tracked-files-unwritten.sh verify "$W/state" >/de
 # ── 2. LENOVINHA'S EXACT CORRUPTION is named ──────────────────────────────
 cp scripts/check-fragment-status-loss.sh scripts/plan-binary-probe.sh
 out="$(_verify)"; rc="$(_vrc)"
-if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'scripts/plan-binary-probe.sh'; then
+if [ "$rc" -ne 0 ] && grep -q <<<"$out" 'scripts/plan-binary-probe.sh'; then
     ok "an instrument overwritten mid-run is named"
 else
     bad "the overwritten instrument was not named (rc=$rc)"
@@ -66,7 +66,7 @@ G checkout -- scripts/plan-binary-probe.sh
 # ── 4. A PATH WITH SPACES is compared correctly ───────────────────────────
 printf 'overwritten\n' > 'a file with spaces.txt'
 out="$(_verify)"
-if printf '%s' "$out" | grep -q 'a file with spaces.txt'; then
+if grep -q <<<"$out" 'a file with spaces.txt'; then
     ok "a path containing spaces is compared and named correctly"
 else
     bad "a path with spaces was dropped from the comparison — the guard has a blind spot"

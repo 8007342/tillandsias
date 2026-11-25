@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-tray-diagnose-check-runs-its-tests-instead-of-always-skipping
+    field: status
+    value: completed
+    ts: "2026-11-24T16:53:06Z"
+    host: yolanda
+
+events:
+  - packet_id: windows-tray-diagnose-check-runs-its-tests-instead-of-always-skipping
+    event:
+      type: completed
+      ts: "2026-11-24T16:53:06Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: 337dc47c2
+  - packet_id: windows-tray-diagnose-check-runs-its-tests-instead-of-always-skipping
+    event:
+      type: note
+      ts: "2026-11-24T16:53:06Z"
+      host: yolanda
+      summary: |-
+        PR 1495 landed as 337dc47c2; the Lua diagnose-surface check is on linux-next and the three shell files are gone

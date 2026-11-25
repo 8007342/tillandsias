@@ -12,6 +12,7 @@
 # `.ayahuitlcalpan.com`). yoga-silverblue paid for that lesson on 970-7fqk the
 # same day; this fixture is built to inherit it rather than repeat it.
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHECK="$ROOT/scripts/fleet-activity.sh"
 pass=0; fail=0
@@ -20,17 +21,17 @@ bad() { echo "FAIL: $1"; fail=$((fail+1)); }
 [ -x "$CHECK" ] || { echo "skip:fleet-activity:no-check-script"; echo "fleet-activity: 0 passed, 0 failed (skipped)"; exit 0; }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/fleet-activity-fixture.XXXXXX")" || exit 2
-trap 'rm -rf "$W"' EXIT INT TERM
+scratch_trap 'rm -rf "$W"'
 
 # A scratch repo whose authors cover all three shapes the classifier must
 # separate: two host conventions and one shared provider.
 R="$W/repo"; mkdir -p "$R/plan/index.d" "$R/crates"
-git -C "$R" init -q 2>/dev/null
-git -C "$R" config user.email "seed@seed.invalid"; git -C "$R" config user.name seed
+scratch_git "$R" init -q 2>/dev/null
+scratch_git "$R" config user.email "seed@seed.invalid"; scratch_git "$R" config user.name seed
 _commit() { # _commit <email> <path> <msg>
     mkdir -p "$(dirname "$R/$2")"; echo "$RANDOM" > "$R/$2"
-    git -C "$R" add -A >/dev/null 2>&1
-    git -C "$R" -c user.email="$1" -c user.name=x commit -q -m "$3" >/dev/null 2>&1
+    scratch_git "$R" add -A >/dev/null 2>&1
+    scratch_git "$R" -c user.email="$1" -c user.name=x commit -q -m "$3" >/dev/null 2>&1
 }
 _commit "tlatoani@alpha.ayahuitlcalpan.com" "plan/index.d/a.yaml"  "plan a"
 _commit "tlatoani@alpha.ayahuitlcalpan.com" "crates/x.rs"          "code a"
@@ -87,7 +88,7 @@ fi
 # THE REAL-WORLD ARM. macneo's address ends .local and names its host; the first
 # version of this script bucketed it. A hermetic repo would only have caught
 # this if its author had already thought of the case — which is the point.
-if printf '%s' "$out" | grep -q 'MacBook-Neo'; then
+if grep -q <<<"$out" 'MacBook-Neo'; then
     if printf '%s' "$out" | grep 'MacBook-Neo' | grep -q 'UNATTRIBUTED'; then
         bad "ARM 4: a .local address that names its host was bucketed (the defect this arm exists for)"
     else

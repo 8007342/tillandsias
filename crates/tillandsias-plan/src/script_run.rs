@@ -198,6 +198,11 @@ pub struct Header {
     pub env_profiles: Vec<String>,
     /// `-- @env-inherit NAME ...`: exact names children inherit (the one-off).
     pub env_inherit: Vec<String>,
+    /// ORDER 2243-wosv: `-- @stdin <max-bytes>`: the script may read its own
+    /// stdin through `stdin.read()`, at most this many bytes. Undeclared, no
+    /// `stdin` table exists, so a decider the preflight door runs never reads
+    /// (and so never blocks on) an inherited stdin unless it opts in.
+    pub stdin_max: Option<usize>,
     /// `note:` lines the header earned (a declared base name is a no-op).
     pub notes: Vec<String>,
 }
@@ -222,6 +227,7 @@ pub const HEADER_DIRECTIVES: &[&str] = &[
     "read-env",
     "env-profile",
     "env-inherit",
+    "stdin",
     "research",
     "cheatsheet",
 ];
@@ -252,6 +258,21 @@ pub fn parse_header(src: &str) -> Result<Header, crate::child_env::EnvRefusal> {
             "env" => h.env.extend(names),
             "env-profile" => h.env_profiles.extend(names),
             "env-inherit" => h.env_inherit.extend(names),
+            "stdin" => {
+                let n = rest.trim();
+                match n.parse::<usize>() {
+                    Ok(v) if v > 0 => h.stdin_max = Some(v),
+                    _ => {
+                        return Err(crate::child_env::EnvRefusal {
+                            token: "refused:script-header:stdin-needs-a-byte-cap".to_string(),
+                            why: format!(
+                                "'@stdin {n}' names no byte cap; a stdin read is bounded so one oversized pipe cannot hold a gate"
+                            ),
+                            remedy: "write the cap: -- @stdin 4194304".to_string(),
+                        });
+                    }
+                }
+            }
             w if HEADER_DIRECTIVES.contains(&w) => {}
             w => {
                 return Err(crate::child_env::EnvRefusal {
@@ -812,6 +833,37 @@ fn register(
             })?,
         )?;
         g.set("env", env)?;
+
+        // ORDER 2243-wosv: stdin.read(), ONLY for a script whose header says
+        // `-- @stdin <max-bytes>`. EOF-safe: a terminal stdin is never read
+        // (returns ""), a closed or empty one is EOF (""), and more than the
+        // cap is a named refusal, never a truncation that reads as complete.
+        if let Some(max) = header.stdin_max {
+            let stdin_t = lua.create_table()?;
+            stdin_t.set(
+                "read",
+                lua.create_function(move |lua, ()| {
+                    use std::io::{IsTerminal, Read};
+                    let input = std::io::stdin();
+                    if input.is_terminal() {
+                        return lua.create_string("");
+                    }
+                    let mut buf = Vec::new();
+                    input
+                        .lock()
+                        .take(max as u64 + 1)
+                        .read_to_end(&mut buf)
+                        .map_err(|e| LuaError::RuntimeError(format!("refused:stdin:read-failed: {e}")))?;
+                    if buf.len() > max {
+                        return Err(LuaError::RuntimeError(format!(
+                            "refused:stdin:too-large:{max} — stdin holds more than the header's cap of {max} bytes; raise `-- @stdin` or pass the input as a file"
+                        )));
+                    }
+                    lua.create_string(&buf)
+                })?,
+            )?;
+            g.set("stdin", stdin_t)?;
+        }
     }
     install_require(lua)?;
     crate::scratch_root::install(lua)?;
@@ -1549,6 +1601,25 @@ mod tests {
             classify(1, None, "violation: the key was not found in the file"),
             Kind::Refused
         );
+    }
+
+    // ORDER 2243-wosv: `@stdin` needs a positive byte cap, by name.
+    #[test]
+    fn header_stdin_cap() {
+        assert_eq!(
+            parse_header("-- @stdin 4096\nlocal x = 1\n")
+                .unwrap()
+                .stdin_max,
+            Some(4096)
+        );
+        assert_eq!(parse_header("-- @env HOME\n").unwrap().stdin_max, None);
+        for src in ["-- @stdin", "-- @stdin 0", "-- @stdin big"] {
+            assert_eq!(
+                parse_header(src).unwrap_err().token,
+                "refused:script-header:stdin-needs-a-byte-cap",
+                "{src}"
+            );
+        }
     }
 
     #[test]

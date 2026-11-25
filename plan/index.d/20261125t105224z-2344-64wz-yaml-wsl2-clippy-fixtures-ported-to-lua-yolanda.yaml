@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: yaml-reader-wsl2-shell-options-and-windows-clippy-fixtures-ported-to-lua
+    order: "2344-64wz"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/test-yaml-reader-availability.lua
+      - scripts/lua/test-wsl2-builder-shell-options.lua
+      - scripts/lua/test-windows-tray-clippy.lua
+    title: "three shell fixtures ported to Lua: yaml reader availability, wsl2 builder shell options, windows tray clippy"
+    context: |
+      ports: test-yaml-reader-availability, test-wsl2-builder-shell-options, test-windows-tray-clippy.
+      Claimed by yolanda in the coordinator's test-[w-z]* range. The yaml reader .sh was red on msys with a C:/ plan
+      binary (12 passed, 13 failed); the port is not.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its subject is mutated; callers run the .lua; the three .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by build.sh, a gate step and a litmus"
+    provenance: "coordinator 2026-11-25 (test-[w-z]* range), yolanda"
+    related: [746-htj9, 764-sunk, 1434-vm7g]
+    events:
+      - {type: claimed, ts: "2026-11-25T10:52:24Z", host: yolanda, summary: "claimed; work ref work/2344-64wz"}

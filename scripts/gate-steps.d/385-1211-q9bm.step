@@ -21,17 +21,16 @@
 # is an early courtesy to the author and cannot see a flip that bypasses
 # set-field, so removing the backstop would trade a late refusal for none.
 #
-# STEP_SCRIPT is a LITERAL path (1063-nraf).
+# STEP_LUA is a LITERAL path (1063-nraf).
 STEP_DESC="Checking a terminal flip that would strand the long-running view is refused at the flip (1211-q9bm)"
-STEP_SCRIPT="scripts/test-long-running-view-refuses-at-completion.sh"
+STEP_LUA="scripts/lua/test-long-running-view-refuses-at-completion.lua"
 STEP_ERROR="the completion-time refusal for plan/long-running.md regressed (1211-q9bm) — either a terminal flip can again strand the view (so the next host to land pays for it), or the guard has widened and is refusing closures it should not: a non-multi_cycle packet, a row already removed, or the in_progress flip a multi_cycle packet makes every cycle; see the failing arm above"
 STEP_OK="long-running view completion-time refusal check passed"
-# Exit 3 means no plan binary was resolvable — nothing was exercised, and the
-# fixture says so by name rather than passing.
+# Exit 3 means no plan binary was resolvable — nothing was exercised.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="no tillandsias-plan binary resolved, so the refusal could not be exercised"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:long-running-completion:7"
+STEP_SECOND_REGIME="macbookair 2026-11-25 darwin ok:long-running-completion:7 arms"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="crates/tillandsias-plan/src/main.rs plan/index.d/** plan/index.yaml plan/long-running.md plan/schema.yaml scripts/check-long-running-view.sh scripts/plan-binary-probe.sh scripts/test-long-running-view-refuses-at-completion.sh"
+STEP_READS="crates/tillandsias-plan/src/main.rs plan/index.d/** plan/index.yaml plan/long-running.md plan/schema.yaml scripts/check-long-running-view.sh scripts/plan-binary-probe.sh scripts/lua/test-long-running-view-refuses-at-completion.lua"

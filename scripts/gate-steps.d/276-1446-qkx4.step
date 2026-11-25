@@ -6,14 +6,15 @@
 #
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking the /project-discipline skill and its forge wiring (1446-qkx4)"
-STEP_SCRIPT="scripts/test-project-discipline-skill.sh"
+STEP_LUA="scripts/lua/test-project-discipline-skill.lua"
 STEP_ERROR="/project-discipline stopped existing, lost a hook refusal family's section, or stopped reaching a forge on a non-Tillandsias project (1446-qkx4) — see the verdict line above"
 STEP_OK="Project-discipline skill passed"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-27 darwin ok:project-discipline-skill:4/4"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:project-discipline-skill:4/4 (Lua port, at 462eaf018)"
+STEP_SECOND_REGIME="yolanda 2026-11-23 msys ok:project-discipline-skill:4/4 (Lua port; arm 4 copied-not-linked, Git bash ln -s copies)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
 STEP_LANES="checkout"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="images/default/config-overlay/mcp/** images/default/config-overlay/mcp/agent-profile.sh scripts/check-skills-single-source.sh scripts/test-project-discipline-skill.sh skills/project-discipline/** skills/project-discipline/SKILL.md"
+STEP_READS="images/default/config-overlay/mcp/** images/default/config-overlay/mcp/agent-profile.sh scripts/check-skills-single-source.sh scripts/lua/test-project-discipline-skill.lua skills/project-discipline/** skills/project-discipline/SKILL.md"

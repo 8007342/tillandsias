@@ -198,6 +198,8 @@ WORK_RE='^work/[0-9]{3,4}-[a-z0-9]{4}$'
 LIMIT=0
 DRY_RUN=0
 DAILY_FULL=0
+STATUS=0
+STATUS_PR=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --limit)   LIMIT="${2:-0}"; shift 2 ;;
@@ -206,6 +208,11 @@ while [ $# -gt 0 ]; do
         --base=*)  TRUNK="${1#*=}"; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
         --daily-full) DAILY_FULL=1; shift ;;
+        --status) STATUS=1; shift ;;
+        --pr)      # read-only: it always implies --status, and never runs the queue
+            STATUS=1; STATUS_PR="${2:-}"; STATUS_PR="${STATUS_PR#\#}"
+            [[ "$STATUS_PR" =~ ^[0-9]{1,7}$ ]] || { echo "fail:land-queue:pr-needs-a-number:${2:-}" >&2; exit 1; }
+            shift 2 ;;
         *) echo "fail:land-queue:unknown-argument:$1" >&2; exit 1 ;;
     esac
 done
@@ -213,6 +220,14 @@ done
 landed=0; evicted=0; requeued=0; skipped=0; _held=0  # the 2118-tpmy trunk-red FLAG (0|1); the freeze check's path list is _frz_paths (2152-lqrf: one name for both erased a hold)
 
 say() { printf '%s\n' "$*"; }
+# ORDER 2238-gpxz: WHERE A LAND'S WALL CLOCK GOES. One line per stage of each
+# candidate, seconds since the previous mark: merge+door (merge, sidecar, host
+# door), plan-refresh, preflight, gate, post-gate+push (a flaky re-run, the
+# trunk-red check, the push and its retries). Measured
+# 2026-11-22 on macuahuitl: the gate averaged ~13 min while a land took ~30, and
+# nothing said where the other ~17 went. A stage a candidate never reaches
+# prints nothing, so the last line names where it stopped.
+_lq_mark() { say "timing:land-queue:#$1:$2=$((SECONDS - ${_LQ_T:-$SECONDS}))s"; _LQ_T=$SECONDS; }
 
 # ORDER 1375-2x4e: the queue JSON is read with `tillandsias-plan json get`, the jq
 # subset on the binary every gate host already has, not with jq. Resolved from
@@ -345,6 +360,103 @@ delta_plan_only() {
 # holder (up to TILLANDSIAS_LAND_QUEUE_DAILY_LOCK_WAIT_S, default 3 h), saying
 # so; any other caller is told who holds it and exits 3.
 _lock_holder() { local _h; _h="$(cat "$LOCKDIR/pid" 2>/dev/null || true)"; [ -n "$_h" ] && kill -0 "$_h" 2>/dev/null && printf '%s\n' "$_h"; }
+
+# ── ORDER 2248-jihs: `--status` — WHAT IS THE QUEUE DOING, WITHOUT THE LOCK ──
+# One line, read-only, never takes or waits on the lock:
+#   queue:gating:#N work/<ref> phase=<p> elapsed=<s> train=<members|-> waiting=<n>
+#   queue:idle last-land=<sha> <age>s
+# The running queue writes the gating line to $_RUNDIR/current at the start of
+# every phase (and $_LOGROOT/current-run names that dir), so a reader asks the
+# file, not the process. The same line is published to
+# refs/tillandsias/queue/status (a commit whose message is the line) so a host
+# that is not the lander can read it with `git fetch`. Publishing is
+# best-effort and bounded (20 s); TILLANDSIAS_LAND_QUEUE_STATUS_PUBLISH=0 or
+# --dry-run turns it off.
+_LQ_LOGROOT0="${TILLANDSIAS_LAND_QUEUE_LOGDIR:-$ROOT/target/land-queue-logs}"
+_lq_idle_line() {
+    local _l _now
+    _l="$(git log -1 --format='%H %ct' --grep='^land(' "$REMOTE/$TRUNK" 2>/dev/null)"
+    _now="$(date +%s)"
+    if [ -n "$_l" ]; then printf 'queue:idle last-land=%s %ss\n' "${_l%% *}" "$((_now - ${_l#* }))"
+    else printf 'queue:idle last-land=none\n'; fi
+}
+_lq_render() { # <stored line with started=<epoch>> -> the line with elapsed=<s>
+    local _st; _st="$(printf '%s' "$1" | sed -n 's/.* started=\([0-9]*\).*/\1/p')"
+    [ -n "$_st" ] || { printf '%s\n' "$1"; return; }
+    printf '%s\n' "$1" | sed "s/ started=[0-9]*/ elapsed=$(( $(date +%s) - _st ))/"
+}
+_lq_publish() { # <line> [more lines, as the commit's body]
+    [ "${TILLANDSIAS_LAND_QUEUE_STATUS_PUBLISH:-1}" = 1 ] && [ "${DRY_RUN:-0}" -eq 0 ] || return 0
+    local _t _c
+    _t="$(git hash-object -t tree -w /dev/null 2>/dev/null)" || return 0
+    _c="$(printf '%s\n' "$1" ${2:+"" "$2"} | git -c user.name=land-queue -c user.email=land-queue@localhost commit-tree "$_t" 2>/dev/null)" || return 0
+    timeout 20 git push -q "$REMOTE" "+$_c:refs/tillandsias/queue/status" </dev/null >/dev/null 2>&1 || true
+}
+# The lines after the first (2288-vx6k): what `--status` adds and the published commit's body
+# carries. They READ files only: $_RUNDIR/next (the queue order left, one number a
+# line), $_RUNDIR/bundle (the open train), bundles.log, and the shadow's own lock dir.
+_lq_more() { # <run dir or empty> -> queue:next, queue:bundle, queue:shadow
+    local _d="$1" _l _n _p _pr _bl="${TILLANDSIAS_LAND_QUEUE_BUNDLE_LOG:-$(dirname "${TILLANDSIAS_LAND_QUEUE_TRAIN_LOG:-$_LQ_LOGROOT0/trains.log}")/bundles.log}"
+    local _sk="${TILLANDSIAS_LAND_QUEUE_SHADOW_LOCK:-${XDG_RUNTIME_DIR:-$_LQ_LOGROOT0}/tillandsias-shadow.lock}" _sl="${TILLANDSIAS_LAND_QUEUE_SHADOW_LOG:-$_LQ_LOGROOT0/shadow-intake.log}"
+    _n=""; [ -z "$_d" ] || _n="$(tr '\n' ',' < "$_d/next" 2>/dev/null)"
+    [ -z "$_d" ] || printf 'queue:next %s\n' "${_n:+#${_n%,}}" | sed 's/,/,#/g; s/ $/ -/'
+    if [ -n "$_d" ] && [ -s "$_d/bundle" ]; then _lq_render "$(cat "$_d/bundle")"
+    else
+        _l="$(grep '^bundle:' "$_bl" 2>/dev/null | tail -n 1)"
+        printf 'queue:bundle open=- last=%s\n' "${_l:--}"
+    fi
+    _p="$(cat "$_sk/pid" 2>/dev/null)"; _pr="$(cat "$_sk/current" 2>/dev/null)"
+    if [ -n "$_p" ] && kill -0 "$_p" 2>/dev/null; then
+        _l=running; [ ! -e "$_sk/stop" ] || _l=stopping
+        printf 'queue:shadow %s pr=%s' "$_l" "${_pr:+#$_pr}" | sed 's/pr=$/pr=-/'
+    else printf 'queue:shadow idle pr=-'; fi
+    printf ' log=%s lines=%s\n' "$_sl" "$(grep -c '^shadow:accept:' "$_sl" 2>/dev/null || [ -e "$_sl" ] || echo 0)"
+}
+_lq_pr() { # <run dir or empty> <pr> -> one line: is MY PR gating?
+    local _cur _i
+    _cur="$(cat "$1/current" 2>/dev/null)"
+    case "$_cur" in "queue:gating:#$2 "*) printf 'queue:pr:#%s gating %s\n' "$2" "$(_lq_render "$_cur" | sed 's/^[^ ]* //')"; return ;; esac
+    case ",$(sed -n 's/.* train=\([^ ]*\).*/\1/p' <<<"$_cur")," in *",#$2,"*) printf 'queue:pr:#%s gating in-train %s\n' "$2" "$(_lq_render "$_cur" | sed 's/^[^ ]* //')"; return ;; esac
+    _i="$(grep -nxF -- "$2" "$1/next" 2>/dev/null | cut -d: -f1)"; _i="${_i%%$'\n'*}"
+    if [ -n "$_i" ]; then printf 'queue:pr:#%s waiting position=%s of=%s\n' "$2" "$_i" "$(grep -c . "$1/next")"
+    elif [ -n "$_cur" ]; then printf 'queue:pr:#%s not-in-this-run (read once per candidate; landed, evicted, held, a draft, or opened since)\n' "$2"
+    else printf 'queue:pr:#%s idle (no run is holding the queue)\n' "$2"; fi
+}
+_lq_phase() { # <num> <ref> <phase> [train members]
+    local _w _line
+    _w="$(printf '%s' "${_cands:-}" | grep -c .)"
+    _line="queue:gating:#$1 $2 phase=$3 started=$(date +%s) train=${4:--} waiting=$_w"
+    printf '%s\n' "$_line" > "$_RUNDIR/current" 2>/dev/null || true
+    printf '%s\n' "$_RUNDIR" > "$_LOGROOT/current-run" 2>/dev/null || true
+    # The numbers still to come, in queue order: read-only for --status. Not the one gating,
+    # not the train's members, not what this run already took.
+    printf '%s' "${_cands:-}" | cut -f1 | while IFS= read -r _w; do
+        case " ${_seen:-} $1 " in *" $_w "*) continue ;; esac
+        case ",${4:-}," in *",#$_w,"*) continue ;; esac
+        [ -n "$_w" ] && printf '%s\n' "$_w"
+    done > "$_RUNDIR/next" 2>/dev/null || true
+    if [ -n "${4:-}" ]; then printf 'queue:bundle open=%s members=%s heavy=%s base=%s phase=%s started=%s\n' "${t_id:--}" "$4" "${heavy_n:--}" "${base:0:9}" "$3" "$(date +%s)" > "$_RUNDIR/bundle" 2>/dev/null || true
+    else rm -f "$_RUNDIR/bundle" 2>/dev/null; fi
+    _lq_publish "$(_lq_render "$_line")" "$(_lq_more "$_RUNDIR" | sed "s/ log=[^ ]*//")"
+}
+_lq_idle() {
+    local _line; _line="$(_lq_idle_line)"
+    rm -f "$_LOGROOT/current-run" 2>/dev/null || true
+    _lq_publish "$_line" "$(_lq_more "" | sed "s/ log=[^ ]*//")"
+}
+if [ "$STATUS" -eq 1 ]; then
+    _sd=""; _lock_holder >/dev/null && _sd="$(cat "$_LQ_LOGROOT0/current-run" 2>/dev/null)"
+    if [ -n "$STATUS_PR" ]; then _lq_pr "$_sd" "$STATUS_PR"; exit 0; fi
+    if _h0="$(_lock_holder)"; then
+        _cur="$(cat "$(cat "$_LQ_LOGROOT0/current-run" 2>/dev/null)/current" 2>/dev/null)"
+        if [ -n "$_cur" ]; then _lq_render "$_cur"
+        else say "queue:gating:? phase=reading-queue holder=$_h0"; fi
+    else
+        _lq_idle_line
+    fi
+    _lq_more "$_sd"
+    exit 0
+fi
 if _h0="$(_lock_holder)"; then
     if [ "$DAILY_FULL" -eq 1 ]; then
         _wmax="${TILLANDSIAS_LAND_QUEUE_DAILY_LOCK_WAIT_S:-10800}"; _w=0
@@ -391,6 +503,7 @@ _start_ref="$(git symbolic-ref --quiet --short HEAD 2>/dev/null \
               || echo HEAD)"
 cleanup() {
     git checkout -q "$_start_ref" 2>/dev/null || true
+    [ -n "${_LOGROOT:-}" ] && _lq_idle  # ORDER 2248-jihs: the status line says idle once the lander is gone
     rm -rf "$LOCKDIR"
 }
 trap cleanup EXIT INT TERM
@@ -454,7 +567,9 @@ GH_LIST_LIMIT="${TILLANDSIAS_LAND_QUEUE_GH_LIST_LIMIT:-500}"
 # gate, then test-land-queue.sh, then its inner queues, and redded run 26's train;
 # ARM 22's stamp leak was the same class. Called first in every gate subshell, so
 # the queue keeps its settings and the gate (and its fixtures) inherits none.
-_gate_clean_env() { local _v; for _v in $(compgen -v TILLANDSIAS_LAND_QUEUE_); do unset "$_v"; done; }
+# 2215-trad: nor GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE — a caller inside a git hook exports them, and a
+# fixture following them writes the REAL .git/config (calmecacpilli 2026-11-22, #1338).
+_gate_clean_env() { local _v; for _v in $(compgen -v TILLANDSIAS_LAND_QUEUE_); do unset "$_v"; done; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; }
 DAILY_SKIP="${TILLANDSIAS_LAND_QUEUE_DAILY_SKIP:-1}"
 DAILY_NS="refs/attest/daily-full"
 DAILY_RED_NS="refs/attest/daily-red"
@@ -516,7 +631,10 @@ if [ "$DAILY_FULL" -eq 1 ]; then
     _dsha="$(git rev-parse "$REMOTE/$TRUNK")"
     git checkout -q --detach "$_dsha" || { say "could-not-run:host:daily-full:checkout-failed"; exit 3; }
     rm -f "$_RUNDIR/no-daily-proof"
-    ( _gate_clean_env; export TILLANDSIAS_CLASS_SELECTOR=off TILLANDSIAS_FULL_GATE_MARKER="$_RUNDIR/no-daily-proof"; eval "$GATE" ) \
+    ( _gate_clean_env; export TILLANDSIAS_CLASS_SELECTOR=off TILLANDSIAS_FULL_GATE_MARKER="$_RUNDIR/no-daily-proof"
+      # 2270-7gp6: the salvage-audit fixture's live 334-ref audit runs here, once a day.
+      # 2272-cuxh: and the preflight door's own fixture (~14 min on a mid-tier host).
+      export TILLANDSIAS_SALVAGE_AUDIT_LIVE=1 TILLANDSIAS_FRONT_DOOR_LIVE=1; eval "$GATE" ) \
         < /dev/null > "$_RUNDIR/daily-full-gate.log" 2>&1
     _drc=$?
     _dns="$DAILY_NS"; [ "$_drc" -eq 0 ] || _dns="$DAILY_RED_NS"
@@ -669,17 +787,217 @@ next_candidate() {
 # measured before K is widened (coordinator 2026-11-20).
 # BATCH_K < 2 (the default until the coordinator sets it: 4 for full trains)
 # leaves the queue exactly as it was.
+# ── SHADOW INTAKE (bundle landing phase 0): INTAKE'S VERDICT BESIDE THE GATE'S ──
+# Off unless TILLANDSIAS_LAND_QUEUE_SHADOW_INTAKE names the command (run in a shadow
+# tree as `<cmd> <base>`, e.g. `./build.sh --intake --changed`). Each gated candidate
+# is remembered (number, base, head, the gate's verdict) and scripts/lua/shadow-
+# intake.lua measures them DETACHED after this run ends: its own lock, worktree and
+# target dir, low priority, bounded. A land run that starts meanwhile asks it to stop
+# at its next PR. It changes, delays and evicts nothing (coordinator 2026-11-24).
+SHADOW_INTAKE="${TILLANDSIAS_LAND_QUEUE_SHADOW_INTAKE:-}"
+SHADOW_LOG="${TILLANDSIAS_LAND_QUEUE_SHADOW_LOG:-$_LOGROOT/shadow-intake.log}"
+SHADOW_LOCK="${TILLANDSIAS_LAND_QUEUE_SHADOW_LOCK:-${XDG_RUNTIME_DIR:-$_LOGROOT}/tillandsias-shadow.lock}"
+SHADOW_TREE="${TILLANDSIAS_LAND_QUEUE_SHADOW_TREE:-${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/shadow-intake/$(basename "$ROOT")}"
+_shadow_q=()
+[ ! -d "$SHADOW_LOCK" ] || : > "$SHADOW_LOCK/stop" 2>/dev/null || true
+shadow_note() { # <num> <base> <head> <gate verdict> <via>
+    [ -n "$SHADOW_INTAKE" ] && [ "$DRY_RUN" -eq 0 ] || return 0
+    _shadow_q+=("$1:$2:$3:$4:$5")
+}
+shadow_launch() {
+    [ "${#_shadow_q[@]}" -gt 0 ] || return 0
+    local _pri=()
+    command -v nice >/dev/null 2>&1 && _pri=(nice -n 10)
+    command -v ionice >/dev/null 2>&1 && _pri+=(ionice -c3)
+    command -v setsid >/dev/null 2>&1 && _pri+=(setsid)  # its own session: it outlives a parent that is killed
+    mkdir -p "$(dirname "$SHADOW_LOG")" 2>/dev/null
+    ( trap '' HUP; trap - EXIT; exec env SHADOW_CMD="$SHADOW_INTAKE" SHADOW_TREE="$SHADOW_TREE" SHADOW_LOG="$SHADOW_LOG" SHADOW_LOCK="$SHADOW_LOCK" SHADOW_KEEP="$_RUNDIR" SHADOW_PLAN="$PLAN" \
+        SHADOW_PR_S="${TILLANDSIAS_LAND_QUEUE_SHADOW_PR_S:-1200}" SHADOW_RUN_S="${TILLANDSIAS_LAND_QUEUE_SHADOW_RUN_S:-1200}" \
+        ${_pri[@]+"${_pri[@]}"} "$PLAN" script run "$_SELF_DIR/lua/shadow-intake.lua" -- "${_shadow_q[@]}" ) </dev/null >"$_RUNDIR/shadow.out" 2>&1 &
+    say "shadow-intake: ${#_shadow_q[@]} candidate(s) handed to a detached run, log $SHADOW_LOG"
+}
 BATCH_K="${TILLANDSIAS_LAND_QUEUE_BATCH_K:-1}"
 TRAIN_LOG="${TILLANDSIAS_LAND_QUEUE_TRAIN_LOG:-$_LOGROOT/trains.log}"
+# bundles.log (bundle landing phase 1): the successor line, beside trains.log, one
+# per train. `heavy=` counts members whose own diff gate-changed cannot scope (its
+# exit-10 rule, printed `heavy:` by --list --intake; no second path list). A probe
+# that does not answer makes it `-`, never a 0 nobody measured. `cause=` is the
+# trains.log result. green = the gate was green (promoted= says whether it landed);
+# red = the gate answered rc=1; aborted = any other rc, the host's state and never a
+# verdict on the tree (2234-a964); abandoned = the train stopped at a named door.
+BUNDLE_LOG="${TILLANDSIAS_LAND_QUEUE_BUNDLE_LOG:-$(dirname "$TRAIN_LOG")/bundles.log}"
+HEAVY_PROBE="${TILLANDSIAS_LAND_QUEUE_HEAVY_PROBE-timeout 60 bash \"$_SELF_DIR/gate-changed.sh\" --list --intake}"
+heavy_probe() { # <base> -> heavy | light | unknown, of the worktree against base
+    local _o
+    [ -n "$HEAVY_PROBE" ] || { echo unknown; return; }
+    _o="$(TILLANDSIAS_GATE_CHANGED_ROOT="$ROOT"; export TILLANDSIAS_GATE_CHANGED_ROOT; eval "$HEAVY_PROBE \"\$1\"" </dev/null 2>/dev/null)"
+    if grep -q '^heavy:' <<<"$_o"; then echo heavy
+    elif grep -q '^select:intake ' <<<"$_o"; then echo light
+    else echo unknown; fi
+}
+# HEAVY_MAX (2281-xx62, phase 2): a train takes at most this many members the probe
+# does not answer `light` for; a further one is put back for the one-at-a-time loop,
+# exactly like a conflicting member, and the next light candidate may still join.
+# `unknown` counts toward the cap: nobody measured it light. 0 = no heavy member.
+# A value that is not a whole number falls back to 2, said aloud.
+HEAVY_MAX="${TILLANDSIAS_BUNDLE_HEAVY_MAX:-2}"
+[[ "$HEAVY_MAX" =~ ^[0-9]{1,4}$ ]] || { [ "$BATCH_K" -ge 2 ] 2>/dev/null && say "train:heavy-max-unreadable:'$HEAVY_MAX' — using 2"; HEAVY_MAX=2; }
+HEAVY_MAX=$((10#$HEAVY_MAX))
+bundle_log() { # <base> <union> <result> <gate_s>; try_batch's nums/heavy_n/t_id are in scope
+    local _v _p=- _t
+    case "$3" in
+        landed:*) _v=green; _p="${3#landed:}" ;;
+        green:*) _v=green ;;
+        red:rc=1|red:rc=1:*) _v=red ;;
+        red:*) _v=aborted ;;
+        *) _v=abandoned ;;
+    esac
+    _t="$(git rev-parse --short=9 "$2^{tree}" 2>/dev/null)"
+    printf 'bundle:%s:%s members=%s heavy=%s base=%s tree=%s gate_s=%s reason=train promoted=%s cause=%s ids=%s ts=%s\n' \
+        "$_v" "$t_id" "${#nums[@]}" "$heavy_n" "${1:0:9}" "${_t:--}" "$4" "$_p" "${3// /_}" "$ids" \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$BUNDLE_LOG" 2>/dev/null || true
+}
 train_log() { # <members> <base> <union> <result> <gate_s>
     mkdir -p "$(dirname "$TRAIN_LOG")" 2>/dev/null
     printf '%s members=%s base=%s union=%s result=%s gate_s=%s\n' \
         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "${2:0:9}" "${3:0:9}" "$4" "$5" >> "$TRAIN_LOG" 2>/dev/null || true
+    bundle_log "$2" "$3" "$4" "$5"
+}
+# ── TRAIN DIAGNOSIS (2289-bxzm, bundle landing phase 1): WHOSE RED IS IT, BY FAILING STEP ──
+# A red train used to cost one whole gate per member. Now the steps the gate log NAMES
+# are re-run alone: on the identical union (green = flake), on the bare trunk (red =
+# trunk-red, and only the whole bare-trunk gate confirms it, as for a single), then on
+# the per-member merge commits in order; the first red names the culprit. A train still
+# evicts nobody: the culprit leaves it and its OWN gate judges it, and the rest (or, for
+# a flake, the same members) ride ONE more train. Anything not judged alone (an unnamed
+# red, a litmus, a step neither red nor green) falls back to one at a time, as before.
+TRAIN_DIAGNOSE="${TILLANDSIAS_LAND_QUEUE_TRAIN_DIAGNOSE:-1}"
+TRAIN_STEP_S="${TILLANDSIAS_LAND_QUEUE_TRAIN_STEP_S:-900}"
+_train_try=1; _train_drop=" "; _train_again=0
+
+# trunk_red <base> <checkout back to> <test> <gate cmd> <log>: rc 0 when the BARE trunk's
+# whole gate names the same test red. One gate per base, remembered (2118-tpmy).
+trunk_red() {
+    local memo v trc
+    [ "$TRUNK_RED_CHECK" = 1 ] || return 1
+    memo="$(cat "$TRUNK_RED_MEMO" 2>/dev/null)"
+    if [ "${memo%% *}" = "$1" ]; then v="${memo#* }"
+    else
+        git checkout -q --detach "$1" 2>/dev/null
+        ( _gate_clean_env; eval "$4" ) < /dev/null > "$5" 2>&1; trc=$?
+        git checkout -q --detach "$2" 2>/dev/null
+        v=green
+        if [ "$trc" -ne 0 ] \
+           && grep -qF -e "$3" -e "red-twice:${3##*/}:" \
+              <<<"$(grep -E '^[[:space:]]*(FAIL|\[FAIL\]|refused:|violation:|blocked:|red-twice:|red-script:)' "$5" 2>/dev/null)"; then
+            v="red $3"
+        fi
+        printf '%s %s\n' "$1" "$v" > "$TRUNK_RED_MEMO" 2>/dev/null || true
+        rm -f "$5"
+    fi
+    [ "$v" = "red $3" ]
+}
+# gate_named_steps <gate log>: "<path>" or "<path> twice" per step the log names red.
+# The gate's own `red-script:<path>` (build.sh _error) decides, the LAST one: earlier ones
+# can be a nested gate inside a passing fixture. Only without one is the old guess read.
+gate_named_steps() {
+    local rb last
+    last="$(sed -n "s/^red-script:\(scripts\/[A-Za-z0-9_.\/-]*\)$/\1/p" "$1" 2>/dev/null | tail -n 1)"
+    if [ -n "$last" ]; then
+        if grep -qF "red-twice:${last##*/}:" "$1"; then echo "$last twice"; else echo "$last"; fi
+        return
+    fi
+    { grep -E '^[[:space:]]*(FAIL|\[FAIL\]|refused:|violation:|blocked:)' "$1" 2>/dev/null \
+          | grep -oE 'scripts/[A-Za-z0-9_./-]+\.(sh|lua)|litmus:[A-Za-z0-9_-]+'
+      sed -n 's/^red-twice:\([A-Za-z0-9_.-]*\):.*/\1/p' "$1" 2>/dev/null | while IFS= read -r rb; do
+          git ls-files -- "scripts/$rb" "scripts/lua/$rb" | sed -n 's/$/ twice/; 1p'
+      done
+    } | sort -r | awk '!s[$1]++'
+}
+# train_step_cmd <test>: how THE GATE runs it, as a command line; rc 1 when it does not.
+# A log line can name any script and some are actors, so only a test-*/check-* that this
+# tree's gate itself runs (one step file, or an inline call) is ever executed.
+train_step_cmd() {
+    local f hit="" n=0
+    [[ "$1" =~ ^scripts/(lua/)?(test|check)-[A-Za-z0-9_.-]+\.(sh|lua)$ ]] || return 1
+    for f in scripts/gate-steps.d/*.step; do
+        [ -f "$f" ] || continue
+        if grep -qxE "STEP_(SCRIPT|LUA)=\"${1//./\\.}\"" "$f"; then hit="$f"; n=$((n + 1)); fi
+    done
+    if [ "$n" -eq 1 ]; then
+        f="${hit##*/}"; printf './build.sh --gate-steps . --gate-step %s' "${f%%-*}"; return 0
+    fi
+    [ "$n" -eq 0 ] || return 1
+    grep -qE "^[^#]*(_run bash|_run_lua_decider) \"(\\\$SCRIPT_DIR/)?${1//./\\.}\"" build.sh 2>/dev/null || return 1
+    case "$1" in *.lua) printf '"$PLAN" script run %s' "$1" ;; *) printf 'bash %s' "$1" ;; esac
+}
+# train_step <tree> <test> <log> <tests absent here are: green|unjudged> -> green|red|unjudged
+train_step() {
+    local cmd rc key
+    git checkout -q --detach "$1" 2>/dev/null || { echo unjudged; return; }
+    [ -e "$2" ] || { echo "$4"; return; }
+    cmd="$(train_step_cmd "$2")" || { echo unjudged; return; }
+    # the plan binary runs every Lua step: it must be this tree's
+    if [ -n "$PLAN_REFRESH" ]; then
+        key="$(plan_refresh_key)" || key=""
+        if [ -z "$key" ] || [ "$key" != "$(cat "$PLAN_REFRESH_STAMP" 2>/dev/null)" ]; then
+            ( eval "$PLAN_REFRESH" ) < /dev/null > "$3.refresh" 2>&1 || { echo unjudged; return; }
+            if key="$(plan_refresh_key)"; then printf '%s\n' "$key" > "$PLAN_REFRESH_STAMP" 2>/dev/null || true; fi
+        fi
+    fi
+    command -v timeout >/dev/null 2>&1 && cmd="timeout $TRAIN_STEP_S $cmd"
+    ( _gate_clean_env; eval "$cmd" ) < /dev/null > "$3" 2>&1; rc=$?
+    case "$rc" in 0) echo green ;; 1) echo red ;; *) echo unjudged ;; esac
+}
+# train_diagnose <gate log>: sets _td (flaky | trunk-red=<test> | culprit=#a,#b | unjudged:<why>)
+# and _td_drop. try_batch's base/union/nums/ids are in scope. Leaves HEAD on the union.
+train_diagnose() {
+    local t twice v i k="" steps n=0 red=0 log="$_RUNDIR/train-step"
+    local -a chain=()
+    _td=""; _td_drop=""
+    steps="$(gate_named_steps "$1")"
+    [ -n "$steps" ] || { _td=unjudged:no-step-named; return; }
+    [ "$(grep -c . <<<"$steps")" -le 6 ] || { _td=unjudged:too-many-steps; return; }
+    while IFS= read -r t; do chain+=("$t"); done < <(git rev-list --first-parent --reverse "$base..$union")
+    [ "${#chain[@]}" -eq "${#nums[@]}" ] || { _td=unjudged:chain-is-not-one-merge-per-member; return; }
+    while IFS=' ' read -r t twice; do
+        n=$((n + 1))
+        _lq_phase "${nums[0]}" train "train-diagnose:$t" "$ids"
+        v="$(train_step "$union" "$t" "$log-$n-union.log" unjudged)"
+        [ "$v" != unjudged ] || { _td="unjudged:$t"; break; }
+        if [ "$v" = green ] && [ -z "$twice" ]; then say "train:step:$t union=green on a re-run"; continue; fi
+        # red-twice then green alone is not a flake to wave through, nor a step that bisects
+        [ "$v" = red ] || { _td="unjudged:$t:red-twice-in-the-gate-green-alone"; break; }
+        red=1
+        v="$(train_step "$base" "$t" "$log-$n-base.log" green)"
+        if [ "$v" = red ]; then
+            if trunk_red "$base" "$union" "$t" "$GATE" "$log-$n-trunk-gate.log"; then _td="trunk-red=$t"
+            else _td="unjudged:$t:red-alone-on-trunk-but-not-in-its-gate"; fi
+            break
+        fi
+        [ "$v" = green ] || { _td="unjudged:$t:base"; break; }
+        k=""
+        for i in "${!chain[@]}"; do
+            if [ "$i" -eq $((${#chain[@]} - 1)) ]; then v=red  # the union: already red
+            else v="$(train_step "${chain[$i]}" "$t" "$log-$n-member-$i.log" green)"; fi
+            case "$v" in
+                red) k="$i"; break ;;
+                unjudged) _td="unjudged:$t:#${nums[$i]}"; break 2 ;;
+            esac
+        done
+        say "train:step:$t base=green first-red=#${nums[$k]}"
+        case " $_td_drop" in *" ${nums[$k]} "*) ;; *) _td_drop="$_td_drop${nums[$k]} " ;; esac
+    done <<< "$steps"
+    git checkout -q --detach "$union" 2>/dev/null
+    if [ -n "$_td" ]; then _td_drop=""; return; fi
+    if [ "$red" -eq 0 ]; then _td=flaky
+    else _td="culprit=#$(printf '%s' "${_td_drop% }" | sed 's/ /,#/g')"; fi
 }
 try_batch() {
     [ "$BATCH_K" -ge 2 ] 2>/dev/null || return 0
     [ "$DRY_RUN" -eq 1 ] && return 0
     local base union n h hs lm mb pre ids="" carried="" out err rc key t0 gs c now
+    local heavy_n=0 heavy_cap=0 tier t_id; t_id="train-$(date +%s)"; [ "$_train_try" -eq 1 ] || t_id="$t_id-2"
     local -a nums=() heads=() parents=()
     git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null || return 0
     base="$(git rev-parse "$REMOTE/$TRUNK" 2>/dev/null)" || return 0
@@ -687,6 +1005,7 @@ try_batch() {
     while IFS=$'\t' read -r n h; do
         [ -n "$n" ] || continue
         [ "${#nums[@]}" -lt "$BATCH_K" ] || break
+        case "$_train_drop" in *" $n "*) continue ;; esac
         [[ "$h" =~ $WORK_RE ]] || continue
         git fetch -q "$REMOTE" "$h" 2>/dev/null || continue
         hs="$(git rev-parse FETCH_HEAD)"
@@ -697,7 +1016,22 @@ try_batch() {
         pre="$(git rev-parse HEAD)"
         if git -c user.name=land-queue -c user.email=land-queue@localhost \
                 merge --no-ff -q --no-edit -m "train: #$n $h" "$hs" >/dev/null 2>&1; then
+            tier="$(heavy_probe "$pre")"
+            if [ "$tier" != light ]; then
+                if [ "$heavy_cap" -ge "$HEAVY_MAX" ]; then
+                    say "train:heavy-deferred:#$n tier=$tier max=$HEAVY_MAX — goes one at a time"
+                    git reset -q --hard "$pre"
+                    continue
+                fi
+                heavy_cap=$((heavy_cap + 1))
+            fi
             nums+=("$n"); heads+=("$hs"); ids="$ids#$n,"
+            say "train:accept:#$n tier=$tier"
+            case "$tier" in
+                heavy) say "train:heavy:#$n"; [ "$heavy_n" = - ] || heavy_n=$((heavy_n + 1)) ;;
+                light) ;;
+                *) say "train:heavy-unknown:#$n"; heavy_n=- ;;
+            esac
         else
             git merge --abort >/dev/null 2>&1 || true
             git reset -q --hard "$pre"
@@ -707,6 +1041,7 @@ try_batch() {
     if [ "${#nums[@]}" -lt 2 ]; then git checkout -q --detach "$base" 2>/dev/null; return 0; fi
     union="$(git rev-parse HEAD)"
     say "train: ${#nums[@]} members $ids base=${base:0:9} union=${union:0:9}"
+    _lq_phase "${nums[0]}" train train-checks "$ids"
     abandon() { say "train:abandoned:$1 — members $ids go one at a time"; train_log "$ids" "$base" "$union" "abandoned:$1" -; git checkout -q --detach "$base" 2>/dev/null; }
     # freeze
     if [ -n "$(freeze_held_paths "$base" "$union" | head -n 1)" ]; then
@@ -755,28 +1090,61 @@ try_batch() {
     # THE ONE GATE
     t0=$SECONDS
     gate_env_for "$base"
+    _lq_phase "${nums[0]}" train train-gate "$ids"
     ( _gate_clean_env; eval "$GATE" ) < /dev/null > "$_RUNDIR/train-gate.log" 2>&1; rc=$?
     gs=$((SECONDS - t0))
     if [ "$rc" -ne 0 ]; then
-        say "train:red:rc=$rc — nobody is evicted by a train; members $ids go one at a time (log: $_RUNDIR/train-gate.log)"
-        train_log "$ids" "$base" "$union" "red:rc=$rc" "$gs"
+        _td=""
+        if [ "$rc" -eq 1 ] && [ "$_train_try" -eq 1 ] && [ "$TRAIN_DIAGNOSE" = 1 ]; then train_diagnose "$_RUNDIR/train-gate.log"; cp -f "$_RUNDIR/train-gate.log" "$_RUNDIR/train-gate-1.log" 2>/dev/null; fi
+        case "$_td" in
+            trunk-red=*)
+                say "hold:trunk-red:${_td#trunk-red=} — trunk ${base:0:9} fails it too; no member of $ids is evicted; the queue holds until trunk is fixed (log: $_RUNDIR/train-gate.log)"
+                _held=1 ;;
+            flaky)
+                say "train:red:flaky — every named step is green on the identical union; members $ids ride one more train"
+                _train_again=1 ;;
+            culprit=*)
+                say "train:red:$_td — it leaves the train and its own gate judges it; the rest ride one more train"
+                _train_drop="$_train_drop$_td_drop"; _train_again=1 ;;
+            *)
+                say "train:red:rc=$rc${_td:+:$_td} — nobody is evicted by a train; members $ids go one at a time (log: $_RUNDIR/train-gate.log)" ;;
+        esac
+        train_log "$ids" "$base" "$union" "red:rc=$rc${_td:+:$_td}" "$gs"
         git checkout -q --detach "$base" 2>/dev/null
         return 0
     fi
     # The tree that ships is the tree that gated: re-read the trunk.
     git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null
     now="$(git rev-parse "$REMOTE/$TRUNK" 2>/dev/null)"
-    if [ "$now" != "$base" ]; then
-        say "train:target-moved:gated-on=${base:0:9} now=${now:0:9} — nothing pushed; members $ids go one at a time"
-        train_log "$ids" "$base" "$union" "green:target-moved" "$gs"
-        return 0
-    fi
     parents=(-p "$base")
     for hs in "${heads[@]}"; do parents+=(-p "$hs"); done
     c="$(printf 'land-train(%s): %d members into %s, one gate on the union\n\n%s\n' "$ids" "${#nums[@]}" "$TRUNK" "$carried" \
         | GIT_AUTHOR_NAME=land-queue GIT_AUTHOR_EMAIL=land-queue@localhost \
           GIT_COMMITTER_NAME=land-queue GIT_COMMITTER_EMAIL=land-queue@localhost \
           git commit-tree "$union^{tree}" "${parents[@]}")" || { abandon commit-tree-failed; return 0; }
+    # ORDER 2215-trad: A PLAN-ONLY MOVE DOES NOT VOID A TRAIN. Run 29's 4-member
+    # train gated ~25 min and pushed nothing because ledger fragments moved
+    # $TRUNK mid-gate; with an active fleet that is nearly every train. The
+    # singles' adopt rule applies unchanged: when EVERY class between the gated
+    # base and the new tip is plan-ledger (delta_plan_only, the same classifier),
+    # merge the train onto the new tip and push without re-gating. Any other
+    # class, an unreadable answer, or a conflict still sends members one at a time.
+    if [ "$now" != "$base" ]; then
+        if git merge-base --is-ancestor "$base" "$now" 2>/dev/null && delta_plan_only "$base" "$now" \
+            && git checkout -q --detach "$c" 2>/dev/null \
+            && GIT_AUTHOR_NAME=land-queue GIT_AUTHOR_EMAIL=land-queue@localhost \
+               GIT_COMMITTER_NAME=land-queue GIT_COMMITTER_EMAIL=land-queue@localhost \
+               git merge --no-ff -q -m "land-train($ids): adopted over a plan-only move ${base:0:9}..${now:0:9}" "$now" >/dev/null 2>&1; then
+            c="$(git rev-parse HEAD)"
+            say "train:adopt:plan-only-move:gated-on=${base:0:9} now=${now:0:9} classes=plan-ledger — the gate's verdict still describes this code"
+        else
+            git merge --abort 2>/dev/null || true
+            say "train:target-moved:gated-on=${base:0:9} now=${now:0:9} classes=$(printf '%s' "${_delta_classes:-unreadable}" | tr '\n' ',' | sed 's/,$//') — nothing pushed; members $ids go one at a time"
+            train_log "$ids" "$base" "$union" "green:target-moved" "$gs"
+            git checkout -q --detach "$base" 2>/dev/null
+            return 0
+        fi
+    fi
     git push -q "$REMOTE" "$c:refs/heads/$TRUNK" >/dev/null 2>&1
     git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null
     if ! git merge-base --is-ancestor "$c" "$REMOTE/$TRUNK" 2>/dev/null; then
@@ -790,14 +1158,17 @@ try_batch() {
     for n in "${nums[@]}"; do
         say "land:$n tier=full gate=green train=${c:0:9} base=${base:0:9} head=${heads[$i]:0:9}"
         not_run_line "$_RUNDIR/train-gate.log"
+        shadow_note "$n" "$base" "${heads[$i]}" green train
         landed=$((landed + 1)); _seen="$_seen$n "; i=$((i + 1))
     done
     git checkout -q --detach "$c" 2>/dev/null
     return 0
 }
 try_batch
+if [ "$_train_again" -eq 1 ] && [ "$_held" -eq 0 ]; then _train_try=2; try_batch; fi
 
 for _pass in 1 2; do
+[ "$_held" -eq 0 ] || break  # a train found the trunk red
 if [ "$_pass" -eq 2 ]; then
     [ -n "$_deferred" ] || break
     _p2="$_deferred"; _deferred=""
@@ -875,6 +1246,8 @@ while next_candidate; do
         esac
     fi
 
+    _LQ_T=$SECONDS  # ORDER 2238-gpxz: the clock _lq_mark reads
+    _lq_phase "$num" "$head" merge+door
     # ── MERGE TARGET + CANDIDATE ─────────────────────────────────────────────
     git checkout -q --detach "$base_sha" 2>/dev/null || {
         say "skip:land-queue:$num:cannot-detach"; skipped=$((skipped + 1)); continue
@@ -1098,6 +1471,8 @@ $_nlwhy
                 continue ;;
         esac
     fi
+    _lq_mark "$num" merge+door
+    _lq_phase "$num" "$head" plan-refresh
     # ── ORDER 1992-lqpb: A CURRENT PLAN BINARY BEFORE ANY DOOR ───────────────
     # The binary's state is this HOST's, never the candidate's: a refresh that
     # cannot make it current stops the run and evicts nobody.
@@ -1131,6 +1506,8 @@ $_nlwhy
         fi
         rm -f "$_rlog"
     fi
+    _lq_mark "$num" plan-refresh
+    _lq_phase "$num" "$head" preflight
     # ── ORDER 1765-q7rg: THE PREFLIGHT DOOR BEFORE THE FULL GATE ─────────────
     # The tree-only deciders answer in about a minute; a decider-level red
     # (exit 1) here is the same red the full gate would reach after ~21 min.
@@ -1154,15 +1531,20 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
         rm -f "$_plog"
     fi
 
+    _lq_mark "$num" preflight
+    _lq_phase "$num" "$head" gate
     _glog="$_RUNDIR/pr-$num-gate.log"
     # No pipeline: a `$GATE | tee` would hand us tee's status, which is the
     # 859-4jny bug one layer over.
     # 2174-dail: the class selector may skip unchanged steps only against a daily proof.
     gate_env_for "$base_sha"
+    _sh_base="$base_sha"
     _gcmd="$GATE"
     [ "$_lane" = plan-only ] && _gcmd="$PLAN_LANE_CHECK"
     ( _gate_clean_env; eval "$_gcmd" ) < /dev/null > "$_glog" 2>&1
     _grc=$?
+    _lq_mark "$num" gate
+    _lq_phase "$num" "$head" post-gate+push
     grep -o 'skip:class-selector:[^ ]*' "$_glog" > "$_RUNDIR/pr-$num-skips" 2>/dev/null || : > "$_RUNDIR/pr-$num-skips"  # 2174-dail: the gate log is removed on a green land
     # ── ORDER 2143-z5uj: A RED IN A TEST THE CANDIDATE DID NOT TOUCH IS RE-RUN
     # ONCE, ON THE IDENTICAL TREE, BEFORE IT EVICTS ANYONE. Measured 2026-11-20:
@@ -1178,6 +1560,18 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
     if [ "$_grc" -eq 1 ] && [ "$_lane" = full ] && ! grep -q '^flaky:' "$_glog" 2>/dev/null; then
         _ftests="$(grep -E '^[[:space:]]*(FAIL|\[FAIL\]|refused:|violation:|blocked:)' "$_glog" 2>/dev/null \
                    | grep -oE 'scripts/[A-Za-z0-9_./-]+\.(sh|lua)|litmus:[A-Za-z0-9_-]+' | sort -u)"
+        # ORDER 2277-7trt: red-twice:<test file>:... is the step runner saying it ran
+        # that step twice on this tree and both were red (2276-5pzy). Its test joins
+        # the named ones, and when EVERY named test is one of those the re-run below
+        # would spend a gate on a question already answered twice. The trunk-red
+        # check after it still runs.
+        _rtwice=""
+        while IFS= read -r _rb; do
+            [ -n "$_rb" ] || continue
+            _rtwice="$_rtwice$(git ls-files -- "scripts/$_rb" "scripts/lua/$_rb" | head -n 1)"$'\n'
+        done <<< "$(sed -n 's/^red-twice:\([A-Za-z0-9_.-]*\):.*/\1/p' "$_glog" 2>/dev/null | sort -u)"
+        _rtwice="$(grep . <<<"$_rtwice")"
+        _ftests="$(printf '%s\n%s\n' "$_ftests" "$_rtwice" | grep . | sort -u)"
         _fdiff="$(git diff --name-only "$base_sha" "$merge_sha" 2>/dev/null)"
         _touched=0
         if [ -n "$_ftests" ]; then
@@ -1190,39 +1584,25 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
             done <<< "$_ftests"
             if [ "$_touched" -eq 0 ]; then
                 _flaky_test="$(head -n 1 <<<"$_ftests")"
-                say "land-queue: #$num red in $_flaky_test, which its diff does not touch — re-running the gate once on the identical tree"
-                ( _gate_clean_env; eval "$_gcmd" ) < /dev/null > "$_glog.rerun" 2>&1
-                _grc=$?
+                if [ -n "$_rtwice" ] && [ -z "$(grep -vxF -- "$_rtwice" <<<"$_ftests")" ]; then
+                    say "land-queue: #$num red-twice in $_flaky_test, already run twice on this tree — not re-running the gate"
+                else
+                    say "land-queue: #$num red in $_flaky_test, which its diff does not touch — re-running the gate once on the identical tree"
+                    ( _gate_clean_env; eval "$_gcmd" ) < /dev/null > "$_glog.rerun" 2>&1
+                    _grc=$?
+                fi
                 if [ "$_grc" -eq 0 ]; then
                     say "flaky:$_flaky_test — #$num red then green on the identical tree ${merge_sha:0:9}; landing"
                     mv -f "$_glog" "$_glog.first-red"
                 else
-                    mv -f "$_glog.rerun" "$_glog"
+                    [ ! -e "$_glog.rerun" ] || mv -f "$_glog.rerun" "$_glog"
                     # ORDER 2118-tpmy: RED TWICE. Is it the trunk's red? The bare
                     # trunk is gated once per base; the same failing test there
                     # holds the queue instead of evicting a candidate for it.
                     _trunk_red=""
-                    if [ "$TRUNK_RED_CHECK" = 1 ]; then
-                        _memo="$(cat "$TRUNK_RED_MEMO" 2>/dev/null)"
-                        if [ "${_memo%% *}" = "$base_sha" ]; then
-                            _tr_verdict="${_memo#* }"
-                        else
-                            git checkout -q --detach "$base_sha" 2>/dev/null
-                            ( _gate_clean_env; eval "$_gcmd" ) < /dev/null > "$_glog.trunk" 2>&1
-                            _trc=$?
-                            git checkout -q --detach "$merge_sha" 2>/dev/null
-                            _tr_verdict="green"
-                            if [ "$_trc" -ne 0 ] \
-                               && grep -E '^[[:space:]]*(FAIL|\[FAIL\]|refused:|violation:|blocked:)' "$_glog.trunk" 2>/dev/null \
-                                  | grep -qF -- "$_flaky_test"; then
-                                _tr_verdict="red $_flaky_test"
-                            fi
-                            printf '%s %s\n' "$base_sha" "$_tr_verdict" > "$TRUNK_RED_MEMO" 2>/dev/null || true
-                            rm -f "$_glog.trunk"
-                        fi
-                        [ "$_tr_verdict" = "red $_flaky_test" ] && _trunk_red="$_flaky_test"
-                    fi
+                    trunk_red "$base_sha" "$merge_sha" "$_flaky_test" "$_gcmd" "$_glog.trunk" && _trunk_red="$_flaky_test"
                     if [ -n "$_trunk_red" ]; then
+                        shadow_note "$num" "$_sh_base" "$head_sha" trunk-red single
                         say "hold:trunk-red:$_trunk_red — trunk ${base_sha:0:9} fails it too; #$num is not evicted; the queue holds until trunk is fixed (full log: $_glog)"
                         rm -f "$_glog.rerun"
                         _held=1
@@ -1233,6 +1613,12 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
                 rm -f "$_glog.rerun"
             fi
         fi
+    fi
+    if [ "$_lane" = full ]; then
+        if [ "$_grc" -eq 0 ]; then _sh_g=green; [ -z "$_flaky_test" ] || _sh_g=flaky
+        elif grep -q '^flaky:' "$_glog" 2>/dev/null; then _sh_g=flaky
+        elif [ "$_grc" -eq 1 ]; then _sh_g=red; else _sh_g=aborted; fi
+        shadow_note "$num" "$_sh_base" "$head_sha" "$_sh_g" single
     fi
     if [ "$_grc" -ne 0 ]; then
         # ORDER 1765-q7rg: A flaky:<step>:<verdicts> line is the step runner's
@@ -1245,6 +1631,16 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
             _deferred="${_deferred}${num}	${head}"$'\n'
             requeued=$((requeued + 1))
             rm -f "$_glog"
+            continue
+        fi
+        # ORDER 2234-a964: rc=255 (podman/crun could not start the gate, a host
+        # going down) or 128+ (a signal) is THIS HOST's state, not a verdict on
+        # the tree, so it is could-not-run:host like the host door (ARM 34):
+        # nobody is evicted, nobody is commented, the run goes on. Measured on
+        # macuahuitl run 29: crun "join keyctl: Disk quota exceeded" from leaked
+        # builder exec sessions evicted 14 PRs with rc=255.
+        if [ "$_grc" -ge 128 ]; then
+            say "could-not-run:host:gate-aborted:rc=$_grc — #$num is not evicted; next candidate (log: $_glog)"
             continue
         fi
         say "evict:land-queue:$num:gate-failed:rc=$_grc${_flaky:+:$_flaky} — full gate log kept at $_glog"
@@ -1357,6 +1753,7 @@ Full gate log kept on the landing host at \`$_glog\`.$(evict_marker "$num" "$hea
     done
     if [ "$_landed_ok" -eq 1 ]; then
         say "land:$num tier=full gate=green base=${base_sha:0:9} head=${head_sha:0:9} merge=${merge_sha:0:9}"
+        _lq_mark "$num" post-gate+push
         not_run_line "$_RUNDIR/pr-$num-skips"
         landed=$((landed + 1))
         continue
@@ -1374,6 +1771,7 @@ The queue will re-gate on its next pass."
 done
 done
 
+shadow_launch
 if [ "$_held" -eq 1 ]; then
     say "hold:land-queue:$_n landed=$landed evicted=$evicted requeued=$requeued skipped=$skipped — held on a trunk red (2118-tpmy)"
     exit 4

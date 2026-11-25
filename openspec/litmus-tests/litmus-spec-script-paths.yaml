@@ -12,30 +12,30 @@ severity: medium
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-spec-script-paths.sh
+  - workspace contains scripts/lua/test-spec-script-paths.lua and the plan binary (resolve_plan_binary)
 
 critical_path:
-  - step: "fixture parses and is executable"
-    command: "bash -n scripts/test-spec-script-paths.sh && test -x scripts/test-spec-script-paths.sh && echo 'ok: parse'"
+  - step: "fixture and decider are present"
+    command: "test -f scripts/lua/test-spec-script-paths.lua && test -f scripts/lua/check-spec-script-paths.lua && echo 'ok: parse'"
     timeout_ms: 2000
     expected_behavior: "ok: parse"
 
   - step: "the spec-path check refuses unresolved paths by name and passes the live tree"
-    command: "bash scripts/test-spec-script-paths.sh 2>&1 | tail -n 1"
+    command: "B=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" && TILLANDSIAS_PLAN_BIN=\"$B\" \"$B\" script run scripts/lua/test-spec-script-paths.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "PASS: spec-script-paths"
+    expected_behavior: "ok:spec-script-paths-fixture:6/6"
 
 observability:
   traces:
     - "@trace spec:ci-release"
-  expected_log: "PASS: spec-script-paths"
+  expected_log: "ok:spec-script-paths-fixture:6/6"
   log_fields:
     spec: "ci-release"
     test: "spec-script-paths"
-    artifact: "scripts/check-spec-script-paths.sh"
+    artifact: "scripts/lua/check-spec-script-paths.lua"
 
 rollback:
   on_failure: >
     A spec names a script the tree does not have: correct the spec, commit the
     script, or mark a deliberate negative. Never grow the baseline.
-  command: "bash scripts/test-spec-script-paths.sh"
+  command: "grep -c spec-path-absent openspec/specs/*/spec.md"

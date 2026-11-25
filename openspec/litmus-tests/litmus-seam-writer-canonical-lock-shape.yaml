@@ -38,7 +38,9 @@ critical_path:
   - step: "scripts/lua/check-seam-writers-canonical.lua refuses a crate whose seam var has no writers, rather than reporting ok:0"
     command: ". scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" script run scripts/lua/check-seam-writers-canonical.lua crates/tillandsias-plan TILLANDSIAS_PODMAN_BIN podman_seam_lock"
     timeout_ms: 30000
-    expected_behavior: "refused:seam-var-has-no-writers:TILLANDSIAS_PODMAN_BIN"
+    assert_exit: 1
+    assert_output_contains: "refused:seam-var-has-no-writers:TILLANDSIAS_PODMAN_BIN"
+    expected_behavior: "a seam var with no writers is refused"
 
 observability:
   traces:

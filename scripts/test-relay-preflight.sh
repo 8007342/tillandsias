@@ -17,6 +17,7 @@
 # identity (-c user.email/-c user.name) so this fixture cannot depend on, or
 # pollute, any operator or host git config.
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UNDER_TEST="$ROOT/scripts/relay-preflight.sh"
@@ -25,10 +26,10 @@ command -v git >/dev/null 2>&1 || { echo "skip:relay-preflight-fixture:no-git"; 
 
 _tmpbase="$ROOT/target/plan-scratch"; mkdir -p "$_tmpbase" 2>/dev/null || _tmpbase="${TMPDIR:-/tmp}"
 W="$(mktemp -d "$_tmpbase/relay-preflight.XXXXXX")"
-trap 'rm -rf "$W"' EXIT INT TERM
+scratch_trap 'rm -rf "$W"'
 
 pass=0
-total=11
+total=14
 ok()  { echo "ok:   $1"; pass=$((pass + 1)); }
 bad() { echo "FAIL: $1: $2"; }
 
@@ -48,7 +49,7 @@ case "$_pb" in ./*) _pb="$ROOT/${_pb#./}" ;; esac
 # The deciders relay-preflight.sh shells out to, by their OWN relative
 # location — copied into every scratch repo's scripts/ dir so they judge the
 # SCRATCH tree, never this checkout's.
-DECIDER_FILES="timing-log.sh plan-binary-probe.sh check-sigpipe-verdict-pipelines-added.sh check-plan-binary-probe-usage.sh check-litmus-pin-claims.sh check-script-exec-bits.sh check-added-fragments-parse.sh check-scorable-obligation-added.sh check-gate-step-regimes.sh check-added-test-is-referenced.sh check-refusal-affordance-added.sh check-rust-source-pin-added.sh check-jq-callsite-ratchet.sh preflight-fixtures-default-target.sh check-issue-citation-convention.sh trace-coverage.sh litmus-covering-specs.sh"
+DECIDER_FILES="timing-log.sh plan-binary-probe.sh check-sigpipe-verdict-pipelines-added.sh check-plan-binary-probe-usage.sh check-litmus-pin-claims.sh check-script-exec-bits.sh check-scorable-obligation-added.sh check-gate-step-regimes.sh check-added-test-is-referenced.sh check-refusal-affordance-added.sh check-jq-callsite-ratchet.sh preflight-fixtures-default-target.sh check-issue-citation-convention.sh trace-coverage.sh litmus-covering-specs.sh"
 
 # _seed <dir>: a fresh repo at <dir> with relay-preflight.sh and every decider
 # it calls, one base commit, branch "linux-next".
@@ -80,8 +81,10 @@ _seed() {
     cp "$ROOT/scripts/lua/check-carried-obligations.lua" "$d/scripts/lua/"
     # 1630-dwab: check-no-python-scripts is a Lua decider since its port.
     cp "$ROOT/scripts/lua/check-no-python-scripts.lua" "$d/scripts/lua/"
-    # 2223-afpl: check-added-fragments-parse.sh is a shim over its Lua port.
+    # 2223-afpl: check-added-fragments-parse is Lua since its port.
     cp "$ROOT/scripts/lua/check-added-fragments-parse.lua" "$d/scripts/lua/"
+    # 2242-rspn: check-rust-source-pin-added is a Lua decider since its port.
+    cp "$ROOT/scripts/lua/check-rust-source-pin-added.lua" "$d/scripts/lua/"
     mkdir -p "$d/methodology"
     cp "$ROOT/methodology/convergence.yaml" "$d/methodology/"
     # The runner's command-policy audit writes .cache/metrics/ under the repo
@@ -103,9 +106,9 @@ _seed() {
         printf '# %s\n\nStub spec for the relay-preflight fixture.\n' "$_s" > "$d/openspec/specs/$_s/spec.md"
     done
     echo "base" > "$d/README.md"
-    git -C "$d" init -q -b linux-next
-    git -C "$d" "${GC[@]}" add -A
-    git -C "$d" "${GC[@]}" commit -qm base
+    scratch_git "$d" init -q -b linux-next
+    scratch_git "$d" "${GC[@]}" add -A
+    scratch_git "$d" "${GC[@]}" commit -qm base
 }
 
 # _origin <seed-dir> <bare-dir>: push seed's linux-next to a bare "origin".
@@ -165,22 +168,22 @@ echo "ok: mentions-foo 1"
 exit 0
 EOF
 chmod +x "$BASE_SEED/scripts/test-mentions-foo.sh"
-git -C "$BASE_SEED" "${GC[@]}" add -A
-git -C "$BASE_SEED" "${GC[@]}" commit -qm "add foo-target and its fixture"
+scratch_git "$BASE_SEED" "${GC[@]}" add -A
+scratch_git "$BASE_SEED" "${GC[@]}" commit -qm "add foo-target and its fixture"
 BASE_BARE="$W/base-origin.git"
 _origin "$BASE_SEED" "$BASE_BARE"
 
 CLONE_A="$W/clone-a"
 _clone "$BASE_BARE" "$CLONE_A"
-git -C "$CLONE_A" "${GC[@]}" checkout -qb work/a
+scratch_git "$CLONE_A" "${GC[@]}" checkout -qb work/a
 echo "change a" > "$CLONE_A/a.txt"
-git -C "$CLONE_A" "${GC[@]}" add -A
-git -C "$CLONE_A" "${GC[@]}" commit -qm "work/a: harmless file"
-git -C "$CLONE_A" "${GC[@]}" checkout -qb work/b linux-next
+scratch_git "$CLONE_A" "${GC[@]}" add -A
+scratch_git "$CLONE_A" "${GC[@]}" commit -qm "work/a: harmless file"
+scratch_git "$CLONE_A" "${GC[@]}" checkout -qb work/b linux-next
 echo "change b" > "$CLONE_A/b.txt"
-git -C "$CLONE_A" "${GC[@]}" add -A
-git -C "$CLONE_A" "${GC[@]}" commit -qm "work/b: harmless file"
-git -C "$CLONE_A" "${GC[@]}" checkout -q linux-next
+scratch_git "$CLONE_A" "${GC[@]}" add -A
+scratch_git "$CLONE_A" "${GC[@]}" commit -qm "work/b: harmless file"
+scratch_git "$CLONE_A" "${GC[@]}" checkout -q linux-next
 
 # ── arm 1 ────────────────────────────────────────────────────────────────────
 _run "$CLONE_A" work/a work/b --base origin/linux-next
@@ -200,19 +203,19 @@ fi
 # ── arm 3: --plan determinism ────────────────────────────────────────────────
 CLONE_C="$W/clone-c"
 _clone "$BASE_BARE" "$CLONE_C"
-git -C "$CLONE_C" "${GC[@]}" checkout -qb work/a
+scratch_git "$CLONE_C" "${GC[@]}" checkout -qb work/a
 echo "change a" > "$CLONE_C/a.txt"
-git -C "$CLONE_C" "${GC[@]}" add -A
-git -C "$CLONE_C" "${GC[@]}" commit -qm "work/a: harmless file"
-git -C "$CLONE_C" "${GC[@]}" checkout -qb work/b linux-next
+scratch_git "$CLONE_C" "${GC[@]}" add -A
+scratch_git "$CLONE_C" "${GC[@]}" commit -qm "work/a: harmless file"
+scratch_git "$CLONE_C" "${GC[@]}" checkout -qb work/b linux-next
 echo "change b" > "$CLONE_C/b.txt"
-git -C "$CLONE_C" "${GC[@]}" add -A
-git -C "$CLONE_C" "${GC[@]}" commit -qm "work/b: harmless file"
-git -C "$CLONE_C" "${GC[@]}" checkout -q linux-next
+scratch_git "$CLONE_C" "${GC[@]}" add -A
+scratch_git "$CLONE_C" "${GC[@]}" commit -qm "work/b: harmless file"
+scratch_git "$CLONE_C" "${GC[@]}" checkout -q linux-next
 
 _run "$CLONE_C" --plan work/a work/b --base origin/linux-next
 _plan1="$OUT"; _rc1="$RC"
-git -C "$CLONE_C" "${GC[@]}" checkout -q linux-next
+scratch_git "$CLONE_C" "${GC[@]}" checkout -q linux-next
 _run "$CLONE_C" --plan work/a work/b --base origin/linux-next
 _plan2="$OUT"; _rc2="$RC"
 if [ "$_rc1" = 0 ] && [ "$_rc2" = 0 ] && [ -n "$_plan1" ] && [ "$_plan1" = "$_plan2" ]; then
@@ -226,11 +229,11 @@ fi
 #    listed before it runs ──────────────────────────────────────────────────
 CLONE_D="$W/clone-d"
 _clone "$BASE_BARE" "$CLONE_D"
-git -C "$CLONE_D" "${GC[@]}" checkout -qb work/touch-foo
+scratch_git "$CLONE_D" "${GC[@]}" checkout -qb work/touch-foo
 printf '#!/usr/bin/env bash\necho hi\necho changed\n' > "$CLONE_D/scripts/foo-target.sh"
-git -C "$CLONE_D" "${GC[@]}" add -A
-git -C "$CLONE_D" "${GC[@]}" commit -qm "touch foo-target"
-git -C "$CLONE_D" "${GC[@]}" checkout -q linux-next
+scratch_git "$CLONE_D" "${GC[@]}" add -A
+scratch_git "$CLONE_D" "${GC[@]}" commit -qm "touch foo-target"
+scratch_git "$CLONE_D" "${GC[@]}" checkout -q linux-next
 
 _d_o="$(mktemp "$W/run-out.XXXXXX")"; _d_e="$(mktemp "$W/run-err.XXXXXX")"
 ( cd "$CLONE_D" && bash scripts/relay-preflight.sh work/touch-foo --base origin/linux-next >"$_d_o" 2>"$_d_e" )
@@ -248,7 +251,7 @@ fi
 # ── arm 2: a ref that makes check-bash-dialect red ──────────────────────────
 CLONE_E="$W/clone-e"
 _clone "$BASE_BARE" "$CLONE_E"
-git -C "$CLONE_E" "${GC[@]}" checkout -qb work/bad-dialect
+scratch_git "$CLONE_E" "${GC[@]}" checkout -qb work/bad-dialect
 # ASSEMBLED, never spelled literally: check-bash-dialect's own gate
 # scans THIS file's bytes too, and a literal bash4-ism here would trip it
 # on its own fixture (the same reason litmus-covering-specs.sh assembles
@@ -256,9 +259,9 @@ git -C "$CLONE_E" "${GC[@]}" checkout -qb work/bad-dialect
 _lower='$'"{x,,}"
 printf '#!/usr/bin/env bash\nx="A"\ny=%s\necho "$y"\n' "$_lower" > "$CLONE_E/scripts/bad-dialect.sh"
 chmod +x "$CLONE_E/scripts/bad-dialect.sh"
-git -C "$CLONE_E" "${GC[@]}" add -A
-git -C "$CLONE_E" "${GC[@]}" commit -qm "add an unguarded bash4-ism"
-git -C "$CLONE_E" "${GC[@]}" checkout -q linux-next
+scratch_git "$CLONE_E" "${GC[@]}" add -A
+scratch_git "$CLONE_E" "${GC[@]}" commit -qm "add an unguarded bash4-ism"
+scratch_git "$CLONE_E" "${GC[@]}" checkout -q linux-next
 
 _run "$CLONE_E" work/bad-dialect --base origin/linux-next
 if [ "$RC" = 1 ] && [ "$OUT" = "refused:relay-preflight:deciders:check-bash-dialect" ]; then
@@ -276,18 +279,18 @@ fi
 CLONE_F="$W/clone-f"
 _clone "$BASE_BARE" "$CLONE_F"
 echo "trunk-version" > "$CLONE_F/conflict.txt"
-git -C "$CLONE_F" "${GC[@]}" add -A
-git -C "$CLONE_F" "${GC[@]}" commit -qm "trunk: conflict.txt"
-git -C "$CLONE_F" "${GC[@]}" push -q origin linux-next
-git -C "$CLONE_F" "${GC[@]}" checkout -qb work/conflict HEAD~1
+scratch_git "$CLONE_F" "${GC[@]}" add -A
+scratch_git "$CLONE_F" "${GC[@]}" commit -qm "trunk: conflict.txt"
+scratch_git "$CLONE_F" "${GC[@]}" push -q origin linux-next
+scratch_git "$CLONE_F" "${GC[@]}" checkout -qb work/conflict HEAD~1
 echo "work-version" > "$CLONE_F/conflict.txt"
-git -C "$CLONE_F" "${GC[@]}" add -A
-git -C "$CLONE_F" "${GC[@]}" commit -qm "work/conflict: conflict.txt"
-git -C "$CLONE_F" "${GC[@]}" checkout -q linux-next
+scratch_git "$CLONE_F" "${GC[@]}" add -A
+scratch_git "$CLONE_F" "${GC[@]}" commit -qm "work/conflict: conflict.txt"
+scratch_git "$CLONE_F" "${GC[@]}" checkout -q linux-next
 
 _run "$CLONE_F" work/conflict --base origin/linux-next
-_status_after="$(git -C "$CLONE_F" status --porcelain)"
-_branch_after="$(git -C "$CLONE_F" symbolic-ref --short -q HEAD)"
+_status_after="$(scratch_git "$CLONE_F" status --porcelain)"
+_branch_after="$(scratch_git "$CLONE_F" symbolic-ref --short -q HEAD)"
 if [ "$RC" = 2 ] && [ "$OUT" = "refused:relay-preflight:merge:merge-conflict:work/conflict" ] \
     && [ -z "$_status_after" ] && [ "$_branch_after" = "linux-next" ]; then
     ok "arm5: merge conflict refuses exit 2, tree restored clean on linux-next"
@@ -299,10 +302,10 @@ fi
 # ── arm 6: NEGATIVE CONTROL — dirty worktree refused BEFORE any fetch ──────
 CLONE_G="$W/clone-g"
 _clone "$BASE_BARE" "$CLONE_G"
-_relay_before="$(git -C "$CLONE_G" for-each-ref --format='%(refname)' refs/heads/relay/ | wc -l)"
+_relay_before="$(scratch_git "$CLONE_G" for-each-ref --format='%(refname)' refs/heads/relay/ | wc -l)"
 echo "dirt" >> "$CLONE_G/README.md"
 _run "$CLONE_G" work/a --base origin/linux-next
-_relay_after="$(git -C "$CLONE_G" for-each-ref --format='%(refname)' refs/heads/relay/ | wc -l)"
+_relay_after="$(scratch_git "$CLONE_G" for-each-ref --format='%(refname)' refs/heads/relay/ | wc -l)"
 if [ "$RC" = 1 ] && [ "$OUT" = "refused:relay-preflight:dirty-worktree" ] && [ "$_relay_before" = "$_relay_after" ]; then
     ok "arm6: a dirty worktree is refused before any fetch (no scratch relay/ branch appears)"
 else
@@ -335,17 +338,17 @@ echo "FAIL: zz-b refuses on purpose"
 exit 1
 EOF
 chmod +x "$Z_SEED"/scripts/zz-subject.sh "$Z_SEED"/scripts/test-zz-a.sh "$Z_SEED"/scripts/test-zz-b.sh
-git -C "$Z_SEED" "${GC[@]}" add -A
-git -C "$Z_SEED" "${GC[@]}" commit -qm "zz-subject and two fixtures that mention it"
+scratch_git "$Z_SEED" "${GC[@]}" add -A
+scratch_git "$Z_SEED" "${GC[@]}" commit -qm "zz-subject and two fixtures that mention it"
 Z_BARE="$W/zz-origin.git"
 _origin "$Z_SEED" "$Z_BARE"
 CLONE_Z="$W/clone-z"
 _clone "$Z_BARE" "$CLONE_Z"
-git -C "$CLONE_Z" "${GC[@]}" checkout -qb work/zz
+scratch_git "$CLONE_Z" "${GC[@]}" checkout -qb work/zz
 printf '#!/usr/bin/env bash\necho v2\n' > "$CLONE_Z/scripts/zz-subject.sh"
-git -C "$CLONE_Z" "${GC[@]}" add -A
-git -C "$CLONE_Z" "${GC[@]}" commit -qm "work/zz: touch zz-subject"
-git -C "$CLONE_Z" "${GC[@]}" checkout -q linux-next
+scratch_git "$CLONE_Z" "${GC[@]}" add -A
+scratch_git "$CLONE_Z" "${GC[@]}" commit -qm "work/zz: touch zz-subject"
+scratch_git "$CLONE_Z" "${GC[@]}" checkout -q linux-next
 _run "$CLONE_Z" work/zz --base origin/linux-next
 if [ "$RC" != 0 ] && [ "$OUT" = "refused:relay-preflight:fixtures:test-zz-b" ]; then
     ok "arm7: a fixture that drains stdin does not end the loop; the next fixture runs and its refusal is reported"
@@ -360,17 +363,17 @@ fi
 # of the tool must take over, so the run reaches ok: and says it re-executed.
 CLONE_H="$W/clone-h"
 _clone "$BASE_BARE" "$CLONE_H"
-git -C "$CLONE_H" "${GC[@]}" checkout -qb work/port
+scratch_git "$CLONE_H" "${GC[@]}" checkout -qb work/port
 # The retired decider is a .sh, as a real port's is: deleting one pays the
 # shell-to-lua carried obligation, so the landing switch (arms 9-10) does not
 # refuse this ref for an unrelated reason. It was check-no-python-scripts until
 # 1630-dwab ported that one to Lua; deleting a .lua pays nothing.
-git -C "$CLONE_H" "${GC[@]}" rm -q scripts/check-jq-callsite-ratchet.sh
+scratch_git "$CLONE_H" "${GC[@]}" rm -q scripts/check-jq-callsite-ratchet.sh
 sed -i.bak -e 's/ check-jq-callsite-ratchet / /' -e '/^        check-jq-callsite-ratchet) /d' "$CLONE_H/scripts/relay-preflight.sh"
 rm -f "$CLONE_H/scripts/relay-preflight.sh.bak"
-git -C "$CLONE_H" "${GC[@]}" add -A
-git -C "$CLONE_H" "${GC[@]}" commit -qm "port: retire check-jq-callsite-ratchet and repoint the tool"
-git -C "$CLONE_H" "${GC[@]}" checkout -q linux-next
+scratch_git "$CLONE_H" "${GC[@]}" add -A
+scratch_git "$CLONE_H" "${GC[@]}" commit -qm "port: retire check-jq-callsite-ratchet and repoint the tool"
+scratch_git "$CLONE_H" "${GC[@]}" checkout -q linux-next
 _run "$CLONE_H" work/port --base origin/linux-next
 if [ "$RC" = 0 ] && grep -q '^ok:relay-preflight:' <<<"$OUT" && grep -q '^item: reexec:merged-copy ok' <<<"$ERR" \
    && ! grep -q 'No such file' <<<"$ERR"; then
@@ -386,13 +389,13 @@ fi
 # PRE-FIX: relay-preflight runs no such decider and arm 9 reads ok:.
 CLONE_W="$W/clone-w"
 _clone "$BASE_BARE" "$CLONE_W"
-git -C "$CLONE_W" "${GC[@]}" checkout -qb work/silent
+scratch_git "$CLONE_W" "${GC[@]}" checkout -qb work/silent
 printf '\n# touched\n' >> "$CLONE_W/scripts/check-litmus-pin-claims.sh"
-git -C "$CLONE_W" "${GC[@]}" add -A
-git -C "$CLONE_W" "${GC[@]}" commit -qm "touch a decider, pay nothing"
-git -C "$CLONE_W" "${GC[@]}" checkout -qb work/waived
-git -C "$CLONE_W" "${GC[@]}" commit -q --allow-empty -m "waive it" -m "Carried-Waiver: shell-to-lua no-item-in-reach"
-git -C "$CLONE_W" "${GC[@]}" checkout -q linux-next
+scratch_git "$CLONE_W" "${GC[@]}" add -A
+scratch_git "$CLONE_W" "${GC[@]}" commit -qm "touch a decider, pay nothing"
+scratch_git "$CLONE_W" "${GC[@]}" checkout -qb work/waived
+scratch_git "$CLONE_W" "${GC[@]}" commit -q --allow-empty -m "waive it" -m "Carried-Waiver: shell-to-lua no-item-in-reach"
+scratch_git "$CLONE_W" "${GC[@]}" checkout -q linux-next
 _run "$CLONE_W" work/silent --base origin/linux-next
 if [ "$RC" = 1 ] && [ "$OUT" = "refused:relay-preflight:deciders:check-carried-obligations" ] \
    && grep -q 'violation:carried:shell-to-lua:silent' <<<"$ERR"; then
@@ -425,18 +428,18 @@ cat > "$V_SEED/scripts/test-vv-env.sh" <<'EOF'
 echo "ok: vv-env 1"
 EOF
 chmod +x "$V_SEED"/scripts/vv-subject.sh "$V_SEED"/scripts/test-vv-env.sh
-git -C "$V_SEED" "${GC[@]}" add -A
-git -C "$V_SEED" "${GC[@]}" commit -qm "vv-subject and an env-probing fixture"
+scratch_git "$V_SEED" "${GC[@]}" add -A
+scratch_git "$V_SEED" "${GC[@]}" commit -qm "vv-subject and an env-probing fixture"
 V_BARE="$W/vv-origin.git"
 _origin "$V_SEED" "$V_BARE"
 CLONE_V="$W/clone-v"
 _clone "$V_BARE" "$CLONE_V"
-git -C "$CLONE_V" "${GC[@]}" checkout -qb work/vv
+scratch_git "$CLONE_V" "${GC[@]}" checkout -qb work/vv
 printf '#!/usr/bin/env bash\necho v2\n' > "$CLONE_V/scripts/vv-subject.sh"
 printf '# a merged copy that differs, so the relay re-executes it\n' >> "$CLONE_V/scripts/relay-preflight.sh"
-git -C "$CLONE_V" "${GC[@]}" add -A
-git -C "$CLONE_V" "${GC[@]}" commit -qm "work/vv: touch vv-subject and the tool"
-git -C "$CLONE_V" "${GC[@]}" checkout -q linux-next
+scratch_git "$CLONE_V" "${GC[@]}" add -A
+scratch_git "$CLONE_V" "${GC[@]}" commit -qm "work/vv: touch vv-subject and the tool"
+scratch_git "$CLONE_V" "${GC[@]}" checkout -q linux-next
 _run "$CLONE_V" work/vv --base origin/linux-next
 if [ "$RC" = 0 ] && grep -q '^ok:relay-preflight:' <<<"$OUT" && grep -q '^item: reexec:merged-copy ok' <<<"$ERR" \
    && grep -q '^item: fixture:test-vv-env ok' <<<"$ERR"; then
@@ -444,6 +447,75 @@ if [ "$RC" = 0 ] && grep -q '^ok:relay-preflight:' <<<"$OUT" && grep -q '^item: 
 else
     bad "arm11" "rc=$RC out=[$OUT]"
     printf '%s\n' "$ERR" | grep -vE '^item: .* ok ' | sed 's/^/    err: /' | head -12
+fi
+
+# ── arms 12-14: the caller's checkout is left as it was found (2252-2mnf) ───
+# PRE-FIX: after a green run HEAD was refs/heads/relay/<utc> (yoga: the next
+# commit landed there and the push sent the old head).
+CLONE_R="$W/clone-r"
+_clone "$BASE_BARE" "$CLONE_R"
+scratch_git "$CLONE_R" "${GC[@]}" checkout -qb work/r
+echo "change r" > "$CLONE_R/r.txt"
+scratch_git "$CLONE_R" "${GC[@]}" add -A
+scratch_git "$CLONE_R" "${GC[@]}" commit -qm "work/r: harmless file"
+_h0="$(scratch_git "$CLONE_R" symbolic-ref HEAD)"
+_run "$CLONE_R" work/r --base origin/linux-next
+_h1="$(scratch_git "$CLONE_R" symbolic-ref HEAD)"; _rc1="$RC"; _e1="$ERR"
+_relay="$(scratch_git "$CLONE_R" for-each-ref --format='%(refname:short)' refs/heads/relay/)"
+_run "$CLONE_R" --plan work/r --base origin/linux-next
+_h2="$(scratch_git "$CLONE_R" symbolic-ref HEAD)"; _rc2="$RC"
+if [ "$_rc1" = 0 ] && [ "$_rc2" = 0 ] && [ "$_h1" = "$_h0" ] && [ "$_h2" = "$_h0" ] && [ -n "$_relay" ] \
+   && grep -q "^note:relay-preflight:restored:work/r — the merged tree is on $_relay" <<<"$_e1"; then
+    ok "arm12: a green run and a --plan run leave HEAD on $_h0, and name the kept relay branch"
+else
+    bad "arm12" "rc=$_rc1/$_rc2 before=$_h0 after=$_h1 plan=$_h2 relay=[$_relay]"
+fi
+
+scratch_git "$CLONE_E" "${GC[@]}" checkout -q work/bad-dialect
+_run "$CLONE_E" work/bad-dialect --base origin/linux-next
+_h1="$(scratch_git "$CLONE_E" symbolic-ref HEAD)"
+scratch_git "$CLONE_R" "${GC[@]}" checkout -q --detach work/r
+_d0="$(scratch_git "$CLONE_R" rev-parse HEAD)"
+_rcr="$RC"; _run "$CLONE_R" work/r --base origin/linux-next
+_d1="$(scratch_git "$CLONE_R" rev-parse HEAD)"
+if [ "$_rcr" = 1 ] && [ "$_h1" = refs/heads/work/bad-dialect ] && [ "$RC" = 0 ] && [ "$_d1" = "$_d0" ] \
+   && ! scratch_git "$CLONE_R" symbolic-ref -q HEAD >/dev/null; then
+    ok "arm13: a refused run leaves HEAD on its branch; a detached caller is left detached at its SHA"
+else
+    bad "arm13" "refused rc=$_rcr head=$_h1; detached rc=$RC $_d0 -> $_d1"
+fi
+
+# A deadline kill: a selected fixture hangs, the group gets TERM.
+K_SEED="$W/k-seed"
+_seed "$K_SEED"
+printf '#!/usr/bin/env bash\necho v1\n' > "$K_SEED/scripts/kk-subject.sh"
+printf '#!/usr/bin/env bash\n# exercises scripts/kk-subject.sh\n: > "%s/kk-running"\nsleep 60\n' "$W" > "$K_SEED/scripts/test-kk-hang.sh"
+chmod +x "$K_SEED"/scripts/kk-subject.sh "$K_SEED"/scripts/test-kk-hang.sh
+scratch_git "$K_SEED" "${GC[@]}" add -A
+scratch_git "$K_SEED" "${GC[@]}" commit -qm "kk-subject and a fixture that hangs"
+_origin "$K_SEED" "$W/kk-origin.git"
+CLONE_K="$W/clone-k"
+_clone "$W/kk-origin.git" "$CLONE_K"
+scratch_git "$CLONE_K" "${GC[@]}" checkout -qb work/kk
+printf '#!/usr/bin/env bash\necho v2\n' > "$CLONE_K/scripts/kk-subject.sh"
+scratch_git "$CLONE_K" "${GC[@]}" add -A
+scratch_git "$CLONE_K" "${GC[@]}" commit -qm "work/kk"
+set -m
+( cd "$CLONE_K" && exec bash scripts/relay-preflight.sh work/kk --base origin/linux-next >"$W/kk.out" 2>&1 </dev/null ) &
+_kp=$!
+set +m
+_n=0
+while [ ! -e "$W/kk-running" ] && kill -0 "$_kp" 2>/dev/null && [ "$_n" -lt 600 ]; do sleep 0.1; _n=$((_n + 1)); done
+_mid="$(scratch_git "$CLONE_K" symbolic-ref --short HEAD)"
+kill -TERM -- "-$_kp" 2>/dev/null
+wait "$_kp" 2>/dev/null; _krc=$?
+_h1="$(scratch_git "$CLONE_K" symbolic-ref HEAD)"
+case "$_mid" in (relay/*) _m=1 ;; (*) _m=0 ;; esac
+if [ "$_m" = 1 ] && [ "$_krc" = 143 ] && [ "$_h1" = refs/heads/work/kk ]; then
+    ok "arm14: a TERM mid-fixture (the deadline kill) leaves HEAD on its branch"
+else
+    bad "arm14" "mid=$_mid rc=$_krc head=$_h1"
+    sed 's/^/    /' "$W/kk.out" | tail -5
 fi
 
 [ "$pass" = "$total" ] && echo "ok:relay-preflight:$pass/$total" || echo "fail:relay-preflight:$pass/$total"

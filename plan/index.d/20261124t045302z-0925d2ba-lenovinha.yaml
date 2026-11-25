@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: imagegen-containers-fail-when-the-gpu-cannot-be-mounted
+    field: status
+    value: completed
+    ts: "2026-11-24T04:53:02Z"
+    host: lenovinha
+
+events:
+  - packet_id: imagegen-containers-fail-when-the-gpu-cannot-be-mounted
+    event:
+      type: completed
+      ts: "2026-11-24T04:53:02Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: land:91d729c2ac3eb91be9f220013a70d9cdafe2a9de
+  - packet_id: imagegen-containers-fail-when-the-gpu-cannot-be-mounted
+    event:
+      type: note
+      ts: "2026-11-24T04:53:02Z"
+      host: lenovinha
+      summary: |-
+        landed as PR #1458

@@ -1,0 +1,30 @@
+# @trace order:2130-fl0r
+name: litmus:build-floor
+spec: ci-release
+phase: pre-build
+description: ./build.sh --floor (scripts/lua/build-floor.lua), the required local check before a work/* push (operator 2026-11-20), passes a clean change in under 120 s and goes red by name on an unparsable changed .lua, a changed .rs that is not rustfmt-clean, and a litmus the packet names that does not exist; a size:long litmus is skipped by name, never silently
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains scripts/lua/build-floor.lua and scripts/lua/test-build-floor.lua
+  - git and cargo (rustfmt) in PATH; the fmt arm skips by name without cargo
+
+critical_path:
+  - step: "five arms on a scratch git repo: clean ok under 120 s; lua-parse red; fmt red; a long litmus skipped by name; a missing packet litmus red"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; TILLANDSIAS_PLAN_BIN=\"$MFPLAN\" \"$MFPLAN\" script run scripts/lua/test-build-floor.lua"
+    timeout_ms: 300000
+    expected_behavior: "ok:build-floor:5-arms"
+
+observability:
+  traces:
+    - "@trace order:2130-fl0r"
+  expected_log: "ok:build-floor:5-arms"
+  log_fields:
+    spec: "ci-release"
+    test: "build-floor"
+    artifact: "scripts/lua/build-floor.lua + scripts/lua/test-build-floor.lua + build.sh --floor"
+
+rollback:
+  on_failure: "read the arm named in the violation line; scripts/lua/build-floor.lua carries each check in its own numbered block"
+  command: "cat scripts/lua/build-floor.lua"

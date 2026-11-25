@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: fixtures-declare-inputs-on-touch-advisory-and-port-checklist
+    order: 2263-6xsp
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      Switch fixture input declarations (2261-8gx5) to an owner-adds-it-on-touch model: an ADVISORY hint when a change edits a scripts/test-* fixture that reads the whole scripts/ directory and declares nothing, and a line in the shell-to-lua port guidance so every new port declares.
+    context: |
+      2261-8gx5 (#1424) shipped the mechanism and 10 declarations; per-fixture verification paced it at ~5 fixtures (~-13 s of intake on a scripts change) per batch against ~108 declarable fixtures. Coordinator direction 2026-11-23: stop batching; have each fixture's owner add `# inputs:` when they next touch it (the --check-declared decider keeps every declaration honest), surfaced by an advisory hint (never a refusal) and by the port guidance porters already read (check-carried-obligations.lua's "pay it:" hint).
+    exit_criteria:
+      - "gate-changed.sh --check-declared prints one note:…:hint line per CHANGED scripts/test-* fixture that reads scripts/ and declares nothing, naming `# inputs:`; it never changes the exit code"
+      - "check-carried-obligations.lua's port hint tells a porter that a ported test fixture declares its inputs"
+      - "an arm: a changed undeclared scripts/ reader gets the hint and exit 0; a declared one gets none"
+    unscoreable: "unpinnable-until-the-guard-exists: the hint arm is the deliverable."
+    next_action: "Defer --check-declared's exit until the map exists; add the hint pass and the arm."
+    provenance: coordinator direction (macuahuitl-fedora, 2026-11-23); filed by lenovinha.
+    related: [2261-8gx5]
+    events:
+      - {type: filed, ts: '2026-11-23T11:41:42Z', host: lenovinha, summary: fixtures declare inputs on touch advisory and port checklist filed}

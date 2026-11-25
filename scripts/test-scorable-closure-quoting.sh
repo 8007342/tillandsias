@@ -96,7 +96,7 @@ verdict() {
 #           in the form it was originally written, which is what the guard
 #           refused.
 v="$(verdict '    verifiable_closure: "scripts/test-gate-step-skip-exit.sh passes (10/10 on lenovinha)"')"
-if printf '%s' "$v" | grep -q '^ok:scorable-obligations'; then
+if grep -q <<<"$v" '^ok:scorable-obligations'; then
     ok "a double-quoted closure naming a script is accepted — the refusal that provoked this row"
 else
     bad "a double-quoted closure naming a script is still refused: $(printf '%s' "$v" | head -1)"
@@ -106,7 +106,7 @@ fi
 #           written as a blanket strip of leading punctuation it could break
 #           this, and nothing else would have noticed.
 v="$(verdict '    verifiable_closure: scripts/test-gate-step-skip-exit.sh passes')"
-if printf '%s' "$v" | grep -q '^ok:scorable-obligations'; then
+if grep -q <<<"$v" '^ok:scorable-obligations'; then
     ok "an unquoted closure is still accepted — the fix did not trade one form for another"
 else
     bad "an unquoted closure regressed: $(printf '%s' "$v" | head -1)"
@@ -115,7 +115,7 @@ fi
 # ── ARM 3 — SINGLE QUOTES, the other YAML scalar style. A filer who reaches for
 #           quotes at all may reach for either.
 v="$(verdict "    verifiable_closure: 'scripts/test-gate-step-skip-exit.sh passes'")"
-if printf '%s' "$v" | grep -q '^ok:scorable-obligations'; then
+if grep -q <<<"$v" '^ok:scorable-obligations'; then
     ok "a single-quoted closure is accepted — both YAML scalar styles judged alike"
 else
     bad "a single-quoted closure is refused: $(printf '%s' "$v" | head -1)"
@@ -127,7 +127,7 @@ fi
 #           have opened a hole wider than the bug it closed: every row could
 #           satisfy the gate by naming nothing at all, in quotes.
 v="$(verdict '    verifiable_closure: ""')"
-if printf '%s' "$v" | grep -q '^violation:scorable-obligation-missing'; then
+if grep -q <<<"$v" '^violation:scorable-obligation-missing'; then
     ok "NEGATIVE CONTROL: an empty quoted closure still refuses — unquoting cannot launder silence into a pass"
 else
     bad "an empty quoted closure now PASSES — the fix opened a hole: $(printf '%s' "$v" | head -1)"
@@ -137,7 +137,7 @@ fi
 #           and must still refuse; otherwise arm 1 would be indistinguishable
 #           from "any quoted string passes".
 v="$(verdict '    verifiable_closure: "we will know it works when the operator is happy"')"
-if printf '%s' "$v" | grep -q '^violation:scorable-obligation-missing'; then
+if grep -q <<<"$v" '^violation:scorable-obligation-missing'; then
     ok "NEGATIVE CONTROL: quoted PROSE still refuses — unquoting exposes the value to the patterns, it does not bypass them"
 else
     bad "quoted prose now passes, so the patterns are no longer being applied: $(printf '%s' "$v" | head -1)"

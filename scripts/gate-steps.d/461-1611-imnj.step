@@ -16,3 +16,4 @@ STEP_LANES="checkout"
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
 STEP_READS="scripts/lua/check-checkout-writers.lua scripts/lua/test-checkout-writers.lua scripts/test-litmus-step-pipefail.sh"
+STEP_SECOND_REGIME="yolanda 2026-11-24 msys ok:checkout-writers-fixture:22 arms at f1f56dd04 (run directly in a checkout with history; fleet-run's one-commit tree prints not run for 10-12 and 17)"

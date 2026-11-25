@@ -101,7 +101,7 @@ matched=0
 
 for h in $stems; do
     rows=$((rows + 1))
-    if printf '%s' "$h" | grep -qE "$buckets"; then
+    if grep -qE <<<"$h" "$buckets"; then
         n="$(printf '%s\n' "$entries" | grep -cE "z-([0-9a-f]{8}-)?$h\.md$")"
         echo "unattributed-bucket $h entries=$n"
         continue

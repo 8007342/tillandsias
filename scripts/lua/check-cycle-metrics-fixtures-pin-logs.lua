@@ -23,11 +23,10 @@ local PINNED = { "TILLANDSIAS_EXPERT_USAGE_LOG", "TILLANDSIAS_CYCLE_FLOW_LOG", "
 local EXEMPT = {
     ["scripts/test-metrics-log-path-agreement.sh"] = "tests how the DEFAULT paths resolve; pinning would erase its subject",
     ["scripts/test-metrics-log-fallback-is-loud.sh"] = "tests the defaulted-path fallback itself",
-    ["scripts/test-cycle-flow-emit-idempotency.sh"] = "emit-only (--emit-flow, its own FLOW_LOG); never reports",
-    ["scripts/test-timing-record-carries-reproduced.sh"] = "emit-only (--emit-timing / --emit-timing-batch); never reports",
+    ["scripts/lua/test-cycle-flow-emit-idempotency.lua"] = "emit-only (--emit-flow, its own FLOW_LOG); never reports",
+    ["scripts/lua/test-timing-record-carries-reproduced.lua"] = "emit-only (--emit-timing / --emit-timing-batch); never reports",
     ["scripts/test-mcp-transport-death-trace.sh"] = "quotes the outage grep as text; never runs the script",
     ["scripts/test-tool-dispatch-lib.sh"] = "lists the script as a converted file; never runs it",
-    ["scripts/test-gate-step-metrics-isolation.sh"] = "names it in prose only; drives build.sh steps, not the reporter",
     ["scripts/lua/test-gate-step-private-metrics-fallback.lua"] = "names it in prose only; never runs it",
 }
 

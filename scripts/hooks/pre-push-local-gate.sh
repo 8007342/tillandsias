@@ -139,6 +139,26 @@ if [[ -z "${REFS//[[:space:]]/}" ]]; then
     echo "${GRN}✓ local gate: no refs on stdin — git is pushing nothing (already up to date, or a non-fast-forward it has already declined). Nothing to gate; if you expected a push, fetch and rebase.${RST}" >&2
     exit 0
 fi
+# ── ORDER 2239-rmun: A HOST THAT CANNOT REACH THE REMOTE STOPS, NAMED ────────
+# Before any gating: a push that cannot land must not first spend minutes of
+# gate (the user's direction 2026-11-22: stop work, do not retry with backoff).
+# The probe only reads; it never runs gh auth login/refresh.
+# TILLANDSIAS_SKIP_REMOTE_PROBE=1 is the fixture's (and an offline mirror's) way out.
+if [ "${TILLANDSIAS_SKIP_REMOTE_PROBE:-0}" != 1 ] && [ -z "${CI:-}" ] && [ -z "${GITHUB_ACTIONS:-}" ] \
+   && [ -f scripts/lua/probe-remote-reachable.lua ]; then
+    _rr_bin="$(. scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null || true)"
+    if [ -n "$_rr_bin" ]; then
+        _rr_rc=0; ( . scripts/plan-binary-probe.sh && . scripts/remote-probe-judge.sh && remote_probe_judge "$_rr_bin" ) || _rr_rc=$?
+        if [ "$_rr_rc" -ne 0 ] && [ "$_rr_rc" -ne 10 ]; then echo "could-not-run:remote-probe:judge-error:rc=$_rr_rc — the remote was not judged (2256-tt3v)" >&2; fi
+        if [ "$_rr_rc" -eq 10 ]; then
+            echo "${RED:-}✗ pre-push: refused:pre-push:remote-unreachable — this host cannot reach the remote (2239-rmun)${RST:-}" >&2
+            echo "  why: a push that cannot land must not spend the gate first, and a loop must not retry it" >&2
+            echo "  remedy: a human restores this host's access (the probe's remedy is above); SUSPEND work on this host until \`tillandsias-plan script run scripts/lua/probe-remote-reachable.lua\` answers ok" >&2
+            exit 1
+        fi
+    fi
+fi
+
 # ORDER 1315-4a7j. THE AFFORDANCE, in one place so every refusal carries the
 # COMPLETE preferred workflow rather than a fragment of it. A warning that names
 # a better lane without saying how to use it leaves the reader exactly where the
@@ -1637,7 +1657,7 @@ attempt_plan_only_lane() {
             # It is not free, either: it would oblige every fixture that drives
             # this lane with a fragment-bearing push to provision this script in
             # its scratch tree. Measured — an earlier revision of this fix did
-            # refuse here, and broke test-gate-stamp-scope.sh case 7, whose tree
+            # refuse here, and broke test-gate-stamp-scope.lua case 7, whose tree
             # legitimately provisions a minimal set. Scope kept to the binary,
             # which is what 1124-7f3u is about.
             LANE_NOTES+=("scripts/lua/check-fragment-status-loss.lua absent — skipped")
@@ -1693,14 +1713,17 @@ attempt_plan_only_lane() {
     # fragment at its author was bypassed by the only path that skips the build,
     # which is the path fragments actually take. Measured windows 2026-08-15:
     # `packets: [unclosed` pushed clean through this lane.
-    if [[ -f scripts/check-added-fragments-parse.sh ]]; then
-        if ! out="$(bash scripts/check-added-fragments-parse.sh 2>&1)"; then
+    # ORDER 2223-afpl: the gate is Lua on `script run`, on the plan_bin this
+    # lane resolved above; its capability was checked before the status-loss
+    # guard, and a guard that cannot run is a refusal (787-f7dh).
+    if [[ -f scripts/lua/check-added-fragments-parse.lua ]]; then
+        if ! out="$(TILLANDSIAS_REPO_ROOT="$REPO_ROOT" TILLANDSIAS_SCRIPT_RUNNER_BIN="$plan_bin" "$plan_bin" script run scripts/lua/check-added-fragments-parse.lua 2>&1)"; then
             echo "plan-only lane: validation FAILED — check-added-fragments-parse refused (full gate required):" >&2
             echo "$out" | head -6 | sed 's/^/  /' >&2
             return 1
         fi
     else
-        LANE_NOTES+=("scripts/check-added-fragments-parse.sh absent — skipped")
+        LANE_NOTES+=("scripts/lua/check-added-fragments-parse.lua absent — skipped")
     fi
 
     # ORDER 1069-5sp4: THE SCORABLE-OBLIGATION GUARD CANNOT RUN
@@ -1738,7 +1761,7 @@ attempt_plan_only_lane() {
     # it directly and the full gate fails there. So fail-closed bought nothing in
     # production and broke the instruments.
     #
-    # test-gate-stamp-scope.sh's own case-7 note records this exact substitution
+    # test-gate-stamp-scope.lua's own case-7 note records this exact substitution
     # one dependency over: without yq on macOS that arm "stopped testing the
     # lane's stamp handling and started testing tool availability". A fixture
     # that fails for want of a copied script is measuring the fixture.
@@ -1970,7 +1993,7 @@ enforce_stamp_scope() {
         # coordinator closure after a scoped land was refused here. The lane
         # validates the whole outgoing diff and declines anything that is not
         # plan-only, so a code class outside the scope still reaches the refusal
-        # below (test-gate-stamp-scope.sh case 9).
+        # below (test-gate-stamp-scope.lua case 9).
         if attempt_plan_only_lane; then
             exit 0
         fi

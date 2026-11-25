@@ -273,7 +273,7 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     # before the gate — the only window that cannot race. A .step file's
     # numeric prefix is chosen at authoring time; the integrate above can
     # bring in another host's step with the same prefix, and the gate's own
-    # fixture (test-gate-step-append-no-conflict.sh, arm 7) then refuses the
+    # fixture (test-gate-step-append-no-conflict.lua, arm 7) then refuses the
     # tree after the full gate has run. MEASURED 2026-09-13 (lenovinha): 215,
     # 255 and 280 collided, the last one after following the "pick it after
     # the integrate" advice exactly; each cost a full re-gate. The allocator
@@ -724,9 +724,11 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     # runs a gh auth command (1025-a896). The delay is overridable so the
     # fixture (scripts/lua/test-land-auth-retry.lua) does not wait.
     _auth_retried=0
+    # LANGUAGE=en (2281-amjg): the verdicts below match git's English. Not LC_ALL=C:
+    # the push runs the hooks, and their character handling must not change.
     while :; do
     if [ -n "$_bounder" ]; then
-        "$_bounder" "$_push_timeout" git push origin "HEAD:refs/heads/$BRANCH" > "$_plog" 2>&1
+        LANGUAGE=en "$_bounder" "$_push_timeout" git push origin "HEAD:refs/heads/$BRANCH" > "$_plog" 2>&1
         rc=$?
     else
         # No coreutils timeout (some macOS hosts without gnu-coreutils): do not
@@ -739,7 +741,7 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         # better than silence, but it is not a fix, and the packet says so.
         echo "land: warn — no 'timeout' or 'gtimeout' found; push is UNBOUNDED on this host (1131-iax2)" >&2
         echo "land:        install GNU coreutils to bound it: brew install coreutils" >&2
-        git push origin "HEAD:refs/heads/$BRANCH" > "$_plog" 2>&1
+        LANGUAGE=en git push origin "HEAD:refs/heads/$BRANCH" > "$_plog" 2>&1
         rc=$?
     fi
     if [ "$rc" -ne 0 ] && [ "$_auth_retried" -eq 0 ] \
@@ -802,7 +804,7 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         rm -f "$_plog"; exit 7
     fi
     # END ORDER 1131-iax2 push bound — this marker is load-bearing: the mutation
-    # control in test-land-push-bounded.sh strips from the ORDER banner to here
+    # control in test-land-push-bounded.lua strips from the ORDER banner to here
     # to rebuild the pre-fix (unbounded) push. If it moves, that arm refuses to
     # prove anything rather than passing vacuously.
     if [ "$rc" -ne 0 ]; then

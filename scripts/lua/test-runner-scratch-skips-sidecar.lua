@@ -1,5 +1,5 @@
--- @trace order:2118-ywk7, spec:ci-release
--- @env PATH HOME TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
+-- @trace order:2118-ywk7, order:2332-5r8v, spec:ci-release
+-- @env PATH HOME
 --
 -- test-runner-scratch-skips-sidecar.lua — priority:build-speed. A litmus-runner
 -- start in a scratch project (a copy of scripts/, no crates/) under
@@ -23,6 +23,10 @@ local function run(argv, opts)
 end
 local ROOT = text.trim(run({ "git", "rev-parse", "--show-toplevel" }).stdout or "")
 if ROOT == "" then verdict.could_not_run("runner-scratch-skips-sidecar", "not inside a git checkout") end
+-- 2332-5r8v: the plan binary as an absolute path. The variable handed on raw, when unset or
+-- relative, resolved to nothing in the scratch project and every arm read as its own red.
+local PLAN = require("common.fixture").plan_binary()
+if PLAN == "" then verdict.could_not_run("runner-scratch-skips-sidecar", "no-plan-binary") end
 local REL = "target/plan-scratch/ywk7-" .. tostring(math.random(100000, 999999)) .. tostring(math.random(100000, 999999))
 local W = ROOT .. "/" .. REL
 fs.mkdir(REL .. "/lt")
@@ -50,7 +54,6 @@ check("arm 1: build-sidecar.sh in a tree with no sidecar crate refuses by name, 
     b.code == 3 and text.contains(be, "could-not-run:build-sidecar:no-sidecar-crate:"),
     "rc=" .. tostring(b.code) .. " " .. be:sub(1, 200))
 
-local PLAN = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN") or env.get("TILLANDSIAS_PLAN_BIN") or ""
 local r = run({ "bash", PJ .. "/scripts/run-litmus-test.sh", "spec-traceability", "--phase", "pre-build",
     "--size", "instant", "--compact" }, { cwd = PJ, env = {
         PATH = env.get("PATH"), HOME = env.get("HOME"), TILLANDSIAS_PLAN_BIN = PLAN,

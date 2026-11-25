@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: declare-inputs-on-the-costliest-whole-scripts-readers
+    order: 2269-s7gr
+    status: ready
+    kind: debt
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 3
+    title: |
+      Declare `# inputs:` on the costliest fixtures that gate-changed reads as depending on all of scripts/, so a scripts change stops selecting them when it does not touch their real inputs.
+    context: |
+      Coordinator direction 2026-11-23 (the intake lever after .step batch 3). Measured on lenovinha, one at a time: 128 fixtures derive a whole-scripts/ input and together cost 520 s on EVERY scripts change; the top four are 261 s. Each candidate is hand-read: a fixture that executes build.sh or the land queue (test-gate-step-private-metrics-fallback 98 s, test-land-queue 48 s) has an unbounded source closure and STAYS wide, as does one that copies scripts/ whole (append-event-archived-refusal-is-hermetic); a bounded one gets the concrete closure declared. Stacked on 2261-8gx5 (#1424), which carries the declaration mechanism and its decider.
+    exit_criteria:
+      - "each declared fixture's list covers every concrete input gate-changed derives for it, plus its transitive sources (the decider holds it)"
+      - "each fixture left wide is named with its reason"
+      - "the scripts-change selection shrinks by the declared fixtures' measured seconds"
+    unscoreable: "hand-verified declarations; the decider is the guard."
+    next_action: "test-salvage-audit (74 s) and test-claims-across-branches (41 s) first."
+    provenance: coordinator direction (macuahuitl-fedora, 2026-11-23); filed by lenovinha.
+    related: [2261-8gx5, 2263-6xsp, 2266-4w3c]
+    events:
+      - {type: filed, ts: '2026-11-23T15:47:14Z', host: lenovinha, summary: declare inputs on the costliest whole-scripts readers filed}

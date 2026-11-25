@@ -23,7 +23,11 @@
 -- Verdict: after the .sh's summary line, ok:plan-lane-after-merge:<p> |
 -- violation:plan-lane-after-merge:<f> | skip:plan-lane-after-merge:no-validator
 
-local root = text.trim(proc.run{ argv = { "pwd", "-P" } }.stdout or "")
+-- 2246-fkea helpers (yolanda, msys: `pwd -P` gave /c/..., a "relative" cwd to
+-- the native runner, and a bare bash is WSL's there).
+local fixture = require "common.fixture"
+local SH = fixture.posix_shell()
+local root = fixture.repo_root()
 local GUARD = "scripts/hooks/pre-push-local-gate.sh"
 local pass, fail = 0, 0
 local function ok(m) out.line("ok:   " .. m); pass = pass + 1 end
@@ -44,7 +48,7 @@ proc.run{ argv = { "mkdir", "-p", W } }
 local function cleanup() proc.run{ argv = { "find", W, "-delete" }, timeout_ms = 60000 } end
 
 fs.write(rel .. "/resolve.sh", ". scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null\n")
-local V = text.trim(proc.run{ argv = { "bash", W .. "/resolve.sh" } }.stdout or "")
+local V = text.trim(proc.run{ argv = { SH, W .. "/resolve.sh" } }.stdout or "")
 if V:sub(1, 2) == "./" then V = root .. "/" .. V:sub(3) end
 if V == "" and not proc.run{ argv = { "yq", "--version" } }.ok then
     cleanup()
@@ -52,7 +56,9 @@ if V == "" and not proc.run{ argv = { "yq", "--version" } }.ok then
     out.line("plan-lane-after-merge: 0 passed, 0 failed (skipped)")
     verdict.skip("plan-lane-after-merge:no-validator")
 end
-local HENV = { GIT_TERMINAL_PROMPT = "0" }
+-- 2242-u39b: the scratch checkout is tested, never the caller's frozen diff base
+-- (TILLANDSIAS_* names pass proc.run's scrub, so both are passed empty).
+local HENV = { GIT_TERMINAL_PROMPT = "0", TILLANDSIAS_GATE_DIFF_BASE = "", TILLANDSIAS_GATE_DIFF_BASE_ROOT = "" }
 if V ~= "" then HENV.TILLANDSIAS_PLAN_BIN = V end
 
 local function G(args)
@@ -110,7 +116,7 @@ G({ "reset", "-q", "--hard", "origin/linux-next~1" })
 local function run_guard()
     local rsha = text.trim(G({ "rev-parse", "origin/windows-next" }).stdout or "")
     local head = text.trim(G({ "rev-parse", "HEAD" }).stdout or "")
-    local r = proc.run{ argv = { "bash", "scripts/hooks/pre-push-local-gate.sh" }, cwd = WC, env = HENV,
+    local r = proc.run{ argv = { SH, "scripts/hooks/pre-push-local-gate.sh" }, cwd = WC, env = HENV,
         stdin = "refs/heads/windows-next " .. head .. " refs/heads/windows-next " .. rsha .. "\n", timeout_ms = 600000 }
     return (r.stdout or "") .. (r.stderr or ""), r.code
 end

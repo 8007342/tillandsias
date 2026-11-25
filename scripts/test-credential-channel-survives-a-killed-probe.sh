@@ -169,7 +169,8 @@ fi
 # bounding tool makes the kill observable.
 if [ -z "$_BOUND" ]; then
     echo "  skip:no-timeout-tool — a killed probe cannot be distinguished from an answered one without a bounding tool; the not-missing property above still held"
-elif grep -qE '^((ok|unverified|blocked):(gh-credentials-store|gh-token-env|github-token-env))(-push-(verified|refused)(-hook-refused|-refstate-refused)?)?$' "$W/.out"; then
+elif grep -qE '^(blocked:plaintext-credential-store|((ok|unverified|blocked):(gh-token-env|github-token-env))(-push-(verified|refused)(-hook-refused|-refstate-refused)?)?)$' "$W/.out"; then
+    # 2222-xjgu: a store file now answers blocked:plaintext-credential-store, still first.
     # 1004-8p76: the store/env arms now PROBE, so they answer
     # ok:<arm>-push-verified[...] or blocked:<arm>-push-refused as well as
     # unverified:<arm>; every one is an answer about the store, not the kill.

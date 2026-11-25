@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: four-more-shell-fixtures-a-c-ported-to-lua-2026-11-24
+    order: "2311-xca3"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/test-claim-wip-limit.lua
+      - scripts/lua/test-command-policy-audit.lua
+      - scripts/lua/test-check-stranded-in-progress.lua
+      - scripts/lua/test-capability-row-check.lua
+    title: "four shell fixtures ported to Lua: claim wip limit, command policy audit, check stranded in progress, capability row check"
+    context: |
+      ports: test-claim-wip-limit, test-command-policy-audit, test-check-stranded-in-progress, test-capability-row-check.
+      Claimed by yoga before the work, in the coordinator's test-[a-c]* range.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its subject is mutated; callers run the .lua; the four .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by build.sh and their litmus"
+    provenance: "coordinator queue 2026-11-24 (test-[a-c]* range), yoga"
+    related: [1367-2sbc, 1443-w9hf, 946-pdpi, 859-b2zc]
+    events:
+      - {type: claimed, ts: "2026-11-24T16:23:51Z", host: yoga, summary: "claimed; work ref work/2311-xca3"}

@@ -1,0 +1,14 @@
+# Gate step 2353-ccsd — data, not code (order 1072-b7eq).
+#
+# The credential cold-state probe, ported to Lua with a darwin path (v56.11.24.1
+# macOS smoke, finding 4: every Mac answered could-not-run:no-busctl). Its fixture
+# left step 350's private-bus harness because it can no longer source
+# private-session-bus.sh; it keeps 1903-djsq's property its own way: every probe
+# run gets a DBUS_SESSION_BUS_ADDRESS that does not exist, and the Linux and
+# darwin paths run against stubbed busctl/security with uname stubbed.
+STEP_DESC="Checking the credential cold-state probe never reads could-not-run as cold, on Linux or darwin (2353-ccsd)"
+STEP_LUA="scripts/lua/test-credential-cold-state-probe.lua"
+STEP_ERROR="the credential cold-state probe reported an unaskable question as cold, lost its fallback-share check, or asked the Keychain for a password (2353-ccsd) — see the failed arm above"
+STEP_OK="Credential cold-state probe holds on Linux and darwin paths"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:credential-cold-state-probe:10 arms"
+STEP_READS="scripts/lua/test-credential-cold-state-probe.lua scripts/lua/probe-credential-cold-state.lua crates/tillandsias-headless/src/vault_bootstrap.rs"

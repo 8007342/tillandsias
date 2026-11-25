@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: five-shell-fixtures-ported-to-lua-2026-11-24
+    order: "2300-6m9m"
+    status: implemented
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/test-plan-hash-time-verbs.lua
+      - scripts/lua/test-lua-determinism.lua
+      - scripts/lua/test-github-token-rotation-entry-points.lua
+      - scripts/lua/test-expert-accuracy-provenance.lua
+      - scripts/lua/test-start-a-new-project-skill.lua
+    title: "five shell fixtures ported to Lua: hash-time verbs, lua-determinism, token-rotation entry points, expert-accuracy provenance, start-a-new-project"
+    context: |
+      Each ran beside its .sh on one tree before the .sh was deleted, and its subject was mutated. Two gained arms the .sh
+      lacked: expert-accuracy (a JSON answer without the fields; two real hosts instead of two literals; a scratch copy,
+      since --path makes a directory) and rotation entry points (a call moved into another function).
+    exit_criteria:
+      - "The five fixtures green in their gate steps and litmus; no .sh of those names left."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by their existing gate steps and litmus"
+    provenance: "standing queue item 3 (shell-to-Lua ports), yoga 2026-11-24"
+    related: [1375-8g5t, 1384-bp6t, 1489-8qd6, 1257-jxu9, 1705-bgen]
+    events:
+      - {type: implemented, ts: "2026-11-24T12:25:44Z", host: yoga, summary: "implemented on work/2300-6m9m"}

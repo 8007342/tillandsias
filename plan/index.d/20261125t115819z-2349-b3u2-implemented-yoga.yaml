@@ -1,0 +1,17 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: a-litmus-phase-on-a-step-is-refused-unless-the-runner-reads-it
+    field: status
+    value: implemented
+    ts: "2026-11-25T11:58:19Z"
+    host: yoga
+  - packet_id: the-forge-image-does-not-bake-the-agent-clis-its-spec-and-litmus-say-it-does
+    field: status
+    value: implemented
+    ts: "2026-11-25T11:58:19Z"
+    host: yoga
+events:
+  - packet_id: a-litmus-phase-on-a-step-is-refused-unless-the-runner-reads-it
+    event: {type: implemented, ts: "2026-11-25T11:58:19Z", host: yoga, summary: "implemented on work/2349-b3u2; eight files, not ten: two of the filed names carry phase in log_fields; eight files still have a numeric top-level phase that no phase run selects, not changed"}
+  - packet_id: the-forge-image-does-not-bake-the-agent-clis-its-spec-and-litmus-say-it-does
+    event: {type: implemented, ts: "2026-11-25T11:58:19Z", host: yoga, summary: "implemented on work/2349-b3u2 as the coordinator approved: spec amended (order 459, 2027-e2cf; no ruling names codex), litmus asks each name alone"}

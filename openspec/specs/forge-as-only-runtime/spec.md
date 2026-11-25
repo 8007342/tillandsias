@@ -50,27 +50,38 @@ surface so that:
 
 ## Requirements
 
-### Requirement: Forge Image Bakes the Full Agent Set
+### Requirement: Forge Image Holds bash And Each Agent Is Installed At Its Lane's Launch
 <!-- req-id: 8dace842 -->
 
-The forge image (`tillandsias-forge`) MUST contain on `$PATH` after build:
+The forge image (`tillandsias-forge`) MUST hold `bash` (the maintenance shell)
+on `$PATH` after build. It MUST NOT be required to hold the agents: the enclave
+network does not exist during an image build, so each is installed by its
+lane's entrypoint at launch, onto the persistent tool cache, and the lane
+blocks on it.
 
-- `claude` (Anthropic Claude Code CLI)
-- `codex` (Codex code-analysis CLI)
-- `opencode` (OpenCode CLI + `opencode serve` web mode)
-- `bash` (maintenance shell)
+- `claude` — the vendor installer at container launch, npm as the fallback
+  (`require_claude`; operator directive 2026-07-21, order 459)
+- `opencode` — the verified upstream release asset (`require_opencode`;
+  operator 2026-11-08, order 2027-e2cf)
+- `codex` — npm through `_require_harness` (`require_codex`). No operator ruling
+  names codex; this is the current state, recorded in `lib-common.sh` as
+  "Codex/Antigravity stay on npm for now"
 
-`command -v claude codex opencode bash` MUST print four valid paths from
-inside a freshly built forge container. New interactive agents MUST be added
-by extending the forge image, never by installing on the host.
+An agent is required for its lane and is not a flaky-optional install: it has no
+first-use shim (order 1951-vv5m covers only the optional tools). New interactive
+agents MUST be added as a lane entrypoint with its own `require_<agent>`, never
+by installing on the host.
 
-#### Scenario: Fresh forge image contains every agent CLI
+#### Scenario: The image holds bash and the three install lanes
 
-- **WHEN** `podman run --rm --entrypoint /bin/sh tillandsias-forge:v<VERSION> -c
-  "command -v claude codex opencode bash"` runs (resolved via `forge_image_tag()`,
-  never `:latest`)
-- **THEN** stdout MUST list four absolute paths
-- **AND** the command MUST exit `0`
+- **WHEN** a forge image (resolved via `forge_image_tag()`, never `:latest`) is
+  asked for each name on its own, never several names to one `command -v`, which
+  succeeds when any of them is found
+- **THEN** `bash` MUST be on `$PATH`
+- **AND** for each of `claude`, `codex` and `opencode`,
+  `entrypoint-forge-<agent>.sh` MUST call `require_<agent>` and `lib-common.sh`
+  MUST define it
+- **AND** an image missing either MUST fail, naming that agent
 - **AND** the host MUST NOT need any of these binaries to be present locally
 
 ### Requirement: All Podman Run Goes Through the Idiomatic Layer
@@ -321,9 +332,9 @@ This spec explicitly forbids:
 
 - `cheatsheets/runtime/everything-in-forge.md` — agent-facing summary of
   this contract, the four mount categories, and the host-terminal seam.
-- `images/default/Containerfile` — the forge image definition; line 29
-  (`RUN npm install -g --prefix /usr/local opencode-ai@latest …
-  @anthropic-ai/claude-code`) bakes the agent set.
+- `images/default/Containerfile` — the forge image definition.
+- `images/default/lib-common.sh` — `require_claude`, `require_codex` and
+  `require_opencode`, the launch-time installs each lane entrypoint calls.
 - `crates/tillandsias-headless/src/main.rs` —
   - `launch_forge_agent` (interactive Claude / Codex / OpenCode /
     Maintenance launches)
@@ -341,16 +352,17 @@ This spec explicitly forbids:
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
 
-- `litmus:forge-as-only-runtime` — verifies (a) the forge image contains
-  `claude`, `codex`, `opencode`, `bash` on `$PATH`, and (b) no raw
-  `podman run` shell-outs exist outside the idiomatic layer.
+- `litmus:forge-as-only-runtime` — verifies the forge image holds `bash` and
+  each agent lane's launch-time install, asking each name alone (post-build).
+- `litmus:forge-no-raw-podman` — verifies no raw podman command is built in the
+  headless crate (pre-build).
 - `litmus:forge-agent-result-format` — verifies JSON propagation, actual
   Codex/OpenCode schemas, fresh capture ownership, real status, bounded
   overflow, and exact-worker timeout cleanup without Podman.
 
 Gating points:
 
-- Forge image bakes all four agent/maintenance CLIs.
+- Forge image holds `bash` and the launch-time install lane of each agent.
 - No `Command::new("podman")` in `crates/tillandsias-headless/src/`.
 - No raw `podman` shell-outs in `scripts/tillandsias-podman`,
   `scripts/build-image.sh`, or `build.sh` (except entries explicitly

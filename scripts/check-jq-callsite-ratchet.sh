@@ -77,7 +77,7 @@ population() {
         ( cd "$ROOT" && { find scripts -type f -name '*.sh' 2>/dev/null
             for f in build.sh launch.sh; do [ -f "$f" ] && echo "$f"; done
             find openspec/litmus-tests -maxdepth 1 -type f -name '*.yaml' 2>/dev/null; } )
-    fi | grep -vE '^scripts/(check|test-check)-jq-callsite-ratchet\.sh$' | sort
+    fi | grep -vE '^scripts/check-jq-callsite-ratchet\.sh$' | sort
 }
 
 files="$(population)"

@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-24, on the coordinator's (macuahuitl-fedora) direction: file the proc.spawn group-kill finding and take it.
+packets:
+- packet_id: proc-detach-lets-a-fixture-see-what-its-subject-leaked
+  order: 2294-dtch
+  status: implemented
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [command-runtime, lua, fixtures, process-groups]
+  size: M
+  implementer_tier: opus
+  estimated_hours: 4
+  title: 'The Lua runtime reaped every run''s process group when the leader exited, so "nothing survived" arms passed on subjects that leak; add proc detach'
+  context: >-
+    Every proc.run and proc.spawn child is a group leader, and the runtime reaped its group (TERM, then KILL) as soon as the leader exited.
+    A fixture asking whether its subject left a process behind therefore always heard no.
+    AUDIT of scripts/lua/test-*.lua, done by reading every fixture that probes processes or backgrounds a job and re-running each candidate against a mutant that really leaks:
+    2 vacuous. test-fleet-run arm 10 stayed green on a fleet-run mutant whose step runs with group=false, and went red once the test's call stopped reaping.
+    The test-macos-vz-orphan-diagnosis Lua port (PR #1471) read ok:4 on an outlive stub that the .sh reds.
+    Not vacuous: awk-float-lc-numeric-signal (file leaks, with a control arm), shared-target arm 7 and inference-supervise (they check inside their own harness before it exits),
+    opencode-tool-start-follower (uses the group kill for cleanup only), uninstall-tray-stop (asserts a survivor, which a reap could only make red), gate-step-pipe-holder (detected inside build.sh before exit).
+    The group() doc comment said only the deadline kills the group; the code also reaped on every exit.
+  exit_criteria:
+  - 'Command::detach(true) skips the exit reap on the direct and managed paths, while the deadline and cancel still kill the group; the managed scope refuses detach without group.'
+  - 'Lua proc.run and proc.spawn accept detach = true; a non-boolean, or detach with group = false, raises.'
+  - 'Red-first: crates/tillandsias-exec/tests/detach.rs is red with detach accepted and ignored, and green with it implemented.'
+  - 'Every vacuous fixture is migrated: test-fleet-run arm 10 here; #1471 after this lands.'
+  verifiable_closure: 'crates/tillandsias-exec/tests/detach.rs (5 tests); test-fleet-run ok:fleet-run-shape:17 on the real fleet-run and arm 10 red on the leaking mutant.'
+  unscoreable: 'no litmus names the runtime option; its pins are the crate tests and the migrated fixtures named in verifiable_closure.'
+  next_action: >-
+    Implemented on work/2294-dtch. Measured on darwin. detach.rs had 3 of 5 red with the stub (the two survive tests and the refusal) and is 5/5 with the change.
+    The tillandsias-exec suite is green, and tillandsias-plan --lib is 530/530. A Lua probe showed: default run, grandchild reaped; run and spawn with detach, grandchild alive; group=false plus detach raises; detach='yes' raises.
+    test-fleet-run gives ok:17 on the real fleet-run and arm 10 red on the mutant. The vz-orphan port with detach = true and no perl reds the outlive mutant and matches the .sh in all 10 harness cases.
+    After landing: switch #1471 from perl to detach. Windows unchanged: the job object still ends descendants.
+  provenance: 'tlatoanis-macbook-air 2026-11-24; coordinator macuahuitl-fedora asked to file and take it.'
+  related: [2293-vzod, 2250-44uy, 1443-8pur]
+  events:
+  - {type: filed, ts: '2026-11-24T09:26:29Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}

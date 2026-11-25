@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: seven-l-o-fixtures-ported-to-lua
+    order: "2369-8vq3"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/test-opencode-entrypoint-prompt.lua
+      - scripts/lua/test-mcp-run-command-tool.lua
+      - scripts/lua/test-land-push-bounded.lua
+      - scripts/lua/test-land-merges-trunk.lua
+      - scripts/lua/test-land-verdict-through-a-pipe.lua
+      - scripts/lua/test-lww-channel-consumers.lua
+      - scripts/lua/test-litmus-step-model.lua
+      - scripts/test-secrets.sh
+    title: "seven shell fixtures in i-o ported to Lua, and the dead test-secrets.sh retired"
+    context: |
+      ports: test-opencode-entrypoint-prompt, test-mcp-run-command-tool, test-land-push-bounded,
+      test-land-merges-trunk, test-land-verdict-through-a-pipe, test-lww-channel-consumers, test-litmus-step-model.
+      retires: test-secrets.sh (nothing runs it; it tests podman secrets and no tillandsias code).
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its main assertions are mutated; callers run the .lua; the .sh files are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by two gate steps, two build.sh steps and five litmus tests"
+    provenance: "coordinator 2026-11-25 (i-o range, batches of 8-10; retire test-secrets.sh), yolanda"
+    related: [1443-r4cj, 1131-iax2, 1064-r8fv, 1137-da83, 1158-y3ad, 901-jtvi]
+    events:
+      - {type: claimed, ts: "2026-11-25T17:04:03Z", host: yolanda, summary: "claimed; work ref work/2369-8vq3"}

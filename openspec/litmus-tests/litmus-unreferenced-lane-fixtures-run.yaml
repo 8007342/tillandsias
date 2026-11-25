@@ -16,7 +16,7 @@ preconditions:
   - workspace contains scripts/check-added-test-is-referenced.sh
 critical_path:
   - step: "a blocked push is refused within a bound, not silence"
-    command: "bash scripts/test-land-push-bounded.sh 2>&1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-land-push-bounded.lua 2>&1"
     expected_behavior: "ok:land-push-bounded:"
     assert_exit: 0
     assert_output_contains: "ok:land-push-bounded:"
@@ -58,19 +58,19 @@ critical_path:
     assert_output_contains: "ok:plan-lane-agreeing-deletion:"
     timeout_ms: 120000
   - step: "release-tier timer renders the unit the release gates on"
-    command: "bash scripts/test-release-tier-timer-render.sh 2>&1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-release-tier-timer-render.lua 2>&1"
     expected_behavior: "ok:release-tier-timer-render:"
     assert_exit: 0
     assert_output_contains: "ok:release-tier-timer-render:"
     timeout_ms: 120000
   - step: "./repeat passes --model and --effort to claude"
-    command: "bash scripts/test-repeat-model-flag.sh 2>&1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-repeat-model-flag.lua 2>&1"
     expected_behavior: "ok:repeat-model-flag:"
     assert_exit: 0
     assert_output_contains: "ok:repeat-model-flag:"
     timeout_ms: 120000
   - step: "shared target dir lock and freshness guard"
-    command: "bash scripts/test-shared-target.sh 2>&1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-shared-target.lua 2>&1"
     expected_behavior: "ok: arm8"
     assert_exit: 0
     assert_output_contains: "ok: arm8"
@@ -106,8 +106,8 @@ critical_path:
     assert_output_contains: "ok:timing-clock-resolution:"
     timeout_ms: 120000
   - step: "uninstall removes only its own PATH block"
-    command: "bash scripts/test-uninstall-path-block.sh 2>&1"
-    expected_behavior: "PASS: uninstall-path-block"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-uninstall-path-block.lua 2>&1"
+    expected_behavior: "ok:uninstall-path-block:6 arms"
     assert_exit: 0
-    assert_output_contains: "PASS: uninstall-path-block"
+    assert_output_contains: "ok:uninstall-path-block:6 arms"
     timeout_ms: 120000
