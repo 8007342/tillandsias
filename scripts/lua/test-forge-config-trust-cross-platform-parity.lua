@@ -107,8 +107,8 @@ end
 T:arm("4 CARGO the four tests pass, and each filter ran at least one test", #red == 0, table.concat(red, " | "))
 
 local live = {}
-for _, s in ipairs({ "scripts/test-forge-standard-gitconfig-path.sh", "scripts/test-forge-runtime-ca-trust.sh" }) do
-    local r = T:run{ fixture.posix_shell(), s, timeout_ms = 300000, env = { TILLANDSIAS_FORGE_IMAGE = env.get("TILLANDSIAS_FORGE_IMAGE") } }
+for _, s in ipairs({ "scripts/lua/test-forge-standard-gitconfig-path.lua", "scripts/lua/test-forge-runtime-ca-trust.lua" }) do
+    local r = T:run{ fixture.plan_binary(), "script", "run", "--timeout", "6m", s, timeout_ms = 300000, env = { TILLANDSIAS_FORGE_IMAGE = env.get("TILLANDSIAS_FORGE_IMAGE") } }
     if r.code ~= 0 then live[#live + 1] = s .. " rc=" .. tostring(r.code) .. " " .. ((r.stdout or "") .. (r.stderr or "")):sub(-300) end
 end
 T:arm("5 LIVE the gitconfig and CA fixtures pass", #live == 0, table.concat(live, " | "))
