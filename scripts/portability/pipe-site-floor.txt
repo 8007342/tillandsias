@@ -517,12 +517,8 @@ scripts scripts/test-claims-fleet-visible.sh 13
 scripts scripts/test-cloudflare-login.sh 33
 scripts scripts/test-cloudflare-token-rotation.sh 16
 scripts scripts/test-codex-oauth-restore.sh 1
-scripts scripts/test-daily-maintenance-day-boundary.sh 1
 scripts scripts/test-enclave-network-internal-discovery.sh 1
 scripts scripts/test-enclave-proxy-lib.sh 4
-scripts scripts/test-enclave-service-health.sh 102
-scripts scripts/test-expire-claims-list-live-rows.sh 8
-scripts scripts/test-expire-claims-reads-the-status-write.sh 9
 scripts scripts/test-expire-claims-write-is-opt-in.sh 4
 scripts scripts/test-fake-cloudflare.sh 11
 scripts scripts/test-fleet-heartbeat-sees-a-ledger-filed-blocker.sh 13
@@ -532,7 +528,6 @@ scripts scripts/test-forge-src-budget-report.sh 1
 scripts scripts/test-forge-swap-service.sh 6
 scripts scripts/test-fragment-batch-never-collapses-verdicts.sh 1
 scripts scripts/test-fragment-status-loss.sh 7
-scripts scripts/test-gate-step-prefix-allocation.sh 8
 scripts scripts/test-gate-step-skip-exit.sh 3
 scripts scripts/test-git-credential-helper.sh 5
 scripts scripts/test-git-mirror-vault-agent-auto-auth.sh 18
@@ -554,7 +549,6 @@ scripts scripts/test-land-queue.sh 1
 scripts scripts/test-ledger-prose-roundtrip.sh 8
 scripts scripts/test-ledger-write-reaches-its-reader.sh 22
 scripts scripts/test-litmus-binding-truth.sh 8
-scripts scripts/test-litmus-fake-backend-under-remote-podman.sh 1
 scripts scripts/test-litmus-fake-podman-hermetic.sh 1
 scripts scripts/test-litmus-kill-adjudicator.sh 14
 scripts scripts/test-litmus-parse-instruments-agree.sh 7

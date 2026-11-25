@@ -43,7 +43,7 @@ local prefix = (root ~= "" and (root:gsub("/+$", "") .. "/")) or ""
 
 -- The one file allowed to pass it, and the checks that define it.
 local ALLOWED = {
-    ["scripts/test-enclave-service-health.sh"] = true,
+    ["scripts/lua/test-enclave-service-health.lua"] = true,
     ["scripts/check-enclave-service-health.sh"] = true,
     ["scripts/lua/check-enclave-expect-none-is-fixture-only.lua"] = true,
 }

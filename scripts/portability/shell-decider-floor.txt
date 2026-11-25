@@ -70,14 +70,10 @@ scripts/test-cloudflare-oauth-core.sh
 scripts/test-cloudflare-token-rotation.sh
 scripts/test-codex-oauth-restore.sh
 scripts/test-concurrent-forge-shared-stack.sh
-scripts/test-daily-maintenance-day-boundary.sh
 scripts/test-e2e-preflight-live-runtime.sh
 scripts/test-enclave-network-internal-discovery.sh
 scripts/test-enclave-proxy-lib.sh
-scripts/test-enclave-service-health.sh
 scripts/test-exec-bits-guard-end-to-end.sh
-scripts/test-expire-claims-list-live-rows.sh
-scripts/test-expire-claims-reads-the-status-write.sh
 scripts/test-expire-claims-write-is-opt-in.sh
 scripts/test-fake-cloudflare.sh
 scripts/test-fleet-heartbeat-sees-a-ledger-filed-blocker.sh
@@ -90,9 +86,7 @@ scripts/test-forge-swap-service.sh
 scripts/test-fragment-batch-never-collapses-verdicts.sh
 scripts/test-fragment-status-loss-row-boundary.sh
 scripts/test-fragment-status-loss.sh
-scripts/test-gate-memory-wsl2-guest.sh
 scripts/test-gate-stamp-memoization.sh
-scripts/test-gate-step-prefix-allocation.sh
 scripts/test-gate-step-skip-exit.sh
 scripts/test-git-credential-helper.sh
 scripts/test-git-mirror-vault-agent-auto-auth.sh
@@ -125,7 +119,6 @@ scripts/test-litmus-binding-truth.sh
 scripts/test-litmus-bindings.sh
 scripts/test-litmus-budget-tally.sh
 scripts/test-litmus-diff-scope.sh
-scripts/test-litmus-fake-backend-under-remote-podman.sh
 scripts/test-litmus-fake-podman-hermetic.sh
 scripts/test-litmus-kill-adjudicator.sh
 scripts/test-litmus-parse-instruments-agree.sh
