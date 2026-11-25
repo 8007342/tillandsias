@@ -117,11 +117,11 @@ critical_path:
     assert_exit: 0
     assert_output_matches: "^OK: "
 
-  - step: "functional gate tests pin warn-only grammar and salvage routing (tests 5-6)"
-    command: "grep -q 'Test 5' scripts/test-pre-receive-yaml-gate.sh && grep -q 'Test 6' scripts/test-pre-receive-yaml-gate.sh && grep -q 'refs/heads/salvage/' scripts/test-pre-receive-yaml-gate.sh && echo 'OK: functional suite covers rung-2 warn and salvage exemption routing' || { echo 'FAIL: functional rung-2 coverage missing'; exit 1; }"
-    timeout_ms: 5000
+  - step: "the functional gate fixture passes: warn-only grammar and salvage routing among its arms"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-pre-receive-yaml-gate.lua 2>&1"
+    timeout_ms: 300000
     assert_exit: 0
-    assert_output_matches: "^OK: "
+    assert_output_contains: "ok:pre-receive-yaml-gate:"
 
 observability:
   traces:

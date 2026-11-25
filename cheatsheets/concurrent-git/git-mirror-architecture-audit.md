@@ -74,7 +74,7 @@ the already-decided local transaction.
 
 **Finding B (fixed and pinned):** order 316 removed the lost pipeline state;
 the current POSIX loop writes a failure marker that the parent checks before
-relay, so the final `exit 1` is effective. `scripts/test-pre-receive-yaml-gate.sh`
+relay, so the final `exit 1` is effective. `scripts/lua/test-pre-receive-yaml-gate.lua`
 proves an invalid update is rejected, a valid update is accepted, and a mixed
 multi-ref push is rejected. Order 336 made the fixture use the production Rust
 `tillandsias-policy` parser, removing the divergent PyYAML wrapper.
