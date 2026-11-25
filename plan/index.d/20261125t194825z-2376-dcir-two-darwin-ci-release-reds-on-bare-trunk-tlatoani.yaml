@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-25, on macuahuitl-fedora's direction.
+packets:
+- packet_id: two-darwin-ci-release-reds-on-bare-trunk
+  order: 2376-dcir
+  status: ready
+  kind: fix
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [macos, litmus, ci-release, portability]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 2
+  title: 'Two litmus:ci-release tests are red on darwin on a bare linux-next checkout: prebuilt-resolver-refuses-stale arm 1, unreferenced-guard-fixtures-run step 5'
+  context: >-
+    Measured by relay-preflight on tlatoanis-macbook-air for #1566 and #1578, and reproduced on a bare origin/linux-next
+    checkout (ce7f7ceef era), so neither PR caused them; macuahuitl's Linux gate is green on both.
+    (1) litmus:prebuilt-resolver-refuses-stale step 1, scripts/lua/test-prebuilt-resolver-refuses-stale.lua:
+    "FAIL: 1 STALE a prebuilt older than its sources is refused by name and never runs — got: rc=0 marker=true"
+    (arm 2 FRESH passes). The stale prebuilt RAN on darwin.
+    (2) litmus:unreferenced-guard-fixtures-run step 5 "e2e preflight refuses a live runtime": "assert_exit: expected 0,
+    got 1 / FAIL: no tillandsias runtime but verdict was 'skip:live-runtime-present' (expected eligible)".
+    UNMEASURED hypothesis for (2): the preflight probe sees this Mac's real tray/VM rather than the fixture's stubbed
+    absence. For (1): an mtime or staleness comparison that differs under BSD stat/touch. Neither cause is verified.
+  exit_criteria:
+  - 'Both tests green on darwin on a bare linux-next checkout, each with its negative control still red under a mutant.'
+  - 'The cause of each is named from a measurement, not inferred.'
+  verifiable_closure: 'scripts/run-litmus-test.sh ci-release --test litmus:prebuilt-resolver-refuses-stale and --test litmus:unreferenced-guard-fixtures-run, green on darwin.'
+  next_action: 'Claim after p-s PR 2 (tlatoanis-macbook-air).'
+  provenance: 'tlatoanis-macbook-air 2026-11-25, relay-preflight logs for work/2360-psb8 and work/2375-psb9.'
+  related: [2360-psb8, 2375-psb9, 1270-5mz8]
+  events:
+  - {type: filed, ts: '2026-11-25T19:48:25Z', host: tlatoanis-macbook-air, summary: 'filed with failing lines; claim after p-s PR 2'}

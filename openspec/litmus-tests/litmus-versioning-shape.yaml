@@ -121,9 +121,9 @@ critical_path:
   # Kept as a SEPARATE fixture because the policy fixture's ranges are small
   # enough to pass against the broken guard, which is how this survived.
   - step: "Req: the VERSION guard reaches a verdict on a large diff (no SIGPIPE fail-open)"
-    command: "bash scripts/test-pre-push-version-guard-sigpipe.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-pre-push-version-guard-sigpipe.lua"
     timeout_ms: 180000
-    expected_behavior: "PASS: pre-push-version-guard 4/4"
+    expected_behavior: "ok:pre-push-version-guard-sigpipe:4 arms"
 
   - step: "Req: build.sh never unconditionally instructs committing VERSION"
     # Order 643-64bx, partial reduction (windows host 2026-08-10). build.sh bumps
