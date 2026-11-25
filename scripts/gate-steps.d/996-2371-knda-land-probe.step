@@ -1,0 +1,10 @@
+# Gate step 2371-knda — data, not code (order 1072-b7eq).
+#
+# Nothing ran this fixture: its litmus is bound to a draft spec, which the runner does not select.
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the land discipline probe answers for its repository (2371-knda)"
+STEP_SCRIPT="scripts/test-land-discipline-probe.sh"
+STEP_ERROR="the land discipline probe no longer answers as pinned (1443-z3vb) — see the FAIL lines above"
+STEP_OK="land-discipline-probe fixture passed"
+STEP_SECOND_REGIME="yolanda 2026-11-25 msys ok:rc0-no-verdict-line"
+STEP_READS="scripts/plan-binary-probe.sh scripts/land-on-platform-branch.sh scripts/test-land-discipline-probe.sh"
