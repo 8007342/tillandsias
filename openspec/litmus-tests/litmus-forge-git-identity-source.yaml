@@ -7,15 +7,15 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-forge-git-identity-source.sh
+  - workspace contains scripts/lua/test-forge-git-identity-source.lua
   - workspace contains images/default/lib-common.sh
   - workspace contains scripts/fleet-activity.sh
 
 critical_path:
-  - step: "order 1453-7rzd: App identity as config, scratch -c wins, Tillandsias-Host trailer attributed, no host identity leaks (5 arms, negative controls)"
-    command: "bash scripts/test-forge-git-identity-source.sh"
+  - step: "order 1453-7rzd: App identity as config, scratch -c wins, Tillandsias-Host trailer attributed, no host identity leaks (13 arms, negative controls)"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-git-identity-source.lua 2>&1"
     timeout_ms: 60000
-    success_pattern: "PASS: forge-git-identity-source"
+    success_pattern: "ok:forge-git-identity-source:13 arms"
     failure_pattern: "FAIL:"
 
 observability:
@@ -28,4 +28,4 @@ observability:
 
 rollback:
   on_failure: "restore configure_git_identity writing config from TILLANDSIAS_GIT_* and the Tillandsias-Host trailer; never export GIT_AUTHOR_*/GIT_COMMITTER_* into a forge"
-  command: "bash scripts/test-forge-git-identity-source.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-git-identity-source.lua 2>&1"

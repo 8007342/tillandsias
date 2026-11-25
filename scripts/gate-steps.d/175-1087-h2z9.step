@@ -11,7 +11,7 @@ STEP_DESC="Checking the fast-refusal phase precedes the first compile"
 STEP_LUA="scripts/lua/test-gate-fast-refusals.lua"
 STEP_ERROR="a fast refusal was hoisted behind a build step (1087-h2z9)"
 STEP_OK="Fast-refusal ordering passed"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:test-gate-fast-refusals:4"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:test-gate-fast-refusals:4 at 5e6b511ac (the Lua fixture, 2342-9f4k; rc 0, plan build-id 9537aea7, relayed by macuahuitl)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
 STEP_LANES="timing"

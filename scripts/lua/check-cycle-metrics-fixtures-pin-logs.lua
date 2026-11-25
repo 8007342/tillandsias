@@ -27,7 +27,6 @@ local EXEMPT = {
     ["scripts/lua/test-timing-record-carries-reproduced.lua"] = "emit-only (--emit-timing / --emit-timing-batch); never reports",
     ["scripts/test-mcp-transport-death-trace.sh"] = "quotes the outage grep as text; never runs the script",
     ["scripts/test-tool-dispatch-lib.sh"] = "lists the script as a converted file; never runs it",
-    ["scripts/test-gate-step-metrics-isolation.sh"] = "names it in prose only; drives build.sh steps, not the reporter",
     ["scripts/lua/test-gate-step-private-metrics-fallback.lua"] = "names it in prose only; never runs it",
 }
 

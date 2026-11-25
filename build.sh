@@ -6559,7 +6559,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # where a step in another lane is charged with it (#1369, #1349).
     _step "Checking the metrics-isolation fixture keeps off the shared timing log (2244-ge9s)..."
     if ! _run_lua_decider "scripts/lua/test-metrics-isolation-keeps-off-the-shared-log.lua" 2>&1; then
-        _error "test-gate-step-metrics-isolation.sh wrote a record carrying the gate's run id into a log the gate's leak check reads — keep its split in a fixture-private fallback dir with the run id unset; see the FAIL lines above (2244-ge9s)"
+        _error "test-gate-step-metrics-isolation.lua wrote a record carrying the gate's run id into a log the gate's leak check reads — keep its split in a fixture-private fallback dir with the run id unset; see the FAIL lines above (2244-ge9s)"
         exit 1
     fi
     _info "Metrics-isolation shared-log fixture passed"
