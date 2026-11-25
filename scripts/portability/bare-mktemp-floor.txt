@@ -76,12 +76,10 @@ scripts/test-fleet-msg-store.sh 1
 scripts/test-forge-gitconfig-bidirectional-quarantine.sh 1
 scripts/test-forge-launch-openspec-init-clean.sh 1
 scripts/test-forge-runtime-ca-trust.sh 1
-scripts/test-forge-seeds-from-salvage-ref.sh 1
 scripts/test-forge-standard-gitconfig-path.sh 1
 scripts/test-forge-validate.sh 1
 scripts/test-fragment-batch-never-collapses-verdicts.sh 1
 scripts/test-fragment-status-loss.sh 1
-scripts/test-gate-fast-refusals.sh 1
 scripts/test-gate-memory-wsl2-guest.sh 1
 scripts/test-gate-stamp-memoization.sh 1
 scripts/test-gate-stamp-scope.sh 1
@@ -91,7 +89,6 @@ scripts/test-git-credential-helper.sh 1
 scripts/test-git-mirror-existing-volume-hardening.sh 1
 scripts/test-git-mirror-ref-convergence.sh 1
 scripts/test-git-mirror-relay-token-expiry.sh 1
-scripts/test-git-mirror-relay-verified-ack.sh 1
 scripts/test-git-mirror-vault-agent-auto-auth.sh 1
 scripts/test-groundtruth-corpus-declaration.sh 3
 scripts/test-guest-binaries-nix-lane.sh 1

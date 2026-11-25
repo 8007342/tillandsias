@@ -14,14 +14,14 @@ size: instant
 
 preconditions:
   - workspace contains images/git/pre-receive-hook.sh and images/git/relay-refs.sh
-  - workspace contains scripts/test-git-mirror-relay-verified-ack.sh
+  - workspace contains scripts/lua/test-git-mirror-relay-verified-ack.lua
 
 critical_path:
   - step: "missing credential fails the client ack; success converges; multi-ref rejection is atomic; stale-push rejection auto-reconciles the mirror"
-    command: "scripts/test-git-mirror-relay-verified-ack.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-git-mirror-relay-verified-ack.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "PASS: git mirror relay-verified acknowledgement fixture (orders 318+369)"
-    assert_output_contains: "PASS: git mirror relay-verified acknowledgement fixture (orders 318+369)"
+    expected_behavior: "ok:git-mirror-relay-verified-ack:15 arms"
+    assert_output_contains: "ok:git-mirror-relay-verified-ack:15 arms"
 
   - step: "failed relay reconciles exported heads via a non-forced fetch outside quarantine"
     command: "grep -Fq \"env -u GIT_QUARANTINE_PATH\" images/git/relay-refs.sh && grep -Fq \"'refs/heads/*:refs/heads/*'\" images/git/relay-refs.sh && ! grep -Fq \"'+refs/heads/*:refs/heads/*'\" images/git/relay-refs.sh && echo 'ok: non-forced reconcile shape'"
@@ -55,4 +55,4 @@ rollback:
   on_failure: >
     Do not restore fire-and-forget post-receive relay. Inspect the pre-receive
     update capture, relay helper atomic push, and fixture receiver isolation.
-  command: "scripts/test-git-mirror-relay-verified-ack.sh"
+  command: "tillandsias-plan script run scripts/lua/test-git-mirror-relay-verified-ack.lua"

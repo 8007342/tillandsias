@@ -7103,7 +7103,14 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # hours apart. The last arm pins that the 1x-to-4x blind band is still OPEN,
     # so closing it cannot happen quietly without the volume evidence.
     _step "Checking the hook can report its own phase timings (1064-5hv2)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-hook-phase-instrumentation.sh" 2>&1; then
+    # 2342-9f4k: the fixture is Lua. No runnable plan binary is a failed check.
+    _hpin_plan="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _hpin_plan=""
+    case "$_hpin_plan" in ./*) _hpin_plan="$SCRIPT_DIR/${_hpin_plan#./}" ;; esac
+    if [[ -z "$_hpin_plan" ]]; then
+        _error "could-not-run:hook-phase-instrumentation:no-plan-binary — scripts/lua/test-hook-phase-instrumentation.lua needs tillandsias-plan script run (1064-5hv2)"
+        exit 1
+    fi
+    if ! (cd "$SCRIPT_DIR" && _run "$_hpin_plan" script run scripts/lua/test-hook-phase-instrumentation.lua) 2>&1; then
         _error "the hook's phase instrumentation or its drift warning changed (1064-5hv2) — see the verdict line above"
         exit 1
     fi

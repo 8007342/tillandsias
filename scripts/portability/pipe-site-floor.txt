@@ -575,7 +575,6 @@ scripts scripts/test-fleet-msg-store.sh 3
 scripts scripts/test-forge-gitconfig-bidirectional-quarantine.sh 2
 scripts scripts/test-forge-project-guard-hooks.sh 1
 scripts scripts/test-forge-project-trust-seeds.sh 1
-scripts scripts/test-forge-seeds-from-salvage-ref.sh 1
 scripts scripts/test-forge-src-budget-report.sh 1
 scripts scripts/test-forge-standard-gitconfig-path.sh 2
 scripts scripts/test-forge-swap-service.sh 6
@@ -607,7 +606,6 @@ scripts scripts/test-harness-contract-probe.sh 1
 scripts scripts/test-harness-rollback.sh 6
 scripts scripts/test-headless-sidecar-target-gate.sh 1
 scripts scripts/test-hook-mover-enumeration-is-batched.sh 1
-scripts scripts/test-hook-phase-instrumentation.sh 5
 scripts scripts/test-host-tools.sh 30
 scripts scripts/test-image-build-convergence.sh 2
 scripts scripts/test-image-usability-check.sh 1
