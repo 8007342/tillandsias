@@ -58,10 +58,6 @@
 8 scripts/spec-index-ensure.sh
 1 scripts/test-bench-prompt-uniqueness.sh
 1 scripts/test-build-sh-ci-full-install-prep.sh
-1 scripts/test-build-step-timing-attribution.sh
-1 scripts/test-codex-mcp-registration.sh
-7 scripts/test-convergence-dashboard.sh
-2 scripts/test-cycle-metrics-recurrence.sh
 2 scripts/test-default-vault-cli-security.sh
 1 scripts/test-json-query-jq-parity.sh
 1 scripts/test-memo-hit-observability.sh
