@@ -6774,6 +6774,11 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
+    _step "Checking no litmus step declares a phase the runner does not read (2349-b3u2)..."
+    if ! _run_lua_decider "scripts/lua/check-litmus-step-phase.lua" 2>&1; then
+        exit 1
+    fi
+
     _step "Checking the CA path has one declaration (998-3z6g)..."
     # PORTED to Lua (1526-gv3t): scripts/lua/check-ca-path-literals.lua.
     if ! _run_lua_decider "scripts/lua/check-ca-path-literals.lua" 2>&1; then

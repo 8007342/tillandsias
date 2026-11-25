@@ -18,7 +18,7 @@ STEP_DESC="Checking every archiver could-not-run exit names its own cause (1132-
 STEP_LUA="scripts/lua/test-archiver-could-not-run-is-self-naming.lua"
 STEP_ERROR="an archiver exit-3 site no longer names its cause, or a repairable instrument failure became forge-skippable (1132-r4mt) — a caller reading rc=3 is back to parsing prose to tell a stale ledger instrument from a locus with no ruby; see the verdict line above"
 STEP_OK="archiver could-not-run self-naming check passed"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   every could-not-run token is written to stdout, where its reader looks"
+STEP_SECOND_REGIME="macbookair 2026-11-25 darwin ok:archiver-could-not-run-is-self-naming:6 arms"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.

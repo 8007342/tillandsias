@@ -24,7 +24,7 @@ STEP_OK="capability envelope source check passed"
 # fixture can produce 3, only the binary's absence can.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="target/debug/tillandsias is not built on this host, so the probe could not be asked"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   --fresh reports measured even with a warm cache"
+STEP_SECOND_REGIME="macbookair 2026-11-25 darwin ok:capabilities-envelope-names-its-source:6 arms"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
 STEP_LANES="timing"
