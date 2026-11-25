@@ -191,7 +191,7 @@ branch_versioning_discipline:
         ./build.sh bumps the counter on every build-producing run; before this
         rule the bump was either reverted by hand or pushed with --no-verify,
         and reverting made every installed binary claim the same version.
-      enforcement: scripts/test-pre-push-version-guard.sh (9 cases), litmus:versioning-shape
+      enforcement: scripts/lua/test-pre-push-version-guard.lua (9 cases), litmus:versioning-shape
 
     - name: release_gating_enforces_main_source
       rule: >

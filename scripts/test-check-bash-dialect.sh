@@ -134,7 +134,7 @@ expect "no-set-u-not-flagged" "ok:bash-dialect-clean" 0
 rm "$TMP/emptyarr.sh"
 
 # 1373-sr9g: sourcing a process substitution defines nothing on bash 3.2.
-# MUTATION ARM: the exact pre-fix line from test-preflight-scratch-is-off-checkout.sh:102.
+# MUTATION ARM: the exact pre-fix line from the retired test-preflight-scratch-is-off-checkout.sh:102 (now scripts/lua/test-preflight-scratch-is-off-checkout.lua).
 printf '#!/usr/bin/env bash\n    . <(sed -n %s "$SIDECAR")\n' "'/if \\[ -n \"\\\${TILLANDSIAS_SIDECAR_TARGET_DIR/,/^fi/p'" > "$TMP/procsub.sh"
 expect "dot-procsub-refused" "blocked:bash4-unguarded:1" 1
 printf '#!/usr/bin/env bash\nsource <(printf X=1)\n' > "$TMP/procsub.sh"

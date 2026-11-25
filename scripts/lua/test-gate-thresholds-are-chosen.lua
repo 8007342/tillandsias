@@ -23,7 +23,7 @@ local T = fixture.new("gate-thresholds-are-chosen")
 local CRED = "scripts/test-check-credential-channel.sh"
 local SELECTOR = "scripts/test-selector-drops-cross-branch-claims.sh"
 local HOOKS = "scripts/lua/test-forge-project-guard-hooks.lua"
-local CONTROL = "scripts/test-precommit-zero-trace-scan-scope.sh"
+local CONTROL = "scripts/lua/test-precommit-zero-trace-scan-scope.lua"
 local src = {}
 for _, f in ipairs({ CRED, SELECTOR, HOOKS, CONTROL }) do
     if not fs.exists(f) then T:refuse("subject-missing", f .. " is missing: no arm can assert over a file that is not there") end
@@ -57,7 +57,7 @@ T:arm("5 LIST the transcribed hook list is gone from " .. HOOKS, not has(HOOKS, 
 T:arm("6 LIST the hook set is derived from install-hooks.sh", has(HOOKS, "install-hooks.sh") and has(HOOKS, 'gmatch("scripts/hooks/'),
     "the coupling is undeclared again")
 
-T:arm("7 NEGATIVE CONTROL the declared vacuity floor is untouched", has(CONTROL, "-gt 20"),
+T:arm("7 NEGATIVE CONTROL the declared vacuity floor is untouched", has(CONTROL, "> 20"),
     "the remedy overreached: a chosen and stated floor must survive in " .. CONTROL)
 T:arm("8 NEGATIVE CONTROL that floor still states what it guards against", has(CONTROL, "vacuous") or has(CONTROL, "vacuity"),
     "a stated choice that stops being stated is a snapshot again")

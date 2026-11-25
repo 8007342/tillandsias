@@ -233,7 +233,6 @@ litmus openspec/litmus-tests/litmus-pickup-role-grammar-shape.yaml 8
 litmus openspec/litmus-tests/litmus-plan-answer-envelope-citability.yaml 15
 litmus openspec/litmus-tests/litmus-plan-compaction-format-preservation.yaml 2
 litmus openspec/litmus-tests/litmus-plan-engine-invariants-shape.yaml 2
-litmus openspec/litmus-tests/litmus-plan-fragments-lane-refusals-carry-affordance.yaml 1
 litmus openspec/litmus-tests/litmus-plan-index-order-uniqueness.yaml 5
 litmus openspec/litmus-tests/litmus-plan-only-lane-structural.yaml 1
 litmus openspec/litmus-tests/litmus-plan-only-push-lane-shape.yaml 12
@@ -621,7 +620,6 @@ scripts scripts/test-plan-binary-copy-refresh.sh 1
 scripts scripts/test-plan-binary-probe-usage-determinism.sh 2
 scripts scripts/test-plan-binary-runnability-precondition.sh 10
 scripts scripts/test-plan-field-get.sh 2
-scripts scripts/test-plan-fragments-lane-affordance.sh 2
 scripts scripts/test-plan-only-lane-structural.sh 8
 scripts scripts/test-plan-orders-fragment-fold.sh 7
 scripts scripts/test-podman-mock-refusal.sh 4
@@ -631,10 +629,8 @@ scripts scripts/test-pre-push-honours-a-live-freeze.sh 11
 scripts scripts/test-pre-push-linux-next-merged.sh 3
 scripts scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh 7
 scripts scripts/test-pre-push-version-guard-sigpipe.sh 3
-scripts scripts/test-pre-push-version-guard.sh 1
 scripts scripts/test-pre-push-work-ref-lane.sh 12
 scripts scripts/test-pre-receive-yaml-gate.sh 2
-scripts scripts/test-precommit-zero-trace-scan-scope.sh 6
 scripts scripts/test-preflight-front-door.sh 8
 scripts scripts/test-preflight-verdict-categories.sh 3
 scripts scripts/test-pretooluse-command-policy.sh 3

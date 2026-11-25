@@ -5329,7 +5329,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # or the /opt fixtures prints "skip: ..." and exits 0; the skip is the
     # point, not the gate.
     _step "Checking populate_hot_paths silent-failure regression (920-tqhs)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-populate-hot-paths-negative-control.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-populate-hot-paths-negative-control.lua" 2>&1; then
         _error "populate_hot_paths silence regressed — an unwritable hot mount could break tellme with a success trace again"
         exit 1
     fi
