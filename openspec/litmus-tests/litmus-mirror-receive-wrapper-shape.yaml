@@ -9,7 +9,7 @@
 # with fsckObjects effective, not decorative.
 #
 # The full container M5 proof (real sshd, real certs, real push) lives in
-# scripts/test-mirror-receive-wrapper.sh mode m5-container (quick tier runs
+# scripts/lua/test-mirror-receive-wrapper.lua arm 5 (quick tier runs
 # the offline lanes; the container lane is the suite's `all` mode and the
 # closure evidence). The order-579 suite covers the pre-receive relay half.
 name: litmus:mirror-receive-wrapper-shape
@@ -24,7 +24,7 @@ size: quick
 
 preconditions:
   - workspace contains images/git/tillandsias-receive.sh
-  - workspace contains scripts/test-mirror-receive-wrapper.sh
+  - workspace contains scripts/lua/test-mirror-receive-wrapper.lua
   - shell utilities (git, ssh-keygen, awk, grep, bash) are available in PATH
 
 critical_path:
@@ -43,23 +43,8 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: setenv-channel"
 
-  - step: "audit variables are exported from the certificate, never from the client request"
-    command: "bash scripts/test-mirror-receive-wrapper.sh vars-exported 2>&1 | tail -1"
-    timeout_ms: 15000
-    expected_behavior: "ok:receive-fixture:push-vars-exported-from-cert"
+  - step: "the whole receive fixture passes: certificate variables, named refusals, the upgraded volume, and M5 in the real container"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-mirror-receive-wrapper.lua 2>&1"
+    timeout_ms: 420000
+    expected_behavior: "ok:mirror-receive-wrapper:"
 
-  - step: "non-receive verbs, missing auth info, plain keys, and missing project are each refused with a named cause"
-    command: "bash scripts/test-mirror-receive-wrapper.sh refusals 2>&1 | tail -1"
-    timeout_ms: 15000
-    expected_behavior: "ok:receive-fixture:refusals-loud-and-named"
-
-  - step: "T7: force push and deletion are refused on an UPGRADED pre-existing volume"
-    command: "bash scripts/test-mirror-receive-wrapper.sh force-upgraded 2>&1 | tail -1"
-    timeout_ms: 20000
-    expected_behavior: "ok:receive-fixture:force-and-delete-refused-on-upgraded-volume"
-    assert_output_contains: "ok:receive-fixture:force-and-delete-refused-on-upgraded-volume"
-
-  - step: "T7: fsckObjects is EFFECTIVE on the upgraded volume (malformed object refused; permissive control copy accepts)"
-    command: "bash scripts/test-mirror-receive-wrapper.sh fsck-upgraded 2>&1 | tail -1"
-    timeout_ms: 20000
-    expected_behavior: "ok:receive-fixture:fsck-effective-on-upgraded-volume"
