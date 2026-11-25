@@ -1,7 +1,8 @@
 # @trace spec:vm-provisioning-lifecycle
 name: litmus:vm-provisioning-idempotent
 spec: vm-provisioning-lifecycle
-phase: 2
+# RETIRED (2357-42x9, 2026-11-25): its commands are cargo examples of tillandsias-host-shell, which has none; it ran in no phase.
+phase: retired
 description: >
   Provisioning the VM twice on the same host must be a no-op on the second run:
   no re-download of the Fedora rootfs or tillandsias binary, no re-import of the

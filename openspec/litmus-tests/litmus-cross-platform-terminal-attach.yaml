@@ -1,7 +1,8 @@
 # @trace spec:vm-idiomatic-layer
 name: litmus:cross-platform-terminal-attach
 spec: vm-idiomatic-layer, windows-native-tray, macos-native-tray
-phase: 4
+# RETIRED (2357-42x9, 2026-11-25): its commands are cargo examples of tillandsias-host-shell, which has none; it ran in no phase.
+phase: retired
 description: >
   Trigger "Attach Here" on a forge from the host tray. The host must spawn
   a terminal (Windows Terminal / Terminal.app / iTerm2) hosting

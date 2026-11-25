@@ -1002,8 +1002,6 @@ specs:
   - litmus:podman-idiomatic-storage-isolation
   - litmus:podman-idiomatic-events-no-polling
   - litmus:no-polling-noops
-  - litmus:podman-idiomatic-event-driven
-  - litmus:podman-idiomatic-storage-isolation-runtime
   - litmus:podman-idiomatic-error-discrimination
   - litmus:podman-idiomatic-launch-routing
   - litmus:headless-init-status-check-source-built

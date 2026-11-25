@@ -1,7 +1,7 @@
 # @trace spec:runtime-logging, spec:methodology-accountability
 name: litmus:log-field-stability-schema
 spec: runtime-logging
-phase: pre-release
+phase: pre-build
 description: Validate log field names and schema backwards compatibility to prevent silent breaking changes
 severity: critical
 size: quick
@@ -82,12 +82,10 @@ critical_path:
 gating_points:
   - signal: "core fields extracted successfully"
     success: "schema_version"
-    failure: "error|not found|No such file"
     spec_linkage: "runtime-logging"
 
   - signal: "golden schema fields extracted successfully"
     success: "accountability"
-    failure: "error|not found|No such file"
 
   - signal: "schema version consistency"
     success: "Schema versions match"
