@@ -106,7 +106,6 @@ scripts/test-host-tools.sh
 scripts/test-if-not-pipeline-guard.sh
 scripts/test-image-build-convergence.sh
 scripts/test-image-usability-check.sh
-scripts/test-initialize-bare-metal-host-idempotent.sh
 scripts/test-installers-quiet-progress.sh
 scripts/test-join-the-fleet-idempotent.sh
 scripts/test-json-query-jq-parity.sh
@@ -138,7 +137,6 @@ scripts/test-memo-hit-observability.sh
 scripts/test-metrics-log-fallback-is-loud.sh
 scripts/test-metrics-log-path-agreement.sh
 scripts/test-mo-full-attest.sh
-scripts/test-mode-only-regression-887-bz88.sh
 scripts/test-must-ship-rows.sh
 scripts/test-nix-cache-service.sh
 scripts/test-nix-toolbox.sh
