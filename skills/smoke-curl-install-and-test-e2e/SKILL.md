@@ -1231,14 +1231,16 @@ _WATCH_PID=$!
 # 100+ requests per smoke, and on 2026-11-01 that ended in a 429 with
 # Retry-After 78443. The prompt spells the token out so the prompt text itself
 # can never satisfy the grep below.
-SMOKE_PROMPT='Smoke check, one turn only. Run `bash scripts/check-credential-channel.sh` in the checkout and show its last line. Then reply with the word SMOKE-AGENT, a hyphen, and the word OK, all on one line with no spaces. Load no skill and do nothing else.'
+SMOKE_PROMPT='Smoke check, one turn only. Run `bash scripts/check-credential-channel.sh` in the checkout and show its last line. Then reply with the word SMOKE-AGENT, a hyphen, and the word OK, as plain text with no spaces, alone on its own line. That word only reports that you answered: print it whatever the check said. Load no skill and do nothing else.'
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
   env TILLANDSIAS_NO_TRAY=1 tillandsias --cloud 8007342/tillandsias --opencode --prompt "$SMOKE_PROMPT" 2>&1 \
   | tee target/smoke-e2e/04-opencode.log
 LANE_RC=${PIPESTATUS[0]}; printf 'opencode_exit=%s\n' "$LANE_RC" | tee target/smoke-e2e/04-opencode-exit.txt
-# The agent answered and called a tool: the token, not the exit code.
-grep -q 'SMOKE-AGENT-OK' target/smoke-e2e/04-opencode.log \
+# The agent answered: the token ALONE ON A LINE, not the exit code. A sentence that
+# declines to print it names it too, and a bare grep took that for an answer
+# (2333-kaf2, lenovinha v56.11.24.1).
+grep -Eq '^[[:space:]]*SMOKE-AGENT-OK[[:space:]]*$' target/smoke-e2e/04-opencode.log \
   && echo 'agent_turn=answered' || echo 'agent_turn=NO-TOKEN (finding)'
 kill "$_WATCH_PID" 2>/dev/null; wait "$_WATCH_PID" 2>/dev/null
 # The watch's verdict, when it issued one, IS the §4 verdict: the agent died and
