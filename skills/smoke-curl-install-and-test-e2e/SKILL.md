@@ -102,12 +102,15 @@ differently-aged shares (yoga, created 2026-06-15; lenovinha, created
 dirty state — and it means every Linux "clean room" pass since at least 2026-06
 silently carried this gap.
 
-Run `scripts/probe-credential-cold-state.sh --format=md` and paste its block
-into the findings file, the way the Windows leg records its hashes. It reports
-`credential-cold` or `credential-warm` from **metadata only** — never
-`secret-tool search --all`, which prints the secret inline and put live tokens
-into two transcripts on 2026-08-25 — and reports `could-not-run` when the
-question cannot be asked, which must never be read as cold.
+Run `tillandsias-plan script run scripts/lua/probe-credential-cold-state.lua -- --format=md`
+and paste its block into the findings file, the way the Windows leg records its
+hashes. It reports `credential-cold` or `credential-warm` from **metadata only** —
+never `secret-tool search --all`, which prints the secret inline and put live
+tokens into two transcripts on 2026-08-25 — and reports `could-not-run` when the
+question cannot be asked, which must never be read as cold. On macOS it reads the
+login Keychain with `security find-generic-password` WITHOUT `-g`/`-w`, which
+prints the item's attributes and never the password (2353-ccsd; before it, every
+Mac answered `could-not-run:no-busctl`).
 
 **Since 1149-vgn2 it checks the host keychain AND
 `~/.cache/tillandsias/fallback_*`, and a cold verdict names everything it

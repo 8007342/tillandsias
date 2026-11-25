@@ -31,7 +31,7 @@ preconditions:
   - forge image is built and available locally
   - git remote origin is reachable and credential channel is active
   - scripts/mo-full-attest.sh and scripts/test-mo-full-attest.sh exist
-  - scripts/meta-orchestration-worktree-guard.sh and scripts/test-worktree-boundary-guard.sh exist
+  - scripts/meta-orchestration-worktree-guard.sh and scripts/lua/test-worktree-boundary-guard.lua exist
 
 critical_path:
   # 2093-loc: local-checkout launch is retired, so the old steps 3-8 (record
@@ -43,9 +43,9 @@ critical_path:
     timeout_ms: 60000
     expected_behavior: "PASS: mo-full-attest fixture"
   - step: "run startup-boundary guard fixture"
-    command: "scripts/test-worktree-boundary-guard.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-worktree-boundary-guard.lua"
     timeout_ms: 60000
-    expected_behavior: "PASS: worktree-boundary-guard fixture"
+    expected_behavior: "ok:worktree-boundary-guard:36 arms"
   - step: "a '.' launch is refused before any forge starts (exit 2, pinned message; was: launch forge with the meta-orchestration prompt)"
     command: "E=\"${TMPDIR:-/tmp}/litmus-dot-launch.err\"; TILLANDSIAS_NO_TRAY=1 timeout 60 tillandsias . --opencode --diagnostics --port 19080 --prompt x >/dev/null 2>\"$E\"; rc=$?; [ \"$rc\" = 2 ] || { echo \"FAIL: '.' launch exited $rc, expected 2\"; exit 1; }; grep -qF \"Error: launching from a local checkout ('.') is no longer supported: Tillandsias does not mount or read a host checkout.\" \"$E\" || { echo 'FAIL: the local-checkout refusal message changed'; exit 1; }; if grep -q 'event:container_launch ' \"$E\"; then echo 'FAIL: a container launched before the refusal'; exit 1; fi; echo \"ok: '.' launch refused (exit 2, pinned message, no container launched)\""
     timeout_ms: 90000

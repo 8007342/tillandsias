@@ -103,7 +103,6 @@ scripts/test-credential-channel-affordances.sh
 scripts/test-credential-channel-host-push-lane.sh
 scripts/test-credential-channel-names-a-locked-keyring.sh
 scripts/test-credential-channel-survives-a-killed-probe.sh
-scripts/test-credential-cold-state-probe.sh
 scripts/test-credential-verdict-script.sh
 scripts/test-cycle-checkout-lock.sh
 scripts/test-cycle-lock-attested-release.sh
@@ -342,7 +341,5 @@ scripts/test-unrunnable-platform-arms.sh
 scripts/test-validator-surface-currency.sh
 scripts/test-vault-shutdown-forwards-sigterm.sh
 scripts/test-version-bump-isolation-scope.sh
-scripts/test-windows-only-sources-verified.sh
-scripts/test-worktree-boundary-guard.sh
 scripts/verify-closure.sh
 scripts/verify-version-monotonic.sh

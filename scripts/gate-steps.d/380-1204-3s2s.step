@@ -31,7 +31,7 @@ STEP_OK="gate-step metrics isolation check passed"
 # fixture says so by name rather than passing.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="scripts/test-litmus-budget-tally.sh is absent, so the isolation could not be exercised"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:step-metrics-isolation:4"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:step-metrics-isolation:4 at b022b6b85 (the Lua fixture, 2344-zk8r; bash 3.2, relayed by macuahuitl)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="runs the litmus runner (it wipes its runtime dirs)"
 STEP_LANES="litmus"

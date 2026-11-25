@@ -473,7 +473,6 @@ scripts scripts/orchestrate-enclave.sh 16
 scripts scripts/plan-binary-probe.sh 7
 scripts scripts/preflight-fixtures-default-target.sh 3
 scripts scripts/probe-complement-selfcheck.sh 5
-scripts scripts/probe-credential-cold-state.sh 4
 scripts scripts/probe-silverblue-update-skew.sh 4
 scripts scripts/promote-stable.sh 12
 scripts scripts/push-plan-fragments-to-trunk.sh 19
@@ -543,7 +542,6 @@ scripts scripts/test-competing-gate-consumer.sh 2
 scripts scripts/test-credential-channel-affordances.sh 1
 scripts scripts/test-credential-channel-host-push-lane.sh 1
 scripts scripts/test-credential-channel-names-a-locked-keyring.sh 6
-scripts scripts/test-credential-cold-state-probe.sh 2
 scripts scripts/test-cycle-checkout-lock.sh 9
 scripts scripts/test-cycle-metrics-recurrence.sh 1
 scripts scripts/test-cycle-preflight-cargo-resolution.sh 3
