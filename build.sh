@@ -5222,7 +5222,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # on two hosts an hour apart as `in_progress=1` with zero rows. The arm that
     # matters is the fresh-unclaimed one; it fails against the pre-fix binary.
     _step "Checking expire-claims --list-live names what it counts (905-wjfj)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-expire-claims-list-live-rows.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-expire-claims-list-live-rows.lua"; then
         _error "--list-live is counting in_progress packets it will not name — the sibling-overlap step built on it is blind again"
         exit 1
     fi

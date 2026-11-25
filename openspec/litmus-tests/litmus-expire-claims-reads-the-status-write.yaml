@@ -23,19 +23,19 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-expire-claims-reads-the-status-write.sh
+  - workspace contains scripts/lua/test-expire-claims-reads-the-status-write.lua
   - a runnable tillandsias-plan is resolvable, or the fixture skips by name
 
 critical_path:
   - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-expire-claims-reads-the-status-write.sh && test -x scripts/test-expire-claims-reads-the-status-write.sh && echo 'ok: expire-claims-status-write-parses'"
+    command: "test -f scripts/lua/test-expire-claims-reads-the-status-write.lua && echo 'ok: expire-claims-status-write-parses'"
     timeout_ms: 5000
     expected_behavior: "ok: expire-claims-status-write-parses"
 
   - step: "age and attribution come from the status write; the event fallback and the claim-as-activity floor both hold"
-    command: "bash scripts/test-expire-claims-reads-the-status-write.sh | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-expire-claims-reads-the-status-write.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "PASS: expire-claims-reads-the-status-write"
+    expected_behavior: "ok:expire-claims-reads-the-status-write:"
 
   - step: "the two readers of one claim agree: live_claims and expire_claim_candidates both consult status_lease_of"
     command: "n=$(grep -c 'status_lease_of(pid)' crates/tillandsias-plan/src/main.rs); [ \"$n\" -ge 2 ] && echo 'ok: both readers consult the lease'"

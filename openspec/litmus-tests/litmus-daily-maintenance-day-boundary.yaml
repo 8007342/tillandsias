@@ -28,17 +28,17 @@ size: instant
 
 preconditions:
   - workspace contains scripts/check-daily-maintenance.sh
-  - workspace contains scripts/test-daily-maintenance-day-boundary.sh
+  - workspace contains scripts/lua/test-daily-maintenance-day-boundary.lua
   - bash, date and sed are available in PATH
 
 critical_path:
   - step: "guard and fixture parse, and the fixture is executable"
-    command: "bash -n scripts/check-daily-maintenance.sh && bash -n scripts/test-daily-maintenance-day-boundary.sh && test -x scripts/test-daily-maintenance-day-boundary.sh && echo 'ok: parses'"
+    command: "bash -n scripts/check-daily-maintenance.sh && test -f scripts/lua/test-daily-maintenance-day-boundary.lua && echo 'ok: parses'"
     timeout_ms: 5000
     expected_behavior: "ok: parses"
 
   - step: "all boundary arms pass (flip-once, both offset signs, grammar, marker fields, mutation control)"
-    command: "bash scripts/test-daily-maintenance-day-boundary.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-daily-maintenance-day-boundary.lua 2>&1"
     timeout_ms: 60000
     expected_behavior: "ok:daily-maintenance-day-boundary:all"
 
@@ -48,7 +48,7 @@ critical_path:
     expected_behavior: "ok: utc-boundary"
 
 evidence:
-  artifact: "scripts/check-daily-maintenance.sh + scripts/test-daily-maintenance-day-boundary.sh"
+  artifact: "scripts/check-daily-maintenance.sh + scripts/lua/test-daily-maintenance-day-boundary.lua"
   measured_on: >
     lenovinha (Fedora Silverblue, UTC-7) 2026-08-26 — live before/after on the
     same host at the same instant: with the local boundary the gate read
