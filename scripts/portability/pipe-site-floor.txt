@@ -520,12 +520,10 @@ scripts scripts/test-archiver-ruby-could-not-run.sh 8
 scripts scripts/test-awk-float-lc-numeric.sh 6
 scripts scripts/test-bench-prompt-uniqueness.sh 1
 scripts scripts/test-bound-litmus-is-runnable.sh 5
-scripts scripts/test-branch-discipline-verb.sh 1
 scripts scripts/test-build-sh-ci-full-install-prep.sh 1
 scripts scripts/test-build-step-timing-attribution.sh 1
 scripts scripts/test-capability-routing.sh 24
 scripts scripts/test-capture-helper.sh 4
-scripts scripts/test-centicolon-extract.sh 3
 scripts scripts/test-check-bash-dialect.sh 2
 scripts scripts/test-check-credential-channel.sh 12
 scripts scripts/test-claims-across-branches.sh 7
