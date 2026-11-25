@@ -40,15 +40,15 @@
 # no skippable line at all. NOT in the fast-refusal lane, whose admission rule
 # is a median under one second.
 #
-# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# STEP_LUA is a LITERAL path on purpose: a binding assembled from a
 # variable is invisible to every name-based scan, including the
 # bound-or-retired guard (1063-nraf). Keep it a plain string.
 STEP_DESC="Checking the loop-status audit can still read what cycle-metrics emits (1243-yiyq)"
-STEP_SCRIPT="scripts/test-loop-status-audit-reads-current-emitter.sh"
+STEP_LUA="scripts/lua/test-loop-status-audit-reads-current-emitter.lua"
 STEP_ERROR="the loop-status audit and cycle-metrics.sh have drifted apart again (1243-yiyq) — the audit will report every host NOT-PASTING while parsing nothing; read which arm failed above"
 STEP_OK="Loop-status audit parses the current emitter"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:loop-status-audit-reads-current-emitter:6"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/cycle-metrics.sh scripts/loop-status-metrics-audit.sh scripts/test-loop-status-audit-reads-current-emitter.sh"
+STEP_READS="scripts/cycle-metrics.sh scripts/loop-status-metrics-audit.sh scripts/lua/test-loop-status-audit-reads-current-emitter.lua"

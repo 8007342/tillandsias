@@ -239,7 +239,6 @@ scripts/test-litmus-terminal-verdict.sh
 scripts/test-litmus-tracked-file-kill-safety.sh
 scripts/test-long-running-view-refuses-at-completion.sh
 scripts/test-loop-status-append-input.sh
-scripts/test-loop-status-audit-reads-current-emitter.sh
 scripts/test-lww-channel-consumers.sh
 scripts/test-macos-vsock-inference-closure.sh
 scripts/test-mcp-plan-resolver-pinning.sh
