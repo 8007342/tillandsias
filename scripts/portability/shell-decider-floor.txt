@@ -109,7 +109,6 @@ scripts/test-e2e-preflight-live-runtime.sh
 scripts/test-enclave-network-internal-discovery.sh
 scripts/test-enclave-proxy-lib.sh
 scripts/test-enclave-service-health.sh
-scripts/test-ensure-cosign.sh
 scripts/test-ensure-toolbox-properties.sh
 scripts/test-exec-bits-guard-end-to-end.sh
 scripts/test-expire-claims-list-live-rows.sh
@@ -129,7 +128,6 @@ scripts/test-forge-runtime-ca-trust.sh
 scripts/test-forge-src-budget-report.sh
 scripts/test-forge-standard-gitconfig-path.sh
 scripts/test-forge-swap-service.sh
-scripts/test-forge-validate.sh
 scripts/test-fragment-batch-never-collapses-verdicts.sh
 scripts/test-fragment-status-loss-row-boundary.sh
 scripts/test-fragment-status-loss.sh
@@ -137,7 +135,6 @@ scripts/test-freshness-regime-budget.sh
 scripts/test-gate-memory-wsl2-guest.sh
 scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh
 scripts/test-gate-stamp-memoization.sh
-scripts/test-gate-stamp-names-content-movers.sh
 scripts/test-gate-stamp.sh
 scripts/test-gate-step-prefix-allocation.sh
 scripts/test-gate-step-regimes.sh
@@ -308,19 +305,15 @@ scripts/test-timing-clock-resolution.sh
 scripts/test-timing-record-carries-root.sh
 scripts/test-token-instrument.sh
 scripts/test-tool-dispatch-lib.sh
-scripts/test-tool-dispatch-rejects-unusable-host-tool.sh
 scripts/test-tool-materialize-litmus-surfaces-arm.sh
 scripts/test-tool-materialize.sh
 scripts/test-trace-coverage.sh
 scripts/test-tracked-files-unwritten-guard.sh
-scripts/test-tray-asset-placeholder-refused.sh
-scripts/test-tray-refresh-no-polling.sh
 scripts/test-tray-surface-parity-gate.sh
 scripts/test-uninstall-keeps-models.sh
 scripts/test-uninstall-matcher-spares-bystanders.sh
 scripts/test-unrunnable-platform-arms.sh
 scripts/test-validator-surface-currency.sh
 scripts/test-vault-shutdown-forwards-sigterm.sh
-scripts/test-version-bump-isolation-scope.sh
 scripts/verify-closure.sh
 scripts/verify-version-monotonic.sh
