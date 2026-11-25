@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: scripts-that-grep-git-prose-force-the-c-locale
+    field: status
+    value: in_progress
+    ts: "2026-11-23T23:56:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: scripts-that-grep-git-prose-force-the-c-locale
+    event:
+      type: claimed
+      ts: "2026-11-23T23:56:02Z"
+      host: calmecacpilli
+      summary: |-
+        Claimed on the coordinator's queue. LANGUAGE=en rather than LC_ALL=C on pushes, so the hooks a push runs keep their locale. Fixed: land-on-platform-branch.sh, probe-remote-reachable.lua, push-plan-fragments-to-trunk.sh, test-mirror-receive-wrapper.sh. Left: test-git-mirror-existing-volume-hardening.sh 162 matches our own hook's words; release-freeze.sh _git_reason only prints; images/git/* run in the git container, whose locale was not checked.

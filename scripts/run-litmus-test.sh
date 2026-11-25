@@ -353,7 +353,9 @@ fi
 # Now the runtime bin joins PATH — after the extraction above, and carrying the
 # shim it may just have written, so both this runner's own yaml_get and every
 # litmus step command resolve the same real yq.
-export PATH="$LITMUS_RUNTIME_DIR/bin:$PATH"
+# 2310-eji3 (yolanda, msys): as this shell spells it. A C:/ runtime dir prepended raw splits
+# at its drive colon, and the whole shim dir, podman and yq included, was off PATH.
+export PATH="$(cd "$LITMUS_RUNTIME_DIR/bin" && pwd):$PATH"
 
 # ── ORDER 746-htj9: the sanctioned YAML read path for the runner's OWN reads ─
 # Metadata reads (phase/host_kind/size/inputs, bindings queries) try
@@ -365,6 +367,12 @@ export PATH="$LITMUS_RUNTIME_DIR/bin:$PATH"
 # fresh clone that has never built the binary must still be able to run.
 # Step COMMANDS inside test files that call yq themselves are 799-tb7q's
 # territory (the toolbox shim above), not this block's.
+# ORDER 2310-eji3. A step that calls a bare `tillandsias-plan` gets the binary this
+# runner resolved, on a host with none on PATH (rc 127, msys) and never a stale one
+# ahead of the probe's answer. The shim dir is already first on every step's PATH; a
+# step that sets its own PATH, or asks a container, is untouched. Removed first: the
+# probe's last candidate is PATH, and it must not resolve last run's link to itself.
+rm -f "$LITMUS_RUNTIME_DIR/bin/tillandsias-plan" "$LITMUS_RUNTIME_DIR/bin/tillandsias-plan.exe"
 LITMUS_PLAN_BIN=""
 if [[ -f "$PROJECT_ROOT/scripts/plan-binary-probe.sh" ]]; then
     # shellcheck source=scripts/plan-binary-probe.sh
@@ -379,6 +387,13 @@ if [[ -f "$PROJECT_ROOT/scripts/plan-binary-probe.sh" ]]; then
             ./*) LITMUS_PLAN_BIN="$PROJECT_ROOT/${LITMUS_PLAN_BIN#./}" ;;
         esac
     fi
+fi
+if [[ -n "$LITMUS_PLAN_BIN" ]]; then
+    _plan_abs="$LITMUS_PLAN_BIN"
+    case "$_plan_abs" in /*|[A-Za-z]:*) ;; *) _plan_abs="$PWD/$_plan_abs" ;; esac
+    case "$LITMUS_PLAN_BIN" in *.exe) _plan_shim=tillandsias-plan.exe ;; *) _plan_shim=tillandsias-plan ;; esac
+    ln -s "$_plan_abs" "$LITMUS_RUNTIME_DIR/bin/$_plan_shim" 2>/dev/null \
+        || cp "$_plan_abs" "$LITMUS_RUNTIME_DIR/bin/$_plan_shim" 2>/dev/null || true
 fi
 # Whether that binary answers `yaml get` (1375-6pnd), decided ONCE here: _yaml_jq
 # always runs inside $(...), so a cache set there would not outlive the call.

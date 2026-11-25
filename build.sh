@@ -6884,22 +6884,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
-    # Order 875-v7hv. The runner parses step fields with bash regexes, which
-    # capture the RAW bytes of a double-quoted YAML scalar, so a `\"` arrives
-    # as backslash-quote and must be unescaped by hand. That unescaping was
-    # applied to `command:` alone; `expected_behavior:`, `success_pattern:` and
-    # `failure_pattern:` got none, so a step whose command emits a quote could
-    # never match its own declared expectation. The dangerous half is
-    # `failure_pattern`: one carrying `\"` silently never fires, and a step
-    # that should have gone red reports green. Same family as the two gates
-    # above — all three ask whether an assertion can still fail.
-    _step "Checking litmus step scalars are unescaped consistently (875-v7hv)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-scalar-unescape.sh" 2>&1; then
-        _error "a litmus step field bypasses yaml_unescape_dq (875-v7hv) — see the verdict line above"
-        exit 1
-    fi
-    _info "Litmus scalar-unescape check passed"
-
     # The six live/adversarial inference arms run through the dedicated Rust
     # production-CLI target above; a shell fixture would be a second authority.
     _step "Checking source-agreement production fixtures ran (1484-uf29)..."
@@ -6921,14 +6905,14 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Framing ratchet passed"
 
     _step "Checking the stale-base revert guard (1000-rqmx)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-no-stale-base-revert.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-no-stale-base-revert.lua" 2>&1; then
         _error "the stale-base revert guard regressed (1000-rqmx) — a force push whose diff reverts untouched files would not be refused"
         exit 1
     fi
     _info "Stale-base revert guard passed"
 
     _step "Checking the stale-base revert guard's RECEIVING half (1001-i5ux)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-no-stale-base-revert-pre-receive.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-no-stale-base-revert-pre-receive.lua" 2>&1; then
         _error "the pre-receive stale-base revert guard regressed (1001-i5ux) — a fast-forward push whose merge discards the trunk would be accepted by the mirror, which --no-verify cannot be blamed for"
         exit 1
     fi
@@ -7082,7 +7066,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _error "a litmus step named for a mutation performs none (1059-pb2j) — rename it to what it asserts; see the verdict line above"
         exit 1
     fi
-    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-mutation-arm-guard.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-litmus-mutation-arm-guard.lua" 2>&1; then
         _error "the mutation-arm guard lost a control (1059-pb2j) — see the verdict line above"
         exit 1
     fi
@@ -7223,26 +7207,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Freshness regime-budget fixture passed"
-
-    # 1063-nraf / 1041-up99: this fixture was ORPHANED — invoked by no script,
-    # no litmus binding and no skill — while plan/index.yaml stated, of it, "THE
-    # NEGATIVE CONTROL, pinned by scripts/test-expert-accuracy-record-shape.sh,
-    # 6/6". The ledger recorded an enforcement that did not run. That is worse
-    # than recording none: a later reader has no reason to doubt it, and the
-    # control it names is the one that keeps a never-called expert from being
-    # reported as 100% accurate rather than as null.
-    #
-    # Wired here rather than left to a human's memory, which is the whole of
-    # 1063-nraf: a fixture pinning a verdict that can delete a host's cycle runs
-    # only when someone remembers to run it. Verified green before wiring
-    # (ok:test-expert-accuracy-record-shape:6-passed) — wiring a red fixture
-    # would trade a silent gap for a broken gate.
-    _step "Checking the expert-accuracy record shape (917-6iwv)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-expert-accuracy-record-shape.sh" 2>&1; then
-        _error "the expert-accuracy record shape regressed (917-6iwv) — a never-called expert must record rate=null, never 0 and never 100, and a partial run must carry its denominator"
-        exit 1
-    fi
-    _info "Expert-accuracy record fixture passed"
 
     # ── 1063-nraf: TEN ORPHANED FIXTURES BOUND ─────────────────────────────
     #

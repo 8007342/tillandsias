@@ -359,5 +359,24 @@ else
     bad "a diverged sibling's claim must still be reported" "rc=$rc out=[$out]"
 fi
 
+# 9. ORDER 2323-wwaa — AN OVERRIDE THAT ALREADY PASSES --index. The binary refuses
+#    a second --index, so every sibling folded to nothing. The checkout's own
+#    binary (planted in the scratch repo) answers instead. RED ON PRE-FIX CODE.
+mkdir -p "$R/built/release"
+cat > "$R/built/release/tillandsias-plan" <<'EOF'
+#!/bin/sh
+[ "$1" = --index ] && shift 2
+[ "$1" = --index ] && { echo "error: unknown subcommand '--index'" >&2; exit 2; }
+echo "PKT	in_progress	some-packet-name"
+EOF
+printf '#!/bin/sh\nexec "%s" --index /scratch/index.yaml "$@"\n' "$R/built/release/tillandsias-plan" > "$W/indexed-plan"
+chmod +x "$R/built/release/tillandsias-plan" "$W/indexed-plan"
+out="$(cd "$R" && CARGO_TARGET_DIR="$R/built" TILLANDSIAS_PLAN_BIN="$W/indexed-plan" bash "$R/scripts/check-claims-across-branches.sh" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
+if [ "$rc" -eq 1 ] && grep -q '^claimed-elsewhere:SOME-PKT:osx-next' <<<"$out"; then
+    ok "an override that fixes its own --index does not blind the sibling fold"
+else
+    bad "an override that fixes its own --index must not blind the sibling fold" "rc=$rc out=[$out]"
+fi
+
 echo "claims-across-branches: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -1,0 +1,4 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: disk-preflight-prunes-the-cargo-incremental-cache-below-the-floor
+    event: {type: note, ts: "2026-11-25T03:47:13Z", host: yoga, summary: "darwin (macbookair, relayed) at 5ba42a1c9: step 410 ok:loop-status-audit-reads-current-emitter:6 arms"}

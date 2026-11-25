@@ -1,0 +1,11 @@
+# Gate step 875-v7hv — every double-quoted litmus step field is unescaped through
+# yaml_unescape_dq; a failure_pattern that is not can never fire, so a red reads green.
+# Moved here from an inline build.sh step with the fixture's Lua port (2282-peuy).
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking litmus step scalars are unescaped consistently (875-v7hv)"
+STEP_LUA="scripts/lua/test-litmus-scalar-unescape.lua"
+STEP_ERROR="a litmus step field bypasses yaml_unescape_dq (875-v7hv) — see the FAIL lines above"
+STEP_OK="Litmus scalar-unescape check passed"
+STEP_READS="scripts/lua/test-litmus-scalar-unescape.lua scripts/run-litmus-test.sh"
+STEP_SECOND_REGIME="yolanda 2026-11-23 msys ok:litmus-scalar-unescape:15 arms at 302b4549e"

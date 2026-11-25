@@ -27,7 +27,7 @@ STEP_ERROR="the pre-push litmus notice regressed (1201-9it2) — either the land
 STEP_OK="land-time litmus notice check passed"
 # Exit 3 means the land tool or the covering-specs map is absent — nothing was
 # exercised, and the fixture says so by name rather than passing.
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:land-notice:5"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:land-notice-names-unrun-litmus:5 arms (2324-xme7 @f13433492, Lua port)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
 STEP_LANES="timing"
