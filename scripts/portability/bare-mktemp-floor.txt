@@ -159,7 +159,6 @@ scripts/test-validator-surface-currency.sh 1
 scripts/test-vault-shutdown-forwards-sigterm.sh 1
 scripts/test-version-bump-isolation-scope.sh 1
 scripts/test-windows-only-sources-verified.sh 1
-scripts/test-windows-tray-clippy.sh 1
 scripts/test-wsl-builder-kill-reaches-guest.sh 1
 scripts/update-convergence-dashboard.sh 2
 scripts/validate-traces.sh 1

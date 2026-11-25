@@ -4960,7 +4960,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Fragment-integrity fixture passed"
     _step "Checking the sanctioned YAML reader is present here (746-htj9)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-yaml-reader-availability.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-yaml-reader-availability.lua" 2>&1; then
         _error "no sanctioned YAML reader in this environment, or the load-failure verdict collapsed into the divergence verdict (720-24u6)"
         exit 1
     fi
