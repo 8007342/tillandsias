@@ -126,7 +126,6 @@ scripts/test-reclaim-stranded-claims.sh 1
 scripts/test-release-tier-freshness.sh 1
 scripts/test-requirement-ids.sh 1
 scripts/test-reset-state-contract.sh 2
-scripts/test-resumable-claim-dirt.sh 1
 scripts/test-running-image-freshness.sh 1
 scripts/test-salvage-audit.sh 1
 scripts/test-salvage-net.sh 1

@@ -17,7 +17,7 @@ description: >
   Pin scripts/check-resumable-claim-dirt.sh: the verdict grammar
   ^(resumable:<order>(,<order>)*|ok:clean-tree|unattributable:.*)$ with
   order-540 exit conventions (0 resumable / 4 clean / 3 refuse / 2 infra),
-  the six hermetic fixture cases in scripts/test-resumable-claim-dirt.sh
+  the six hermetic fixture cases in scripts/lua/test-resumable-claim-dirt.lua
   (clean tree; untracked refuses; dirt predating the claim refuses; another
   host's claim refuses; claim past TTL refuses; own live claims pass naming
   every order), the `tillandsias-plan expire-claims --list-live` row shape it
@@ -27,15 +27,15 @@ size: instant
 
 preconditions:
   - workspace contains scripts/check-resumable-claim-dirt.sh
-  - workspace contains scripts/test-resumable-claim-dirt.sh
+  - workspace contains scripts/lua/test-resumable-claim-dirt.lua
   - workspace contains skills/meta-orchestration/SKILL.md
   - a runnable tillandsias-plan binary is resolvable (plan-binary-probe)
 
 critical_path:
   - step: "the hermetic fixture passes all six cases through the real binary"
-    command: "bash scripts/test-resumable-claim-dirt.sh 2>&1 | tail -1 | grep -qx 'PASS: resumable claim dirt (6/6)' && echo 'ok: fixture 6/6'"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-resumable-claim-dirt.lua"
     timeout_ms: 30000
-    expected_behavior: "ok: fixture 6/6"
+    expected_behavior: "ok:resumable-claim-dirt:6 arms"
 
   - step: "the detector emits exactly one well-formed verdict line on this live tree"
     command: "out=$(bash scripts/check-resumable-claim-dirt.sh); rc=$?; n=$(printf '%s\\n' \"$out\" | grep -cE '^(resumable:[0-9A-Za-z-]+(,[0-9A-Za-z-]+)*|ok:clean-tree|unattributable:.*)$'); [ \"$n\" = 1 ] && [ $rc -eq 0 -o $rc -eq 2 -o $rc -eq 3 -o $rc -eq 4 ] && echo 'ok: well-formed verdict' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
@@ -74,7 +74,7 @@ observability:
   log_fields:
     spec: "meta-orchestration"
     test: "resumable-claim-dirt-shape"
-    artifact: "scripts/check-resumable-claim-dirt.sh + scripts/test-resumable-claim-dirt.sh + skills/meta-orchestration/SKILL.md"
+    artifact: "scripts/check-resumable-claim-dirt.sh + scripts/lua/test-resumable-claim-dirt.lua + skills/meta-orchestration/SKILL.md"
 
 rollback:
   on_failure: >
@@ -84,6 +84,6 @@ rollback:
     0 only when every dirty path is tracked, the folded ledger names a live
     claim owned by this host (expire-claims --list-live, claim-convention
     event host), and every dirty path's mtime postdates the oldest such
-    claim; keep scripts/test-resumable-claim-dirt.sh's six cases green and
+    claim; keep scripts/lua/test-resumable-claim-dirt.lua's six cases green and
     the SKILL.md consultation (review-gated, never auto-commit) intact.
-  command: "bash scripts/test-resumable-claim-dirt.sh 2>&1 | tail -3"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-resumable-claim-dirt.lua"

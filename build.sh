@@ -4988,7 +4988,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Exit-status canary sound"
 
     _step "Checking set-field emits valid YAML for every value shape..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-set-field-yaml-shapes.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-set-field-yaml-shapes.lua" 2>&1; then
         _error "set-field can write an unparseable ledger fragment — the ledger is append-only"
         exit 1
     fi
@@ -5275,7 +5275,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Host-identity fixture passed"
 
     _step "Checking the test-baseline ratchet's own fixture..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-check-test-baseline.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-check-test-baseline.lua" 2>&1; then
         _error "the test-baseline ratchet's fixture failed — the gate below cannot be trusted to go red"
         exit 1
     fi
