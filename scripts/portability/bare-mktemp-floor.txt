@@ -147,7 +147,6 @@ scripts/test-skills-single-source.sh 1
 scripts/test-smoke-verifies-a-signature.sh 1
 scripts/test-spec-index-durable-tier-demotion.sh 1
 scripts/test-spec-index-endpoint-classification.sh 1
-scripts/test-spec-index-repo-relative-rung.sh 1
 scripts/test-squid-supervisor.sh 1
 scripts/test-ssh-lane-sidecar.sh 1
 scripts/test-timing-record-carries-root.sh 1
