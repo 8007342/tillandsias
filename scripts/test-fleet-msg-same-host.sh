@@ -28,6 +28,8 @@
 #   8 plain       a lane whose outbox/new is a symlink onto b-default's inbox
 #                 is refused:msg:lane-not-plain; b's mail is neither read nor
 #                 moved (the mover never follows a link out of a lane)
+#   9 leak        the pid the fixture kills is the server itself, the server does
+#                 not hold the caller's fd 9, and none is left when it ends
 # Mutation controls (each re-runs an arm's predicate against a seam that
 # removes the property; the arm must then FAIL):
 #   NEG-LAX       TILLANDSIAS_MSG_MOVER_LAX=1 (the mover's second secret check
@@ -45,7 +47,7 @@
 # that window, so the fixture takes about 65 s after the build.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-pass=0; total=8; controls=0
+pass=0; total=9; controls=0
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1"; }
 
@@ -58,8 +60,12 @@ fi
 
 T="$(mktemp -d "${TMPDIR:-/tmp}/fleet-msg-same-host.XXXXXX")"
 MPID=""
+stop_mover() {
+    [ -n "$MPID" ] || return 0
+    kill "$MPID" 2>/dev/null; wait "$MPID" 2>/dev/null; MPID=""
+}
 cleanup() {
-    if [ -n "$MPID" ]; then kill "$MPID" 2>/dev/null; wait "$MPID" 2>/dev/null; fi
+    stop_mover
     rm -rf "$T"
 }
 trap cleanup EXIT
@@ -108,9 +114,12 @@ m() {
         TILLANDSIAS_MSG_LANE="$lane" "$PLAN" msg "$@" 2>"$T/err")"; RC=$?
     ERR="$(cat "$T/err")"
 }
-# mover <env assignments...> <args...>: the real binary, hermetic.
+# mover <env assignments...> <args...>: the real binary, hermetic. With
+# MOVER_EXEC=exec a backgrounded call BECOMES the binary, so $! is its pid: without
+# it $! is this function's subshell, and killing that orphaned the server, which
+# held every descriptor it inherited (a land lock, 80 minutes; 2323-r7zf).
 mover() {
-    env -u TILLANDSIAS_MSG_ROOT -u TILLANDSIAS_MSG_MOVER_LAX -u TILLANDSIAS_MSG_SKIP_FSYNC \
+    ${MOVER_EXEC:-} env -u TILLANDSIAS_MSG_ROOT -u TILLANDSIAS_MSG_MOVER_LAX -u TILLANDSIAS_MSG_SKIP_FSYNC \
         -u TILLANDSIAS_MSG_WAKE_SOCK \
         HOME="$T/home" XDG_STATE_HOME="$T/state" XDG_RUNTIME_DIR="$T/run" \
         TILLANDSIAS_MSG_HOST="$H" TILLANDSIAS_MSG_POLL_MS=100 TILLANDSIAS_MSG_SWEEP_MS=250 \
@@ -164,8 +173,10 @@ fi
 
 # ── the resident, and the lanes a launcher would have made ──────────────────
 for l in a-default b-default; do mkdir -p "$LANES/$l"; done
-mover TILLANDSIAS_MSG_ROOT="$S" TILLANDSIAS_MSG_WAKE_SOCK="$WAKE" \
-    "$BIN" --msg-serve >"$T/mover.out" 2>"$T/mover.log" &
+# fd 9 here stands for a lock the caller holds; the server must not keep it.
+[ -e /dev/fd/9 ] || exec 9>"$T/caller-lock"
+MOVER_EXEC=exec mover TILLANDSIAS_MSG_ROOT="$S" TILLANDSIAS_MSG_WAKE_SOCK="$WAKE" \
+    "$BIN" --msg-serve >"$T/mover.out" 2>"$T/mover.log" 9>&- &
 MPID=$!
 if ! wait_for 100 test -S "$WAKE"; then
     echo "FAIL: the mover never bound its wake socket"; cat "$T/mover.log"
@@ -306,6 +317,25 @@ if [ "$ttl_acked" = 0 ] && [ ! -e "$LANES/b-default/inbox/new/$TTL_ID" ] && [ ! 
    && has "acked:$H/b-default@" "$(line 1 "$OUT")"; then
     ok "5 ttl: the --ttl 60 message acked into b-default is gone from its inbox 61 s later; the sender still reads acked:"
 else bad "5 acked_first=$ttl_acked status=[$OUT] b_new=[$(ls "$LANES/b-default/inbox/new")]"; fi
+
+# ── arm 9: the server ends with the fixture ──────────────────────────────────
+# The recorded pid must BE the server (anything else is what leaked), it must not
+# hold the caller's fd 9, and nothing may answer its wake socket once stopped.
+spid="$MPID"; sargs="$(ps -o args= -p "$spid" 2>/dev/null)"
+held=n; if [ -d "/proc/$spid/fd" ]; then
+    for l in "/proc/$spid/fd"/*; do
+        case "$(readlink "$l")" in "$(readlink "/proc/$$/fd/9")") held=y ;; esac
+    done
+fi
+stop_mover
+left=""; if [ -d /proc/self ]; then
+    for e in /proc/[0-9]*/environ; do
+        if tr '\0' '\n' <"$e" 2>/dev/null | grep -cxF "HOME=$T/home" >/dev/null; then left="$left ${e%/environ}"; fi
+    done 2>/dev/null
+fi
+if has "--msg-serve" "$sargs" && [ "$held" = n ] && ! kill -0 "$spid" 2>/dev/null && [ -z "$left" ]; then
+    ok "9 leak: the recorded pid is the server, it held no caller fd 9, and none is left under the throwaway HOME"
+else bad "9 args=[$sargs] fd9_held=$held left=[$left]"; fi
 
 if [ "$pass" = "$total" ] && [ "$controls" = 3 ]; then
     echo "ok:fleet-msg-same-host:$pass/$total+$controls-controls"

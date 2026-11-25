@@ -6939,7 +6939,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # into) must skip it with the retired reason. Two arms through the real
     # runner in a temp root; the retired probe fails loudly if it ever runs.
     _step "Checking retired-phase litmus tests run only when asked for (956-llei)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-retired-phase-skip.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-litmus-retired-phase-skip.lua" 2>&1; then
         _error "the litmus runner executes retired-phase tests under the default phase filter (956-llei) — see the verdict line above"
         exit 1
     fi
@@ -6949,7 +6949,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # spec's bound test list (the instant sweep ran 1 of 29 ci-release tests
     # and reported PASS before the runner fed steps from /dev/null).
     _step "Checking a stdin-reading litmus step does not eat its spec's test list (956-llei)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-stdin-does-not-eat-the-spec-list.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-litmus-stdin-does-not-eat-the-spec-list.lua" 2>&1; then
         _error "a stdin-reading litmus step swallows the rest of its spec's test list (956-llei) — see the verdict line above"
         exit 1
     fi

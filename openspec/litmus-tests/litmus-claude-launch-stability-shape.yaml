@@ -11,14 +11,14 @@ preconditions:
   - workspace contains images/default/Containerfile
   - workspace contains images/default/entrypoint-forge-claude.sh
   - workspace contains crates/tillandsias-headless/src/main.rs
-  - workspace contains scripts/test-claude-forge-bypass-preaccepted.sh
+  - workspace contains scripts/lua/test-claude-forge-bypass-preaccepted.lua
   - workspace contains scripts/test-claude-forge-remote-control-args.sh
 
 critical_path:
-  - step: "order 1437-y2wu: bypass-permissions consent pre-accepted, forge-gated, additive (6 fixture arms, incl. entrypoint wiring order)"
-    command: "bash scripts/test-claude-forge-bypass-preaccepted.sh"
+  - step: "order 1437-y2wu: bypass-permissions consent pre-accepted, forge-gated, additive (7 fixture arms, incl. entrypoint wiring order)"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-claude-forge-bypass-preaccepted.lua 2>&1"
     timeout_ms: 60000
-    success_pattern: "PASS: claude forge bypass-permissions consent pre-accepted"
+    success_pattern: "ok:claude-forge-bypass-preaccepted:7 arms"
     failure_pattern: "FAIL:"
 
   - step: "Claude forge joins Remote Control as <project>-forge when supported (3 fixture arms + wiring)"

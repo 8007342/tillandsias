@@ -51,12 +51,10 @@ scripts/test-build-image-installed-version-alias.sh 1
 scripts/test-build-step-timing-attribution.sh 1
 scripts/test-census-enforced-reachability-split.sh 1
 scripts/test-check-credential-channel.sh 1
-scripts/test-claude-forge-bypass-preaccepted.sh 1
 scripts/test-clear-vault-credentials-partial-is-nonzero.sh 1
 scripts/test-clear-vault-host-credentials.sh 1
 scripts/test-cloudflare-oauth-core.sh 1
 scripts/test-codex-mcp-registration.sh 1
-scripts/test-codex-oauth-harvest.sh 2
 scripts/test-codex-oauth-restore.sh 1
 scripts/test-codex-safe-state.sh 1
 scripts/test-command-policy-evaluator.sh 1
@@ -110,7 +108,6 @@ scripts/test-inference-mkdir-fatal-1183-j9dk.sh 1
 scripts/test-installer-probes-by-attempt-not-by-help.sh 2
 scripts/test-installer-provisions-once.sh 1
 scripts/test-land-merges-trunk.sh 1
-scripts/test-land-notice-names-unrun-litmus.sh 1
 scripts/test-land-queue.sh 1
 scripts/test-ledger-node-claim-resolution.sh 1
 scripts/test-ledger-prose-roundtrip.sh 1
@@ -118,7 +115,6 @@ scripts/test-ledger-write-reaches-its-reader.sh 3
 scripts/test-litmus-bindings.sh 1
 scripts/test-litmus-budget-tally.sh 1
 scripts/test-litmus-covering-relay-scope.sh 1
-scripts/test-litmus-item-opener-refused.sh 1
 scripts/test-litmus-mutation-arm-guard.sh 1
 scripts/test-litmus-runner-reports-rc.sh 2
 scripts/test-litmus-tracked-file-kill-safety.sh 2

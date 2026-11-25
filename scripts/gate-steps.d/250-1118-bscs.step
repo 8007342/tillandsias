@@ -6,16 +6,16 @@
 # 0.0.0.0 with allowlist-free egress, reachable from every enclave container
 # whether or not anything routed there.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking the push token is GitHub-https-only and the permissive proxy port is loopback (1118-bscs)"
-STEP_SCRIPT="scripts/test-credential-and-proxy-confinement.sh"
+STEP_LUA="scripts/lua/test-credential-and-proxy-confinement.lua"
 STEP_ERROR="a GitHub token can reach a non-GitHub host or travel over http, or the permissive proxy port is reachable from the enclave again (1118-bscs) — see the verdict line above"
 STEP_OK="Credential and proxy confinement passed"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   CONTROL: the strict port 3128 still binds for the enclave (confinement did not break the allowlisted pat"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:credential-and-proxy-confinement:9 arms (2320-b5vv @f03fae8d7, Lua port)"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="images/git/git-credential-tillandsias.sh images/proxy/squid.conf scripts/test-credential-and-proxy-confinement.sh"
+STEP_READS="images/git/git-credential-tillandsias.sh images/proxy/squid.conf scripts/lua/test-credential-and-proxy-confinement.lua"
 # ORDER 2184-sinp: DECLARED INPUTS (2118-tnut grammar). The script reads
 # exactly two repo files (the git credential helper and the proxy config) and
 # runs nothing else from the tree. An ATIME TRACE of a real run agrees.

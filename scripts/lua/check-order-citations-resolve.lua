@@ -1,6 +1,6 @@
 -- @env TILLANDSIAS_ORDER_CITATIONS_ROOT
 -- @read-env TILLANDSIAS_ORDER_CITATIONS_ROOT
--- @trace order:1234-zade, spec:spec-traceability
+-- @trace order:1234-zade, order:2321-feiw, spec:spec-traceability
 --
 -- check-order-citations-resolve.lua — PORTED from check-order-citations-resolve.sh
 -- (1118-fqfk carry). Every `@trace order:<id>` must name a packet that exists.
@@ -26,31 +26,43 @@
 --
 -- The tree is TILLANDSIAS_ORDER_CITATIONS_ROOT when set (the fixture's scratch
 -- trees), else the repository root. `/usr/bin/grep` as in validate-traces.sh:
--- the shell `grep` may be a wrapper.
+-- the shell `grep` may be a wrapper. Native Windows has no such path: there grep
+-- and find are PATH's, as Git's bash resolves them (2321-feiw).
 --
 -- VERDICTS (one line, stdout):
 --   ok:order-citations-resolve:<cited> checked, <declared> declared
 --   violation:order-citations-unresolvable:<n>
 --   blocked:order-citations-resolve:no-ledger-orders-found
+--   blocked:order-citations-resolve:no-citations-found
+--   blocked:order-citations-resolve:no-grep-or-find  (native Windows without Git's tools)
 
 -- Known-unresolvable, declared 2026-09-17. Remove an entry when it is fixed.
 local DECLARED = { ["1184-u5mg"] = true, ["723-b9cn"] = true }
 
 local root = env.get("TILLANDSIAS_ORDER_CITATIONS_ROOT")
 if root == "" then root = nil end
-local GREP = "/usr/bin/grep"
+local fixture = require "common.fixture"
+local GREP, FIND = "/usr/bin/grep", "find"
+if fixture.posix_shell() ~= "bash" then -- native Windows: no /usr/bin, and System32 has another find
+    GREP, FIND = fixture.which("grep"), fixture.which("find")
+    if not GREP or not FIND then
+        verdict.emit("blocked:order-citations-resolve:no-grep-or-find", 2)
+    end
+end
 local CITE_ROOTS = { "scripts/", "crates/", "images/", "methodology/" }
 
-local function grep(args)
-    local argv = { GREP }
+-- The pattern goes on stdin (-f -). Measured on msys: as an argument from this native
+-- runner the citation pattern matched nothing (0 cited, ok); on stdin, all of them.
+local function grep(pattern, args)
+    local argv = { GREP, "-f", "-" }
     for _, a in ipairs(args) do argv[#argv + 1] = a end
-    local r = proc.run{ argv = argv, cwd = root }
+    local r = proc.run{ argv = argv, cwd = root, stdin = pattern }
     return text.lines(r.stdout or "")
 end
 
 -- Top-level *.sh files, which the shell original reached as ./*.sh.
 local function top_level_sh()
-    local r = proc.run{ argv = { "find", ".", "-maxdepth", "1", "-name", "*.sh", "-type", "f" }, cwd = root }
+    local r = proc.run{ argv = { FIND, ".", "-maxdepth", "1", "-name", "*.sh", "-type", "f" }, cwd = root }
     local out = {}
     for _, l in ipairs(text.lines(r.stdout or "")) do
         if l ~= "" then out[#out + 1] = l end
@@ -63,9 +75,9 @@ local DECL = '^[[:space:]]*-?[[:space:]]*order: "?[0-9]{3,4}-[a-z0-9]{4}"?'
 local known = {}
 local known_n = 0
 for _, src in ipairs({ { "plan/index.yaml", "plan/index.d/" }, { "plan/archive/" } }) do
-    local args = { "-rhoE", DECL }
+    local args = { "-rhoE" }
     for _, p in ipairs(src) do args[#args + 1] = p end
-    for _, l in ipairs(grep(args)) do
+    for _, l in ipairs(grep(DECL, args)) do
         local id = l:match('order: "?([0-9]+%-[a-z0-9]+)"?')
         if id and not known[id] then
             known[id] = true
@@ -85,7 +97,7 @@ local function cite_args(extra)
 end
 
 local cited, cited_list = {}, {}
-for _, l in ipairs(grep(cite_args({ "-rhoE", '@trace[^"]{0,60}order:[0-9]{3,4}-[a-z0-9]{4}' }))) do
+for _, l in ipairs(grep('@trace[^"]{0,60}order:[0-9]{3,4}-[a-z0-9]{4}', cite_args({ "-rhoE" }))) do
     for id in l:gmatch("order:([0-9][0-9][0-9][0-9]?%-[a-z0-9][a-z0-9][a-z0-9][a-z0-9])") do
         if not cited[id] then
             cited[id] = true
@@ -94,6 +106,9 @@ for _, l in ipairs(grep(cite_args({ "-rhoE", '@trace[^"]{0,60}order:[0-9]{3,4}-[
     end
 end
 table.sort(cited_list)
+if #cited_list == 0 and not root then
+    verdict.emit("blocked:order-citations-resolve:no-citations-found — this repository cites orders, so an empty read is a broken instrument", 2)
+end
 
 local declared_n, violations = 0, 0
 for _, id in ipairs(cited_list) do
@@ -103,7 +118,7 @@ for _, id in ipairs(cited_list) do
         else
             violations = violations + 1
             log.raw("  unresolvable order citation: " .. id)
-            for _, f in ipairs(grep(cite_args({ "-rln", "order:" .. id }))) do
+            for _, f in ipairs(grep("order:" .. id, cite_args({ "-rln" }))) do
                 if f ~= "" then log.raw("    cited in: " .. f) end
             end
             log.raw("    No packet carries that order. If the suffix was invented on a real")
