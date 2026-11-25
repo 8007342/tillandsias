@@ -23,11 +23,12 @@
 -- GRAMMAR (the binary's own lines are relayed above the verdict)
 --   ok:no-python-scripts                                                 exit 0
 --   violation:no-python-scripts:<rc>                                     exit <rc>
---   could-not-run:no-python-scripts:build-failed                         exit 3
+--   could-not-run:no-python-scripts:build-failed|<spawn status>          exit 3
 --   refused:no-runnable-tillandsias-policy                               exit 1
 --
 -- Usage: tillandsias-plan script run scripts/lua/check-no-python-scripts.lua
 
+local fixture = require "common.fixture"
 local top = proc.run({ argv = { "git", "rev-parse", "--show-toplevel" }, timeout_ms = 30000 })
 local ROOT = text.trim(top.stdout or "")
 if top.status ~= "exited" or top.code ~= 0 or ROOT == "" then
@@ -51,7 +52,7 @@ end
 
 local penv = {}
 if target_dir ~= "" then penv.CARGO_TARGET_DIR = target_dir end
-local probe = proc.run({ argv = { "bash", "-s" }, cwd = ROOT, env = penv, timeout_ms = 60000,
+local probe = proc.run({ argv = { fixture.posix_shell(), "-s" }, cwd = ROOT, env = penv, timeout_ms = 60000,
     stdin = '. scripts/plan-binary-probe.sh\nresolve_target_binary tillandsias-policy debug "$PWD"\n' })
 local bin = text.trim(probe.stdout or "")
 if probe.status ~= "exited" or probe.code ~= 0 or bin == "" then
@@ -59,11 +60,18 @@ if probe.status ~= "exited" or probe.code ~= 0 or bin == "" then
         "probed target/debug and CARGO_TARGET_DIR by execution and nothing ran")
 end
 
+-- 2363-nyjf: the probe answers in its shell's spelling; a native spawn needs its own.
+bin = fixture.native_path(bin)
+if not fixture.is_abs(bin) then bin = ROOT .. "/" .. (bin:gsub("^%./", "")) end
 local r = proc.run({ argv = { bin, "check-no-python-scripts" }, cwd = ROOT, timeout_ms = 300000 })
 for _, l in ipairs(text.lines(r.stdout or "")) do if l ~= "" then out.line(l) end end
 for _, l in ipairs(text.lines(r.stderr or "")) do if l ~= "" then log.raw(l) end end
 if r.status == "exited" and r.code == 0 then
     verdict.emit("ok:no-python-scripts", 0)
 end
-local rc = (r.status == "exited" and r.code ~= 0) and r.code or 1
+if r.status ~= "exited" then
+    verdict.emit("could-not-run:no-python-scripts:" .. tostring(r.status), 3,
+        bin .. " did not run to an exit, so the question was never asked: " .. tostring(r.why))
+end
+local rc = r.code
 verdict.emit("violation:no-python-scripts:" .. tostring(rc), rc)

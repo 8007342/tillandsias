@@ -105,14 +105,17 @@ _expect "reachable volume wins rung 3 with no demotion" "$out" \
 # must say so rather than fail the tree. The arms still RUN for every non-root
 # host, which is where the rootless-podman shape 1003-v3dc fixes actually
 # occurs, so the teeth are intact exactly where the condition is real.
-if [ "$(id -u)" -eq 0 ]; then
+# 2363-nyjf: ASKED, not inferred from the uid. msys is not root and chmod 000
+# does not stop a stat there either, so the question is whether the child is
+# still visible once its parent is closed.
+denied="$work/denied"; mkdir -p "$denied/vol"; chmod 000 "$denied"
+if [ -e "$denied/vol" ]; then
     echo "SKIP  unreadable volume is a DEMOTION, not an absence"
-    echo "        chmod 000 does not constrain root; the not-permitted condition cannot be constructed"
+    echo "        chmod 000 does not hide the child here (root, or msys); the not-permitted condition cannot be constructed"
     echo "SKIP  the demotion reason names the volume"
-    echo "        chmod 000 does not constrain root; the not-permitted condition cannot be constructed"
+    echo "        chmod 000 does not hide the child here (root, or msys); the not-permitted condition cannot be constructed"
     skips=$((skips+2))
 else
-denied="$work/denied"; mkdir -p "$denied/vol"; chmod 000 "$denied"
 out="$(_run "echo '$denied/vol'")"
 root="${out%%|*}"; reason="$(printf '%s' "$out" | cut -d'|' -f3)"
 _expect "unreadable volume is a DEMOTION, not an absence" "$out" \
@@ -121,8 +124,8 @@ _expect "unreadable volume is a DEMOTION, not an absence" "$out" \
 _expect "the demotion reason names the volume" "$out" \
     'case "$reason" in *not-permitted*testvol*) true;; *) false;; esac' \
     "expected a reason mentioning not-permitted and the volume name"
-chmod 755 "$denied"
 fi
+chmod 755 "$denied"
 
 # ── 3. Volume genuinely ABSENT: fall through QUIETLY, no reason ──────────────
 # Reporting this as a demotion would be a new defect: a host with no volume is
@@ -157,7 +160,7 @@ if [ "$fails" -eq 0 ]; then
     if [ "$skips" -eq 0 ]; then
         echo "ok:test-spec-index-durable-tier-demotion:7-passed"
     else
-        echo "ok:test-spec-index-durable-tier-demotion:$((7-skips))-passed:${skips}-skipped-root"
+        echo "ok:test-spec-index-durable-tier-demotion:$((7-skips))-passed:${skips}-skipped"
     fi
     exit 0
 fi
