@@ -10,14 +10,14 @@ severity: critical
 size: quick
 
 preconditions:
-  - workspace contains scripts/test-forge-gitconfig-bidirectional-quarantine.sh
+  - workspace contains scripts/lua/test-forge-gitconfig-bidirectional-quarantine.lua
   - localhost/tillandsias-forge:latest exists
 
 critical_path:
   - step: "run the bidirectional repository-config quarantine fixture"
-    command: "scripts/test-forge-gitconfig-bidirectional-quarantine.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-gitconfig-bidirectional-quarantine.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "PASS: forge gitconfig bidirectional quarantine (order 321)"
+    expected_behavior: "ok:forge-gitconfig-bidirectional-quarantine:7 arms"
 
   - step: "both Linux forge launchers install the ordered gitdir facade"
     command: "cargo test -p tillandsias-headless forge_repo_gitdir_quarantines_local_config_and_preserves_shared_state_mounts"
@@ -38,4 +38,4 @@ rollback:
     Do not restore a direct config-file bind: Git's lock-and-rename update
     fails on a file mountpoint. Inspect facade ordering and nested object/ref
     mounts.
-  command: "scripts/test-forge-gitconfig-bidirectional-quarantine.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-gitconfig-bidirectional-quarantine.lua 2>&1"

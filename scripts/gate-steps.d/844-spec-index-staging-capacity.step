@@ -19,5 +19,5 @@ STEP_DESC="Checking the spec-index builder stages where the payload fits (964-ze
 STEP_LUA="scripts/lua/test-spec-index-staging-capacity.lua"
 STEP_ERROR="the spec-index builder stages into the ambient TMPDIR (964-zedm) — see the verdict line above"
 STEP_OK="Spec-index staging capacity check passed"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin PASS spec-index staging capacity 6/6 at 35680bdf4 (run directly, idle host)"
+STEP_SECOND_REGIME="macbookair 2026-11-25 darwin ok:spec-index-staging-capacity:5 arms"
 STEP_READS="scripts/spec-index-ensure.sh scripts/lua/test-spec-index-staging-capacity.lua"

@@ -189,7 +189,7 @@ chmod +x "$AB/wc/scripts"/*.sh "$AB/wc/scripts/hooks"/*.sh 2>/dev/null || true
 # So CONSTRUCT the property rather than inherit it. If this checkout has no
 # built binary either, SKIP BY NAME rather than scoring the guard wrong for an
 # environment the arm never claimed to need — the precedent is
-# test-claims-across-branches.sh's own 1109-t8kw skip.
+# test-claims-across-branches.lua's own 1109-t8kw skip.
 #
 # AND IT IS THE BINARY, NOT yq. `yq` satisfies the lane's FIRST validator gate
 # (pre-push-local-gate.sh:1003) and is NOT enough for these arms: arm A's push

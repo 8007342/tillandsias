@@ -101,7 +101,7 @@
 # For that rule to hold, a step name that itself contains `:runs=` is
 # rewritten to `_runs=` in the reported key (no emitter names steps that way;
 # the rewrite keeps the rule true rather than documented). Pinned by a
-# colon-bearing step name in scripts/test-cycle-metrics-recurrence.sh.
+# colon-bearing step name in scripts/test-cycle-metrics-recurrence.lua.
 #
 # STEP NAMES ARE SANITISED BEFORE THEY REACH A LINE. The grammar is
 # whitespace- and comma-delimited, and the three lines are read back ONE PER

@@ -525,7 +525,7 @@ PWD_QUOTED="$(printf '%q' "$(pwd)")"
 # live child still writing a test transcript. SIGTERM to the STRAY did nothing
 # 8s later; SIGKILL to it and its child reaped it. pirria saw one still running
 # 12 minutes after its launcher was "stopped", with
-# test-archiver-ruby-could-not-run.sh as its live child, concurrent with a
+# test-archiver-ruby-could-not-run.lua as its live child, concurrent with a
 # second gate — which is how a gate refuses on this host and passes on the
 # relaunch with nothing changed (1132-r4mt arm 4's race). The same defect is
 # the env-forwarding lesson one axis over: that boundary did not carry FLAGS

@@ -5175,7 +5175,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # which would retire 873-zcim while every positive case stayed green.
 
     _step "Checking the checkout-lock attested-release fixture (899-q9di)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-cycle-lock-attested-release.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-cycle-lock-attested-release.lua" 2>&1; then
         _error "the checkout-lock attested-release fixture regressed — either a finished cycle strands its lock again, or the lock stopped refusing concurrent agents"
         exit 1
     fi
@@ -5191,7 +5191,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # through `| tail`, the worst of them accusing land-on-platform-branch.sh
     # of the exact defect its header exists to prevent.
     _step "Checking the land-verdict-through-a-pipe fixture (1137-da83)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-land-verdict-through-a-pipe.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-land-verdict-through-a-pipe.lua" 2>&1; then
         _error "the land-verdict pipe fixture regressed — either the land tool stopped exiting 3 and naming a refused gate, or the trap it documents changed shape and the row's guidance is now wrong"
         exit 1
     fi
@@ -5551,7 +5551,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # which never advances in the parent — is invisible to any test that calls
     # the helper directly.
     _step "Checking bench prompt uniqueness (858-ihcb)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-bench-prompt-uniqueness.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-bench-prompt-uniqueness.lua" 2>&1; then
         _error "bench-inference-floor.sh can reach a measured call with a reused prompt — prefill numbers would be cache hits"
         exit 1
     fi
@@ -6552,7 +6552,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Linux installer soft-reset fixture passed"
 
     _step "Checking the litmus step model (901-jtvi)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-step-model.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-litmus-step-model.lua" 2>&1; then
         _error "the litmus step model regressed — a producer's failure or its stderr can go missing again (901-jtvi)"
         exit 1
     fi

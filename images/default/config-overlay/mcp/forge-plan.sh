@@ -1602,6 +1602,8 @@ TOOLS_JSON
                         invalid_params=1
                         invalid_message="Invalid plan_next arguments: use only string pickup_role, string desired_release, and integer limit in 1..=5 — plan_next is capped at five on purpose"
                     else
+                        # 2371-u43z: an empty array is "unbound" under set -u before bash 4.4 (macOS
+                        # has 3.2), so every list below that can be empty is expanded guarded.
                         _pn_args=()
                         _pn_role=$(echo "$args" | jq -r '.pickup_role // empty')
                         _pn_release=$(echo "$args" | jq -r '.desired_release // empty')
@@ -1609,7 +1611,7 @@ TOOLS_JSON
                         [ -n "$_pn_role" ] && _pn_args+=("$_pn_role")
                         [ -n "$_pn_release" ] && _pn_args+=(--release "$_pn_release")
                         [ -n "$_pn_limit" ] && _pn_args+=(--limit "$_pn_limit")
-                        result=$(plan_next_envelope "${_pn_args[@]}")
+                        result=$(plan_next_envelope ${_pn_args[@]+"${_pn_args[@]}"})
                     fi
                     ;;
                 "methodology_path")
@@ -1674,7 +1676,7 @@ TOOLS_JSON
                         # The body itself is the ONE value here that must never
                         # touch argv; msg_send_tool pipes it to the CLI's stdin.
                         _ms_body=$(printf '%s' "$args" | jq -r '.body')
-                        result=$(msg_send_tool "$_ms_body" "${_ms_args[@]}")
+                        result=$(msg_send_tool "$_ms_body" ${_ms_args[@]+"${_ms_args[@]}"})
                     fi
                     ;;
                 "msg_recv")
@@ -1694,7 +1696,7 @@ TOOLS_JSON
                         [ "$_mr_keep" = "true" ] && _mr_args+=(--keep)
                         _mr_wait=$(printf '%s' "$args" | jq -r '.wait // empty')
                         [ -n "$_mr_wait" ] && _mr_args+=(--wait "$_mr_wait")
-                        result=$(msg_query recv "${_mr_args[@]}")
+                        result=$(msg_query recv ${_mr_args[@]+"${_mr_args[@]}"})
                     fi
                     ;;
                 "msg_list")

@@ -11,15 +11,15 @@ size: quick
 
 preconditions:
   - workspace contains images/default/vault-cli.sh
-  - workspace contains scripts/test-default-vault-cli-security.sh
+  - workspace contains scripts/lua/test-default-vault-cli-security.lua
   - workspace contains crates/tillandsias-headless/src/main.rs
 
 critical_path:
   - step: "exercise both no-override CA shapes and transport-secret boundaries"
-    command: "scripts/test-default-vault-cli-security.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-default-vault-cli-security.lua 2>&1"
     timeout_ms: 30000
-    expected_behavior: "PASS: default Vault CLI CA selection, Vault-token curl-argv secrecy, stdin bodies, and shared semantics"
-    assert_output_contains: "PASS: default Vault CLI CA selection, Vault-token curl-argv secrecy, stdin bodies, and shared semantics"
+    expected_behavior: "ok:default-vault-cli-security:17 arms"
+    assert_output_contains: "ok:default-vault-cli-security:17 arms"
 
   - step: "default helper contains no insecure curl fallback"
     command: "! grep -qE '^[^#]*curl[^|]*(\\s-k\\s|--insecure)' images/default/vault-cli.sh && grep -Fq '/etc/tillandsias/ca.crt' images/default/vault-cli.sh && grep -Fq '/run/tillandsias/ca-bundle.crt' images/default/vault-cli.sh && echo 'ok: verified dual CA shape'"
@@ -44,4 +44,4 @@ rollback:
     Do not restore curl -k, token headers in argv, or shell-argument token
     writes. Fix CA selection or stdin transport while preserving fail-closed
     behavior.
-  command: "scripts/test-default-vault-cli-security.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-default-vault-cli-security.lua 2>&1"

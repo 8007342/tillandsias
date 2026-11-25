@@ -13,7 +13,7 @@
 # failures and raw usage text on stderr. MEASURED here before this change.
 #
 # The counterpart is `stat -f '%Lp'`, which is what the fleet already uses
-# (scripts/test-default-vault-cli-security.sh, scripts/hash-image-sources.sh).
+# (scripts/hash-image-sources.sh).
 # MEASURED on this host against known modes, with the system stat forced:
 #   /usr/bin/stat -f '%Lp'  ->  700, 600, 644   (no zero padding)
 # so the selftest's literal "700"/"600"/"644" comparisons keep their meaning.
