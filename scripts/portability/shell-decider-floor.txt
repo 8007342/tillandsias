@@ -353,9 +353,6 @@ scripts/test-validator-surface-currency.sh
 scripts/test-vault-shutdown-forwards-sigterm.sh
 scripts/test-version-bump-isolation-scope.sh
 scripts/test-windows-only-sources-verified.sh
-scripts/test-windows-tray-clippy.sh
 scripts/test-worktree-boundary-guard.sh
-scripts/test-wsl2-builder-shell-options.sh
-scripts/test-yaml-reader-availability.sh
 scripts/verify-closure.sh
 scripts/verify-version-monotonic.sh
