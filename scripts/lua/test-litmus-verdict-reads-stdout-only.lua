@@ -30,6 +30,9 @@
 --                       assert_exit 1, pass and are not in the census
 --   8 CENSUS            a success_pattern match that exits 1 passes and is named
 --   9 MUTATION          arm 6's step passes in a runner without the exit rule
+--  10 LOOSE             "1" is not "10"; `test result: ok` with 0 tests FAILS; the
+--                       right number and a run that passed a test PASS
+--  11 MUTATION          arm 10's failing steps pass in a runner without the rules
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-litmus-verdict-reads-stdout-only.lua
 
@@ -73,6 +76,15 @@ write_case("fa7q-pattern", "printf 'ok: token\\n'; exit 1", "    success_pattern
 write_case("fa7q-declared", "printf 'ok: token\\\\n'; exit 1",
     "    assert_exit: 1\n    assert_output_contains: \"ok: token\"\n")
 
+-- 2309-fa7q, the two expectations containment cannot judge.
+local JUDGED = {
+    { "fa7q-number-ten", "echo 10", "1", false },
+    { "fa7q-number-one", "echo ' 1'", "1", true },
+    { "fa7q-zero-tests", "echo 'test result: ok. 0 passed; 0 failed'", "test result: ok", false },
+    { "fa7q-some-tests", "echo 'test result: ok. 0 passed'; echo 'test result: ok. 12 passed; 0 failed'", "test result: ok", true },
+}
+for _, j in ipairs(JUDGED) do write_case(j[1], j[2], "    expected_behavior: \"" .. j[3] .. "\"\n") end
+
 -- The bindings are half of the seam (1252-znbn): `--test` runs a test through
 -- the spec that binds it, so the throwaway corpus carries its own.
 local bind = "version: '1.0'\ndescription: throwaway bindings for the 1268-fx87 fixture\nspecs:\n"
@@ -81,6 +93,7 @@ for _, nm in ipairs({ "fx87-contam", "fx87-stderr-only", "fx87-explicit", "fx87-
     "fa7q-nonzero", "fa7q-declared", "fa7q-pattern" }) do
     bind = bind .. "  - " .. LIT .. ":" .. nm .. "\n"
 end
+for _, j in ipairs(JUDGED) do bind = bind .. "  - " .. LIT .. ":" .. j[1] .. "\n" end
 bind = bind .. "  coverage_ratio: 100\n"
 fs.write(REL .. "/bindings.yaml", bind)
 
@@ -175,6 +188,29 @@ else
     rc, o = litmus(W .. "/fa7q-mutant-runner.sh", "fa7q-nonzero")
     check("9 without the exit rule the same step passes", pinned == 1 and rc == 0 and text.contains(o, "[OK]"),
         "pinned=" .. pinned .. " rc=" .. rc .. " " .. short(o))
+end
+
+-- 10 LOOSE: red on the mutant value, green on the right one; 11 MUTATION
+for _, j in ipairs(JUDGED) do
+    rc, o = litmus(RUNNER, j[1])
+    check("10 " .. j[1] .. (j[4] and " passes" or " fails"),
+        rc == (j[4] and 0 or 1) and text.contains(o, j[4] and "[OK]" or "[FAIL]"), "rc=" .. rc .. " " .. short(o))
+end
+local ls = src:find('case "$expected_lc" in', 1, true)
+local le = ls and src:find('if grep -Fqi "$expected"', ls, true)
+if le == nil then
+    check("11 the two rules are there", false, "rule lines moved")
+else
+    local body, pinned = (src:sub(1, ls - 1) .. src:sub(le))
+        :gsub("\nreadonly PROJECT_ROOT=[^\n]*", function() return "\nreadonly PROJECT_ROOT=\"" .. ROOT .. "\"" end, 1)
+    fs.write(REL .. "/fa7q-loose-runner.sh", body)
+    for _, j in ipairs(JUDGED) do
+        if not j[4] then
+            rc, o = litmus(W .. "/fa7q-loose-runner.sh", j[1])
+            check("11 without the rules " .. j[1] .. " passes", pinned == 1 and rc == 0 and text.contains(o, "[OK]"),
+                "pinned=" .. pinned .. " rc=" .. rc .. " " .. short(o))
+        end
+    end
 end
 
 run({ "rm", "-rf", W })
