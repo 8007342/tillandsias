@@ -11,7 +11,7 @@
 --   3 an uninterrupted run passes, runs the live-accept arm, and is clean
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-append-event-archived-refusal-is-hermetic.lua
--- Verdict: ok:append-event-archived-refusal-is-hermetic:<n> arms | violation:... | skip:...:no-setsid
+-- Verdict: ok:append-event-archived-refusal-is-hermetic:<n> arms | violation:... | skip:...:no-plan-binary
 
 local fixture = require "common.fixture"
 local T = fixture.new("append-event-archived-refusal-is-hermetic")
@@ -32,7 +32,6 @@ exec "@PLAN@" "$@"
 local SCRIPT = [==[
 set -u
 R="$1"; P="$2"; MODE="$3"; W=$PWD; C="$W/$MODE"
-command -v setsid >/dev/null 2>&1 || exit 9
 chmod +x "$W/shim/tillandsias-plan"
 export HOME="$W/home" GIT_CONFIG_NOSYSTEM=1; mkdir -p "$HOME" "$C/plan" "$C/target"; unset CARGO_TARGET_DIR
 cp -R "$R/scripts" "$R/lib" "$C/" && cp -R "$R/plan/index.yaml" "$R/plan/index.d" "$R/plan/archive" "$C/plan/" && cp "$R/.gitignore" "$C/" || exit 90
@@ -43,8 +42,10 @@ cd "$C" || exit 92
 export TILLANDSIAS_PLAN_BIN="$W/shim/tillandsias-plan"
 F=scripts/lua/test-append-event-archived-refusal.lua
 if [ "$MODE" = kill ]; then
-    setsid "$P" script run "$F" >"$W/kill.out" 2>&1 </dev/null &
-    pid=$!; n=0
+    # Job control gives the child a process group of its own (macOS has no setsid).
+    set -m
+    "$P" script run "$F" >"$W/kill.out" 2>&1 </dev/null &
+    pid=$!; n=0; set +m
     while [ ! -s "$W/mark" ] && kill -0 "$pid" 2>/dev/null && [ "$n" -lt 600 ]; do sleep 0.2; n=$((n + 1)); done
     [ -s "$W/mark" ] && echo yes >"$W/marked" || echo no >"$W/marked"
     kill -KILL -- "-$pid" 2>/dev/null; wait "$pid" 2>/dev/null
@@ -61,7 +62,6 @@ local function shim(mode) fs.write(w.rel .. "/shim/tillandsias-plan", (SHIM:gsub
 local function run(mode)
     shim(mode)
     local r = T:run{ SH, "-s", "--", ROOT, PLAN, mode, cwd = w.abs, stdin = SCRIPT, env_unset = { "TILLANDSIAS_*", "GIT_*" }, timeout_ms = 300000 }
-    if r.code == 9 then T:skip("no-setsid") end
     if r.code ~= 0 then T:refuse("setup-failed", mode .. " rc=" .. tostring(r.code) .. " " .. (r.stderr or "")) end
     local function read(f) return fs.exists(w.rel .. "/" .. f) and fs.read(w.rel .. "/" .. f) or "" end
     local x = { out = read(mode .. ".out"), rc = text.trim(read(mode .. ".rc")), dirt = read(mode .. ".dirt"), marked = text.trim(read("marked")) }

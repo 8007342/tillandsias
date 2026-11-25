@@ -10,6 +10,6 @@
 STEP_DESC="Checking the append-event archived-refusal fixture (896-f8ti)"
 STEP_LUA="scripts/lua/test-append-event-archived-refusal.lua"
 STEP_ERROR="append-event's archive guard regressed — either events are landing on completed work again, or legitimate writes to fragment-only packets are being refused"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:append-event-archived-refusal-fixture:4 at e1e44ec8b (direct)"
+STEP_SECOND_REGIME="macbookair 2026-11-25 darwin ok:append-event-archived-refusal:5 arms"
 STEP_OK="append-event archived-refusal fixture passed"
 STEP_READS="scripts/lua/test-append-event-archived-refusal.lua"
