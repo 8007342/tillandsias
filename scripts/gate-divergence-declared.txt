@@ -6,7 +6,7 @@
 # was NINE reds on a trunk where --check was green on all nine.
 #
 # This file is the list that did not exist. It is DATA, read by
-# scripts/test-gate-divergence-is-declared.sh, which fails when a difference
+# scripts/lua/test-gate-divergence-is-declared.lua, which fails when a difference
 # appears that is not listed here. Adding a line is how you declare one.
 #
 # FORMAT:  <path>  <class>  <reason>

@@ -11,11 +11,11 @@
 # untriaged count ratchets rather than redding: there were 22 on the day it was
 # written, and a gate that reds trunk on day one gets switched off.
 #
-# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# STEP_LUA is a LITERAL path on purpose: a binding assembled from a
 # variable is invisible to every name-based scan, including the
 # bound-or-retired guard (1063-nraf). Keep it a plain string.
 STEP_DESC="Checking every landing-gate/release-gate difference is declared (1087-h2z9)"
-STEP_SCRIPT="scripts/test-gate-divergence-is-declared.sh"
+STEP_LUA="scripts/lua/test-gate-divergence-is-declared.lua"
 STEP_ERROR="a check runs in --ci-full and not in --check without being declared, or the untriaged ratchet turned the wrong way (1087-h2z9) — see the verdict line above"
 STEP_OK="Gate-divergence declaration check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:gate-divergence-declared:18"
@@ -25,4 +25,4 @@ STEP_LANES="timing"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/gate-divergence-declared.txt scripts/gate-steps.d/** scripts/local-ci.sh scripts/test-gate-divergence-is-declared.sh"
+STEP_READS="scripts/gate-divergence-declared.txt scripts/gate-steps.d/** scripts/local-ci.sh scripts/lua/test-gate-divergence-is-declared.lua"
