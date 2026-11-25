@@ -11,7 +11,7 @@ when its last line at column 0 is the skip, whether or not the step declares one
 | step | file | sites | skip_exit |
 |---|---|---|---|
 | 035-1049-s35z-jq | scripts/test-jq-multiline-capture.sh | 1 | none |
-| 045-1004-vsh2 | scripts/test-cmdkey-predicate-discriminates.sh | 1 | none |
+| 045-1004-vsh2 | scripts/test-cmdkey-predicate-discriminates.sh (ported here; that skip is gone) | 1 | none |
 | 077-1198-7q95 | scripts/test-expire-claims-reads-the-status-write.sh | 1 | none |
 | 105-1073-dqtx | scripts/test-image-usability-check.sh | 4 | none |
 | 140-1087-h2z9 | scripts/lua/check-cheatsheet-tiers.lua | 2 | none |
