@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: nine-fixtures-from-superseded-drafts-to-lua
+    order: "2375-ch7i"
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 6
+    title: "Nine fixtures to Lua: #1335's two, and the seven left in drafts 2130-trcy, 2136-vsfy and 2137-it4m"
+    context: |
+      #1335 (2219-27uv) cannot land: an older commit on its ref raises a pipe floor and check-shell-ratchet walks commits. Its two ports
+      move here with the seven portable fixtures the three drafts still hold. Includes one fix: fleet-activity goes red (bad-ref) in a
+      checkout without origin/linux-next; that becomes a named skip.
+      ports: scripts/test-gate-memory-wsl2-guest.sh scripts/test-litmus-fake-backend-under-remote-podman.sh scripts/test-check-credential-channel.sh scripts/test-daily-maintenance-day-boundary.sh scripts/test-gate-step-prefix-allocation.sh scripts/test-git-mirror-vault-agent-auto-auth.sh scripts/test-expire-claims-reads-the-status-write.sh scripts/test-enclave-service-health.sh scripts/test-expire-claims-list-live-rows.sh
+    exit_criteria:
+      - "each .lua gives the same verdict as its .sh, and the same red arm under two or three mutants; every caller runs the .lua; the nine .sh files are deleted"
+    unscoreable: "unpinnable-until-the-guard-exists: the mutant parity is the deliverable."
+    next_action: "port, push, retire work/2219-27uv, relay-preflight, PR."
+    provenance: filed by lenovinha; batch agreed with macuahuitl 2026-11-25.
+    related: [2219-27uv, 2130-trcy, 2136-vsfy, 2137-it4m, 2373-f26m]
+    events:
+      - {type: filed, ts: '2026-11-25T20:17:37Z', host: lenovinha, summary: nine ports from superseded drafts}

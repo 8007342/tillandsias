@@ -26,19 +26,14 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-a-claim-names-a-workstation.sh
+  - workspace contains scripts/lua/test-a-claim-names-a-workstation.lua
   - a runnable tillandsias-plan is resolvable, or the fixture skips by name
 
 critical_path:
-  - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-a-claim-names-a-workstation.sh && test -x scripts/test-a-claim-names-a-workstation.sh && echo 'ok: claim-names-a-workstation-parses'"
-    timeout_ms: 5000
-    expected_behavior: "ok: claim-names-a-workstation-parses"
-
   - step: "a claim with no --host is refused and writes nothing; explicit --host wins, including the platform; other writes are untouched"
-    command: "bash scripts/test-a-claim-names-a-workstation.sh | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-a-claim-names-a-workstation.lua 2>&1"
     timeout_ms: 300000
-    expected_behavior: "PASS: a-claim-names-a-workstation"
+    expected_behavior: "ok:a-claim-names-a-workstation:"
 
   - step: "the guard sits ABOVE set-field's list/scalar branch split, where a scalar field can reach it"
     command: "g=$(grep -n 'ORDER 1201-hsf9 — A CLAIM MUST NAME A WORKSTATION' crates/tillandsias-plan/src/main.rs | cut -d: -f1); l=$(grep -n 'if field_is_list(packet, &field)' crates/tillandsias-plan/src/main.rs | head -1 | cut -d: -f1); [ -n \"$g\" ] && [ -n \"$l\" ] && [ \"$g\" -lt \"$l\" ] && echo 'ok: guard precedes the branch split'"

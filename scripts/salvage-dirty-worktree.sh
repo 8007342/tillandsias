@@ -33,7 +33,7 @@
 # only lasting effect is objects on the remote.
 #
 # `salvage/<host>/<yyyymmdd>-<slug>` is an EXISTING accepted ref grammar whose
-# YAML gate is deliberately exempt (see scripts/test-pre-receive-yaml-gate.sh),
+# YAML gate is deliberately exempt (see scripts/lua/test-pre-receive-yaml-gate.lua),
 # precisely so a half-edited tree can be pushed. It existed and nothing used it.
 #
 # Verdict, one line on stdout:

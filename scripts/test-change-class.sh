@@ -10,6 +10,11 @@
 # selector being broken-shut is not evidence — it is the shape that let ARM 8b
 # of test-land-queue.sh pass against a defect earlier tonight.
 set -uo pipefail
+# 2373-zter: the land queue exports TILLANDSIAS_CLASS_SELECTOR=off around its gate,
+# which made S1 and N1 fail there and pass standalone. Each arm sets what it means
+# to test; nothing about the selector is inherited.
+unset TILLANDSIAS_CLASS_SELECTOR TILLANDSIAS_CLASS_BASE TILLANDSIAS_CHANGE_CLASS_REMOTE \
+    TILLANDSIAS_TRUNK_BRANCH TILLANDSIAS_FULL_GATE_MARKER TILLANDSIAS_FULL_GATE_MAX_AGE_S
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 pass=0; fail=0; skipped=0

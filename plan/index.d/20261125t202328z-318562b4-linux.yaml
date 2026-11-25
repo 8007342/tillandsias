@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nine-fixtures-from-superseded-drafts-to-lua
+    event:
+      type: note
+      ts: "2026-11-25T20:23:28Z"
+      agent_id: linux-lenovinha-claude-20261125t202325z
+      host: linux
+      summary: |-
+        Seven ports at 353c6e06d. Left in shell: git-mirror-vault-agent-auto-auth (a live agent signalled across steps; proc.run ends children when the call returns) and check-credential-channel (test-fixtures-ignore-inherited-git-dir mutates its shell source, test-keyring-fixtures-use-a-private-bus and test-gate-thresholds-are-chosen name it, and it sources a private session bus). The fleet-activity bad-ref skip waits for #1580.

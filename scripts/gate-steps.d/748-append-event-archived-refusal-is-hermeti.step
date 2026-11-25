@@ -12,5 +12,5 @@ STEP_DESC="Checking the append-event archived-refusal fixture is hermetic (1564-
 STEP_LUA="scripts/lua/test-append-event-archived-refusal-is-hermetic.lua"
 STEP_ERROR="the append-event archived-refusal fixture can leave a write in the checkout it runs from, or no longer asserts that a fragment-only packet accepts events"
 STEP_OK="append-event archived-refusal hermetic fixture passed"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin skip:append-event-archived-refusal-is-hermetic:no-setsid at 213905e79 (named skip: no setsid on macOS, nothing judged)"
+STEP_SECOND_REGIME="macbookair 2026-11-25 darwin ok:append-event-archived-refusal-is-hermetic:4 arms"
 STEP_READS="scripts/lua/test-append-event-archived-refusal-is-hermetic.lua"

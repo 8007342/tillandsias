@@ -6,7 +6,7 @@
 # YAML.load_file a safe load that refuses Date, so the plain
 # `created: 2026-10-25` that `openspec new change` writes rejected the whole
 # push, while yq loads the same file. The sibling litmus:git-mirror-yaml-gate-shape
-# and scripts/test-pre-receive-yaml-gate.sh put tillandsias-policy on PATH and
+# and scripts/lua/test-pre-receive-yaml-gate.lua put tillandsias-policy on PATH and
 # never reach the ruby branch; this one runs the hook INSIDE the git image.
 #
 # REGIME: post-build, because it needs the built localhost/tillandsias-git

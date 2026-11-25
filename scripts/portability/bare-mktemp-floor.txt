@@ -46,12 +46,10 @@ scripts/scan-litmus-expression-pinning.sh 1
 scripts/select-work-batch.sh 4
 scripts/stamp-requirement-ids.sh 2
 scripts/test-build-image-installed-version-alias.sh 1
-scripts/test-build-step-timing-attribution.sh 1
 scripts/test-check-credential-channel.sh 1
 scripts/test-clear-vault-credentials-partial-is-nonzero.sh 1
 scripts/test-clear-vault-host-credentials.sh 1
 scripts/test-cloudflare-oauth-core.sh 1
-scripts/test-codex-mcp-registration.sh 1
 scripts/test-codex-oauth-restore.sh 1
 scripts/test-codex-safe-state.sh 1
 scripts/test-concurrent-forge-shared-stack.sh 1
@@ -91,8 +89,6 @@ scripts/test-litmus-runner-reports-rc.sh 2
 scripts/test-litmus-tracked-file-kill-safety.sh 2
 scripts/test-metrics-log-fallback-is-loud.sh 1
 scripts/test-metrics-log-path-agreement.sh 1
-scripts/test-mirror-host-cert-and-sshd.sh 2
-scripts/test-mirror-receive-wrapper.sh 5
 scripts/test-no-competing-gate.sh 1
 scripts/test-opencode-render-probe.sh 1
 scripts/test-opencode-vault-auth-content.sh 1
@@ -103,7 +99,6 @@ scripts/test-plan-orders-fragment-fold.sh 1
 scripts/test-podman-sync-budgets.sh 1
 scripts/test-pre-push-version-guard-sigpipe.sh 1
 scripts/test-pre-push-work-ref-lane.sh 1
-scripts/test-pre-receive-yaml-gate.sh 1
 scripts/test-preflight-fixtures-default-target.sh 1
 scripts/test-pretooluse-command-policy.sh 1
 scripts/test-provider-device-auth.sh 1
@@ -124,7 +119,6 @@ scripts/test-smoke-verifies-a-signature.sh 1
 scripts/test-spec-index-durable-tier-demotion.sh 1
 scripts/test-spec-index-endpoint-classification.sh 1
 scripts/test-squid-supervisor.sh 1
-scripts/test-ssh-lane-sidecar.sh 1
 scripts/test-tool-materialize-litmus-surfaces-arm.sh 1
 scripts/test-uninstall-matcher-spares-bystanders.sh 1
 scripts/test-vault-shutdown-forwards-sigterm.sh 1
