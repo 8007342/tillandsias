@@ -72,8 +72,3 @@ images/web/entrypoint.sh
 images/web-wrangler/entrypoint.sh
 # Creates the toolbox that carries the tools (§6.5 row 5).
 scripts/ensure_toolbox.sh
-# Runs at the top of build.sh, before a fresh clone has a plan binary to run
-# Lua with; a port would turn a seconds-long memory refusal into could-not-run
-# exactly when the gate is starved. Coordinator ruling 2026-11-20 (2124-mwzr):
-# same class as the toolbox entry points.
-scripts/check-gate-memory-floor.sh
