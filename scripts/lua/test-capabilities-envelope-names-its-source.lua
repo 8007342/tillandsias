@@ -13,7 +13,7 @@
 --   6 --fresh measures with a warm cache
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-capabilities-envelope-names-its-source.lua
--- Verdict: ok:capabilities-envelope-names-its-source:<n> arms | violation:... | could-not-run:... (exit 3)
+-- Verdict: ok:capabilities-envelope-names-its-source:<n> arms | violation:... | skip:... | could-not-run:... (exit 3)
 
 local fixture = require "common.fixture"
 local T = fixture.new("capabilities-envelope-names-its-source")
@@ -42,6 +42,7 @@ else
     [ -n "$BIN" ] || BIN="$ROOT/target/debug/tillandsias"
 fi
 [ -x "$BIN" ] || { echo "$BIN"; exit 9; }
+"$BIN" --version </dev/null 2>/dev/null | grep -qiE "^tillandsias" || exit 8
 export XDG_CACHE_HOME="$W/cache"
 "$BIN" --capabilities >"$W/cold" 2>/dev/null </dev/null; echo $? >"$W/cold.rc"
 "$BIN" --capabilities >"$W/warm" 2>/dev/null </dev/null
@@ -55,6 +56,9 @@ if r.code == 9 then
     T:cleanup()
     verdict.emit("could-not-run:capabilities-envelope-names-its-source:no-binary", 3)
 end
+-- A named binary that does not answer --version as tillandsias is not the subject (the preflight door
+-- plants one). Only --version is asked: a product whose --capabilities broke is still red below.
+if r.code == 8 then T:skip("the-named-binary-is-not-tillandsias") end
 if r.code ~= 0 then T:refuse("setup-failed", "rc=" .. tostring(r.code) .. " " .. (r.stderr or "")) end
 local function read(f) return fs.exists(d.rel .. "/" .. f) and fs.read(d.rel .. "/" .. f):gsub("\r", "") or "" end
 local function first(f) return read(f):match("^[^\n]*") end
