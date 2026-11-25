@@ -26,6 +26,9 @@ STEP_DESC="Checking a terminal flip that would strand the long-running view is r
 STEP_LUA="scripts/lua/test-long-running-view-refuses-at-completion.lua"
 STEP_ERROR="the completion-time refusal for plan/long-running.md regressed (1211-q9bm) — either a terminal flip can again strand the view (so the next host to land pays for it), or the guard has widened and is refusing closures it should not: a non-multi_cycle packet, a row already removed, or the in_progress flip a multi_cycle packet makes every cycle; see the failing arm above"
 STEP_OK="long-running view completion-time refusal check passed"
+# Exit 3 means no plan binary was resolvable — nothing was exercised.
+STEP_SKIP_EXIT=3
+STEP_SKIP_DESC="no tillandsias-plan binary resolved, so the refusal could not be exercised"
 STEP_SECOND_REGIME="macbookair 2026-11-25 darwin ok:long-running-completion:7 arms"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First

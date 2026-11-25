@@ -12,9 +12,9 @@
 --   5 it fails loud on an unwritable mount, saying FATAL
 --   6 MUTATION CONTROL the old form exits 0
 --
--- As uid 0 mode 0555 excludes nobody: the static arms run, then skip.
+-- As uid 0 mode 0555 excludes nobody: the static arms run, then it could not run.
 -- Usage: tillandsias-plan script run scripts/lua/test-inference-mkdir-fatal-1183-j9dk.lua
--- Verdict: ok:inference-mkdir-fatal:<n> arms | violation:... | skip:...:uid-0-static-arms-only
+-- Verdict: ok:inference-mkdir-fatal:<n> arms | violation:... | could-not-run:...:uid-0-static-arms-only (exit 3)
 
 local fixture = require "common.fixture"
 local T = fixture.new("inference-mkdir-fatal")
@@ -55,7 +55,9 @@ end
 local rc, got, o = run(GUARD)
 if rc == 90 then
     if #T.failed > 0 then T:finish() end
-    T:skip("uid-0-static-arms-only")
+    -- Exit 3, not 0: the runner books exit 0 as a pass, and the gate step nominates 3 as its skip.
+    T:cleanup()
+    verdict.emit("could-not-run:inference-mkdir-fatal:uid-0-static-arms-only", 3)
 end
 T:arm("5a PREMISE the directory is unwritable", rc == 0, "rc=" .. tostring(rc) .. " " .. o)
 T:arm("5b the shipped guard fails on it", got ~= nil and got ~= "0", o)
