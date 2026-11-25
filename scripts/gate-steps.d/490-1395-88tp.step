@@ -8,7 +8,7 @@ STEP_DESC="Checking the CentiColon grader: enforced x reachable x tier x green r
 STEP_LUA="scripts/lua/test-centicolon-grade.lua"
 STEP_ERROR="the CentiColon grader credited an obligation it must not, or refused nothing it must (1395-88tp) — see the verdict line above"
 STEP_OK="CentiColon grader holds"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:centicolon-grade:11"
+STEP_SECOND_REGIME="macbookair 2026-11-25 darwin ok:centicolon-grade:18 arms"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
 STEP_LANES="timing"
