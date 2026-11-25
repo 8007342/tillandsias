@@ -192,6 +192,7 @@ _aa_phase start
 # and every subsequent shell died before it could print why. Hence both halves
 # of what follows — the explicit dot-directory prunes, and a measured budget
 # that refuses rather than discovers the next .claude the hard way.
+# BEGIN-TREE-COPY (cut by scripts/lua/test-archive-answerability-tree-copy.lua)
 TAR_PRUNE=(
     --exclude=./target
     --exclude=./target-musl
@@ -207,6 +208,21 @@ TAR_PRUNE=(
     # that had built it. Top-level only: the cp fast path matches entry names.
     --exclude=./.cache
 )
+
+# ORDER 2187-9cws (regressed 1392-6tbs). An IGNORED symlink whose target does
+# not exist here, e.g. a nix-build `result` -> /nix/store/... left by another
+# host or a WSL build, made MSYS tar fail to recreate it (tree-copy-failed) and
+# the check judged nothing. Ignored files are never inputs to this check, so a
+# dangling ignored symlink is pruned on every host. git lists the ignored set
+# collapsed to directories (--directory), ~50 ms even with a 60 GB .claude.
+# Tracked symlinks are copied as before. The cp fast path skips top-level names
+# only; a nested one that its cp cannot copy fails over to tar, which prunes it.
+while IFS= read -r -d '' _aa_ign; do
+    _aa_ign="${_aa_ign%/}"
+    if [ -L "$REPO_ROOT/$_aa_ign" ] && [ ! -e "$REPO_ROOT/$_aa_ign" ]; then
+        TAR_PRUNE+=("--exclude=./$_aa_ign")
+    fi
+done < <(git -C "$REPO_ROOT" ls-files -z -o -i --exclude-standard --directory 2>/dev/null)
 
 BUDGET_KB=$(( 1024 * 1024 ))   # 1 GiB
 # du must be asked from INSIDE the root with `.` as the operand, exactly as tar
@@ -274,6 +290,7 @@ if [ "$_aa_copy_ok" != 1 ]; then
         exit 1
     fi
 fi
+# END-TREE-COPY
 
 _aa_phase tree-copy
 if [ ! -f "$TREE/plan/index.yaml" ]; then

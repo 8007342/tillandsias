@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-21: build-speed queue item 4 (operator ruling: a land takes minutes).
+packets:
+  - packet_id: gate-steps-run-in-a-worker-pool-with-a-declared-serial-set
+    order: "2155-gpar"
+    status: in_progress
+    kind: perf
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, gate]
+    estimated_hours: 6
+    owned_files:
+      - build.sh
+    title: "Gate steps run in a worker pool, with a serial set declared per step file"
+    context: |
+      TILLANDSIAS_GATE_STEP_JOBS > 1 runs scripts/gate-steps.d through a pool; outputs replay in filename
+      order and the first red ends the gate as before; STEP_SERIAL="<why>" steps then run alone. Default 1
+      (serial, unchanged). Measured on yoga (12 cores), ./build.sh --gate-steps .: serial 844.8 s, 209 steps,
+      green; pool jobs=6 480.8 s, 209 steps, green (103 parallel in 23 s, 107 serial). The serial set (cargo,
+      podman, litmus runner, fixed ports, host state, fixed-name files in the checkout, the shared timing log,
+      nested gates) was found by measurement: three earlier pool runs each red on one shared resource.
+    exit_criteria:
+      - "With JOBS=6 the gate-steps phase is green and runs every step file exactly once (a count check refuses otherwise)."
+      - "A darwin (bash 3.2) second regime of the pool from macbookair."
+    unscoreable: "the wall times on a host are the measure"
+    provenance: "coordinator build-speed queue item 4, 2026-11-21."
+    events:
+      - type: filed
+        ts: "2026-11-21T06:34:21Z"
+        host: yoga
+        summary: "filed and claimed"

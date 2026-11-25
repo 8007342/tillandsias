@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: fixture-scratch-git-added-joins-a-windows-runner-path
+    order: 2265-4pja
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, windows]
+    estimated_hours: 1
+    title: |
+      Gate step 898's fixture (test-fixture-scratch-git-added.lua) is red on msys under fleet-run: it treats only "/" as absolute, so a C:\… runner path becomes ROOT/C:\…, and with no runner set it falls back to a hard-coded target/release/tillandsias-plan.
+    context: |
+      Reported by the coordinator 2026-11-23 while the fixture's owner (calmecacpilli) is suspended. `if RUNNER:sub(1, 1) ~= "/" then RUNNER = ROOT .. "/" .. RUNNER end` is the same drive-letter class 2246-fkea's helpers fix (common.fixture.native_path() is on trunk; is_abs() is in #1402, not yet landed). No open work ref touches the fixture.
+    exit_criteria:
+      - "a drive-letter runner path (C:/… or C:\\…) is not joined to the repo root, and the path is made native"
+      - "with no runner set, the fixture takes common.fixture.plan_binary(), not target/release"
+      - "an msys run from yolanda records it green; Linux stays green"
+    unscoreable: "unpinnable-until-the-guard-exists: the msys record is the deliverable."
+    next_action: "Inline the drive-letter test (is_abs() once #1402 lands), native_path(), plan_binary() fallback."
+    provenance: coordinator direction (macuahuitl-fedora, 2026-11-23); filed by lenovinha.
+    related: [2246-fkea, 2253-j2at]
+    events:
+      - {type: filed, ts: '2026-11-23T12:37:03Z', host: lenovinha, summary: scratch-git fixture joins a Windows runner path filed}

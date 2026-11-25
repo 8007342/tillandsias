@@ -6,6 +6,23 @@ use std::fs;
 use std::path::PathBuf;
 
 fn main() {
+    // ORDER 2289-umyb: `host-services` is unix-only. It is the Linux tray's and
+    // the VM guest's code (Unix sockets, nix); on Windows the forge runs in the
+    // WSL2 guest. Refused here, before rustc, so this is the one error printed: a
+    // compile_error! would only join the 26 unresolved std::os::unix and nix
+    // paths. CARGO_CFG_UNIX is the TARGET's; cfg!(unix) would be this host's.
+    if std::env::var_os("CARGO_FEATURE_HOST_SERVICES").is_some()
+        && std::env::var_os("CARGO_CFG_UNIX").is_none()
+    {
+        let target = std::env::var("TARGET").unwrap_or_default();
+        println!(
+            "cargo::error=host-services is unix-only and the target is {target} (2289-umyb). \
+             The features tray and listen-vsock enable it. Build the default features here, \
+             or build for a Linux target in the guest."
+        );
+        return;
+    }
+
     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
     // ── Order 852-dk9z: a probe-code fingerprint the capability cache keys on ──

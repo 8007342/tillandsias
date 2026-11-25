@@ -23,7 +23,7 @@
 # regenerated from the CLI, so moving them into canonical skills/ and
 # symlinking back would put a generated artifact under source control as if it
 # were authored, and the next launch would recreate the originals anyway —
-# scripts/check-opsx-generated-dirt.sh exists precisely because that
+# scripts/lua/check-opsx-generated-dirt.lua exists precisely because that
 # regeneration dirties the checkout.
 #
 # 631-wpkd's own note says not to bulk-move them without checking whether they

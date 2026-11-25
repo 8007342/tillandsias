@@ -1,0 +1,15 @@
+# Gate step 2272-cuxh — check-running-image-freshness.sh detects a stale running
+# image and never claims staleness without proof (order 422). No LAND gate ran
+# its fixture (its litmus is --ci-full only), so it sat red unseen on a host
+# whose :latest lacked the label case 3 inherited, and evicted #1358.
+# Skips by name without podman or a built git image.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the running-image freshness gate detects a stale image (422, 2272-cuxh)..."
+STEP_SCRIPT="scripts/test-running-image-freshness.sh"
+STEP_ERROR="the running-image freshness gate no longer detects a stale image, or claims one without proof — see the FAIL line above"
+STEP_OK="running-image freshness fixture passed, or named its skip"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin skip:running-image-freshness:no-git-image at 23e82e7e0 (named skip: Homebrew podman has no git image; nothing judged)"
+STEP_SERIAL="builds two images and runs a container under a fixed name"
+STEP_LANES="podman"
+STEP_READS="images/git/** scripts/check-running-image-freshness.sh scripts/hash-image-sources.sh scripts/test-running-image-freshness.sh"

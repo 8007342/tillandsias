@@ -1,0 +1,36 @@
+# @trace spec:spec-traceability
+name: litmus:litmus-timeout-retry-shape
+spec: spec-traceability
+phase: pre-build
+description: >
+  Order 2150-3j97 (priority:build-speed). A litmus step killed by its own
+  timeout (rc 124 or 137) with no output is re-run once and announced as
+  flaky:<test>#<step>. An assertion red, a step that printed output, and a
+  second timeout are never re-run. RC attempt 4 failed only on two silent
+  step timeouts on a loaded host.
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains scripts/lua/test-litmus-timeout-retry.lua
+
+critical_path:
+  - step: "silent timeout re-run once and named flaky; negative control: an assertion red is never re-run; output-then-timeout and a double timeout stay red"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-timeout-retry.lua 2>&1"
+    timeout_ms: 180000
+    expected_behavior: "ok:litmus-timeout-retry:5/5"
+
+observability:
+  traces:
+    - "@trace spec:spec-traceability"
+  expected_log: "ok:litmus-timeout-retry:"
+  log_fields:
+    spec: "spec-traceability"
+    test: "litmus-timeout-retry-shape"
+    artifact: "scripts/run-litmus-test.sh step loop (2150-3j97)"
+
+rollback:
+  on_failure: >
+    The re-run must stay limited to an empty-stdout rc 124/137 kill, once.
+    Restore that condition in run-litmus-test.sh's step loop before anything else.
+  command: "tillandsias-plan script run scripts/lua/test-litmus-timeout-retry.lua"

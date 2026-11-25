@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: archiver-naming-envelope-source-and-census-split-fixtures-ported-to-lua
+    field: status
+    value: implemented
+    ts: "2026-11-25T11:01:16Z"
+    host: yoga
+events:
+  - packet_id: archiver-naming-envelope-source-and-census-split-fixtures-ported-to-lua
+    event: {type: implemented, ts: "2026-11-25T11:01:16Z", host: yoga, summary: "implemented on work/2346-754w"}

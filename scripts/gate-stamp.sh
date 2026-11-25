@@ -150,7 +150,7 @@ set -uo pipefail
 # digest in the same "<hex>  <name>" line shape, so every first-field parse
 # below works with either tool and the emitted frames — and therefore existing
 # stamps — stay byte-identical across hosts (pinned by
-# scripts/test-gate-stamp-portable-digest.sh). Same dispatch as
+# scripts/lua/test-gate-stamp-portable-digest.lua). Same dispatch as
 # scripts/build-sidecar.sh::_sha256; kept local because this script is
 # deliberately self-contained.
 if command -v sha256sum >/dev/null 2>&1; then

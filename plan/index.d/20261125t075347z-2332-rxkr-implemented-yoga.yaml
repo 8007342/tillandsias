@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: grep-escapes-jq-capture-and-inference-entrypoint-fixtures-ported-to-lua
+    field: status
+    value: implemented
+    ts: "2026-11-25T07:53:47Z"
+    host: yoga
+events:
+  - packet_id: grep-escapes-jq-capture-and-inference-entrypoint-fixtures-ported-to-lua
+    event: {type: implemented, ts: "2026-11-25T07:53:47Z", host: yoga, summary: "implemented on work/2332-rxkr"}

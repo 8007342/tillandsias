@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: host-state-red-twice-is-not-flaky
+    order: "2276-5pzy"
+    status: implemented
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [build-speed, land-queue]
+    estimated_hours: 1
+    owned_files:
+      - build.sh
+      - scripts/lua/test-gate-step-host-state-retry.lua
+      - scripts/gate-steps.d/895-1765-q7rg.step
+    title: "A STEP_HOST_STATE step that fails twice is a red that reproduced, not a flake; its token is never an ok line"
+    context: |
+      #1441 was evicted twice as gate-failed:rc=1:flaky:test-pending-capability-row-does-not-wedge.sh:ok:,ok: on a
+      deterministic red (8 passed, 1 failed). The step runner named every twice-red host-state step flaky, and its
+      token was the last verdict-shaped line, an ok line here, so the queue requeued a red and spent a gate on it.
+      Now a retry that fails is red-twice: and evicts like any red. A retry that exits 3 (could not run, 2251-iyiu)
+      gave no verdict and stays flaky:. The token reads red verdict lines only, else rc=<n>.
+      This overturns 1765-q7rg's naming of a second red as flaky, on the coordinator's report.
+    exit_criteria:
+      - "scripts/lua/test-gate-step-host-state-retry.lua green: an ok-then-fail fixture red twice is red-twice: with rc=1, a could-not-run twice is flaky:, and the pre-fix build.sh reds three arms."
+    unscoreable: "fixture-scored: gate step 895 runs the fixture; no litmus covers the step runner's retry"
+    provenance: "coordinator macuahuitl-fedora 2026-11-23, from #1441's two evictions"
+    related: [1765-q7rg, 2251-iyiu]
+    events:
+      - type: implemented
+        ts: "2026-11-23T20:59:37Z"
+        host: yoga
+        summary: "implemented on work/2276-5pzy; 7/7, pre-fix build.sh reds 3 arms, 2251-iyiu sibling 4/4"

@@ -35,7 +35,7 @@ mkdir -p "$PROJECT_DIR"
 # alongside the lib-common redirect it already does. The stub is a transparent
 # exec, deliberately: this fixture's subject is PROMPT ROUTING — which argv the
 # harness receives — and supervision behaviour has its own fixture
-# (scripts/test-harness-supervisor.sh, 7 scenarios). Staging the real
+# (scripts/lua/test-harness-supervisor.lua, 7 scenarios). Staging the real
 # supervisor here would make every routing assertion depend on supervision too,
 # and a fixture that tests two things fails for two reasons.
 sed -e "s|source /usr/local/lib/tillandsias/lib-common.sh|source \"$TMP_DIR/lib-common.sh\"|" \

@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: four-shell-fixtures-a-c-ported-to-lua-2026-11-24
+    order: "2301-4bgh"
+    status: implemented
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/test-check-engine-cpu-dispatch.lua
+      - scripts/lua/test-check-toolchain-pinned.lua
+      - scripts/lua/test-build-version-label.lua
+      - scripts/lua/test-codex-device-auth.lua
+    title: "four shell fixtures ported to Lua: engine cpu dispatch, toolchain pinned, build version label, codex device auth"
+    context: |
+      ports: test-check-engine-cpu-dispatch, test-check-toolchain-pinned, test-build-version-label, test-codex-device-auth.
+      Each ran beside its .sh on one tree before the .sh was deleted, and its subject was mutated. The toolchain port
+      refuses when a substitution does not apply; codex-device-auth runs each case in its own scratch home and also
+      asserts that a refused login stores nothing.
+    exit_criteria:
+      - "The four fixtures green in build.sh, their gate step and their litmus; no .sh of those names left."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by their existing gate steps and litmus"
+    provenance: "coordinator queue 2026-11-24 (test-[a-c]* range), yoga"
+    related: [861-n7f5, 1562-tc7p, 1238-b825]
+    events:
+      - {type: implemented, ts: "2026-11-24T13:52:21Z", host: yoga, summary: "implemented on work/2301-4bgh"}

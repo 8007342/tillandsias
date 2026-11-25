@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: land-queue-fixture-becomes-lua-in-slices
+    order: 2211-etx9
+    status: blocked
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 8
+    title: |
+      Port test-land-queue.sh (1908 lines, the last free 2196-rdec candidate) to scripts/lua in slices.
+    context: |
+      Coordinator ruling 2026-11-22: hold until yoga's active fix to the land-queue fixture (daily-full ARM 51 and the attest push) lands, then port. At 1908 lines it is a multi-slice port: one slice per arm group, each slice moving its arms to a Lua fixture with output parity and a mutant that reds both, the .sh shrinking until it is deleted. It is wired into build.sh, gate step 286 and litmus:land-queue-host-door-names-its-cause.
+    exit_criteria:
+      - "every arm of test-land-queue.sh runs from scripts/lua with the same lines and reds on the same mutant; build.sh, step 286 and the litmus run the Lua; the .sh is deleted"
+    unscoreable: "unpinnable-until-the-guard-exists: the existing step and litmus are the proof, slice by slice."
+    next_action: "Wait for yoga's land-queue fix to land, then cut the arm groups into slices."
+    provenance: coordinator direction; filed by lenovinha.
+    depends_on: []
+    related: [2196-rdec, 1461-5rm6]
+    events:
+      - {type: filed, ts: '2026-11-22T12:13:09Z', host: lenovinha, summary: "filed blocked: waits on yoga's land-queue fixture fix"}

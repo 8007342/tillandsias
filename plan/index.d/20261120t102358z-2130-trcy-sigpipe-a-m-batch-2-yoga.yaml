@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-20: yoga's a-m share of 2123-ivi5 (p1), batch 2 (batch 1 is 2127-br92).
+packets:
+  - packet_id: yoga-converts-the-a-m-sigpipe-verdict-pipelines-batch-2-ten-gate-run-files
+    order: 2130-trcy
+    status: in_progress
+    kind: debt
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixtures, sigpipe, gate]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-brew-shim-reentrancy.sh
+      - scripts/test-check-credential-channel.sh
+      - scripts/test-check-engine-cpu-dispatch.sh
+      - scripts/test-credential-cold-state-probe.sh
+      - scripts/test-cycle-claims-report.sh
+      - scripts/test-daily-maintenance-day-boundary.sh
+      - scripts/test-freshness-regime-budget.sh
+      - scripts/test-gate-step-prefix-allocation.sh
+      - scripts/test-git-mirror-vault-agent-auto-auth.sh
+      - scripts/test-harness-contract-probe.sh
+    title: "Batch 2 of yoga's a-m share of 2123-ivi5: the next ten gate-run files decide no verdict through a pipeline SIGPIPE can falsify"
+    context: |
+      Split (coordinator 2026-11-20): first letter after a test-/check- prefix, else the basename; a-m is yoga, n-z is
+      lenovinha (2126-4cyq). Batch 2 is the next ten smallest gate-run files of yoga's share (one site each), none
+      touched by any open work ref (measured 2026-11-20).
+    exit_criteria:
+      - "scripts/census-sigpipe-verdict-pipelines.sh --list names none of the ten files, and the census total drops by their site count."
+      - "Each file stays green on this host or in the builder toolbox."
+    unscoreable: "the census tool is the measure"
+    provenance: "census at linux-next 2026-11-20; parent 2123-ivi5."
+    events:
+      - type: filed
+        ts: "2026-11-20T10:23:58Z"
+        host: yoga
+        summary: "filed and claimed, child of 2123-ivi5"

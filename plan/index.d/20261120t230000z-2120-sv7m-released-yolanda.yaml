@@ -1,0 +1,9 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: studio-save-commits-reach-origin-through-the-git-mirror-and-webstudio-changes-reports-them
+    event:
+      type: released
+      ts: "2026-11-20T23:00:00Z"
+      host: yolanda
+      summary: |-
+        released to ready by yolanda at macuahuitl-fedora's direction (WIP cap; frees a slot for the \?\ fixture root fix). Operator-held: pushing studio saves to GitHub is a new outward effect awaiting the operator's answer. Work is preserved on origin at refs/heads/salvage/yolanda/2026-11-20-2120-sv7m (474646329): relay() in studio-front.js + selftest arm 6, the studio.rs studio_branches fetch and compare_url, STUDIO_REPO_WEB in main.rs, the GrapesJS and Puck Open-PR buttons, litmus-studio-saves-reach-origin.yaml. The Rust is not yet compiled or tested. Re-claim when the operator answers.

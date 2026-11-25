@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-forge-queue-jobs-audit-record-says-bare-metal
+    order: "2354-5biy"
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, queue, policy]
+    estimated_hours: 2
+    title: "the policy audit of a queue.submit job in a forge records host_kind=bare-metal (reported, not reproduced)"
+    context: |
+      Split from 2329-at6p at the coordinator's word. The only evidence is pirria's audit in a CPU-only forge on build 56.11.23.1.
+      Not reproduced by lenovinha. read_host_kind takes the kind from /run/.containerenv naming the forge image, not from
+      TILLANDSIAS_HOST_KIND, so a missing variable does not by itself explain it. 2329-at6p now sets the variable for a queued
+      job; whether that changes the record is unmeasured.
+    exit_criteria:
+      - "Which record said bare-metal is named (policy audit, timing log or MCP usage log) and reproduced, or the row is closed as not reproducible with what was run."
+      - "Inside a forge that record says forge for a queue.submit job."
+    unscoreable: "unpinnable-until-the-guard-exists: needs a forge run"
+    next_action: "Ask pirria for the record's path and line; submit a job through queue.submit in a real lane and read the same record."
+    provenance: "coordinator macuahuitl-fedora 2026-11-25, from pirria"
+    related: [2329-at6p]
+    events:
+      - {type: filed, ts: "2026-11-25T12:11:23Z", host: lenovinha, summary: "split from 2329-at6p"}

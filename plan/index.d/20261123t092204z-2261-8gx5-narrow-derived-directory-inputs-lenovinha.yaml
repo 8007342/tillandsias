@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: gate-changed-narrows-directory-wide-derived-inputs
+    order: 2261-8gx5
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 8
+    title: |
+      Intake lever (2): a 5-file scripts change selects ~175 fixtures because 129 fixtures take the WHOLE scripts/ directory as an input. Narrow the derived inputs where they are artifacts, let a fixture declare a narrower set that a decider holds honest, and prove recall holds on the replay.
+    context: |
+      Measured 2026-11-23 on lenovinha (2256-mvmy samples, derived map): of #1382's 175 selected fixtures, 125 came in via a scripts/lua change. 129 fixtures read scripts/ (114 name it in their own text, 15 inherit it from an executed helper; top: scripts/gate-stamp.sh, run by 13). The causes: (a) case-pattern globs read as inputs — gate-stamp.sh:174 `scripts/*|build.sh|…) echo build-scripts` classifies a path and reads nothing (~13 fixtures); (b) genuine directory scans, correct as they are (~14); (c) the bulk, ~87: dynamic paths — `"$ROOT/scripts/${name}.sh"` or `scripts/$x` stop at `$` and resolve to the whole directory, which is conservative on purpose. Coordinator direction 2026-11-23: (1)+(2)+(4) in one row, with the replay re-run proving recall.
+    exit_criteria:
+      - "(1) a token on a shell `case` arm (a pattern followed by `)`) is not read as an input; gate-stamp.sh's arm no longer makes its 13 executors read scripts/"
+      - "(2) a dynamic path whose variable is bound in the same file to a literal list (`for n in a b c`, an array literal) resolves to that list, not the directory"
+      - "(4) a fixture may DECLARE its inputs (`# inputs: <paths>` / `-- inputs: <paths>` in its header, or STEP_INPUTS on its .step); the selector trusts the declaration over the derived directory-wide read, and a decider refuses a declaration that misses any literal repo path the file names"
+      - "arms for each of (1), (2), (4) and the decider; the 2249-tif9 replay re-run keeps recall 13/13, and the 5 measured samples' selections shrink, both recorded"
+    unscoreable: "unpinnable-until-the-guard-exists: the arms, the decider and the replay re-run are the deliverable."
+    next_action: "Case-arm exclusion in section 4's token pass first (smallest, safe), then list-bound dynamic paths, then declared inputs and their decider."
+    provenance: lenovinha's measurement; coordinator direction (macuahuitl-fedora, 2026-11-23).
+    related: [2248-zcqh, 2249-tif9, 2256-mvmy, 2250-gwfy, 2118-tnut]
+    events:
+      - {type: filed, ts: '2026-11-23T09:22:04Z', host: lenovinha, summary: gate-changed narrows directory-wide derived inputs filed}

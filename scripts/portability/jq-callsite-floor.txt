@@ -27,8 +27,6 @@
 14 scripts/bench-accel-lane.sh
 9 scripts/bench-inference-floor.sh
 1 scripts/build-image.sh
-1 scripts/check-bare-metal-host-initialized.sh
-1 scripts/check-claim-confirmed.sh
 18 scripts/check-mcp-expert-health.sh
 2 scripts/check-must-ship-rows.sh
 2 scripts/check-nix-deps-stability.sh
@@ -65,15 +63,11 @@
 7 scripts/test-convergence-dashboard.sh
 2 scripts/test-cycle-metrics-recurrence.sh
 2 scripts/test-default-vault-cli-security.sh
-2 scripts/test-expert-accuracy-record-shape.sh
-6 scripts/test-hardware-fingerprint.sh
-7 scripts/test-jq-multiline-capture.sh
 1 scripts/test-json-query-jq-parity.sh
 1 scripts/test-memo-hit-observability.sh
 1 scripts/test-opencode-vault-auth-content.sh
 2 scripts/test-project-info-grep-code-recall.sh
 2 scripts/test-ssh-lane-sidecar.sh
-4 scripts/test-timing-record-carries-reproduced.sh
 6 scripts/test-timing-record-carries-root.sh
 1 scripts/test-tool-dispatch-lib.sh
 6 scripts/tillandsias-host-push-cert.sh

@@ -9,7 +9,9 @@ description: >
   three bind styles the launcher uses: a single file by -v (remote_projects.rs
   repo listing and clone), a single file by --mount, and the trust directory at
   /etc/tillandsias/ca-trust (the mirror). A control build with the 1998-mvrs (b)
-  shape (ca.crt a symlink to a missing file) must fail the file binds; that is
+  shape (ca.crt a symlink to a missing file) must fail the
+  image-shape arm on every runtime, and the file binds on a runtime that does
+  not create a missing symlink target (crun 1.31 does); that is
   the regression that made vault-cli refuse "CA bundle not readable" and the
   tray loop on GitHub login on macuahuitl.
 severity: critical
@@ -23,11 +25,11 @@ critical_path:
   - step: "Req: the built git image reads the bound CA under the file (-v, --mount) and directory binds; the pre-fix image fails the file binds"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-git-image-ca-bind-styles.lua"
     timeout_ms: 2400000
-    success_pattern: "ok:git-image-ca-bind-styles:3 arms\\+control"
+    success_pattern: "ok:git-image-ca-bind-styles:4 arms\\+control"
 observability:
   traces:
     - "@trace order:2018-cabd"
-  expected_log: "ok:git-image-ca-bind-styles:3 arms+control"
+  expected_log: "ok:git-image-ca-bind-styles:4 arms+control"
   log_fields:
     spec: "git-mirror-service"
     test: "git-image-ca-bind-styles"

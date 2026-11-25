@@ -34,7 +34,9 @@ critical_path:
   - step: "ensure_enclave_network is called before any router/container setup in each spawn path"
     command: "scripts/litmus-helper-tray-network-bootstrap.sh check-ensure_enclave_network-present"
     timeout_ms: 5000
-    expected_behavior: "ensure_enclave_network present"
+    assert_exit: 0
+    assert_output_contains: "ok: ensure_enclave_for_project ensure_enclave_network present"
+    expected_behavior: "all three spawn paths reach ensure_enclave_network"
 
   - step: "Step 15 plan file references the @trace litmus binding"
     command: "grep -Fq 'plan/steps/15-tray-network-bootstrap.md' crates/tillandsias-headless/src/main.rs && echo 'spawn paths cite Step 15'"

@@ -57,7 +57,51 @@ line_matches() {
 have_refs=$(git -C "$ROOT" for-each-ref --format='%(refname)' refs/remotes/origin/salvage 2>/dev/null | wc -l)
 
 TMPDIR_ARM2B="$(mktemp -d)"
-trap 'rm -rf "$TMPDIR_ARM2B"; git -C "$ROOT" update-ref -d "refs/remotes/${SALVAGE_PROBE_REMOTE:-origin}/arm2probe-1226/stale" 2>/dev/null || true' EXIT
+trap 'rm -rf "$TMPDIR_ARM2B"' EXIT
+# ── THE AUDITED REPO (2270-7gp6, measured: arm 1's live audit of 334 refs was 74 of
+# this fixture's 75 s, and it grows with the fleet's ref count) ─────────────
+# Arms 1-3 assert properties of the audit's LOOKUP and LABELS: refs are found
+# under both surfaces, the header names both, the count covers both, and every
+# difference carries a direction. None of that needs the live refs, so the
+# audit runs over a scratch repo built to have each case: origin/linux-next, a
+# STALE salvage ref (diverged, tip older than the branch's edit: is-AHEAD), a
+# NEWER diverged work ref (ref-may-be-AHEAD) and an ancestor work ref (nothing
+# differs). TILLANDSIAS_SALVAGE_AUDIT_LIVE=1 audits this checkout's real refs
+# instead; the land queue's --daily-full gate sets it, so the live audit still
+# runs once a day (TILLANDSIAS_ prefixed: only that prefix crosses the toolbox
+# boundary, scripts/with-tillandsias-builder.sh). A normal gate names the
+# skipped live arm on a not-run: line.
+_AUD="$ROOT"
+AUD_CHECK="$CHECK"
+if [ "${TILLANDSIAS_SALVAGE_AUDIT_LIVE:-0}" != 1 ]; then
+    echo "not-run:salvage-audit:live-refs — arms 1-3 audit a constructed repo; the audit of this checkout's real origin/salvage+work refs runs on the --daily-full gate (TILLANDSIAS_SALVAGE_AUDIT_LIVE=1, 2270-7gp6)"
+    _AUD="$TMPDIR_ARM2B/audited"
+    AUD_CHECK="$_AUD/scripts/salvage-audit.sh"
+    _ag() { git -C "$_AUD" -c user.name=salvfix -c user.email=salvfix@invalid -c commit.gpgsign=false "$@"; }
+    _at() { GIT_AUTHOR_DATE="$1 +0000" GIT_COMMITTER_DATE="$1 +0000" _ag commit -qm "$2"; }
+    if mkdir -p "$_AUD/scripts" && git -C "$_AUD" init -q 2>/dev/null \
+        && cp "$CHECK" "$AUD_CHECK" \
+        && printf 'v1\n' > "$_AUD/VERSION" && _ag add -A && _at 1700000000 base \
+        && _abase="$(_ag rev-parse HEAD)" \
+        && printf 'v2\n' > "$_AUD/VERSION" && _ag add VERSION && _at 1700001000 'branch edit' \
+        && _ag update-ref refs/remotes/origin/linux-next HEAD \
+        && _ag update-ref refs/remotes/origin/work/ancestor "$_abase" \
+        && _ag checkout -q "$_abase" 2>/dev/null \
+        && printf 'stale\n' > "$_AUD/VERSION" && _ag add VERSION && _at 1700000940 'stale snapshot' \
+        && _ag update-ref refs/remotes/origin/salvage/stale HEAD \
+        && _ag checkout -q "$_abase" 2>/dev/null \
+        && printf 'newer\n' > "$_AUD/VERSION" && _ag add VERSION && _at 1700002000 'newer work' \
+        && _ag update-ref refs/remotes/origin/work/newer HEAD \
+        && _ag checkout -q refs/remotes/origin/linux-next 2>/dev/null; then :
+    else
+        echo "FAIL: could not build the audited scratch repo — arms 1-3 would have nothing to read"
+        echo "FAIL: salvage-audit $pass/$((pass + fail + 1)) (1226-jb8y)"
+        exit 1
+    fi
+fi
+# ARM 0's nested run swaps in a deliberately slow subject: honour it.
+[ -n "${SALVAGE_AUDIT_CHECK:-}" ] && AUD_CHECK="$SALVAGE_AUDIT_CHECK"
+have_refs=$(git -C "$_AUD" for-each-ref --format='%(refname)' refs/remotes/origin/salvage 2>/dev/null | wc -l)
 # ── THE CEILING (order 1672-8i7t) ───────────────────────────────────────────
 # This was a fixed `timeout 300`, and the arms below then read `tail -1` of the
 # capture as the verdict. On yolanda-windows 2026-10-13 (tillandsias-build,
@@ -90,7 +134,7 @@ if [ -z "${TEST_SALVAGE_AUDIT_NESTED:-}" ]; then
 fi
 
 _capture_t0=$SECONDS
-out="$(timeout "$SALVAGE_AUDIT_TIMEOUT_S" bash "$CHECK" 2>&1)"
+out="$(timeout "$SALVAGE_AUDIT_TIMEOUT_S" bash "$AUD_CHECK" 2>&1)"
 _capture_rc=$?
 if [ "$_capture_rc" -eq 124 ]; then
     echo "FAIL: timeout after ${SALVAGE_AUDIT_TIMEOUT_S}s — the audit was killed at the fixture's ceiling ($((SECONDS - _capture_t0))s elapsed), so its cut-short output was NOT parsed by any arm"
@@ -118,8 +162,8 @@ fi
 # tells a blocked host to use. Pointing it at work/ the first time turned up an
 # eleven-day-old ledger event absent from trunk. A default that silently covers
 # one surface is this audit's own false-negative, one level up.
-have_salv=$(git -C "$ROOT" for-each-ref --format='%(refname)' refs/remotes/origin/salvage 2>/dev/null | wc -l)
-have_work=$(git -C "$ROOT" for-each-ref --format='%(refname)' refs/remotes/origin/work 2>/dev/null | wc -l)
+have_salv=$(git -C "$_AUD" for-each-ref --format='%(refname)' refs/remotes/origin/salvage 2>/dev/null | wc -l)
+have_work=$(git -C "$_AUD" for-each-ref --format='%(refname)' refs/remotes/origin/work 2>/dev/null | wc -l)
 if [ "$have_salv" -eq 0 ] && [ "$have_work" -eq 0 ]; then
     echo "skip: ARM 1b — this clone has neither salvage nor work refs"
 else
@@ -207,36 +251,34 @@ _probe_ref="refs/remotes/${SALVAGE_PROBE_REMOTE:-origin}/arm2probe-1226/stale"
 #      `<branch>-is-AHEAD` over `ref-may-be-AHEAD`. A commit created now is
 #      newer than any branch edit, so the probe commit is dated deliberately.
 #
-# Built with plumbing (hash-object / write-tree / commit-tree) against a
-# TEMPORARY index, so the working tree and the real index are never touched.
+# ORDER 2197-hgit: BUILT IN A SCRATCH REPO, never the real checkout. The arm
+# used to read the real HEAD's history of VERSION and write a probe ref and
+# objects into the real .git, so its answer depended on which branch the host
+# had checked out. Now a two-commit scratch repo carries the three properties
+# above by construction, and a copy of the audit runs there (it binds to the
+# repo its own file sits in).
 _probe_file="VERSION"
-_probe_tip="$(git -C "$ROOT" rev-list -n1 HEAD -- "$_probe_file" 2>/dev/null || true)"
-_probe_base="$(git -C "$ROOT" rev-parse --verify -q "${_probe_tip}^" 2>/dev/null || true)"
-_probe_new="$(git -C "$ROOT" rev-parse --verify -q HEAD 2>/dev/null || true)"
-_branch_edit="$(git -C "$ROOT" log -1 --format=%ct HEAD -- "$_probe_file" 2>/dev/null || echo 0)"
 _probe_commit=""
-if [ -n "$_probe_base" ] && [ -n "$_probe_new" ] && [ "${_branch_edit:-0}" -gt 0 ]; then
-    _tmpidx="$TMPDIR_ARM2B/index"
-    _blob="$(printf 'arm2probe-1226\n' | git -C "$ROOT" hash-object -w --stdin 2>/dev/null || true)"
-    if [ -n "$_blob" ]; then
-        GIT_INDEX_FILE="$_tmpidx" git -C "$ROOT" read-tree "$_probe_base" 2>/dev/null
-        GIT_INDEX_FILE="$_tmpidx" git -C "$ROOT" update-index --cacheinfo "100644,$_blob,$_probe_file" 2>/dev/null
-        _tree="$(GIT_INDEX_FILE="$_tmpidx" git -C "$ROOT" write-tree 2>/dev/null || true)"
-        if [ -n "$_tree" ]; then
-            _when=$(( _branch_edit - 60 ))
-            _probe_commit="$(GIT_AUTHOR_DATE="$_when +0000" GIT_COMMITTER_DATE="$_when +0000" \
-                GIT_AUTHOR_NAME=arm2probe GIT_AUTHOR_EMAIL=arm2probe@invalid \
-                GIT_COMMITTER_NAME=arm2probe GIT_COMMITTER_EMAIL=arm2probe@invalid \
-                git -C "$ROOT" commit-tree "$_tree" -p "$_probe_base" -m 'arm2probe-1226 stale snapshot' 2>/dev/null || true)"
-        fi
-    fi
-fi
+_sr="$TMPDIR_ARM2B/scratch"
+_sg() { git -C "$_sr" -c user.name=arm2probe -c user.email=arm2probe@invalid -c commit.gpgsign=false "$@"; }
+mkdir -p "$_sr/scripts" && git -C "$_sr" init -q 2>/dev/null \
+    && cp "$CHECK" "$_sr/scripts/salvage-audit.sh" \
+    && printf 'v1\n' > "$_sr/$_probe_file" && _sg add -A \
+    && GIT_AUTHOR_DATE="1700000000 +0000" GIT_COMMITTER_DATE="1700000000 +0000" _sg commit -qm base \
+    && _probe_base="$(_sg rev-parse HEAD)" \
+    && printf 'v2\n' > "$_sr/$_probe_file" && _sg add -A \
+    && GIT_AUTHOR_DATE="1700001000 +0000" GIT_COMMITTER_DATE="1700001000 +0000" _sg commit -qm 'branch edit' \
+    && _probe_new="$(_sg rev-parse HEAD)" \
+    && _sg checkout -q "$_probe_base" 2>/dev/null \
+    && printf 'arm2probe-1226\n' > "$_sr/$_probe_file" && _sg add -A \
+    && GIT_AUTHOR_DATE="1700000940 +0000" GIT_COMMITTER_DATE="1700000940 +0000" _sg commit -qm 'arm2probe-1226 stale snapshot' \
+    && _probe_commit="$(_sg rev-parse HEAD)" \
+    && _sg checkout -q "$_probe_new" 2>/dev/null || _probe_commit=""
 if [ -z "$_probe_commit" ]; then
     bad "ARM 2b: could not construct a stale snapshot — the positive path is UNTESTED, which is the condition this arm exists to remove"
 else
-    git -C "$ROOT" update-ref "$_probe_ref" "$_probe_commit"
-    _out2b="$(timeout 120 bash "$CHECK" --branch "$_probe_new" --pattern 'refs/heads/arm2probe-1226/' 2>&1)"
-    git -C "$ROOT" update-ref -d "$_probe_ref" 2>/dev/null || true
+    _sg update-ref "$_probe_ref" "$_probe_commit"
+    _out2b="$(timeout 120 bash "$_sr/scripts/salvage-audit.sh" --branch "$_probe_new" --pattern 'refs/heads/arm2probe-1226/' 2>&1)"
     _hit2b="$(printf '%s' "$_out2b" | grep -c 'is-AHEAD' || true)"
     if [ "${_hit2b:-0}" -gt 0 ]; then
         ok "ARM 2b: a CONSTRUCTED stale snapshot is labelled is-AHEAD — the positive path ran on this host"

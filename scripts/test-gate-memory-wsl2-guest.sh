@@ -21,8 +21,17 @@
 # meminfo whenever the guest has more than the floor available.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FLOOR="$ROOT/scripts/check-gate-memory-floor.sh"
-[ -f "$FLOOR" ] || { echo "skip:gate-memory-wsl2-guest:absent"; exit 0; }
+# 2167-gmfl: the decider is the Lua (scripts/check-gate-memory-floor.sh is only
+# its bootstrap), so these arms judge the Lua itself, and a missing runner
+# REFUSES: a skip here would be a permanent green over the WSL2 rule.
+FLOOR="$ROOT/scripts/lua/check-gate-memory-floor.lua"
+[ -f "$FLOOR" ] || { echo "refused:gate-memory-wsl2-guest:absent:$FLOOR"; exit 1; }
+PLAN_BIN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || PLAN_BIN=""
+case "$PLAN_BIN" in ./*) PLAN_BIN="$ROOT/${PLAN_BIN#./}" ;; esac
+if [ -z "$PLAN_BIN" ] || ! grep -qx script <<<"$("$PLAN_BIN" capabilities 2>/dev/null)"; then
+    echo "refused:gate-memory-wsl2-guest:no-plan-binary (build one: cargo build --release -p tillandsias-plan)"; exit 1
+fi
+FLOOR_RUN() { "$PLAN_BIN" script run "$FLOOR" -- "$@"; }
 W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT
 pass=0; fail=0
 ok()  { printf 'ok:   %s\n' "$1"; pass=$((pass+1)); }
@@ -34,7 +43,7 @@ printf 'MemTotal:       16000000 kB\nMemAvailable:    8000000 kB\n' > "$W/health
 printf 'MemTotal:       16000000 kB\nMemAvailable:     200000 kB\n' > "$W/starved"
 
 # 1
-out="$(TILLANDSIAS_GATE_MEMORY_OSRELEASE="$W/wsl2" bash "$FLOOR" 2>/dev/null)"; rc=$?
+out="$(TILLANDSIAS_GATE_MEMORY_OSRELEASE="$W/wsl2" FLOOR_RUN 2>/dev/null)"; rc=$?
 last="$(printf '%s\n' "$out" | sed '/^[[:space:]]*$/d' | tail -n 1)"
 case "$out" in
     *ok:gate-memory*) bad "arm 1: a WSL2 guest asserted ok from its own meminfo (rc=$rc): $out" ;;
@@ -48,21 +57,21 @@ case "$out" in
 esac
 
 # 2
-out="$(TILLANDSIAS_GATE_MEMORY_OSRELEASE="$W/wsl2" bash "$FLOOR" --meminfo-from "$W/healthy" 2>/dev/null)"; rc=$?
+out="$(TILLANDSIAS_GATE_MEMORY_OSRELEASE="$W/wsl2" FLOOR_RUN --meminfo-from "$W/healthy" 2>/dev/null)"; rc=$?
 case "$rc:$out" in
     0:ok:gate-memory:*) ok "arm 2: a host figure passed in is judged normally (ok, rc=0)" ;;
     *) bad "arm 2: host figure via --meminfo-from not judged (rc=$rc): $out" ;;
 esac
 
 # 3
-out="$(TILLANDSIAS_GATE_MEMORY_OSRELEASE="$W/wsl2" bash "$FLOOR" --meminfo-from "$W/starved" 2>/dev/null)"; rc=$?
+out="$(TILLANDSIAS_GATE_MEMORY_OSRELEASE="$W/wsl2" FLOOR_RUN --meminfo-from "$W/starved" 2>/dev/null)"; rc=$?
 case "$rc:$out" in
     1:refused:gate:insufficient-memory*) ok "arm 3: a starved host figure is still refused (rc=1)" ;;
     *) bad "arm 3: starved host figure not refused (rc=$rc): $out" ;;
 esac
 
 # 4
-out="$(TILLANDSIAS_GATE_MEMORY_OSRELEASE="$W/native" bash "$FLOOR" 2>/dev/null)"; rc=$?
+out="$(TILLANDSIAS_GATE_MEMORY_OSRELEASE="$W/native" FLOOR_RUN 2>/dev/null)"; rc=$?
 case "$out" in
     *wsl2-guest*) bad "arm 4: a native kernel was treated as a WSL2 guest (rc=$rc): $out" ;;
     *) ok "arm 4: a native kernel is not refused as WSL2 (rc=$rc, $(printf '%s' "$out" | head -n 1 | cut -c1-60))" ;;

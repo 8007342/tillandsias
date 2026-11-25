@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-container-browser-window-denies-the-microphone-at-once-with-no-prompt-and-no-audioinput-while-playback-still-reaches-the-host
+    field: next_action
+    value: |-
+      First measure the threat arm on a Linux host: browser.cdp {browser_level:true, method:"Browser.grantPermissions", params:{permissions:["audioCapture"]}}, then getUserMedia; record whether a stream arrives and whether it carries signal (host-side Pulse server log shows the refused record stream). Then the red arms: a launcher flag/policy test and a browser.cdp method refusal test, red first.
+
+
+      [2026-11-19T23:28:20Z calmecacpilli] LEFT: criteria 2-4 covered by #507 plus the yoga live check. Criterion 1 (no audioinput) conflicts with 1769-9gna's Monitor of Speakers source. DECIDE: allow the monitor and rewrite the criterion as 'getUserMedia rejects NotAllowedError, no prompt; the only audioinput is Monitor of Speakers', or hide the monitor. Then re-run live on Linux. Verify on next stable (live checks run on stable releases).
+    ts: "2026-11-19T23:28:20Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: a-container-browser-window-denies-the-microphone-at-once-with-no-prompt-and-no-audioinput-while-playback-still-reaches-the-host
+    event:
+      type: note
+      ts: "2026-11-19T23:28:20Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

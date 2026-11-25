@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-22: shell-to-lua, one carried-offered wired item per PR (coordinator).
+packets:
+  - packet_id: port-check-windows-tray-clippy-to-lua
+    order: "2203-wclp"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, windows]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/check-windows-tray-clippy.lua
+      - scripts/test-windows-tray-clippy.sh
+      - scripts/hooks/pre-push-local-gate.sh
+      - scripts/gate-steps.d/560-1434-vm7g.step
+    title: "Port check-windows-tray-clippy to Lua"
+    context: |
+      check-windows-tray-clippy.sh is ported to scripts/lua/check-windows-tray-clippy.lua with byte-identical
+      verdict lines and exit codes. The pre-push hook runs it through the plan binary; a host with no runnable
+      plan binary gets could-not-run (rc 3), which the hook notes, exactly like a missing cargo. The fixture
+      copies the .lua into its scratch repos. The crate scan walks for <root>/<name>/Cargo.toml, because fs.list
+      returns files only.
+      OPEN: the step's STEP_SECOND_REGIME (yolanda 2026-09-27 msys) measured the .sh. The decider's real arm
+      runs only natively on Windows, so a fresh msys run is owed before this counts as verified there.
+    exit_criteria:
+      - "test-windows-tray-clippy 5/5 on linux (toolbox); .sh vs .lua identical on the real tree (crate-untouched; --all with no cargo gives 3 no-cargo)."
+      - "A fresh msys run of test-windows-tray-clippy on a Windows host, recorded as the step's STEP_SECOND_REGIME."
+    unscoreable: "the shell-to-lua counter is the measure"
+    provenance: "coordinator 2026-11-22: take windows-tray-clippy first while #1109 holds cheatsheet-tiers."
+    events:
+      - type: filed
+        ts: "2026-11-22T08:55:37Z"
+        host: yoga
+        summary: "filed and claimed"

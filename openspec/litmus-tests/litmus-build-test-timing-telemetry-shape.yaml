@@ -40,7 +40,8 @@ inputs:
   - scripts/local-ci.sh
   - scripts/run-litmus-test.sh
   - scripts/test-build-step-timing-attribution.sh
-  - scripts/test-gate-phase-rows-carry-run-id.sh
+  - scripts/lua/test-gate-phase-rows-carry-run-id.lua
+  - scripts/lua/test-litmus-step-timing.lua
   - scripts/lua/test-slowest-span-marker.lua
   - scripts/timing-log.sh
 
@@ -120,7 +121,7 @@ critical_path:
     # Stub gate of three phases through build.sh's real tracker: asserts three
     # phase rows plus the total row, all carrying one run_id, and wall_ms on
     # each phase row. Failed on the pre-fix tree (no _gate_run_id_begin).
-    command: "bash scripts/test-gate-phase-rows-carry-run-id.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-gate-phase-rows-carry-run-id.lua 2>&1"
     timeout_ms: 60000
     expected_behavior: "ok:gate-phase-rows-carry-run-id-fixture:5"
 
@@ -132,13 +133,13 @@ critical_path:
     expected_behavior: "ok:slowest-span-marker-fixture:4"
 
   - step: "1233-jqp4: the litmus runner records one duration per EXECUTED STEP (budgets are per step; per-test totals only bound them)"
-    command: "bash scripts/test-litmus-step-timing.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-step-timing.lua 2>&1 | tail -1"
     success_pattern: "^ok:litmus-step-timing:[0-9]+ arms$"
     timeout_ms: 120000
 
   - step: "1233-jqp4: a budget is a ceiling, not a grace period — a hung step is killed AND red, a wrong answer under a generous budget is red and fast"
-    command: "bash scripts/test-litmus-budget-negative-control.sh 2>&1 | tail -1"
-    success_pattern: "^ok:litmus-budget-negative-control:[0-9]+ arms$"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-budget-negative-control.lua 2>&1"
+    success_pattern: "^ok:litmus-budget-negative-control:[0-9]+-arms$"
     timeout_ms: 120000
 
 observability:

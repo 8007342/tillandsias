@@ -19,16 +19,16 @@ size: instant
 
 preconditions:
   - workspace contains scripts/litmus-covering-specs.sh
-  - workspace contains scripts/test-litmus-covering-relay-scope.sh
+  - workspace contains scripts/lua/test-litmus-covering-relay-scope.lua
   - shell utilities (bash, awk, sort, mktemp) are available in PATH
 
 critical_path:
-  - step: "the fixture and the tool parse, and the fixture carries its exec bit"
-    command: "bash -n scripts/litmus-covering-specs.sh && bash -n scripts/test-litmus-covering-relay-scope.sh && test -x scripts/test-litmus-covering-relay-scope.sh && echo 'ok: relay-scope-parses'"
+  - step: "the tool parses"
+    command: "bash -n scripts/litmus-covering-specs.sh && echo 'ok: relay-scope-parses'"
     timeout_ms: 3000
     expected_behavior: "ok: relay-scope-parses"
 
-  - step: "six rule arms and two catch arms, exit 0"
-    command: "out=$(bash scripts/test-litmus-covering-relay-scope.sh); rc=$?; case \"$out\" in (*'ok:covering-relay-scope:6/6'*'ok:covering-relay-scope-catches:2/2'*) [ \"$rc\" = 0 ] && echo 'ok: relay-scope 6/6 catches 2/2' ;; (*) printf '%s\\n' \"$out\"; exit 1 ;; esac"
+  - step: "the rule arms, the no-phase arms and the two catch arms"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-covering-relay-scope.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "ok: relay-scope 6/6 catches 2/2"
+    expected_behavior: "ok:litmus-covering-relay-scope:14 arms"

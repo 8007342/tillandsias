@@ -18,7 +18,7 @@ preconditions:
   - workspace contains scripts/hash-image-sources.sh
   - workspace contains scripts/meta-orchestration-worktree-guard.sh
   - workspace contains scripts/lua/test-meta-orchestration-dirty-tree-safety.lua
-  - workspace contains scripts/test-worktree-boundary-guard.sh
+  - workspace contains scripts/lua/test-worktree-boundary-guard.lua
   - workspace contains scripts/test-build-sh-ci-full-install-prep.sh
 
 critical_path:
@@ -28,7 +28,7 @@ critical_path:
     expected_behavior: "ok: executable"
 
   - step: "guard scripts parse under bash"
-    command: "bash -n scripts/meta-orchestration-worktree-guard.sh scripts/test-worktree-boundary-guard.sh && echo 'ok: syntax'"
+    command: "bash -n scripts/meta-orchestration-worktree-guard.sh && echo 'ok: syntax'"
     timeout_ms: 1000
     expected_behavior: "ok: syntax"
 
@@ -46,10 +46,10 @@ critical_path:
     # 60s on the same slow-host sizing as the fixture above; 0.9s standalone on
     # lenovinha (2026-10-19). Until 1247-b46r this fixture ran only in the e2e
     # litmus opencode-prompt-e2e-shape, which the instant suite never reaches.
-    command: "scripts/test-worktree-boundary-guard.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-worktree-boundary-guard.lua"
     timeout_ms: 60000
-    expected_behavior: "PASS: worktree-boundary-guard fixture"
-    assert_output_contains: "PASS: worktree-boundary-guard fixture"
+    expected_behavior: "ok:worktree-boundary-guard:36 arms"
+    assert_output_contains: "ok:worktree-boundary-guard:36 arms"
 
   - step: "local full-install preparation preserves tracked release and dashboard state"
     # 60s: 5.2s standalone on windows (measured 2026-08-16); the old 10s left
@@ -65,9 +65,9 @@ critical_path:
     # real reason the timeout was masking — core.autocrlf=true makes the clone
     # hash diverge and core.fileMode=false makes the exec-bit scenario a no-op.
     # See plan/issues/hash-image-sources-fixture-windows-portability-2026-08-16.md.
-    command: "scripts/test-hash-image-sources.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-hash-image-sources.lua 2>&1"
     timeout_ms: 90000
-    expected_behavior: "PASS: canonical skills participate in forge image cache key"
+    expected_behavior: "ok:hash-image-sources:9 arms"
 
 observability:
   traces:

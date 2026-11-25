@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: assigned by macuahuitl-fedora 2026-11-22 (found by yolanda-windows).
+packets:
+  - packet_id: lua-fixtures-never-spawn-which
+    order: "2257-qnt7"
+    status: claimed
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, fixtures, wsl, portability]
+    estimated_hours: 1
+    title: "Lua fixtures look tools up through common.fixture.which(), never by spawning the which binary"
+    context: |
+      The WSL builder has no which package. Five fixtures (six sites) spawned it: test-builder-toolbox-exists refused at
+      setup, test-build-sh-darwin-tool-remediation could not run, and the others read a failed spawn as an absent tool.
+    exit_criteria:
+      - "No scripts/lua or lib/lua file spawns which; with which absent from PATH, test-builder-toolbox-exists and test-build-sh-darwin-tool-remediation pass."
+      - "test-common-fixture.lua arm 12 passes."
+    unscoreable: "pinned-elsewhere: test-common-fixture.lua arm 12."
+    next_action: "Land the PR; msys and WSL-builder reruns."
+    provenance: "macuahuitl-fedora 2026-11-22, relaying yolanda-windows."
+    events:
+      - type: filed
+        ts: "2026-11-23T06:49:33Z"
+        host: calmecacpilli
+        summary: "filed and claimed; implemented in the same change"

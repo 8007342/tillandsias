@@ -21,7 +21,7 @@
 #   blocked:yaml-reader-absent:<env>
 #   blocked:yaml-reader-broken:<env>:<verdict-it-gave>
 #
-# Pinned by scripts/test-yaml-reader-availability.sh.
+# Pinned by scripts/lua/test-yaml-reader-availability.lua.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 

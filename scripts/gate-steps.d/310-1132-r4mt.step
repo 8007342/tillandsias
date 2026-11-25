@@ -13,13 +13,13 @@
 # them; making them skippable would turn a naming fix into leniency, which is
 # the failure 965-sxec's channel exists to prevent.
 #
-# STEP_SCRIPT is a LITERAL path (1063-nraf).
+# STEP_LUA is a LITERAL path (1063-nraf).
 STEP_DESC="Checking every archiver could-not-run exit names its own cause (1132-r4mt)"
-STEP_SCRIPT="scripts/test-archiver-could-not-run-is-self-naming.sh"
+STEP_LUA="scripts/lua/test-archiver-could-not-run-is-self-naming.lua"
 STEP_ERROR="an archiver exit-3 site no longer names its cause, or a repairable instrument failure became forge-skippable (1132-r4mt) — a caller reading rc=3 is back to parsing prose to tell a stale ledger instrument from a locus with no ruby; see the verdict line above"
 STEP_OK="archiver could-not-run self-naming check passed"
-# Exit 3 means the archiver source is not present — nothing was examined, and the
-# fixture says so by name rather than passing. Exit 1 remains a real regression.
-STEP_SKIP_EXIT=3
-STEP_SKIP_DESC="scripts/archive-plan-packets.sh is absent, so no exit-3 site could be read"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   every could-not-run token is written to stdout, where its reader looks"
+STEP_SECOND_REGIME="macbookair 2026-11-25 darwin ok:archiver-could-not-run-is-self-naming:6 arms"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/archive-plan-packets.sh scripts/lua/test-archiver-could-not-run-is-self-naming.lua scripts/lua/check-archiver-ready-set.lua"

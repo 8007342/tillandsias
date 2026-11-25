@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha. Source: the landing-pipeline redesign (operator 2026-11-20), P10, relayed by macuahuitl-fedora; items (a)-(d) and the restated exit accepted 2026-11-20.
+packets:
+  - packet_id: gate-roster-declared-inputs-shared-content-memo-concurrent-rust-families
+    order: 2118-tnut
+    status: in_progress
+    kind: infrastructure
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [gate, landing, build, performance]
+    estimated_hours: 12
+    owned_files:
+      - scripts/archiver-check-memo.sh
+      - scripts/lua/test-archiver-check-memo.lua
+      - build.sh
+    title: |
+      Gate roster: a content-keyed archiver memo shared across worktrees, declared inputs on the shell, Lua and litmus steps, and the Rust families run concurrently.
+    context: |
+      Operator P10, 2026-11-20. 211 gate steps are declared, and only 4 have inputs, so the scoped tier is a full gate in practice.
+      A sweep of crates/ found that Rust compiles in or reads files in every class a docs+test PR touches, so the Rust steps are NOT skippable by declared inputs. Examples:
+        - include_str! of cheatsheets/*.md and skills/*/SKILL.md;
+        - lua_std.rs git-greps every *.sh plus openspec/litmus-tests;
+        - groundtruth.rs and answer.rs read openspec/litmus-tests;
+        - gh_auth_deploy_key.rs reads docs/cheatsheets;
+        - tillandsias-embed build.rs embeds images/, skills/ and research/.
+      The Rust floor is about 12.7 min serial on lenovinha (run gate-1795138247572-2794550).
+      Accepted plan: (a) declared inputs on non-Rust steps, each skip mutation-proven, keep-unconditional untouched; (b) Rust families concurrent with shell steps, same target dir only where cargo's lock serialises builds, peak RSS under 70% of RAM or a capped job count; (c) a Rust skip only for plan-ledger-only trees; (d) a worktree-shared archiver memo keyed on content.
+      (d) is done on work/2118-tnut. Before it the memo hit 31 of 424 runs on lenovinha, and one miss took 316 s.
+    exit_criteria:
+      - '(d) a second worktree with byte-identical ledger, instrument and plan binary hits the archiver memo; a different ledger misses; a rebuilt binary at the same path misses (it hit before, a false memo)'
+      - '(a) each declared-input skip is mutation-proven: a change to a declared input makes the step run, and every skip is printed'
+      - '(b) the Rust test families run concurrently with the shell steps; peak RSS stays under 70% of RAM on lenovinha and macuahuitl'
+      - 'restated exit (operator 2026-11-20): a docs+test tree --check wall at most the Rust floor plus 3 min'
+    verifiable_closure: |
+      (d) scripts/lua/test-archiver-check-memo.lua, 11 arms, 3 of them red on the old script. (a) and (b) add their own mutation and RSS evidence to this row.
+    unscoreable: 'decider-not-litmus: (d) is scored by the gate decider scripts/lua/test-archiver-check-memo.lua that build.sh runs on every --check, not a litmus binding; (a) and (b) are gate-roster changes whose mutation and RSS evidence is recorded on this row.'
+    next_action: Land (d). Then (a), starting from the top non-Rust steps by wall time in the timing ledger, then (b).
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20; operator landing-pipeline redesign P10, relayed by macuahuitl-fedora.
+    events:
+      - type: filed
+        ts: "2026-11-20T20:04:52Z"
+        host: lenovinha
+        summary: P10 filed; (d) shared content-keyed archiver memo implemented.

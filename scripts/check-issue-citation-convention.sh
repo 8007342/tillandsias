@@ -68,7 +68,7 @@ if [ -z "${TILLANDSIAS_ISSUE_CITATION_HEAD:-}" ] && [ ! -e "$ISSUE_DIR" ]; then
     exit 0
 fi
 
-if ! git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
+if ! git rev-parse --verify --quiet "$base_ref^{commit}" >/dev/null 2>&1; then
     # An unavailable base is an UNKNOWN, not a pass, and says so on stderr —
     # but it must not fail the gate on a fresh clone with no remote ref.
     echo "ok:issue-citation-convention:0 checked"
@@ -87,7 +87,7 @@ fi
 # skipped deliberately: a ref has no untracked files, and reading the worktree's
 # would judge bytes that are not in the push.
 head_ref="${TILLANDSIAS_ISSUE_CITATION_HEAD:-}"
-if [ -n "$head_ref" ] && ! git rev-parse --verify "$head_ref" >/dev/null 2>&1; then
+if [ -n "$head_ref" ] && ! git rev-parse --verify --quiet "$head_ref^{commit}" >/dev/null 2>&1; then
     # Fail CLOSED here, unlike the base-ref case above. An unavailable base is
     # a fresh-clone unknown; an unavailable HEAD was named explicitly by a
     # caller that believes it is validating something, and silently checking

@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-22: JOBS=6 evictions on macuahuitl (run 27), routed by the coordinator.
+packets:
+  - packet_id: a-gate-step-can-declare-it-runs-alone-and-the-metrics-path-agreement-step-does
+    order: "2192-excl"
+    status: in_progress
+    kind: bug
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [gate, build-speed]
+    estimated_hours: 1
+    owned_files:
+      - build.sh
+      - scripts/gate-steps.d/279-1455-d7hc.step
+    title: "A gate step can declare it runs alone (STEP_LANES exclusive), and the metrics path-agreement step does"
+    context: |
+      Under JOBS=6 macuahuitl evicted #1248 and #1287 back to back on lanes step 279-1455-d7hc. The step writes
+      the fixed /tmp/tillandsias-timing.jsonl and counts lines of the fixed /tmp/forge-expert-usage.jsonl before
+      and after a run (its own header), so any concurrent writer in another lane breaks its count. A single lane
+      token could not say "nothing else may run": `exclusive` now sends a step to the exclusive phase after the
+      lanes, and 279 declares it.
+    exit_criteria:
+      - "279 runs in the exclusive phase under JOBS=6 and passes; its macuahuitl evictions stop."
+    unscoreable: "macuahuitl's JOBS=6 run logs are the measure"
+    provenance: "coordinator, run 27 evictions, 2026-11-22."
+    events:
+      - type: filed
+        ts: "2026-11-22T05:20:01Z"
+        host: yoga
+        summary: "filed, claimed and fixed"

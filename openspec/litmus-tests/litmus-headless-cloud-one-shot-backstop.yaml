@@ -18,7 +18,7 @@ preconditions:
 
 critical_path:
   - step: "Req: queue default prompt, backstop order (remove, report, print, exit 124) and the dispatch wiring"
-    command: "bash scripts/test-headless-cloud-one-shot.sh 2>&1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-headless-cloud-one-shot.lua 2>&1"
     timeout_ms: 600000
     success_pattern: "ok:headless-cloud-one-shot:5"
 
@@ -29,10 +29,10 @@ observability:
   log_fields:
     spec: "cli-mode"
     test: "headless-cloud-one-shot-backstop"
-    artifact: "scripts/test-headless-cloud-one-shot.sh"
+    artifact: "scripts/lua/test-headless-cloud-one-shot.lua"
 
 rollback:
   on_failure: >
     Restore crates/tillandsias-headless/src/one_shot.rs and the two
     timed_out() checks after run_cli_with_vault_credential_cleanup in main.rs.
-  command: "bash scripts/test-headless-cloud-one-shot.sh 2>&1"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-headless-cloud-one-shot.lua 2>&1"

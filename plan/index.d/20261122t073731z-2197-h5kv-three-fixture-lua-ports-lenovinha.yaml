@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Tech-debt session (bash→lua), coordinator direction: three ports per batch.
+packets:
+  - packet_id: release-finalize-affordance-and-capability-guard-fixtures-become-lua
+    order: 2197-h5kv
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 3
+    title: |
+      Port test-release-preflight-affordances.sh, test-finalize-cycle-affordances.sh and test-capability-manifest-guard.sh to scripts/lua, rewire gate steps 680/690 and the litmus, delete the three .sh.
+    context: |
+      Open work refs were scanned first; none touches these three.
+    exit_criteria:
+      - 'each Lua port prints the same ok/FAIL arms as its .sh on this tree; steps 680 and 690 run STEP_LUA; litmus:capability-manifest-guard runs the Lua; the three .sh and their floor lines are gone'
+    unscoreable: 'unpinnable-until-the-guard-exists: the existing steps and litmus are the proof and are recorded in the PR.'
+    next_action: 'Port, compare arm output, rewire, open the PR.'
+    provenance: coordinator direction; filed by lenovinha.
+    depends_on: []
+    related: [1505-hedu, 1504-4tty, 583-dv9n]
+    events:
+      - {type: filed, ts: '2026-11-22T07:37:31Z', host: lenovinha, summary: filed three fixture Lua ports}

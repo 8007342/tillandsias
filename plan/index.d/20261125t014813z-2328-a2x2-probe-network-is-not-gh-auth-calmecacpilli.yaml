@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: assigned by macuahuitl-fedora 2026-11-25 (its own finding).
+packets:
+  - packet_id: remote-probe-names-a-network-failure-network
+    order: "2328-a2x2"
+    status: claimed
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [preflight, pre-push, remote-probe]
+    estimated_hours: 1
+    title: "A host that cannot connect to GitHub is blocked:remote-unreachable:network, never gh-auth"
+    context: |
+      On calmecacpilli 2026-11-23 git said "Failed to connect to github.com:443" and the probe said gh-auth, whose remedy is
+      a login. The probe took any nonzero gh auth status for a bad login. The verdict stays in blocked:remote-unreachable
+      (not could-not-run, as first asked) because remote-probe-judge.sh lets everything else through, and a host that
+      cannot push must stop (2239-rmun).
+    exit_criteria:
+      - "test-probe-remote-reachable.lua arms 15-18 are red on the old probe and green on the new; arm 19 (a real refusal) says gh-auth on both."
+    unscoreable: "pinned-elsewhere: gate step 889 (test-probe-remote-reachable.lua)."
+    next_action: "Land the PR; refresh the darwin and msys records of step 889 (19 arms)."
+    provenance: "macuahuitl-fedora 2026-11-25; calmecacpilli outage 2026-11-23."
+    events:
+      - type: filed
+        ts: "2026-11-25T01:48:13Z"
+        host: calmecacpilli
+        summary: "filed and claimed; implemented in the same change"

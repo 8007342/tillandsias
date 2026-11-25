@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 699-usxc).
+#
+# the-door-leaves-34-to-58-guards-unjudged-on-mid-tier-hosts.status was ALREADY 'ready', so no field changed — but the caller
+# supplied a note, and discarding it silently is what this packet is about.
+events:
+  - packet_id: the-door-leaves-34-to-58-guards-unjudged-on-mid-tier-hosts
+    event:
+      type: note
+      ts: "2026-11-23T21:38:28Z"
+      host: lenovinha
+      summary: |-
+        Correction and data. The 36 lenovinha doors had unrecorded load, so their skip counts are an upper bound. Exactly 26 guards were skipped in all 36 (the list in the row); 34 were skipped in at least 30. Six idle doors (load under 1.5 before each, refused=0): cold 182 s with 59 skips, then 151 s with 41, then 149 s with 39 four times; 39 guards skipped in all six. The long lane is not the cause (its three guards ran 0-3 s). Coordinator ruling: per-host recorded cost, a declared skip naming guard and cost, fast hosts keep judging all; not gate-only.

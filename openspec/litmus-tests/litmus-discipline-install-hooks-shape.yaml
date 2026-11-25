@@ -16,24 +16,19 @@ severity: normal
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-discipline-install-hooks.sh
+  - workspace contains scripts/lua/test-discipline-install-hooks.lua
   - workspace contains crates/tillandsias-plan/hooks/pre-push.lua
 
 critical_path:
-  - step: "fixture parses and is executable"
-    command: "bash -n scripts/test-discipline-install-hooks.sh && test -x scripts/test-discipline-install-hooks.sh && echo 'ok: parse'"
-    timeout_ms: 2000
-    expected_behavior: "ok: parse"
-
   - step: "install-hooks, raise, advisories, override, fail-closed stubs, forge wiring, and the idempotent / not-ours NEGATIVE CONTROL"
-    command: "bash scripts/test-discipline-install-hooks.sh 2>&1 | tail -n 1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-discipline-install-hooks.lua 2>&1 | tail -n 1"
     timeout_ms: 120000
-    expected_behavior: "PASS: discipline-install-hooks"
+    expected_behavior: "ok:discipline-install-hooks:18 arms"
 
 observability:
   traces:
     - "@trace spec:branch-discipline"
-  expected_log: "PASS: discipline-install-hooks"
+  expected_log: "ok:discipline-install-hooks:18 arms"
   log_fields:
     spec: "branch-discipline"
     test: "discipline-install-hooks-shape"
@@ -43,4 +38,4 @@ rollback:
   on_failure: >
     A hook that refuses a level-0 project's push to main violates the floor:
     restore level-0 pre-push to never refusing before anything else.
-  command: "bash scripts/test-discipline-install-hooks.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-discipline-install-hooks.lua 2>&1"

@@ -1,5 +1,5 @@
 # spec-script-paths-baseline.txt — script paths active specs name that do not
-# resolve, recorded when scripts/check-spec-script-paths.sh landed (815-yace,
+# resolve, recorded when scripts/check-spec-script-paths.sh (now scripts/lua/check-spec-script-paths.lua) landed (815-yace,
 # measured on yoga 2026-09-30: 98 distinct spec/path pairs, 10 unresolved).
 #
 # A BURNDOWN LIST. Never add to it: a new unresolved path is a defect in the

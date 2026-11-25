@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-22: coordinator option (a) after shell-to-lua batch 2 found nothing portable.
+packets:
+  - packet_id: verdict-emit-accepts-a-reviewed-table-of-legacy-verdict-words-with-their-callers-exit-codes
+    order: "2193-vtbl"
+    status: in_progress
+    kind: debt
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, lua-door, plan-crate]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/script_run.rs
+      - crates/tillandsias-plan/tests/lua_verdict_grammar.rs
+    title: "verdict.emit accepts a reviewed table of legacy verdict words, each with its callers' exit codes"
+    context: |
+      Shell-to-lua batch 2 ported nothing: the remaining deciders print verdict words verdict.emit refused
+      (unavailable:, non-opsx:, launch-dirt:, ...). LEGACY_VERDICT_WORDS lists 13 words, each with the ONLY exit
+      codes their .sh pairs them with (derived from every `echo "<word>:` and the following `exit N` in
+      scripts/check-*, verify-*, guard-*.sh). verdict.emit accepts such a line only with one of those codes, so a
+      port is byte-identical and classify() (exit-code-first) books it exactly as it books the .sh. note:,
+      usage:, summary: are absent: diagnostics, not verdicts.
+    exit_criteria:
+      - "lua_verdict_grammar: every word emitted verbatim with each of its codes; refused with a code outside its set; the test table is the source table."
+    unscoreable: "the test file is the measure"
+    provenance: "coordinator decision (a), 2026-11-22."
+    events:
+      - type: filed
+        ts: "2026-11-22T06:31:06Z"
+        host: yoga
+        summary: "filed and claimed"

@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Story build-speed-lenovinha (coordinator, 2026-11-21).
+packets:
+  - packet_id: the-pending-capability-fixture-folds-the-real-ledger-once-and-a-trimmed-scaffold-for-every-other-arm
+    order: 2161-jtam
+    status: ready
+    kind: chore
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    story: build-speed-lenovinha
+    capability_tags: [build-speed, plan-ledger, release-preflight]
+    estimated_hours: 1
+    title: |
+      test-pending-capability-row-does-not-wedge ran release-preflight (a full ledger fold) six times over a copy of the real ledger. Report: 77.8 s on macuahuitl (an RC-4 timeout too); 19 s here.
+    context: |
+      Coordinator ruling 2026-11-21: a trimmed scaffold ledger for the arms, and ONE arm folding the real-ledger copy so the property against the real ledger is still asserted once per gate.
+    exit_criteria:
+      - 'exactly one release-preflight per run folds the real-ledger copy (the closure arm); every other arm folds a one-row scaffold; all arms and the TERM/SIGKILL children pass'
+    unscoreable: 'unpinnable-until-the-guard-exists: the fixture itself is the pin.'
+    next_action: 'Land the PR.'
+    provenance: coordinator build-speed round 3, 2026-11-21; filed by lenovinha.
+    depends_on: []
+    related: [1128, 1320, 2160-suep]
+    events:
+      - {type: filed, ts: '2026-11-21T09:10:18Z', host: lenovinha, summary: filed p0 under build-speed-lenovinha}

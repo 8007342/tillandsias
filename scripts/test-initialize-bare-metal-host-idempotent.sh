@@ -14,7 +14,7 @@
 #
 # WHAT THIS FIXTURE DOES NOT PROVE, and why its verdict now says so in its own
 # name (ORDER 1346-cdwt, coordinator ruling 2026-09-21). Every arm here is a
-# CHECKER-SHAPE arm: it asks what scripts/check-bare-metal-host-initialized.sh
+# CHECKER-SHAPE arm: it asks what scripts/lua/check-bare-metal-host-initialized.lua
 # SAYS in a manufactured state. None of them runs the skill's commands, and a
 # stub cannot reset a machine. 1312-i6da's closure additionally requires two
 # REAL-HOST arms — the skill's commands run twice with no container creation
@@ -36,9 +36,16 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 3
 
-CHECKER="$ROOT/scripts/check-bare-metal-host-initialized.sh"
+# 2170-ji2b: the checker is Lua on the one runner. A stub podman on PATH still
+# reaches it: the runner forwards PATH (and the checker's other declared env).
+CHECKER="$ROOT/scripts/lua/check-bare-metal-host-initialized.lua"
 SKILL="$ROOT/skills/initialize-bare-metal-host/SKILL.md"
 [ -f "$CHECKER" ] || { echo "skip:initialize-bare-metal-host:no-checker"; exit 3; }
+# shellcheck source=scripts/plan-binary-probe.sh
+. "$ROOT/scripts/plan-binary-probe.sh"
+PB="$(resolve_plan_binary 2>/dev/null)" || PB=""
+[ -n "$PB" ] || { echo "skip:initialize-bare-metal-host:no-plan-binary"; exit 3; }
+chk() { "$PB" script run "$CHECKER"; }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/init-bare-metal.XXXXXX")" || exit 3
 trap 'rm -rf "$W"' EXIT
@@ -59,8 +66,8 @@ ALL_UP=$'tillandsias-vault\ntillandsias-proxy\ntillandsias-git-tillandsias\ntill
 
 echo "arm 1 (checker-shape) — STABLE READ: one manufactured state yields the SAME verdict twice"
 mk_podman "$W/up" "$ALL_UP" "40"
-v1="$(PATH="$W/up:$PATH" bash "$CHECKER" 2>/dev/null)"; r1=$?
-v2="$(PATH="$W/up:$PATH" bash "$CHECKER" 2>/dev/null)"; r2=$?
+v1="$(PATH="$W/up:$PATH" chk 2>/dev/null)"; r1=$?
+v2="$(PATH="$W/up:$PATH" chk 2>/dev/null)"; r2=$?
 if [ "$v1" = "$v2" ] && [ "$r1" -eq 0 ] && [ "$r2" -eq 0 ]; then
     # 1346-cdwt: echo the STABILITY, never the verdict's contents. This line
     # used to print the whole checker verdict, including a `lane=` field the
@@ -75,7 +82,7 @@ fi
 
 echo "arm 2 (checker-shape) — SEEDLESS: an unseeded state reads not-seeded, with NO prompt and no write. NOTE: this is NOT 1312-i6da closure arm 2 (rebuild from nothing); a stub cannot reset a machine."
 mk_podman "$W/noseed" "$ALL_UP" "0"
-out="$(PATH="$W/noseed:$PATH" bash "$CHECKER" </dev/null 2>/dev/null)"; rc=$?
+out="$(PATH="$W/noseed:$PATH" chk </dev/null 2>/dev/null)"; rc=$?
 case "$out" in
     *github=not-seeded*) _f1=1 ;;
     *) _f1=0 ;;
@@ -91,7 +98,10 @@ esac
 # very sentence and reported the checker as a seeder. Fourth instrument-inside-
 # its-own-search-space of the session (1287-myx8); this one was caught by the
 # fixture before it landed rather than after.
-_code_only="$(sed -e 's/#.*$//' "$CHECKER" 2>/dev/null)"
+# 2170-ji2b: the checker is Lua, so its comment lines start with `--`. Whole
+# comment lines are dropped, never a `--…` suffix: that would also strip a real
+# `--with-token` from code and open the loophole this arm closes.
+_code_only="$(sed -e '/^[[:space:]]*--/d' "$CHECKER" 2>/dev/null)"
 _seedy="$(printf '%s\n' "$_code_only" | grep -cE 'github-login|--with-token|vault kv put' )"
 if [ "$_f1" -eq 1 ] && [ "$rc" -eq 0 ] && [ "$_seedy" -eq 0 ]; then
     ok "not-seeded reported, rc=0, and the checker contains no seeding verb"
@@ -101,7 +111,7 @@ fi
 
 echo "arm 3 (checker-shape) — TROUBLESHOOTING: a stopped-mirror state yields todo: naming the fix, rc=1"
 mk_podman "$W/nomirror" $'tillandsias-vault\ntillandsias-proxy' "40"
-out3="$(PATH="$W/nomirror:$PATH" bash "$CHECKER" 2>/dev/null)"; rc3=$?
+out3="$(PATH="$W/nomirror:$PATH" chk 2>/dev/null)"; rc3=$?
 case "$out3" in
     todo:initialize-bare-metal-host:mirror:*tillandsias*) _f3=1 ;;
     *) _f3=0 ;;

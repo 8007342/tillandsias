@@ -66,3 +66,10 @@ STEP_SCRIPT="scripts/test-litmus-parse-only-duplicate-key.sh"
 STEP_ERROR="run-litmus-test.sh --parse-only can again report ok on a file a YAML loader rejects (1274-cbk7) — read which arm failed above; ARM 0 failing means the premise is gone and no later arm means anything, ARM 1 failing means the fixture can no longer reproduce the defect"
 STEP_OK="--parse-only refuses duplicated mapping keys"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin skip:litmus-parse-only-duplicate-key:no-yaml-reader-on-PATH"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="drives podman; runs the litmus runner (it wipes its runtime dirs)"
+STEP_LANES="podman litmus"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="images/router/** scripts/lua/check-litmus-yaml-parses.lua scripts/plan-binary-probe.sh scripts/run-litmus-test.sh scripts/test-litmus-parse-only-duplicate-key.sh scripts/tillandsias-podman"

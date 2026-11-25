@@ -1,6 +1,6 @@
 #!/bin/bash
 # @trace spec:project-summarizers
-# freshness: auditor=forge-forge-tillandsias-codex-20260824t004713z date=2026-08-24 verdict=updated scope=full script; exact section parsing now preserves quoted SDK constraints, counts only direct dependency keys, and detects frameworks by dependency name; pinned by test-summarize-pubspec.sh
+# freshness: auditor=forge-forge-tillandsias-codex-20260824t004713z date=2026-08-24 verdict=updated scope=full script; exact section parsing now preserves quoted SDK constraints, counts only direct dependency keys, and detects frameworks by dependency name; pinned by scripts/lua/test-summarize-pubspec.lua
 
 set -euo pipefail
 
@@ -65,7 +65,7 @@ has_dependency() {
   printf '%s\n' "$DEPENDENCIES" | grep -Fxq "$1"
 }
 
-if has_dependency flutter || printf '%s\n' "$PUBSPEC_FACTS" | grep -Fq $'flutter_project\t1'; then
+if has_dependency flutter || grep -Fq <<<"$PUBSPEC_FACTS" $'flutter_project\t1'; then
   IS_FLUTTER=1
 else
   IS_FLUTTER=0

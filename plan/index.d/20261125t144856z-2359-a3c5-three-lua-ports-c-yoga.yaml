@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: jq-callsite-ratchet-competing-gate-and-centicolon-grade-fixtures-ported-to-lua
+    order: "2359-a3c5"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/test-check-jq-callsite-ratchet.lua
+      - scripts/lua/test-competing-gate-consumer.lua
+      - scripts/lua/test-centicolon-grade.lua
+    title: "three shell fixtures ported to Lua: jq call-site ratchet, competing-gate consumer, CentiColon grader"
+    context: |
+      ports: test-check-jq-callsite-ratchet, test-competing-gate-consumer, test-centicolon-grade.
+      Claimed by yoga before the work, in the coordinator's test-[a-c]* range.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its subject is mutated; callers run the .lua; the three .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by three gate steps"
+    provenance: "coordinator queue 2026-11-25 (test-[a-c]* range), yoga"
+    related: [1375-tsfu, 1150-q462, 1395-88tp]
+    events:
+      - {type: claimed, ts: "2026-11-25T14:48:56Z", host: yoga, summary: "claimed; work ref work/2359-a3c5"}

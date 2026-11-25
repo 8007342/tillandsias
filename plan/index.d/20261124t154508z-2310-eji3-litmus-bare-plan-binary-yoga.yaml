@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: litmus-steps-cannot-depend-on-a-tillandsias-plan-that-happens-to-be-on-path
+    order: "2310-eji3"
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, windows]
+    estimated_hours: 3
+    owned_files:
+      - scripts/run-litmus-test.sh
+    title: "a litmus step that calls a bare tillandsias-plan works on a host with none on PATH, or is refused by a check"
+    context: |
+      2308-irfp fixed one file. A grep of litmus `command:` lines at 2026-11-24 finds bare calls in 24 others. The pattern
+      is single-line only, so the count is not exact, and which of them run on msys was not checked. Some may mean a forge's
+      own PATH (for example litmus-forge-plan-binary-on-path): those must keep meaning it.
+      Coordinator ruling: fix it once, in the runner (a bare name resolves through the probe) or by a check that refuses a
+      bare call; not by 24 edits.
+    exit_criteria:
+      - "With no tillandsias-plan on PATH, a litmus step that calls it bare on the host resolves the binary plan-binary-probe.sh names, or a check refuses that step by file. Pre-fix result: FAILS, rc 127."
+      - "NEGATIVE CONTROL: a step whose subject is a forge's or container's own PATH is unchanged."
+    unscoreable: "unpinnable-until-the-guard-exists: the runner change or the check is the deliverable"
+    next_action: "Choose runner or check; the runner must not put a stale binary ahead of the probe's answer."
+    provenance: "coordinator macuahuitl-fedora 2026-11-24, from yoga's grep during 2308-irfp"
+    related: [2308-irfp]
+    events:
+      - {type: filed, ts: "2026-11-24T15:45:08Z", host: yoga, summary: "filed on the request of the coordinator"}

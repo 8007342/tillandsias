@@ -169,7 +169,18 @@ specs:
 - spec_id: ci-release
   status: active
   litmus_tests:
+  - litmus:floor-merge-driver-merges-clean
+  - litmus:archive-answerability-tree-copy
+  - litmus:local-ci-landed-guards
+  - litmus:local-ci-strict-specs
+  - litmus:local-ci-check-catalog
+  - litmus:script-run-roots-at-a-repository
+  - litmus:land-queue-host-door-names-its-cause
+  - litmus:plan-binary-rebuild-while-running
+  - litmus:gate-step-declared-inputs-are-mutation-proven
   - litmus:release-is-one-cloud-build
+  - litmus:build-floor
+  - litmus:common-fixture
   - litmus:gate-step-private-metrics-fallback
   - litmus:prebuilt-resolver-refuses-stale
   - litmus:promote-stable-refusals-carry-affordance
@@ -188,6 +199,7 @@ specs:
   - litmus:scorable-obligation-splitter
   - litmus:census-enforced-reachability-split
   - litmus:added-test-is-referenced-shape
+  - litmus:unreferenced-slow-and-regime-fixtures-run
   - litmus:unreferenced-lane-fixtures-run
   - litmus:unreferenced-guard-fixtures-run
   - litmus:verify-closure-shape
@@ -200,6 +212,8 @@ specs:
   - litmus:litmus-binding-truth
   - litmus:github-actions-budget
   - litmus:ci-release-toolchain-shape
+  - litmus:cycle-metrics-fixtures-pin-logs-shape
+  - litmus:runner-scratch-skips-sidecar-shape
   - litmus:seam-writer-canonical-lock-shape
   - litmus:bash-composition-hazards-advisory-shape
   # 1137-da83. scripts/test-*.sh is not globbed by build.sh, so a fixture runs
@@ -232,6 +246,7 @@ specs:
   - litmus:installer-swap-atomicity
   - litmus:installer-reprovisions-on-install
   - litmus:validator-surface-currency
+  - litmus:plan-binary-refresh-clears-stale
   - litmus:fragment-ts-skew
   - litmus:preflight-front-door
   - litmus:preflight-declarations-host-sed
@@ -357,6 +372,7 @@ specs:
 - spec_id: dev-build
   status: active
   litmus_tests:
+  - litmus:build-dev-cache-ca-trap-cleared
   - litmus:environment-isolation
   - litmus:binary-e2e-smoke
   - litmus:headless-init-status-check-source-built
@@ -454,6 +470,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-as-only-runtime
+  - litmus:forge-no-raw-podman
   - litmus:container-start-health
   - litmus:launch-artifacts-untracked
   - litmus:forge-agent-result-format
@@ -1098,6 +1115,7 @@ specs:
 - spec_id: spec-traceability
   status: active
   litmus_tests:
+  - litmus:litmus-timeout-retry-shape
   - litmus:plan-next-names-a-stale-ledger-and-hides-rows-siblings-hold
   - litmus:no-fixture-writes-live-ledger-shape
   - litmus:spec-traceability-shape
@@ -1358,7 +1376,6 @@ specs:
   - litmus:no-credentials-at-rest
   - litmus:antigravity-lane-tty-takes-keystrokes
   - litmus:vault-audit-persistence-shape
-  - litmus:vault-auto-unseal-no-prompt
   - litmus:codex-api-key-env-var
   - litmus:vault-cli-verifies-tls
   - litmus:default-vault-cli-security

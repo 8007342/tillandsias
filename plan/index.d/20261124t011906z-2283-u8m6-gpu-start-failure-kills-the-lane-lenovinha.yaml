@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-gpu-that-cannot-be-mounted-kills-the-lane-instead-of-falling-back-to-cpu
+    order: 2283-u8m6
+    status: ready
+    kind: bug
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [rust, podman, inference, release]
+    estimated_hours: 3
+    title: |
+      When podman cannot start tillandsias-inference with --device nvidia.com/gpu=all, the whole lane exits 1; it must fall back to CPU inference with one status line.
+    context: |
+      Release-blocking for v56.11.23.1 (lenovinha smoke, 2026-11-24): `tillandsias --cloud ... --opencode` exits 1 in 36 s with `crun: mount_setattr /run/nvidia-persistenced/socket: Operation not permitted`. Reproduced with bare podman and bisected: --userns=keep-id with --device nvidia.com/gpu=all fails (rc 126); either alone works (crun 1.31, podman 6.2.0, nvidia-container-toolkit 1.20.2, driver 620.70.06 installed 2026-11-23). Not a regression: build_inference_run_args differs from v56.11.7.1's in the proxy env only. Whether the driver upgrade is the trigger is unproven. With TILLANDSIAS_NO_LOCAL_INFERENCE=1 the lane works. The builder already degrades to CPU with no CDI spec; the gap is a spec that exists and a start that fails.
+    exit_criteria:
+      - "a start that fails with the GPU device is retried once without it; the lane continues and prints one status line naming the cause"
+      - "a start that fails without any GPU device still fails as today"
+      - "every launch site of tillandsias-inference uses the one helper"
+      - "red-first on lenovinha's real driver: today's behaviour exits 1; with the fix the lane answers"
+    unscoreable: "unpinnable-until-the-guard-exists: the real-driver lane is the deliverable."
+    next_action: "One helper around build_inference_run_args' five launch sites."
+    provenance: coordinator ruling (macuahuitl-fedora, 2026-11-24); measured and filed by lenovinha.
+    related: []
+    events:
+      - {type: filed, ts: '2026-11-24T01:19:06Z', host: lenovinha, summary: GPU start failure kills the lane filed}

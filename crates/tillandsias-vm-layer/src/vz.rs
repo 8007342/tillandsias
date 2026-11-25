@@ -1937,9 +1937,29 @@ READY_STATE="$(systemctl is-active tillandsias-headless-ready.service 2>/dev/nul
 # for further records by anything parsing this file line-wise.
 HEADLESS_LOG="$(journalctl -u tillandsias-headless.service -n 20 --no-pager 2>/dev/null | sed 's/^/log /' || true)"
 
+# Order 2352-pvcm. KERNEL REBOOT PENDING IS EXPECTED, AND SAID. The 1925-gupg
+# upgrade above installs the newest kernel-core, but the guest keeps running the
+# kernel it booted until its next COLD boot (EFI -> GRUB picks the newest entry);
+# provisioning runs once, on the first boot. The tray's quit is a cold stop, so the
+# next launch boots the new kernel. Recorded here so the host can say so instead of
+# leaving an installed/running mismatch for a smoke to find (v56.11.24.1 finding 3).
+KERNEL_RUNNING="$(uname -r 2>/dev/null || true)"; [ -n "$KERNEL_RUNNING" ] || KERNEL_RUNNING=unknown
+KERNEL_INSTALLED="$(rpm -q --last kernel-core 2>/dev/null | head -1 | cut -d' ' -f1 || true)"
+KERNEL_INSTALLED="${KERNEL_INSTALLED#kernel-core-}"; [ -n "$KERNEL_INSTALLED" ] || KERNEL_INSTALLED=unknown
+KERNEL_REBOOT_PENDING=unknown
+if [ "$KERNEL_INSTALLED" != unknown ] && [ "$KERNEL_RUNNING" != unknown ]; then
+  if [ "$KERNEL_INSTALLED" = "$KERNEL_RUNNING" ]; then KERNEL_REBOOT_PENDING=no; else KERNEL_REBOOT_PENDING=yes; fi
+fi
+
+# Order 2352-pvcm. THE IN-GUEST MARKER GETS ITS COMPLETION LINE. It carried start,
+# upgrade and FAILED lines and never a completion, so a guest at Ready read exactly
+# like one that stopped after the upgrade (v56.11.24.1 smoke, finding 3). Best-effort
+# and BEFORE the state record below, which stays the last statement.
+echo "tillandsias-provision-complete kernel_running=$KERNEL_RUNNING kernel_installed=$KERNEL_INSTALLED kernel_reboot_pending=$KERNEL_REBOOT_PENDING $(date -u +%FT%TZ)" >> /var/log/tillandsias-provision-marker 2>/dev/null || true
+
 # Written LAST on purpose. Anything after it could fail while the record says
 # complete, which would be a fresh instance of this packet's defect.
-{ echo "tillandsias-provision-state v1"; echo "written_at $(date -u +%s)"; echo "written_at_iso $(date -u +%FT%TZ)"; echo "phase complete"; echo "guest_binary_sha256 $GUEST_BIN_SHA"; echo "headless_service_state $HEADLESS_STATE"; echo "headless_exec_main_start_timestamp $HEADLESS_START_TS"; echo "headless_exec_main_status $HEADLESS_EXIT_STATUS"; echo "headless_result $HEADLESS_RESULT"; echo "headless_nrestarts $HEADLESS_NRESTARTS"; echo "ready_service_state $READY_STATE"; echo "ready_service_state_note started --no-block; not-yet-active here is EXPECTED"; [ -n "$HEADLESS_LOG" ] && printf '%s\n' "$HEADLESS_LOG"; } > "$PROV_STATE" 2>/dev/null || true
+{ echo "tillandsias-provision-state v1"; echo "written_at $(date -u +%s)"; echo "written_at_iso $(date -u +%FT%TZ)"; echo "phase complete"; echo "guest_binary_sha256 $GUEST_BIN_SHA"; echo "kernel_running $KERNEL_RUNNING"; echo "kernel_installed $KERNEL_INSTALLED"; echo "kernel_reboot_pending $KERNEL_REBOOT_PENDING"; echo "headless_service_state $HEADLESS_STATE"; echo "headless_exec_main_start_timestamp $HEADLESS_START_TS"; echo "headless_exec_main_status $HEADLESS_EXIT_STATUS"; echo "headless_result $HEADLESS_RESULT"; echo "headless_nrestarts $HEADLESS_NRESTARTS"; echo "ready_service_state $READY_STATE"; echo "ready_service_state_note started --no-block; not-yet-active here is EXPECTED"; [ -n "$HEADLESS_LOG" ] && printf '%s\n' "$HEADLESS_LOG"; } > "$PROV_STATE" 2>/dev/null || true
 "#
     .replace("__SECURE_CONTROL_WIRE__", secure_control_wire)
     // ORDER 1055-e8ie. Substituted rather than interpolated: this script is a
@@ -5355,6 +5375,97 @@ mod tests {
         assert!(
             ok.contains("tillandsias-guest-upgrade ok installed_kernel=kernel-core-7.2.13"),
             "{ok}"
+        );
+    }
+
+    /// 2352-pvcm (v56.11.24.1 macOS smoke, finding 3): a provision that reaches
+    /// its end writes a COMPLETION line into the in-guest marker, and says
+    /// whether the upgraded kernel waits for the next boot — in the marker and in
+    /// the host-read state, where diagnose reports it. The tail of the generated
+    /// script (from the kernel block through the final state write) is RUN, with
+    /// rpm and uname faked. Pre-fix: red, the marker had no completion line.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_completed_provision_writes_its_completion_line_and_kernel_state() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let script = provision_user_data("off");
+        let start = script
+            .find("KERNEL_RUNNING=\"$(uname -r")
+            .expect("pre-fix: no kernel record and no completion line in the provision script");
+        let end = start
+            + script[start..]
+                .find("echo \"phase complete\";")
+                .expect("the final state write");
+        let end = end + script[end..].find('\n').expect("its newline") + 1;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let marker = dir.path().join("marker");
+        let state = dir.path().join("provision.state");
+        let tail = script[start..end].replace(
+            "/var/log/tillandsias-provision-marker",
+            marker.to_str().unwrap(),
+        );
+        let bin = dir.path().join("bin");
+        std::fs::create_dir(&bin).unwrap();
+        let fake = |name: &str, body: &str| {
+            let p = bin.join(name);
+            std::fs::write(&p, format!("#!/bin/bash\n{body}\n")).unwrap();
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        };
+        fake("uname", "echo 6.19.10-300.fc44.aarch64");
+        let run = |installed: &str| -> (String, String) {
+            fake(
+                "rpm",
+                &format!("echo kernel-core-{installed} Tue 25 Nov 2026"),
+            );
+            let _ = std::fs::remove_file(&marker);
+            std::fs::write(
+                &marker,
+                "tillandsias-provision-start 2026-11-25T00:57:27Z\n",
+            )
+            .unwrap();
+            let out = std::process::Command::new("/bin/bash")
+                .arg("-c")
+                .arg(format!(
+                    "set -euo pipefail\ntrap 'echo TRAPPED; exit 99' ERR\nPROV_STATE='{}'\n\
+                     GUEST_BIN_SHA=abc HEADLESS_STATE=active HEADLESS_START_TS=t HEADLESS_EXIT_STATUS=0 \
+                     HEADLESS_RESULT=success HEADLESS_NRESTARTS=0 READY_STATE=activating HEADLESS_LOG=\n{tail}",
+                    state.display()
+                ))
+                .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+                .output()
+                .expect("bash");
+            let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+            assert!(
+                out.status.success() && !stdout.contains("TRAPPED"),
+                "{stdout}"
+            );
+            (
+                std::fs::read_to_string(&marker).unwrap_or_default(),
+                std::fs::read_to_string(&state).unwrap_or_default(),
+            )
+        };
+        let (m, s) = run("7.3.4-200.fc44.aarch64");
+        let done = m
+            .lines()
+            .last()
+            .filter(|l| l.starts_with("tillandsias-provision-complete "));
+        assert!(
+            done.is_some(),
+            "no completion line is the marker's last: {m}"
+        );
+        assert!(
+            m.contains("kernel_running=6.19.10-300.fc44.aarch64 kernel_installed=7.3.4-200.fc44.aarch64 kernel_reboot_pending=yes"),
+            "{m}"
+        );
+        assert!(
+            s.contains("phase complete\n") && s.contains("kernel_reboot_pending yes\n"),
+            "{s}"
+        );
+        // CONTROL: the same kernel installed and running is not pending.
+        let (m, s) = run("6.19.10-300.fc44.aarch64");
+        assert!(
+            m.contains("kernel_reboot_pending=no") && s.contains("kernel_reboot_pending no\n"),
+            "{m}{s}"
         );
     }
 

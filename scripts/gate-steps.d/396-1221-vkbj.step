@@ -28,13 +28,15 @@
 # ARM 9 pins that this row changed what is SAID and what is READ, never whether
 # a gate refuses — the staging argument stays 1141-vf9w's to settle.
 #
-# STEP_SCRIPT is a LITERAL path (1063-nraf).
+# STEP_LUA is a LITERAL path (1063-nraf).
 STEP_DESC="Checking a competing-gate silence names its own cause, and build.sh reads it (1221-vkbj)"
-STEP_SCRIPT="scripts/test-competing-gate-no-dispatch-cause.sh"
+STEP_LUA="scripts/lua/test-competing-gate-no-dispatch-cause.lua"
 STEP_ERROR="the competing-gate no-answer path regressed (1221-vkbj) — either an undispatched or in-dispatch caller is again told it failed to assert (sending a reader to fix a call site that does not exist), or the new cause has widened to swallow a genuine wiring bug, or build.sh has gone back to discarding the exit code, or it has begun asserting --host-side and is manufacturing a vacuous clean for 1141-vf9w's promotion gate to consume; see the failing arm above"
 STEP_OK="competing-gate cause and consumer check passed"
 # Exit 3 means the check script is absent — nothing was examined, and the
 # fixture says so by name rather than passing.
-STEP_SKIP_EXIT=3
-STEP_SKIP_DESC="scripts/check-no-competing-gate.sh is absent, so the no-answer path could not be exercised"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:no-dispatch-cause:11"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:competing-gate-no-dispatch-cause:11 arms (2314-ktxt @e010f3816, Lua port)"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/check-no-competing-gate.sh scripts/lua/test-competing-gate-no-dispatch-cause.lua"

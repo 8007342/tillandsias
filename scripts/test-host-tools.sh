@@ -53,6 +53,16 @@ check() {
     else fail=$((fail + 1)); printf 'FAIL %s\n' "$2"; [ -n "${3:-}" ] && printf '     %s\n' "$3"; fi
 }
 
+# Put tool $1 in a farm as $2. A symlink, except under MSYS: there `ln -s` COPIES,
+# and a copied .exe cannot load its DLLs from a narrow PATH (rc 127, no output),
+# so it is an exec wrapper instead (2268-kvxh).
+link_tool() {
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*) printf '#!/bin/sh\nexec "%s" "$@"\n' "$1" > "$2" && chmod +x "$2" ;;
+        *) ln -sf "$1" "$2" 2>/dev/null ;;
+    esac
+}
+
 # Build a farm of everything the checks might reach, minus the named tools.
 farm() {
     local dir="$1"; shift
@@ -71,13 +81,13 @@ farm() {
         # from 21/21 to 2/22 red on a Linux host, both failures in the
         # 1004-cp6p tray-build arms, neither of which is about rg.
         for skip in "$@"; do [ "$t" = "$skip" ] && continue 2; done
-        p="$(command -v "$t" 2>/dev/null)" && ln -sf "$p" "$dir/$t" 2>/dev/null
+        p="$(command -v "$t" 2>/dev/null)" && link_tool "$p" "$dir/$t"
     done
 }
 
 # 1. This host, as it is. Whatever the answer, it must be well-formed.
 out="$("$CHECK" 2>/dev/null)"; rc=$?
-if printf '%s' "$out" | grep -qE '^(ok:host-tools:[a-z]+:gate:[0-9]+ present; tray-build:[0-9]+ present(, missing [a-z0-9,._-]+)?|missing:host-tools:[a-z]+:gate:[a-z0-9,._-]+)$'; then
+if grep -qE <<<"$out" '^(ok:host-tools:[a-z]+:gate:[0-9]+ present; tray-build:[0-9]+ present(, missing [a-z0-9,._-]+)?|missing:host-tools:[a-z]+:gate:[a-z0-9,._-]+)$'; then
     check ok "live verdict is well-formed: $out"
 else
     check FAIL "live verdict is well-formed" "rc=$rc out=[$out]"
@@ -113,7 +123,7 @@ farm "$tmp/farm" "$_absent_tool" "$_absent_extra"
 # longer only looking there.
 mkdir -p "$tmp/noprefix"
 out="$(PATH="$tmp/farm" TILLANDSIAS_HOST_TOOL_PREFIXES="$tmp/noprefix" "$CHECK" 2>/dev/null)"; rc=$?
-if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q "^missing:host-tools:${_plat}:.*${_absent_tool}"; then
+if [ "$rc" -eq 1 ] && grep -q <<<"$out" "^missing:host-tools:${_plat}:.*${_absent_tool}"; then
     check ok "a genuinely absent required tool is named, exit 1 ($_plat/$_absent_tool)"
 else
     check FAIL "a genuinely absent required tool is named ($_plat/$_absent_tool)" "rc=$rc out=[$out]"
@@ -177,7 +187,7 @@ while IFS='|' read -r tool kind scope platforms prover expect why remedy; do
     if [ "$tool" = timeout ]; then farm "$tmp/f2" timeout gtimeout; else farm "$tmp/f2" "$tool"; fi
     got="$(PATH="$tmp/f2" run_prover "$prover" | tail -1)"
 
-    if printf '%s' "$got" | grep -q "^$expect"; then
+    if grep -q <<<"$got" "^$expect"; then
         check ok "without $tool, $prover reports $expect"
     elif [ "$got" = "$ctl" ]; then
         # THE PRECONDITION DID NOT HOLD, and this is the shape that must not read
@@ -223,14 +233,14 @@ mkdir -p "$tmp/offpath" "$tmp/empty"
 _have_all=1
 for _t in $_reqs; do
     _p="$(command -v "$_t" 2>/dev/null)" || { _have_all=0; continue; }
-    ln -sf "$_p" "$tmp/offpath/$_t" 2>/dev/null
+    link_tool "$_p" "$tmp/offpath/$_t"
 done
 if [ "$_have_all" = 1 ]; then
     # POSITIVE: resolvable-but-off-PATH must PASS. PATH deliberately carries
     # none of the required tools; only the prefix does.
     farm "$tmp/bare" $_reqs
     out="$(PATH="$tmp/bare" TILLANDSIAS_HOST_TOOL_PREFIXES="$tmp/offpath" "$CHECK" 2>/dev/null)"; rc=$?
-    if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '^ok:host-tools:'; then
+    if [ "$rc" -eq 0 ] && grep -q <<<"$out" '^ok:host-tools:'; then
         check ok "1004-x9ua: tools present in a standard prefix but off PATH resolve, not MISSING"
     else
         check FAIL "1004-x9ua: tools off PATH but present must resolve" "rc=$rc out=[$out]"
@@ -252,7 +262,7 @@ if [ "$_have_all" = 1 ]; then
     # TRUE ABSENCE KEEPS ITS VERDICT AND ITS TERMINAL FORCE. Same bare PATH, but
     # the prefix is empty: nothing is resolvable anywhere.
     out="$(PATH="$tmp/bare" TILLANDSIAS_HOST_TOOL_PREFIXES="$tmp/empty" "$CHECK" 2>/dev/null)"; rc=$?
-    if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q "^missing:host-tools:${_plat}:"; then
+    if [ "$rc" -eq 1 ] && grep -q <<<"$out" "^missing:host-tools:${_plat}:"; then
         check ok "1004-x9ua: a tool absent from PATH and every prefix still fails, exit 1"
     else
         check FAIL "1004-x9ua: true absence must still fail" "rc=$rc out=[$out]"
@@ -267,7 +277,7 @@ if [ "$_have_all" = 1 ]; then
     _liars=""
     for _t in $_reqs; do
         command -v "$_t" >/dev/null 2>&1 || continue
-        printf '%s' "$_live" | grep -q "[:,]$_t\(,\|$\)" && _liars="${_liars:+$_liars,}$_t"
+        grep -q <<<"$_live" "[:,]$_t\(,\|$\)" && _liars="${_liars:+$_liars,}$_t"
     done
     if [ -z "$_liars" ]; then
         check ok "1004-x9ua: no verdict names a tool that is installed on this host (criterion 2)"
@@ -284,10 +294,10 @@ fi
 #     `brew install coreutils` is advice to install what it has.
 if [ "$_plat" = macos ] && command -v gtimeout >/dev/null 2>&1; then
     mkdir -p "$tmp/gt"; rm -f "$tmp/gt"/*
-    ln -sf "$(command -v gtimeout)" "$tmp/gt/gtimeout"
+    link_tool "$(command -v gtimeout)" "$tmp/gt/gtimeout"
     for _t in $_reqs; do
         [ "$_t" = timeout ] && continue
-        _p="$(command -v "$_t" 2>/dev/null)" && ln -sf "$_p" "$tmp/gt/$_t"
+        _p="$(command -v "$_t" 2>/dev/null)" && link_tool "$_p" "$tmp/gt/$_t"
     done
     farm "$tmp/bare2" $_reqs gtimeout
     out="$(PATH="$tmp/bare2" TILLANDSIAS_HOST_TOOL_PREFIXES="$tmp/gt" "$CHECK" 2>/dev/null)"; rc=$?
@@ -310,7 +320,7 @@ fi
 mkdir -p "$tmp/noprefix"
 farm "$tmp/notray" zig cargo-zigbuild
 out="$(PATH="$tmp/notray" TILLANDSIAS_HOST_TOOL_PREFIXES="$tmp/noprefix" "$CHECK" 2>/dev/null)"; rc=$?
-if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '^ok:host-tools:'; then
+if [ "$rc" -eq 0 ] && grep -q <<<"$out" '^ok:host-tools:'; then
     check ok "1004-cp6p: a tray-build-only shortfall does not fail the gate"
 else
     check FAIL "1004-cp6p: tray-build shortfall must not fail the gate" "rc=$rc out=[$out]"
@@ -318,7 +328,7 @@ fi
 
 # 5b. AND IT MUST STILL BE NAMED. Not failing is only correct if the shortfall
 #     is reported — silently passing is the defect wearing the fix's clothes.
-if printf '%s' "$out" | grep -q 'tray-build:'; then
+if grep -q <<<"$out" 'tray-build:'; then
     check ok "1004-cp6p: the verdict names the tray-build scope it covered"
 else
     check FAIL "1004-cp6p: the verdict must name its scope, not print a bare count" "out=[$out]"
@@ -329,7 +339,7 @@ fi
 #     the gate would have stopped enforcing anything.
 farm "$tmp/nogate" cargo rustc
 out="$(PATH="$tmp/nogate" TILLANDSIAS_HOST_TOOL_PREFIXES="$tmp/noprefix" "$CHECK" 2>/dev/null)"; rc=$?
-if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q '^missing:host-tools:[a-z]*:gate:'; then
+if [ "$rc" -eq 1 ] && grep -q <<<"$out" '^missing:host-tools:[a-z]*:gate:'; then
     check ok "1004-cp6p: a missing gate-scope tool still fails, exit 1"
 else
     check FAIL "1004-cp6p: gate scope must keep its terminal force" "rc=$rc out=[$out]"
@@ -370,7 +380,7 @@ chmod +x "$tmp/rustupstub/rustup"
 # would catch a row that leaked across platforms.
 out="$(PATH="$tmp/rustupstub:$PATH" "$CHECK" 2>&1)"
 if [ "$_plat" = macos ]; then
-    if printf '%s' "$out" | grep -q 'x86_64-unknown-linux-musl'; then
+    if grep -q <<<"$out" 'x86_64-unknown-linux-musl'; then
         check ok "1004-cp6p: a missing rustup target is reported, naming the triple"
     else
         check FAIL "1004-cp6p: a missing rustup target must name the triple" "out=[$out]"
@@ -378,7 +388,7 @@ if [ "$_plat" = macos ]; then
 else
     # The mirror: the macos-scoped rows must NOT appear here. An arm that merely
     # skipped would say nothing on this platform and let a leaked row through.
-    if printf '%s' "$out" | grep -q 'unknown-linux-musl'; then
+    if grep -q <<<"$out" 'unknown-linux-musl'; then
         check FAIL "1004-cp6p: macos-scoped rustup targets leaked onto $_plat" "out=[$out]"
     else
         check ok "1004-cp6p: macos-scoped rustup targets are filtered out on $_plat"
@@ -387,7 +397,7 @@ fi
 # NEGATIVE CONTROL: the triple that IS installed must not be reported missing,
 # or the arm above would pass by reporting everything.
 if [ "$_plat" = macos ]; then
-    if printf '%s' "$out" | grep -q 'MISSING (tray-build): aarch64-unknown-linux-musl'; then
+    if grep -q <<<"$out" 'MISSING (tray-build): aarch64-unknown-linux-musl'; then
         check FAIL "1004-cp6p: an installed target must not be reported missing" "out=[$out]"
     else
         check ok "1004-cp6p: an installed rustup target is not reported missing"
@@ -429,7 +439,7 @@ if [ -f "$_bmt" ]; then
         | awk -F'|' '$4 ~ /macos/ {print $1}' | sort -u)"
     _undeclared=""
     for _n in $_script_needs $_script_targets; do
-        printf '%s\n' "$_declared_tray" | grep -qx "$_n" || _undeclared="${_undeclared:+$_undeclared,}$_n"
+        grep -qx "$_n" <<<"$_declared_tray" || _undeclared="${_undeclared:+$_undeclared,}$_n"
     done
     if [ -z "$_undeclared" ]; then
         check ok "1004-cp6p: every prerequisite build-macos-tray.sh invokes is declared at tray-build scope"
@@ -440,11 +450,13 @@ else
     check FAIL "1004-cp6p: build-macos-tray.sh is missing, so the anti-drift arm cannot run"
 fi
 
-# 5. The check is wired into the gate.
-if grep -q 'check-host-tools.sh\|test-host-tools.sh' "$ROOT/build.sh"; then
-    check ok "build.sh consults the host-tools check"
+# 5. The check is wired into the gate: inline in build.sh, or (2266-4w3c) as a
+# gate step, which the gate runs from scripts/gate-steps.d/.
+if grep -q 'check-host-tools.sh\|test-host-tools.sh' "$ROOT/build.sh" \
+    || grep -lq 'test-host-tools.sh' "$ROOT"/scripts/gate-steps.d/*.step 2>/dev/null; then
+    check ok "the gate consults the host-tools check (build.sh or a gate step)"
 else
-    check FAIL "build.sh consults the host-tools check"
+    check FAIL "the gate consults the host-tools check (build.sh or a gate step)"
 fi
 
 # 6. EVERY DECLARED PLATFORM, FROM ANY HOST — commissioned by macuahuitl after
@@ -484,6 +496,19 @@ for _p in $(printf '%s\n' "$_spec" | awk -F'|' '{print $4}' | tr ',' '\n' | sort
     fi
     _n_declared="$(printf '%s\n' "$_declared" | grep -c .)"
     _out="$(PATH="$PATH" "$CHECK" --platform "$_p" 2>/dev/null)"
+    # A host without one of $_p's gate tools gets `missing:`, which carries no
+    # present count, so there is no partition to add up. Keep the named tools
+    # (judged for strays below), supply them as stubs, and ask again: a declared
+    # tool the probe dropped is still unaccounted for (2268-kvxh).
+    _named=""
+    case "$_out" in
+        missing:host-tools:$_p:*)
+            _named="$(printf '%s' "$_out" | sed -E 's/^missing:host-tools:[a-z]+:gate://' | tr ',' '\n')"
+            mkdir -p "$tmp/stub-$_p"
+            for _m in $_named; do printf '#!/bin/sh\nexit 0\n' > "$tmp/stub-$_p/$_m"; chmod +x "$tmp/stub-$_p/$_m"; done
+            _out="$(TILLANDSIAS_HOST_TOOL_PREFIXES="$tmp/stub-$_p:${CARGO_HOME:-$HOME/.cargo}/bin:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin" "$CHECK" --platform "$_p" 2>/dev/null)"
+            ;;
+    esac
     # ORDER 1004-cp6p: the verdict now names both scopes, so the partition must
     # add gate + tray-build present counts and pick up a tray-build shortfall as
     # "named but absent". Counting only the gate half would let every tray-build
@@ -503,7 +528,7 @@ for _p in $(printf '%s\n' "$_spec" | awk -F'|' '{print $4}' | tr ',' '\n' | sort
     esac
     # Nothing may be named that the spec did not declare for this platform.
     _stray=""
-    for _m in $_reported_missing; do
+    for _m in $_named $_reported_missing; do
         printf '%s\n' "$_declared" | grep -qx "$_m" || _stray="${_stray:+$_stray,}$_m"
     done
     # present + missing must account for every declared tool, exactly once.
@@ -535,7 +560,7 @@ for _bogus in os mac inux; do
     # only the gate half would let a substring match every tray-build row while
     # this arm reported success — the loosened-membership bug it exists to catch,
     # surviving in the half the arm stopped looking at.
-    if printf '%s' "$_out" | grep -qE "^ok:host-tools:[a-z]*:gate:0 present; tray-build:0 present$"; then
+    if grep -qE <<<"$_out" "^ok:host-tools:[a-z]*:gate:0 present; tray-build:0 present$"; then
         check ok "--platform $_bogus selects nothing (substring must not match)"
     else
         check FAIL "--platform $_bogus selects nothing" "out=[$_out]"
@@ -547,7 +572,7 @@ done
 #    early-returns on forge). Assert check-host-tools does not require openssl
 #    when TILLANDSIAS_HOST_KIND=forge.
 _forge_out="$(TILLANDSIAS_HOST_KIND=forge "$CHECK" --platform linux 2>/dev/null)"
-if printf '%s' "$_forge_out" | grep -q "openssl"; then
+if grep -q <<<"$_forge_out" "openssl"; then
     check FAIL "forge host kind does not require openssl" "out=[$_forge_out]"
 else
     check ok "forge host kind is exempt from openssl requirement"

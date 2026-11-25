@@ -79,7 +79,7 @@ critical_path:
   # the mirror host are stubbed. Measured 0.026s on yoga — twelve attempts cost
   # nothing because the backoff is a no-op stub.
   - step: "the clone's bounded wait fails LOUD and NON-ZERO on exhaustion (behaviour, not the loop literal)"
-    command: "bash scripts/test-forge-clone-wait-is-bounded.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-clone-wait-is-bounded.lua 2>&1"
     timeout_ms: 60000
     expected_behavior: "ok:forge-clone-wait-is-bounded"
 

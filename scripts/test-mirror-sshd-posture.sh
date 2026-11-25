@@ -77,7 +77,7 @@ positive() {
         --entrypoint /bin/bash \
         "$IMAGE_TAG" -c "$INNER_POSITIVE" 2>&1)"
     rc=$?
-    if [ $rc -eq 0 ] && printf '%s' "$out" | grep -q 'inner:banner-ok'; then
+    if [ $rc -eq 0 ] && grep -q <<<"$out" 'inner:banner-ok'; then
         echo "ok:sshd-under-posture:banner-accepted"
         return 0
     fi
@@ -110,7 +110,7 @@ negative() {
         --entrypoint /bin/bash \
         "$IMAGE_TAG" -c "$INNER_NEGATIVE" 2>&1)"
     rc=$?
-    if [ $rc -eq 0 ] && printf '%s' "$out" | grep -q 'inner:named-cause-ok'; then
+    if [ $rc -eq 0 ] && grep -q <<<"$out" 'inner:named-cause-ok'; then
         echo "ok:sshd-negative-control:read-only-blocks-writable-state"
         return 0
     fi

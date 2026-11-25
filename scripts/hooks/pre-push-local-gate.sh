@@ -139,6 +139,26 @@ if [[ -z "${REFS//[[:space:]]/}" ]]; then
     echo "${GRN}✓ local gate: no refs on stdin — git is pushing nothing (already up to date, or a non-fast-forward it has already declined). Nothing to gate; if you expected a push, fetch and rebase.${RST}" >&2
     exit 0
 fi
+# ── ORDER 2239-rmun: A HOST THAT CANNOT REACH THE REMOTE STOPS, NAMED ────────
+# Before any gating: a push that cannot land must not first spend minutes of
+# gate (the user's direction 2026-11-22: stop work, do not retry with backoff).
+# The probe only reads; it never runs gh auth login/refresh.
+# TILLANDSIAS_SKIP_REMOTE_PROBE=1 is the fixture's (and an offline mirror's) way out.
+if [ "${TILLANDSIAS_SKIP_REMOTE_PROBE:-0}" != 1 ] && [ -z "${CI:-}" ] && [ -z "${GITHUB_ACTIONS:-}" ] \
+   && [ -f scripts/lua/probe-remote-reachable.lua ]; then
+    _rr_bin="$(. scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null || true)"
+    if [ -n "$_rr_bin" ]; then
+        _rr_rc=0; ( . scripts/plan-binary-probe.sh && . scripts/remote-probe-judge.sh && remote_probe_judge "$_rr_bin" ) || _rr_rc=$?
+        if [ "$_rr_rc" -ne 0 ] && [ "$_rr_rc" -ne 10 ]; then echo "could-not-run:remote-probe:judge-error:rc=$_rr_rc — the remote was not judged (2256-tt3v)" >&2; fi
+        if [ "$_rr_rc" -eq 10 ]; then
+            echo "${RED:-}✗ pre-push: refused:pre-push:remote-unreachable — this host cannot reach the remote (2239-rmun)${RST:-}" >&2
+            echo "  why: a push that cannot land must not spend the gate first, and a loop must not retry it" >&2
+            echo "  remedy: a human restores this host's access (the probe's remedy is above); SUSPEND work on this host until \`tillandsias-plan script run scripts/lua/probe-remote-reachable.lua\` answers ok" >&2
+            exit 1
+        fi
+    fi
+fi
+
 # ORDER 1315-4a7j. THE AFFORDANCE, in one place so every refusal carries the
 # COMPLETE preferred workflow rather than a fragment of it. A warning that names
 # a better lane without saying how to use it leaves the reader exactly where the
@@ -284,6 +304,37 @@ while read -r _l _ls _remote_ref _rs; do
             # passing the gate it exists to protect is not a mechanism.
             _all_salvage=0; _all_work=0
             ;;
+        refs/attest/daily-full/*|refs/attest/daily-red/*)
+            # ORDER 2209-dfix. The daily full-gate verdict that
+            # `land-queue.sh --daily-full` publishes: a name for a trunk commit
+            # the remote already has, minted AFTER a full gate of that commit
+            # ran, so it uploads nothing and the local tree's stamp measures the
+            # wrong subject. Without this the hook refused the first live run's
+            # publish as "the tree changed since ./build.sh --check last passed"
+            # (macuahuitl 2026-11-22). Only <epoch> leaves, only creation: a
+            # deletion or a non-numeric name falls through to the gate.
+            _e="${_remote_ref##*/}"
+            if [[ "$_ls" =~ ^0+$ || -z "$_e" || "$_e" == *[!0-9]* ]]; then
+                _all_marker=0
+            fi
+            _all_salvage=0; _all_work=0
+            ;;
+        refs/attest/native-lint/*)
+            # NATIVE-LINT ATTESTATION REFS (order 2112-nlrf). Written by
+            # scripts/attest-native-lint.sh --ref after its clippy run passes: a
+            # PARENTLESS commit whose tree IS the linted crate subtree, named for
+            # that subtree's sha. It is not a branch and moves no branch, so the
+            # tree stamp measures the wrong subject. Exempt ONLY when the pushed
+            # object proves that shape; anything else under this name is gated.
+            _att_name="${_remote_ref##*/}"
+            _att_tree="$(git rev-parse --verify --quiet "$_ls^{tree}" 2>/dev/null)" || _att_tree=""
+            _att_parents="$(git rev-list --parents -n 1 "$_ls" 2>/dev/null)" || _att_parents=""
+            if [[ -n "$_att_tree" && "$_att_tree" == "$_att_name" && "$_att_parents" == "$_ls" ]]; then
+                _all_salvage=0; _all_work=0
+            else
+                _all_salvage=0; _all_marker=0; _all_work=0
+            fi
+            ;;
         refs/heads/salvage/*)
             _all_marker=0; _all_work=0   # a salvage ref is not the work lane (1315-4a7j regression caught by litmus:salvage-net-roundtrip, 2026-09-21)
             # DELETION PROTECTION (874-w2gc). The exemption used to wave
@@ -315,7 +366,7 @@ if [[ "$_any_ref" -eq 1 && "$_all_work" -eq 1 ]]; then
     WORK_REF_LANE=1
 fi
 if [[ "$_any_ref" -eq 1 && "$_all_marker" -eq 1 ]]; then
-    echo "${GRN}✓ local gate: coordination marker ref under refs/tillandsias/ — exempt by design (1176-9vqn); it is not a branch, no gate reads it and no release ships it${RST}" >&2
+    echo "${GRN}✓ local gate: coordination marker ref (refs/tillandsias/*, refs/attest/daily-*/<epoch>; 1176-9vqn, 2209-dfix) or self-verifying native-lint attestation (refs/attest/native-lint/, 2112-nlrf) — exempt by design; it is not a branch and moves none${RST}" >&2
     exit 0
 fi
 if [[ "$_any_ref" -eq 1 && "$_all_salvage" -eq 1 ]]; then
@@ -1319,7 +1370,10 @@ attempt_plan_only_lane() {
             # advice — and only because it has been DIAGNOSED rather than
             # guessed. The reason travels with the verb, or it reads like the
             # rm-the-ledger advice this fleet refused twice today.
-            if [[ -n "$_ctd" && "${_fresher#$_ctd}" != "$_fresher" ]]; then
+            # 2068-9789: only when the RESOLVED copy lies OUTSIDE the redirected
+            # target dir. On yolanda both sat under $CARGO_TARGET_DIR, and the
+            # hint called a copy orphaned that every build still writes.
+            if [[ -n "$_ctd" && "${_fresher#$_ctd}" != "$_fresher" && "${plan_bin#$_ctd}" == "$plan_bin" ]]; then
                 echo "  The resolved copy is ORPHANED: CARGO_TARGET_DIR is redirected to" >&2
                 echo "  $_ctd, so no build writes $plan_bin any more and rebuilding cannot" >&2
                 echo "  refresh it in place. Removing it is safe for that reason, not merely to" >&2
@@ -1603,7 +1657,7 @@ attempt_plan_only_lane() {
             # It is not free, either: it would oblige every fixture that drives
             # this lane with a fragment-bearing push to provision this script in
             # its scratch tree. Measured — an earlier revision of this fix did
-            # refuse here, and broke test-gate-stamp-scope.sh case 7, whose tree
+            # refuse here, and broke test-gate-stamp-scope.lua case 7, whose tree
             # legitimately provisions a minimal set. Scope kept to the binary,
             # which is what 1124-7f3u is about.
             LANE_NOTES+=("scripts/lua/check-fragment-status-loss.lua absent — skipped")
@@ -1659,14 +1713,17 @@ attempt_plan_only_lane() {
     # fragment at its author was bypassed by the only path that skips the build,
     # which is the path fragments actually take. Measured windows 2026-08-15:
     # `packets: [unclosed` pushed clean through this lane.
-    if [[ -f scripts/check-added-fragments-parse.sh ]]; then
-        if ! out="$(bash scripts/check-added-fragments-parse.sh 2>&1)"; then
+    # ORDER 2223-afpl: the gate is Lua on `script run`, on the plan_bin this
+    # lane resolved above; its capability was checked before the status-loss
+    # guard, and a guard that cannot run is a refusal (787-f7dh).
+    if [[ -f scripts/lua/check-added-fragments-parse.lua ]]; then
+        if ! out="$(TILLANDSIAS_REPO_ROOT="$REPO_ROOT" TILLANDSIAS_SCRIPT_RUNNER_BIN="$plan_bin" "$plan_bin" script run scripts/lua/check-added-fragments-parse.lua 2>&1)"; then
             echo "plan-only lane: validation FAILED — check-added-fragments-parse refused (full gate required):" >&2
             echo "$out" | head -6 | sed 's/^/  /' >&2
             return 1
         fi
     else
-        LANE_NOTES+=("scripts/check-added-fragments-parse.sh absent — skipped")
+        LANE_NOTES+=("scripts/lua/check-added-fragments-parse.lua absent — skipped")
     fi
 
     # ORDER 1069-5sp4: THE SCORABLE-OBLIGATION GUARD CANNOT RUN
@@ -1704,7 +1761,7 @@ attempt_plan_only_lane() {
     # it directly and the full gate fails there. So fail-closed bought nothing in
     # production and broke the instruments.
     #
-    # test-gate-stamp-scope.sh's own case-7 note records this exact substitution
+    # test-gate-stamp-scope.lua's own case-7 note records this exact substitution
     # one dependency over: without yq on macOS that arm "stopped testing the
     # lane's stamp handling and started testing tool availability". A fixture
     # that fails for want of a copied script is measuring the fixture.
@@ -1936,7 +1993,7 @@ enforce_stamp_scope() {
         # coordinator closure after a scoped land was refused here. The lane
         # validates the whole outgoing diff and declines anything that is not
         # plan-only, so a code class outside the scope still reaches the refusal
-        # below (test-gate-stamp-scope.sh case 9).
+        # below (test-gate-stamp-scope.lua case 9).
         if attempt_plan_only_lane; then
             exit 0
         fi
@@ -2315,9 +2372,17 @@ fi
 # by name off Windows and when the change does not touch the crate. A
 # could-not-run (no cargo) is noted, not refused: a host without a toolchain
 # cannot have built the change it is pushing either.
-if [[ -f scripts/check-windows-tray-clippy.sh ]]; then
-    _wtc_out="$(bash scripts/check-windows-tray-clippy.sh 2>&1)"
-    _wtc_rc=$?
+if [[ -f scripts/lua/check-windows-tray-clippy.lua ]]; then
+    # ORDER 2203-wclp: the checker is the Lua port, run by the plan binary. No
+    # runnable plan binary is a could-not-run (rc 3), noted like a missing cargo.
+    _wtc_plan="$( . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null )" || _wtc_plan=""
+    if [[ -n "$_wtc_plan" ]]; then
+        _wtc_out="$("$_wtc_plan" script run scripts/lua/check-windows-tray-clippy.lua 2>&1)"
+        _wtc_rc=$?
+    else
+        _wtc_out="could-not-run:windows-tray-clippy:no-plan-binary"
+        _wtc_rc=3
+    fi
     _wtc_verdict="$(printf '%s\n' "$_wtc_out" | tail -1)"
     case "$_wtc_rc:$_wtc_verdict" in
         0:ok:*) echo "${GRN}✓ ${_wtc_verdict}${RST}" >&2 ;;
@@ -2334,9 +2399,9 @@ fi
 # ORDER 1577-g96z — A WORK PUSH IS TOLD WHAT IT OWES. On a work/<order> push,
 # a change that is DUE to a carried obligation (methodology/convergence.yaml
 # carried_obligations) and neither pays an item nor carries a Carried-Waiver
-# trailer gets ONE warn:pre-push:carried-obligations line naming the offered
-# item and the waiver line, and the push goes on (gentle stage: silence is
-# refused only at landing). Outside the work lane it is not run at all.
+# trailer is REFUSED here (2194-cspr; it was one warn line until 2026-11-22), naming the offered
+# item and the waiver line, because the land queue refuses the same silence at
+# landing an hour later. Outside the work lane it is not run at all.
 if [[ "$WORK_REF_LANE" == "1" && -f scripts/lua/check-carried-obligations.lua ]]; then
     _co_plan="$( . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null )" || _co_plan=""
     if [[ -n "$_co_plan" ]] && grep -qx script <<<"$("$_co_plan" capabilities 2>/dev/null)"; then
@@ -2345,9 +2410,20 @@ if [[ "$WORK_REF_LANE" == "1" && -f scripts/lua/check-carried-obligations.lua ]]
         while IFS= read -r _co_line; do
             case "$_co_line" in
                 carried:*:due:*)
-                    TILLANDSIAS_HOOK_DECIDER="carried-obligations" \
-                    refuse "${_co_line} — this change touches the backlog's area and neither pays an item nor waives (1577-g96z)" \
-                           "$(grep -E '^    |^Carried-Waiver:' <<<"$_co_err")" ;;
+                    # ORDER 2194-cspr (coordinator 2026-11-22): REFUSED HERE, not
+                    # warned. `refuse` degrades to a warning on the work lane, so a
+                    # carried-silent change was pushed, queued, and evicted by the
+                    # land queue's --landing check an hour later: about 8 gate
+                    # slots in one day. The remedy costs one commit, so the author
+                    # gets it now. `due:` is printed only when the change neither
+                    # pays an item nor carries a waiver git can read.
+                    echo "" >&2
+                    echo "${RED}✗ pre-push refused: ${_co_line} — this change touches the backlog's area and neither pays an item nor waives (1577-g96z, 2194-cspr)${RST}" >&2
+                    grep -E '^    |^Carried-Waiver:' <<<"$_co_err" | sed 's/^/  /' >&2
+                    echo "  why: the land queue evicts a carried-silent change at --landing, after it has waited its turn" >&2
+                    echo "  remedy: port the offered item, or add the Carried-Waiver line above to the LAST paragraph of a commit message (git reads trailers only there), then push again" >&2
+                    echo "" >&2
+                    exit 1 ;;
             esac
         done <<<"$_co_out"
     fi

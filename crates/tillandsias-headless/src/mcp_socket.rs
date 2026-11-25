@@ -1605,8 +1605,48 @@ type LaneWindows = (
 static LANE_WINDOWS: OnceLock<Mutex<std::collections::HashMap<LaneListenerKey, LaneWindows>>> =
     OnceLock::new();
 
+/// Order 1911-3gqy: how often the idle sweeper looks. A minute is noise next
+/// to the hour-scale idle limit.
+const WINDOW_SWEEP_EVERY: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Order 1911-3gqy (spec:browser-window-timeout): close every lane's windows
+/// that passed their idle or absolute limit. Returns how many it closed.
+pub(crate) fn sweep_lane_windows() -> usize {
+    let lanes: Vec<LaneWindows> = match LANE_WINDOWS.get() {
+        Some(map) => map
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .values()
+            .cloned()
+            .collect(),
+        None => return 0,
+    };
+    lanes
+        .iter()
+        .map(|(windows, debounce)| {
+            tillandsias_browser_mcp::window_registry::sweep_timed_out(windows, debounce).len()
+        })
+        .sum()
+}
+
+/// Start the idle sweeper once, the first time any lane has a registry.
+fn start_window_sweeper() {
+    static STARTED: std::sync::Once = std::sync::Once::new();
+    STARTED.call_once(|| {
+        let _ = std::thread::Builder::new()
+            .name("browser-window-sweeper".into())
+            .spawn(|| {
+                loop {
+                    std::thread::sleep(WINDOW_SWEEP_EVERY);
+                    sweep_lane_windows();
+                }
+            });
+    });
+}
+
 /// The window registry of lane `(project, instance)`, created on first use.
 pub(crate) fn lane_windows(project: &str, instance: &str) -> LaneWindows {
+    start_window_sweeper();
     let mut map = LANE_WINDOWS
         .get_or_init(|| Mutex::new(std::collections::HashMap::new()))
         .lock()
@@ -1888,12 +1928,29 @@ pub(crate) fn lane_server_build(socket: &std::path::Path) -> Result<String, Stri
 
 /// 2070-mtf9: the pid of the process listening on `socket`, from the
 /// kernel's peer credentials (captured at listen time). `None` when nothing
-/// accepts there.
+/// accepts there. Linux reads SO_PEERCRED; darwin reads LOCAL_PEERPID
+/// (2107-pcrd: PeerCredentials is Linux-only, so trunk did not compile here).
+/// Any other unix answers `None`: the lane is reported without a pid.
 pub(crate) fn lane_listener_pid(socket: &std::path::Path) -> Option<i32> {
     let stream = UnixStream::connect(socket).ok()?;
+    peer_pid(&stream)
+}
+
+#[cfg(target_os = "linux")]
+fn peer_pid(stream: &UnixStream) -> Option<i32> {
     let creds =
-        nix::sys::socket::getsockopt(&stream, nix::sys::socket::sockopt::PeerCredentials).ok()?;
+        nix::sys::socket::getsockopt(stream, nix::sys::socket::sockopt::PeerCredentials).ok()?;
     Some(creds.pid())
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn peer_pid(stream: &UnixStream) -> Option<i32> {
+    nix::sys::socket::getsockopt(stream, nix::sys::socket::sockopt::LocalPeerPid).ok()
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios")))]
+fn peer_pid(_stream: &UnixStream) -> Option<i32> {
+    None
 }
 
 /// `" (exe deleted)"` when a `/proc/<pid>/exe` link names a replaced binary.

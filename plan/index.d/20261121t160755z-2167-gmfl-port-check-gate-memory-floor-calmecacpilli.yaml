@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: shell-to-lua sized port, assigned by macuahuitl-fedora 2026-11-21.
+packets:
+  - packet_id: port-check-gate-memory-floor-to-lua
+    order: "2167-gmfl"
+    status: implemented
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, gate, memory]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/check-gate-memory-floor.lua
+      - scripts/check-gate-memory-floor.sh
+      - scripts/test-gate-memory-refusal.sh
+      - scripts/test-gate-memory-wsl2-guest.sh
+      - scripts/portability/bootstrap-shell-allowlist.txt
+    title: "Port the memory-floor decider to scripts/lua; keep scripts/check-gate-memory-floor.sh as its no-plan-binary bootstrap"
+    context: |
+      The decider is scripts/lua/check-gate-memory-floor.lua: the same rules, verdicts and exit codes as the .sh (floor,
+      WSL2-guest refusal to assert, no-meminfo, no-memavailable, bad floor, each could-not-run followed by a terminal skip:).
+      build.sh asks for the floor at gate START, before the first compile, so scripts/check-gate-memory-floor.sh stays as a
+      bootstrap. When a plan binary resolves, it execs the Lua. Otherwise it prints
+      could-not-run:gate-memory:no-plan-binary and skip:, then exits 3, and build.sh warns and proceeds. It is allowlisted
+      under §6.5 row 2. The path build.sh calls is unchanged, so the two consumer fixtures, which stub that path, still
+      stub the real entry point. The two logic fixtures now run the Lua directly, and the WSL2 one refuses, rather than
+      skips, when no runner resolves. test-gate-memory-refusal gains arm 10, for the bootstrap's no-binary branch.
+    exit_criteria:
+      - "the old .sh and bootstrap+Lua print identical stdout and exit codes on starved, healthy, no-MemAvailable, missing file, WSL2 default, WSL2 explicit, native, bad floor and --floor-mb (measured 2026-11-21)."
+      - "wsl2-guest 4/4, refusal 15/15, floor-consumer 9/9, host-memory-figure 6/6; and each FAILS on a sabotaged decider: WSL2 rule off (3/4), floor never refuses (13/15), MemFree substituted (11/15), bootstrap says ok without a binary (14/15), build.sh ignores rc 1 (7/9), host figure not passed (3/6)."
+    unscoreable: "a port: scored by the four fixtures named above."
+    next_action: "Land."
+    provenance: "macuahuitl-fedora 2026-11-21: check-gate-memory-floor as a sized job, with a tiny sh bootstrap for the no-plan-binary case."
+    events:
+      - type: filed
+        ts: "2026-11-21T16:07:55Z"
+        host: calmecacpilli
+        summary: "filed and ported on work/2167-gmfl"

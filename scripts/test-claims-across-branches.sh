@@ -15,6 +15,7 @@
 # fixtures rather than this script's decision. The stub makes the decision the
 # only variable.
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHECK="$ROOT/scripts/check-claims-across-branches.sh"
 [ -x "$CHECK" ] || { echo "blocked:no-check"; exit 2; }
@@ -24,7 +25,7 @@ ok()  { pass=$((pass+1)); echo "ok   $1"; }
 bad() { fail=$((fail+1)); echo "FAIL $1" >&2; [ -n "${2:-}" ] && echo "     $2" >&2; }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/xbranch-fx.XXXXXX")"
-trap 'rm -rf "$W"' EXIT INT TERM
+scratch_trap 'rm -rf "$W"'
 
 # 1948-xbaf: the stub arms below run against THIS checkout's origin/* refs,
 # whose ancestry to HEAD changes as the fleet pushes. They test the fold
@@ -46,7 +47,7 @@ EOF
 # 1. A sibling holding the packet must REFUSE, naming the branch.
 mkstub "$W/hold" in_progress
 out="$(cd "$ROOT" && TILLANDSIAS_PLAN_BIN="$W/hold/tillandsias-plan" bash "$CHECK" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
-if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q '^claimed-elsewhere:SOME-PKT:'; then
+if [ "$rc" -eq 1 ] && grep -q '^claimed-elsewhere:SOME-PKT:' <<<"$out"; then
     ok "a sibling branch holding the packet is reported, exit 1"
 else
     bad "a sibling holding the packet must be reported" "rc=$rc out=[$out]"
@@ -56,7 +57,7 @@ fi
 #    would be useless in the other direction: no host could ever claim anything.
 mkstub "$W/free" ready
 out="$(cd "$ROOT" && TILLANDSIAS_PLAN_BIN="$W/free/tillandsias-plan" bash "$CHECK" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
-if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '^ok:cross-branch-claims:'; then
+if [ "$rc" -eq 0 ] && grep -q '^ok:cross-branch-claims:' <<<"$out"; then
     ok "a packet nobody holds is not refused, exit 0 — arm 1 is not refusing everything"
 else
     bad "an unheld packet must pass" "rc=$rc out=[$out]"
@@ -90,7 +91,7 @@ if [ -z "$_node" ]; then
 else
 out="$(cd "$ROOT" && TILLANDSIAS_PLAN_BIN="$W/mine/tillandsias-plan" \
         TILLANDSIAS_XBRANCH_CLAIM_HOST="$_node" bash "$CHECK" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
-if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '^own-claim-reflected:SOME-PKT:'; then
+if [ "$rc" -eq 0 ] && grep -q '^own-claim-reflected:SOME-PKT:' <<<"$out"; then
     ok "a claim held only under THIS host's label is reported as the reader's own, exit 0"
 else
     bad "the reader's own reflected claim must not be reported as a sibling's" "rc=$rc out=[$out]"
@@ -104,7 +105,7 @@ fi
 #     is the one 814-iyu7 measures in duplicated hours.
 out="$(cd "$ROOT" && TILLANDSIAS_PLAN_BIN="$W/mine/tillandsias-plan" \
         TILLANDSIAS_XBRANCH_CLAIM_HOST="some-other-host" bash "$CHECK" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
-if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q '^claimed-elsewhere:SOME-PKT:'; then
+if [ "$rc" -eq 1 ] && grep -q '^claimed-elsewhere:SOME-PKT:' <<<"$out"; then
     ok "NC: a claim under another host's label still refuses, exit 1"
 else
     bad "another host's claim must still refuse" "rc=$rc out=[$out]"
@@ -157,6 +158,35 @@ case "$_parsed" in
     *) bad "the parser did not read the winning entry's host" "got [$_parsed]" ;;
 esac
 
+# 2b (2271-5v9r): the parser reads every fragment in ONE awk, so its block state
+# must reset at each FILE, as the old one-awk-per-file loop did. File a ends
+# inside some-packet-name's block; file b opens with status-shaped lines (a
+# newer ts, another host) before any packet_id. Carried across the boundary,
+# b's lines would be read as a's packet and win on ts.
+mkdir -p "$W/tree2/plan/index.d"
+cat > "$W/tree2/plan/index.d/a.yaml" <<'FRAG'
+packets:
+  - packet_id: some-packet-name
+    field: status
+    value: in_progress
+    ts: "2026-01-01T00:00:00Z"
+    host: first-host
+FRAG
+cat > "$W/tree2/plan/index.d/b.yaml" <<'FRAG'
+    field: status
+    ts: "2027-01-01T00:00:00Z"
+    host: leaked-host
+packets:
+  - packet_id: unrelated-packet
+FRAG
+if [ -s "$W/parser.sh" ]; then
+    _parsed2="$( . "$W/parser.sh"; _claim_host_on_branch "$W/tree2" some-packet-name 2>/dev/null )" || true
+    case "$_parsed2" in
+        first-host) ok "the parser's block state resets at each fragment file (no status leaks across files)" ;;
+        *) bad "a status block leaked across a fragment boundary" "got [$_parsed2], want [first-host]" ;;
+    esac
+fi
+
 # 3. THE FALSE NEGATIVE THAT MATTERS. No plan binary means the folds cannot be
 #    read at all. That MUST block: reporting ok would say "nobody holds it"
 #    on the strength of having been unable to look. This is 1024-c3h3's shape,
@@ -174,7 +204,7 @@ mkdir -p "$W/noroot/scripts"
 cp "$CHECK" "$W/noroot/scripts/"
 cp "$ROOT/scripts/plan-binary-probe.sh" "$W/noroot/scripts/"
 out="$(env -i PATH=/usr/bin:/bin HOME="$W" bash "$W/noroot/scripts/check-claims-across-branches.sh" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
-if [ "$rc" -eq 2 ] && printf '%s' "$out" | grep -q '^blocked:no-plan-binary'; then
+if [ "$rc" -eq 2 ] && grep -q '^blocked:no-plan-binary' <<<"$out"; then
     ok "no plan binary BLOCKS rather than reporting the packet unclaimed"
 else
     bad "no plan binary must block, not pass" "rc=$rc out=[$out]"
@@ -212,7 +242,7 @@ mkstub_absent() { # $1=dir
 # "safe to claim" and meant only "no sibling holds it in_progress".
 mkstub_absent "$W/none"
 out="$(cd "$ROOT" && TILLANDSIAS_PLAN_BIN="$W/none/tillandsias-plan" bash "$CHECK" NO-SUCH-PACKET-1091 --no-fetch 2>/dev/null)"; rc=$?
-if [ "$rc" -eq 2 ] && printf '%s' "$out" | grep -q '^unknown-packet:'; then
+if [ "$rc" -eq 2 ] && grep -q '^unknown-packet:' <<<"$out"; then
     ok "a packet no branch and no local fold knows is reported unknown, not ok"
 else
     bad "an unknown packet must not report ok" "rc=$rc out=[$out]"
@@ -222,7 +252,7 @@ fi
 # everything, arm 5 would pass while the tool refused every real packet too.
 mkstub "$W/real" ready
 out="$(cd "$ROOT" && TILLANDSIAS_PLAN_BIN="$W/real/tillandsias-plan" bash "$CHECK" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
-if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '^ok:cross-branch-claims:'; then
+if [ "$rc" -eq 0 ] && grep -q '^ok:cross-branch-claims:' <<<"$out"; then
     ok "a packet the fold knows still passes — arm 5 is not refusing everything"
 else
     bad "a known packet must still pass" "rc=$rc out=[$out]"
@@ -289,7 +319,7 @@ mkdir -p "$R/scripts" "$R/plan/index.d"
 cp "$CHECK" "$ROOT/scripts/plan-binary-probe.sh" "$R/scripts/"
 printf 'packets: []\n' > "$R/plan/index.yaml"
 printf '# keep\n' > "$R/plan/index.d/README.md"
-_g() { git -C "$R" -c user.email=fx@example.invalid -c user.name=fx -c commit.gpgsign=false "$@"; }
+_g() { scratch_git "$R" -c user.email=fx@example.invalid -c user.name=fx -c commit.gpgsign=false "$@"; }
 _g init -q -b main
 _g add -A && _g commit -q --no-verify -m "sibling's ledger"
 _anc="$(_g rev-parse HEAD)"
@@ -327,6 +357,25 @@ if [ "$rc" -eq 1 ] && grep -q '^claimed-elsewhere:SOME-PKT:osx-next' <<<"$out"; 
     ok "a diverged sibling's claim is still reported"
 else
     bad "a diverged sibling's claim must still be reported" "rc=$rc out=[$out]"
+fi
+
+# 9. ORDER 2323-wwaa — AN OVERRIDE THAT ALREADY PASSES --index. The binary refuses
+#    a second --index, so every sibling folded to nothing. The checkout's own
+#    binary (planted in the scratch repo) answers instead. RED ON PRE-FIX CODE.
+mkdir -p "$R/built/release"
+cat > "$R/built/release/tillandsias-plan" <<'EOF'
+#!/bin/sh
+[ "$1" = --index ] && shift 2
+[ "$1" = --index ] && { echo "error: unknown subcommand '--index'" >&2; exit 2; }
+echo "PKT	in_progress	some-packet-name"
+EOF
+printf '#!/bin/sh\nexec "%s" --index /scratch/index.yaml "$@"\n' "$R/built/release/tillandsias-plan" > "$W/indexed-plan"
+chmod +x "$R/built/release/tillandsias-plan" "$W/indexed-plan"
+out="$(cd "$R" && CARGO_TARGET_DIR="$R/built" TILLANDSIAS_PLAN_BIN="$W/indexed-plan" bash "$R/scripts/check-claims-across-branches.sh" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
+if [ "$rc" -eq 1 ] && grep -q '^claimed-elsewhere:SOME-PKT:osx-next' <<<"$out"; then
+    ok "an override that fixes its own --index does not blind the sibling fold"
+else
+    bad "an override that fixes its own --index must not blind the sibling fold" "rc=$rc out=[$out]"
 fi
 
 echo "claims-across-branches: $pass passed, $fail failed"

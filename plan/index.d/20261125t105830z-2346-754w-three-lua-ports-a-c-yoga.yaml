@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: archiver-naming-envelope-source-and-census-split-fixtures-ported-to-lua
+    order: "2346-754w"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/test-archiver-could-not-run-is-self-naming.lua
+      - scripts/lua/test-capabilities-envelope-names-its-source.lua
+      - scripts/lua/test-census-enforced-reachability-split.lua
+    title: "three shell fixtures ported to Lua: archiver could-not-run naming, capability envelope source, census reachability split"
+    context: |
+      ports: test-archiver-could-not-run-is-self-naming, test-capabilities-envelope-names-its-source, test-census-enforced-reachability-split.
+      Claimed by yoga before the work, in the coordinator's test-[a-c]* range.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its subject is mutated; callers run the .lua; the three .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by two gate steps and two litmus tests"
+    provenance: "coordinator queue 2026-11-25 (test-[a-c]* range), yoga"
+    related: [1132-r4mt, 1139-xe5m, 1334-57at]
+    events:
+      - {type: claimed, ts: "2026-11-25T10:58:30Z", host: yoga, summary: "claimed; work ref work/2346-754w"}

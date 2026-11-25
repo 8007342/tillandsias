@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-litmus-phase-on-a-step-is-refused-unless-the-runner-reads-it
+    order: "2349-b3u2"
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, lua]
+    estimated_hours: 4
+    owned_files:
+      - scripts/lua/check-litmus-step-phase.lua
+    title: "ten litmus files declare phase: on their steps, which the runner does not read, so each step runs in the file's phase or in runtime"
+    context: |
+      get_test_phase reads the top level only and answers runtime when it has none. Found on 2327-ahqf. The ten:
+      cross-platform-terminal-attach, macos-tray-menu-renders, onboarding-cold-start-discovery, status-check-stack-verification,
+      vault-auto-unseal-no-prompt, vault-policy-forge-cannot-read-github-token, vm-provisioning-idempotent,
+      vm-shutdown-drains-forges, vsock-handshake, windows-tray-menu-renders. Whether each has a top-level phase was not read.
+    exit_criteria:
+      - "A check refuses a litmus step that declares phase: while the runner does not read it. Pre-fix result: FAILS, no such check."
+      - "NEGATIVE CONTROL: it is red on a planted file and green on the corpus once each of the ten is split or fixed."
+    unscoreable: "unpinnable-until-the-guard-exists: the check is the deliverable"
+    next_action: "yoga takes it after the a-c batch, on the coordinator's word."
+    provenance: "coordinator macuahuitl-fedora 2026-11-25, from yoga's 2327-ahqf"
+    related: [2327-ahqf]
+    events:
+      - {type: filed, ts: "2026-11-25T11:35:12Z", host: yoga, summary: "filed on the request of the coordinator; not yet taken"}
+  - packet_id: the-forge-image-does-not-bake-the-agent-clis-its-spec-and-litmus-say-it-does
+    order: "2349-9vaq"
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, litmus, spec]
+    estimated_hours: 3
+    owned_files:
+      - openspec/specs/forge-as-only-runtime/spec.md
+      - openspec/litmus-tests/litmus-forge-as-only-runtime.yaml
+    title: "the forge image holds none of claude, codex and opencode, and the litmus that says it does is green because bash's command -v succeeds when any one name is found"
+    context: |
+      Measured on yoga 2026-11-25, localhost/tillandsias-forge:v56.11.22.1 with /bin/sh (bash): command -v of claude, of codex and
+      of opencode each exit 1; command -v claude codex opencode bash exits 0 and prints /usr/bin/bash only; command -v nosuch bash
+      exits 0. find / -xdev holds no such file. lib-common.sh installs the harnesses when a lane starts. The spec's requirement
+      "Forge Image Bakes the Full Agent Set" says four valid paths. Which of the two is wrong is a decision.
+    exit_criteria:
+      - "The spec and the image agree: the requirement is changed to what a lane installs, or the image bakes the set."
+      - "The litmus asks each name on its own, and is red when one is missing. Pre-fix result: FAILS, green with three missing."
+    unscoreable: "a decision first: the spec or the image"
+    next_action: "Needs a decision from the operator or the coordinator; not taken."
+    provenance: "yoga 2026-11-25, while making 2327-ahqf's image check skip without an image"
+    related: [2327-ahqf]
+    events:
+      - {type: filed, ts: "2026-11-25T11:35:12Z", host: yoga, summary: "filed; found, not taken"}

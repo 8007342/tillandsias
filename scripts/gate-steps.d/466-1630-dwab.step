@@ -1,7 +1,7 @@
 # Gate step 1630-dwab — a .lua guard can declare itself serial
 # (`-- preflight: serial — <reason>`), and the door's own launcher then runs it
-# with nothing beside it. Both writers of the .mutant-lcnum-* checkout paths
-# (steps 450 and 455) declare it, so neither runs beside the other or beside a
+# with nothing beside it. The former writers of the .mutant-lcnum-* checkout paths
+# (steps 450 and 455, out of the checkout since 2278-x4tw) motivated it: neither ran beside a
 # tree-scanning guard. _pf_predecide and _pf_launcher are extracted at run time:
 # the trunk door (the `--` match removed) predecides the .lua as parallel, the
 # fixed door as serial, and the launcher shows no overlap with the declaration
@@ -11,6 +11,13 @@
 # STEP_LUA is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking a .lua guard can declare itself serial at the door (1630-dwab)"
 STEP_LUA="scripts/lua/test-door-serial-lua-declaration.lua"
-STEP_ERROR="the preflight door no longer honours a .lua guard's -- preflight: serial, or a .mutant-lcnum-* writer runs beside other guards (1630-dwab) — see the FAIL lines above"
+STEP_ERROR="the preflight door no longer honours a .lua guard's -- preflight: serial, or a timed guard runs beside others (1630-dwab) — see the FAIL lines above"
 STEP_OK="Door .lua serial declaration fixture passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-12 darwin ok:door-serial-lua-declaration:8 arms"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
+STEP_LANES="checkout"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lua/test-awk-float-lc-numeric-signal.lua scripts/lua/test-door-serial-lua-declaration.lua scripts/plan-binary-probe.sh scripts/test-awk-float-lc-numeric.sh"

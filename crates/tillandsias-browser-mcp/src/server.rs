@@ -657,6 +657,15 @@ impl BrowserMcpServer {
             None => return Self::json_rpc_error(id, -32602, "tools/call requires name"),
         };
         let args = Self::requested_arguments(request);
+        // Order 1911-3gqy (spec:browser-window-timeout, "no recorded
+        // activity"): a call on a window this lane owns is activity, so the
+        // idle sweeper never closes a window an agent is still driving.
+        // Nothing recorded it before, so idle meant "since creation".
+        if let Some(window_id) = args.get("window_id").and_then(|v| v.as_str())
+            && self.windows.owned_by(window_id, &self.owner())
+        {
+            self.windows.touch_window_activity(window_id);
+        }
 
         let response = match tool_name {
             "browser.open" => self.handle_browser_open(id, args),
@@ -902,6 +911,16 @@ impl BrowserMcpServer {
         self.windows.insert(entry);
         self.debounce
             .record(&self.project_label, &allowed.host, window_id.clone());
+        // Order 1911-3gqy: over the per-lane cap, the OLDEST windows close, so
+        // a loop that opens windows cannot exhaust the podman network pool.
+        let evicted: Vec<String> = self
+            .windows
+            .beyond_cap(crate::window_registry::MAX_WINDOWS_PER_LANE, &window_id)
+            .into_iter()
+            .filter(|old| {
+                crate::window_registry::close_window(&self.windows, &self.debounce, old).is_some()
+            })
+            .collect();
 
         RpcResponse::Success {
             id,
@@ -914,6 +933,8 @@ impl BrowserMcpServer {
                 "headless": headless,
                 "service_workers": service_workers,
                 "notice": notice,
+                // Order 1911-3gqy: windows closed to stay under the cap.
+                "evicted": evicted,
             }),
         }
     }
@@ -2953,6 +2974,64 @@ mod tests {
                 })
                 .collect()
         }
+    }
+
+    /// Order 1911-3gqy: opening one window past the per-lane cap closes the
+    /// OLDEST and says so in the result; the new window stays. The registry is
+    /// pre-filled, because the fake server allows only active routes.
+    #[tokio::test]
+    async fn opening_past_the_cap_evicts_the_oldest_window() {
+        use crate::window_registry::tests::entry;
+        let windows: Arc<crate::window_registry::WindowRegistry> = Default::default();
+        let debounce: Arc<crate::window_registry::DebounceTable> = Default::default();
+        let cap = crate::window_registry::MAX_WINDOWS_PER_LANE;
+        // `cap` existing windows, w0 the oldest
+        for i in 0..cap {
+            windows.insert(entry(
+                &format!("w{i}"),
+                Duration::from_secs(1000 - i as u64),
+                Duration::ZERO,
+            ));
+        }
+        let server = test_server_fake_launch(None).with_windows(windows.clone(), debounce);
+        let opened = call_tool(
+            &server,
+            "browser.open",
+            json!({ "url": "http://web.acme.localhost:8080/" }),
+        )
+        .await;
+        assert_eq!(opened["evicted"], json!(["w0"]), "{opened}");
+        assert!(!windows.contains("w0"));
+        assert!(windows.contains("w1"));
+        assert!(windows.contains(opened["window_id"].as_str().unwrap()));
+    }
+
+    /// Order 1911-3gqy (spec:browser-window-timeout, "recorded activity"): a
+    /// tool call on a window its lane owns resets the idle timer, so the
+    /// sweep keeps it; another lane's call on the same window records nothing.
+    #[tokio::test]
+    async fn a_tool_call_on_an_owned_window_is_recorded_activity() {
+        use crate::window_registry::tests::entry;
+        let windows: Arc<crate::window_registry::WindowRegistry> = Default::default();
+        let debounce: Arc<crate::window_registry::DebounceTable> = Default::default();
+        let idle = Duration::from_secs(crate::window_registry::IDLE_TIMEOUT_SECS + 60);
+        windows.insert(entry("mine", idle * 2, idle)); // owning_lane "acme/0"
+        windows.insert(entry("theirs", idle * 2, idle));
+        let mine = test_server_fake_launch(None)
+            .with_lane("0")
+            .with_windows(windows.clone(), debounce.clone());
+        let other = test_server_fake_launch(None)
+            .with_lane("1")
+            .with_windows(windows.clone(), debounce.clone());
+        call_tool(&mine, "browser.read_url", json!({ "window_id": "mine" })).await;
+        call_tool(&other, "browser.read_url", json!({ "window_id": "theirs" })).await;
+        let closed = crate::window_registry::sweep_timed_out(&windows, &debounce);
+        assert_eq!(
+            closed,
+            vec!["theirs".to_string()],
+            "only the untouched window is idle"
+        );
+        assert!(windows.contains("mine"));
     }
 
     async fn call_tool(
