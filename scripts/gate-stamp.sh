@@ -422,7 +422,7 @@ compute() {
         # what moved. Code, specs, scripts, images, methodology and
         # plan/index.yaml itself (the compacted BASE, which a fold rewrites)
         # all still hash; a change to any of them re-gates. Negative control:
-        # scripts/test-gate-stamp.sh cases 6-7. Skipping here cannot desync the
+        # scripts/lua/test-gate-stamp.lua cases 6-7. Skipping here cannot desync the
         # exec-bit lockstep below: the pointer catches up on the next path.
         #
         # ORDER 1142-85zx adds plan/issues/*.md, and the arithmetic is the same

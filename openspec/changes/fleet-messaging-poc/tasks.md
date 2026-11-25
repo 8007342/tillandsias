@@ -21,7 +21,7 @@ is ephemeral; broadcasts ack per recipient and are never replied to.
       and the `capabilities` entry; `send` with several `--to`, groups
       from `plan/fleet/groups.yaml`, `--ttl`, `--in-reply-to` with the
       reply-to-broadcast and unknown-reply-target refusals.
-- [x] 1.4 `scripts/test-fleet-msg-store.sh`: shape refusals, secret
+- [x] 1.4 `scripts/lua/test-fleet-msg-store.lua`: shape refusals, secret
       refusals, duplicate id, `send` returns the id with no daemon, `recv`
       twice with the sender's receipt byte-identical, `status` transitions
       from fixture-written receipts, TTL bounds refusal, unread message
@@ -108,7 +108,7 @@ Implementation notes for 1506-q7ab (what 1506-7tq4 and 1506-ssb5 inherit):
       `msg_status` wrapping the verbs with the capability probe.
 - [ ] 3.2 `entrypoint-forge-codex.sh` and the OpenCode entrypoint print
       `msg recv --keep` at session start.
-- [ ] 3.3 `scripts/test-fleet-msg-mcp.sh`: JSON-RPC round trip; an old
+- [ ] 3.3 `scripts/lua/test-fleet-msg-mcp.lua`: JSON-RPC round trip; an old
       binary without the verb answers the degraded envelope.
 
 ## 4. Host identity and Noise XX [1506-32k5, opus]
