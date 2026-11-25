@@ -1,4 +1,4 @@
--- @env PATH HOME XDG_RUNTIME_DIR
+-- @env PATH HOME XDG_RUNTIME_DIR TOOLBOX_PATH container
 -- @trace order:2253-iher
 --
 -- test-gate-keep-going.lua — `./build.sh --gate-steps <root> --keep-going`
@@ -19,7 +19,7 @@
 --                build.sh: arm 2's world names only a — arm 2 has teeth
 --
 --   6 UID 0      step 345 run as uid 0 is a named skip, never STEP_OK (2332-rxkr)
---   7 FALSE GREEN the same run at exit 0 prints STEP_OK: arm 6 has teeth
+--   7 the same run as a skip at exit 0 is one too; ending ok: it prints STEP_OK (2343-3ch4)
 --   8 a red static arm outranks the skip
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-gate-keep-going.lua
@@ -53,7 +53,7 @@ local function gate(build, r, extra)
     local argv = { fixture.posix_shell(), build, "--gate-steps", r.abs }
     if extra and extra.kg then argv[#argv + 1] = "--keep-going" end
     local res = proc.run({ argv = argv, timeout_ms = 300000, cwd = ROOT,
-        env = { PATH = env.get("PATH"), HOME = env.get("HOME"), XDG_RUNTIME_DIR = env.get("XDG_RUNTIME_DIR"),
+        env = { PATH = env.get("PATH"), HOME = env.get("HOME"), XDG_RUNTIME_DIR = env.get("XDG_RUNTIME_DIR"), TOOLBOX_PATH = env.get("TOOLBOX_PATH"), container = env.get("container"),
                 TILLANDSIAS_GATE_STEP_JOBS = extra and extra.jobs or "1" } })
     return res.code, (res.stdout or "") .. (res.stderr or "")
 end
@@ -126,8 +126,12 @@ T:arm("6 UID 0 step 345 is a named skip and never its STEP_OK",
     applied and rc == 0 and has(o, "could-not-run:inference-mkdir-fatal:uid-0-static-arms-only") and has(o, "could-not-run (exit 3;") and not has(o, PASSED), "applied=" .. tostring(applied) .. " rc=" .. tostring(rc) .. "\n" .. o)
 d, applied = root345("uid0-at-0", { UID0, { 'uid-0-static-arms-only", 3)', 'uid-0-static-arms-only", 0)' }, { '"could-not-run:inf', '"skip:inf' } })
 rc, o = gate(B, d)
-T:arm("7 FALSE GREEN the same run at exit 0 prints STEP_OK: arm 6 has teeth",
-    applied and rc == 0 and has(o, "skip:inference-mkdir-fatal:uid-0-static-arms-only") and has(o, PASSED), "applied=" .. tostring(applied) .. " rc=" .. tostring(rc) .. "\n" .. o)
+T:arm("7a the same run as a skip at exit 0 is a named skip too (2343-3ch4)",
+    applied and rc == 0 and has(o, ":declared (skip:inference-mkdir-fatal:uid-0-static-arms-only;") and not has(o, PASSED), "applied=" .. tostring(applied) .. " rc=" .. tostring(rc) .. "\n" .. o)
+d, applied = root345("uid0-ok", { UID0, { 'uid-0-static-arms-only", 3)', '4 arms", 0)' }, { '"could-not-run:inf', '"ok:inf' } })
+rc, o = gate(B, d)
+T:arm("7b CONTROL the same run ending ok: prints STEP_OK: 6 and 7a have teeth",
+    applied and rc == 0 and has(o, PASSED) and not has(o, ":declared ("), "applied=" .. tostring(applied) .. " rc=" .. tostring(rc) .. "\n" .. o)
 d, applied = root345("uid0-red", { UID0, { 'text.contains(GUARD, "id -u")', "false" } })
 rc, o = gate(B, d)
 T:arm("8 a red static arm outranks the skip",
