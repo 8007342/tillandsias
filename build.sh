@@ -1072,7 +1072,7 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, 
     # NONE launched, and 108 identical launch failures are indistinguishable
     # from 108 real refusals to anyone reading the summary.
     #
-    # THE TREE ALREADY KNEW: scripts/test-dispatch-reap.sh:99 probes
+    # THE TREE ALREADY KNEW: scripts/lua/test-dispatch-reap.lua probes
     # `command -v setsid` and emits a named skip under 1141-vf9w ("NOT the same
     # as passing"). One caller asked and one did not.
     #
@@ -6983,7 +6983,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # part of 1005-m6rz's closure. It compiles nothing and touches no real
     # toolchain: every arm is hermetic in a scratch tree.
     _step "Checking cargo resolution, git identity and the cargo-site registry (876-irn7, 1005-m6rz)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-cycle-preflight-cargo-resolution.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-cycle-preflight-cargo-resolution.lua" 2>&1; then
         _error "a preamble host-readiness arm regressed (876-irn7, 1005-m6rz) — see the verdict line above"
         exit 1
     fi
@@ -7235,7 +7235,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # gate step 350-1903-djsq, under the sentinel session bus.
 
     _step "Checking the freshness budget is regime-named and still catches a regression (1038-d7vw)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-freshness-regime-budget.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-freshness-regime-budget.lua" 2>&1; then
         _error "the freshness budget stopped discriminating by filesystem regime, or drifted outside the measurements that derived it (1038-d7vw) — one global number cannot serve 725ms on ext4 and 13.8s over drvfs, and a remote budget raised past the 25.2s pre-fix cost would stay green through a full quadratic regression"
         exit 1
     fi

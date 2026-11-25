@@ -18,7 +18,7 @@ description: >
   a non-Silverblue host the direct-exec step was a tautology: the delegate
   returns before doing any toolbox work, so an include that did NOTHING passed
   every step. The property assertions now live in
-  scripts/test-ensure-toolbox-properties.sh, which drives the real include
+  scripts/lua/test-ensure-toolbox-properties.lua, which drives the real include
   against a hermetic fake `toolbox` and pairs every assertion with a MUTANT
   that must fail (order 634-39ik: assert properties, carry a negative control).
 severity: high
@@ -27,14 +27,14 @@ size: instant
 inputs:
   - scripts/ensure_toolbox.sh
   - scripts/with-tillandsias-builder.sh
-  - scripts/test-ensure-toolbox-properties.sh
+  - scripts/lua/test-ensure-toolbox-properties.lua
   - scripts/check-no-competing-gate.sh
   - scripts/test-no-competing-gate.sh
 
 preconditions:
   - workspace contains scripts/ensure_toolbox.sh
   - workspace contains scripts/with-tillandsias-builder.sh
-  - workspace contains scripts/test-ensure-toolbox-properties.sh
+  - workspace contains scripts/lua/test-ensure-toolbox-properties.lua
   - shell utilities (bash, grep, sed, awk, cmp) are available in PATH
 
 critical_path:
@@ -68,9 +68,9 @@ critical_path:
     # assertion its own mutant survives is vacuous. Each mutation is verified to
     # have actually applied (cmp), so a sed that matched nothing is a loud red,
     # never a silent pass.
-    command: "scripts/test-ensure-toolbox-properties.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-ensure-toolbox-properties.lua 2>&1"
     timeout_ms: 120000
-    success_pattern: "PASS: ensure_toolbox property fixture"
+    success_pattern: "ok:ensure-toolbox-properties:"
     failure_pattern: "FAIL:"
 
   - step: "the canon entry is ROUTABLE, not merely present (methodology_ask must answer at confidence=exact)"
