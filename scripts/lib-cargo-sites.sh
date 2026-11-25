@@ -10,7 +10,7 @@
 #                                       no agent tool call is a login shell.
 #                                       CANONICAL: it carries the resolution loop
 #                                       inline and is pinned by
-#                                       test-cycle-preflight-cargo-resolution.sh.
+#                                       test-cycle-preflight-cargo-resolution.lua.
 #   scripts/lua/check-cheatsheet-tiers.lua 1005-m6rz. Printed a bare
 #                                       `cargo: command not found` as a
 #                                       validation ERROR on the commit hook.
@@ -60,7 +60,7 @@
 #
 # CYCLE-PREFLIGHT DELIBERATELY DOES NOT SOURCE THIS. Its loop is pinned by a
 # fixture that greps the shipped script for the literal loop
-# (test-cycle-preflight-cargo-resolution.sh), because 876-irn7's lesson was that
+# (test-cycle-preflight-cargo-resolution.lua), because 876-irn7's lesson was that
 # a test pinning a paraphrase pins nothing. Refactoring it to call this would
 # delete that pin to save nine lines. The duplication is the price of the pin
 # and is recorded here so it reads as a decision rather than an oversight.

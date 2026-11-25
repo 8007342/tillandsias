@@ -193,7 +193,7 @@ for _cf in manage-cache.sh pre-commit-openspec.sh; do
 done
 
 # AND THE CONTROL: a `date -d` with NO counterpart must still be named.
-# test-check-bash-dialect.sh:77 writes one into a fixture as its SUBJECT — the
+# test-check-bash-dialect.lua writes one into a fixture as its SUBJECT — the
 # same self-flagging shape as this file's own HALF-1 lines, and correct.
 grep -qE <<<"$OUT" 'test-check-bash-dialect\.sh:[0-9]+' \
     && ok "COUNTERPART control: a bare GNU date idiom IS still flagged" \

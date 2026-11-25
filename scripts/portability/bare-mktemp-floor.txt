@@ -51,7 +51,6 @@ scripts/test-clear-vault-credentials-partial-is-nonzero.sh 1
 scripts/test-clear-vault-host-credentials.sh 1
 scripts/test-cloudflare-oauth-core.sh 1
 scripts/test-codex-oauth-restore.sh 1
-scripts/test-codex-safe-state.sh 1
 scripts/test-concurrent-forge-shared-stack.sh 1
 scripts/test-credential-verdict-script.sh 1
 scripts/test-cycle-checkout-lock.sh 1
