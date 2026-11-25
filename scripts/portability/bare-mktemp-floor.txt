@@ -116,7 +116,6 @@ scripts/test-litmus-bindings.sh 1
 scripts/test-litmus-budget-tally.sh 1
 scripts/test-litmus-runner-reports-rc.sh 2
 scripts/test-litmus-tracked-file-kill-safety.sh 2
-scripts/test-loop-status-audit-reads-current-emitter.sh 1
 scripts/test-metrics-log-fallback-is-loud.sh 1
 scripts/test-metrics-log-path-agreement.sh 1
 scripts/test-mirror-host-cert-and-sshd.sh 2

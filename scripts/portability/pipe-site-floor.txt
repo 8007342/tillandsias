@@ -641,7 +641,6 @@ scripts scripts/test-litmus-terminal-verdict.sh 2
 scripts scripts/test-litmus-tracked-file-kill-safety.sh 2
 scripts scripts/test-long-running-view-refuses-at-completion.sh 26
 scripts scripts/test-loop-status-append-input.sh 6
-scripts scripts/test-loop-status-audit-reads-current-emitter.sh 2
 scripts scripts/test-lww-channel-consumers.sh 2
 scripts scripts/test-mcp-run-command-tool.sh 2
 scripts scripts/test-memo-hit-observability.sh 1
