@@ -619,7 +619,6 @@ scripts scripts/test-litmus-binding-truth.sh 8
 scripts scripts/test-litmus-fake-backend-under-remote-podman.sh 1
 scripts scripts/test-litmus-fake-podman-hermetic.sh 1
 scripts scripts/test-litmus-kill-adjudicator.sh 14
-scripts scripts/test-litmus-missing-bound-test-reds.sh 3
 scripts scripts/test-litmus-parse-instruments-agree.sh 7
 scripts scripts/test-litmus-parse-only-duplicate-key.sh 7
 scripts scripts/test-litmus-podman-preflight-trigger.sh 1
