@@ -2751,7 +2751,7 @@ print_summary() {
     printf '%bPass Rate%b: %d%% (%d/%d executed)\n' "${BOLD}" "${NC}" "$coverage_ratio" "$TESTS_PASSED" "$total_executed" >&2
     # ORDER 1309-fhxb. ADDED LINES, never a reshape of the ones above: the census
     # on the row names seven parsers of this surface, and
-    # test-litmus-missing-bound-test-reds.sh asserts the LITERAL string
+    # test-litmus-missing-bound-test-reds.lua asserts the LITERAL string
     # `Pass Rate: 100% (1/1 executed)`.
     #
     # STEP VERDICTS, and the definition is printed with them so nobody re-derives
