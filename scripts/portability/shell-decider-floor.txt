@@ -65,17 +65,11 @@ scripts/test-change-class.sh
 scripts/test-check-carry-forward.sh
 scripts/test-check-credential-channel.sh
 scripts/test-claims-fleet-visible.sh
-scripts/test-clear-vault-credentials-partial-is-nonzero.sh
-scripts/test-clear-vault-host-credentials.sh
 scripts/test-cloudflare-login.sh
 scripts/test-cloudflare-oauth-core.sh
 scripts/test-cloudflare-token-rotation.sh
 scripts/test-codex-oauth-restore.sh
 scripts/test-concurrent-forge-shared-stack.sh
-scripts/test-credential-channel-affordances.sh
-scripts/test-credential-channel-names-a-locked-keyring.sh
-scripts/test-credential-channel-survives-a-killed-probe.sh
-scripts/test-credential-verdict-script.sh
 scripts/test-cycle-checkout-lock.sh
 scripts/test-daily-maintenance-day-boundary.sh
 scripts/test-e2e-preflight-live-runtime.sh
