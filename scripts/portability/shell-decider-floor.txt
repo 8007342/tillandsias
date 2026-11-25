@@ -241,11 +241,9 @@ scripts/test-long-running-view-refuses-at-completion.sh
 scripts/test-loop-status-append-input.sh
 scripts/test-lww-channel-consumers.sh
 scripts/test-macos-vsock-inference-closure.sh
-scripts/test-mcp-plan-resolver-pinning.sh
 scripts/test-mcp-run-command-tool.sh
 scripts/test-mcp-transport-death-trace.sh
 scripts/test-memo-hit-observability.sh
-scripts/test-meta-orchestration-opsx-sync-merge.sh
 scripts/test-metrics-log-fallback-is-loud.sh
 scripts/test-metrics-log-path-agreement.sh
 scripts/test-mirror-discipline.sh
@@ -255,14 +253,12 @@ scripts/test-mirror-refuses-when-broken.sh
 scripts/test-mirror-sshd-posture.sh
 scripts/test-mirror-sync-state.sh
 scripts/test-mo-full-attest.sh
-scripts/test-mo-full-record-precedes-marker.sh
 scripts/test-mode-only-regression-887-bz88.sh
 scripts/test-must-ship-rows.sh
 scripts/test-nix-cache-service.sh
 scripts/test-nix-toolbox.sh
 scripts/test-no-competing-gate.sh
 scripts/test-no-stale-base-revert-pre-receive.sh
-scripts/test-no-stale-base-revert.sh
 scripts/test-nvidia-cdi-stale-hostpath.sh
 scripts/test-opencode-entrypoint-prompt.sh
 scripts/test-opencode-render-probe.sh
@@ -366,7 +362,6 @@ scripts/test-sync-image-cheatsheets-for-commit.sh
 scripts/test-timing-clock-resolution.sh
 scripts/test-timing-record-carries-reproduced.sh
 scripts/test-timing-record-carries-root.sh
-scripts/test-timing-supervisor-lost.sh
 scripts/test-token-instrument.sh
 scripts/test-tool-dispatch-lib.sh
 scripts/test-tool-dispatch-rejects-unusable-host-tool.sh
@@ -379,11 +374,9 @@ scripts/test-tray-refresh-no-polling.sh
 scripts/test-tray-surface-parity-gate.sh
 scripts/test-uninstall-keeps-models.sh
 scripts/test-uninstall-matcher-spares-bystanders.sh
-scripts/test-uninstall-path-block.sh
 scripts/test-unrunnable-platform-arms.sh
 scripts/test-validator-surface-currency.sh
 scripts/test-vault-shutdown-forwards-sigterm.sh
-scripts/test-verify-closure.sh
 scripts/test-version-bump-isolation-scope.sh
 scripts/test-warm-tier-model.sh
 scripts/test-windows-only-sources-verified.sh

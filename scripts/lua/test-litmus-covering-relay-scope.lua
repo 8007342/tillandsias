@@ -15,6 +15,7 @@
 --   6 cap 15, declared first then by name; --all-covering lifts it; reruns are byte-identical
 --   7 f18dc0d74 (1428-v4tt): the PATH query answers 0 specs, relay-scope runs meta-orchestration
 --   8 562e6281a (1432-x3ug): both the full run and relay-scope run the harness's spec
+--   9-13 a file with no phase or size line (2326-b52d)   14 the reader and the runner agree on it
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-litmus-covering-relay-scope.lua
 -- Verdict: ok:litmus-covering-relay-scope:<n> arms | violation:...
@@ -33,9 +34,9 @@ local function corpus(bound)
     for _, n in ipairs(bound) do y = y .. "- spec_id: x\n  litmus_tests:\n  - " .. L .. n .. "\n" end
     fs.write(d.rel .. "/bind.yaml", y)
 end
--- declared / command: a path, or nil.
+-- declared / command: a path, or nil. A nil phase or size writes no line.
 local function mk(file, name, spec, phase, size, declared, command)
-    fs.write(d.rel .. "/tests/" .. file .. ".yaml", "name: " .. L .. name .. "\nspec: " .. spec .. "\nphase: " .. phase .. "\nsize: " .. size .. "\npreconditions:\n"
+    fs.write(d.rel .. "/tests/" .. file .. ".yaml", "name: " .. L .. name .. "\nspec: " .. spec .. (phase and "\nphase: " .. phase or "") .. (size and "\nsize: " .. size or "") .. "\npreconditions:\n"
         .. (declared and "  - workspace contains " .. declared .. "\n" or "") .. 'critical_path:\n  - step: "s"\n    command: "test -f ' .. (command or "-") .. '"\n')
 end
 local function map(real, ...)
@@ -77,6 +78,34 @@ local again, all = scope("--paths", "lib/k.sh"), scope("--all-covering", "--path
 T:arm("6 cap 15 declared first, --all-covering lifts it, byte-identical reruns", x.out:match("^[^\n]*") == "run:declared:cap-zz\tlib/k.sh\tinstant"
     and has(x, "deferred:cap:cap-16\tlib/k.sh\tinstant") and has(x, "deferred:cap:cap-17\tlib/k.sh\tinstant") and has(x, "ok:litmus-relay-scope:run=15 deferred=3")
     and again.out == x.out and has(all, "ok:litmus-relay-scope:run=18 deferred=0"), x.why .. all.why)
+
+-- 9-14 (2326-b52d): an empty phase field used to vanish in the tab-split, so the SIZE was read
+-- as the phase. A missing phase is `runtime`, as the runner reads it.
+corpus{ "nophase-long", "nosize", "post" }
+mk("a", "nophase-long", "s-npl", nil, "long", nil, "lib/n.sh")
+mk("b", "nosize", "s-ns", "pre-build", nil, nil, "lib/n.sh")
+mk("c", "post", "s-post", "post-build", "quick", nil, "lib/n.sh")
+x = scope("--paths", "lib/n.sh")
+T:arm("9 a file with no phase line defers by phase and prints its real size", has(x, "deferred:phase:s-npl\tlib/n.sh\tlong"), x.why)
+T:arm("10 CONTROL an explicit other phase defers with its own size", has(x, "deferred:phase:s-post\tlib/n.sh\tquick"), x.why)
+T:arm("11 CONTROL a pre-build file with no size line runs as instant", has(x, "run:command:s-ns\tlib/n.sh\tinstant") and has(x, "ok:litmus-relay-scope:run=1 deferred=2"), x.why)
+x = scope("--paths", "openspec/litmus-tests/a.yaml")
+T:arm("12 an edited file with no phase line defers too, with its real size", has(x, "deferred:phase:s-npl\topenspec/litmus-tests/a.yaml\tlong"), x.why)
+x = map(false, "--run", "lib/n.sh")
+T:arm("13 the --run query names its real phase and size", has(x, "scripts/run-litmus-test.sh s-npl --phase runtime --size long --compact"), x.why)
+-- Both defaults are READ from the code, so a drift of either is red here.
+local function defaults(src, pattern)
+    local seen, list = {}, {}
+    for v in src:gmatch(pattern) do
+        if not seen[v] then seen[v] = true; list[#list + 1] = v end
+    end
+    return table.concat(list, ",")
+end
+local getter = ("\n" .. fs.read("scripts/run-litmus-test.sh")):match("\nget_test_phase%(%) {\n(.-)\n}\n") or ""
+local runner = defaults(getter, '%.phase // "([%w-]+)"') .. "/" .. defaults(getter, 'print "([%w-]+)"') .. "/" .. defaults(getter, "%${v:%-([%w-]+)}")
+local reader = defaults(fs.read("scripts/litmus-covering-specs.sh"), "%${phase:%-([%w-]+)}")
+T:arm("14 the reader's default phase is the runner's, in every tier of the runner", reader ~= "" and runner == reader .. "/" .. reader .. "/" .. reader,
+    "reader=" .. reader .. " runner=" .. runner)
 
 local P1 = { "openspec/litmus-tests/litmus-build-cache-sweep-trigger.yaml", "openspec/litmus-tests/litmus-committable-branch-guard-shape.yaml",
     "openspec/litmus-tests/litmus-plan-only-push-lane-shape.yaml" }

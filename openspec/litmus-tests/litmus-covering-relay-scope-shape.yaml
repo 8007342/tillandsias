@@ -28,7 +28,7 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: relay-scope-parses"
 
-  - step: "six rule arms and two catch arms, exit 0"
+  - step: "the rule arms, the no-phase arms and the two catch arms"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-covering-relay-scope.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "ok:litmus-covering-relay-scope:8 arms"
+    expected_behavior: "ok:litmus-covering-relay-scope:14 arms"
