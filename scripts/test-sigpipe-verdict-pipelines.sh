@@ -131,6 +131,45 @@ run_gate 1 "GATE MUTATION added recursive-grep verdict pipeline is refused (1070
 printf '#!/usr/bin/env bash\nset -uo pipefail\nhits="$(grep -rl needle .)"\ncase "$hits" in *needle*) :;; esac\n' > "$repo/scripts/victim.sh"
 run_gate 0 "GATE recursive grep captured into a variable stays clean (1070-a4gc)"
 
+# 2d. ORDER 2141-2m3f: a WRITER piped into a READER THAT MAY NOT READ. #1187 was
+# evicted by test-git-credential-helper.sh:53 at exactly these bytes: the
+# helper's erase exits without reading stdin, printf takes EPIPE, and pipefail
+# fails the line though the helper did what it should. No early-exit consumer
+# is involved, so the class above could not see it.
+# MEASURED PRE-FIX: rc=0 (unseen). Post-fix: refused.
+cat > "$repo/scripts/victim.sh" <<'VICTIM'
+#!/usr/bin/env bash
+set -uo pipefail
+printf 'protocol=https\n\n' | "$HELPER" erase >/dev/null 2>&1 || fail "case3: erase must be a no-op"
+VICTIM
+run_gate 1 "GATE MUTATION writer into a reader that may not read is refused (2141-2m3f)"
+
+# 2e. NEGATIVE CONTROL for 2d: the same bytes as a here-string cannot SIGPIPE.
+cat > "$repo/scripts/victim.sh" <<'VICTIM'
+#!/usr/bin/env bash
+set -uo pipefail
+"$HELPER" erase >/dev/null 2>&1 <<<$'protocol=https\n' || fail "case3: erase must be a no-op"
+VICTIM
+run_gate 0 "GATE the here-string into the helper stays clean (2141-2m3f)"
+
+# 2f. NEGATIVE CONTROL: a writer into a FULL reader (sort reads all of stdin)
+# is not the class, or the rule would refuse half the corpus.
+cat > "$repo/scripts/victim.sh" <<'VICTIM'
+#!/usr/bin/env bash
+set -uo pipefail
+printf 'b\na\n' | sort >/dev/null || fail "sort failed"
+VICTIM
+run_gate 0 "GATE a writer into a full reader stays clean (2141-2m3f)"
+
+# 2g. NEGATIVE CONTROL: the same writer into the helper, with NO verdict on its
+# status, decides nothing, so it is not the class either.
+cat > "$repo/scripts/victim.sh" <<'VICTIM'
+#!/usr/bin/env bash
+set -uo pipefail
+printf 'protocol=https\n\n' | "$HELPER" store >/dev/null 2>&1
+VICTIM
+run_gate 0 "GATE an undecided writer into the helper stays clean (2141-2m3f)"
+
 # 3. The recommended rewrite of the same check passes.
 printf '#!/usr/bin/env bash\nset -uo pipefail\nout="$(cat /etc/hosts)"\nif grep -q root <<<"$out"; then :; fi\n' > "$repo/scripts/victim.sh"
 run_gate 0 "GATE the here-string rewrite of the same check passes"
