@@ -579,7 +579,6 @@ scripts scripts/test-join-the-fleet-idempotent.sh 8
 scripts scripts/test-json-query-jq-parity.sh 4
 scripts scripts/test-land-gate-refusal-names-its-step.sh 12
 scripts scripts/test-land-queue.sh 1
-scripts scripts/test-land-verdict-through-a-pipe.sh 1
 scripts scripts/test-ledger-prose-roundtrip.sh 8
 scripts scripts/test-ledger-write-reaches-its-reader.sh 22
 scripts scripts/test-litmus-binding-truth.sh 8
@@ -591,14 +590,11 @@ scripts scripts/test-litmus-parse-only-duplicate-key.sh 7
 scripts scripts/test-litmus-podman-preflight-trigger.sh 1
 scripts scripts/test-litmus-runner-reads-without-jq.sh 6
 scripts scripts/test-litmus-runner-reports-rc.sh 7
-scripts scripts/test-litmus-step-model.sh 1
 scripts scripts/test-litmus-step-pipefail.sh 3
 scripts scripts/test-litmus-structured-assert.sh 1
 scripts scripts/test-litmus-terminal-verdict.sh 2
 scripts scripts/test-litmus-tracked-file-kill-safety.sh 2
 scripts scripts/test-loop-status-append-input.sh 6
-scripts scripts/test-lww-channel-consumers.sh 2
-scripts scripts/test-mcp-run-command-tool.sh 2
 scripts scripts/test-memo-hit-observability.sh 1
 scripts scripts/test-metrics-log-fallback-is-loud.sh 1
 scripts scripts/test-metrics-log-path-agreement.sh 1
