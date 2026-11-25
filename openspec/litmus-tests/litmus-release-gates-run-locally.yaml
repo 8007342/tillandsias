@@ -154,9 +154,9 @@ critical_path:
   # and asserts whether the remote head moved, so a refusal that pushed anyway
   # cannot read as a pass.
   - step: "a scoped stamp is honoured only for the change classes it covers"
-    command: "bash scripts/test-gate-stamp-scope.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-gate-stamp-scope.lua 2>&1"
     timeout_ms: 180000
-    expected_behavior: "PASS: gate-stamp-scope ("
+    expected_behavior: "ok:gate-stamp-scope:18 arms"
 
   # Tillandsias tracks each harness skill entry as a symlink to a directory.
   # `sha256sum <symlink>` follows it, refuses the directory, and made the first
