@@ -1,5 +1,5 @@
 -- @env PATH HOME
--- @trace order:1034-whsp, order:1091-xn4c, order:1948-xbaf, order:2372-snfs
+-- @trace order:1034-whsp, order:1948-xbaf, order:2372-snfs
 --
 -- test-claims-across-branches.lua — check-claims-across-branches.sh reports a packet a sibling
 -- branch holds, and never answers "unclaimed" when it could not look. Ported from the .sh of the
