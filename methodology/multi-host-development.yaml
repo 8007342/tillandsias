@@ -1393,7 +1393,7 @@ multi_host_development:
     measured_costs:
       one_time_bootstrap: "~5 min (rootfs import 15s + dnf toolchain ~3min + rustup ~2min); persists across e2e runs"
       per_invocation_overhead: "~1-2s (re-exec + stdin marker probe)"
-      shell_or_git_fixture_test: "~3s wall (e.g. test-git-mirror-relay-verified-ack.sh, 3 cases)"
+      shell_or_git_fixture_test: "~3s wall (e.g. test-git-mirror-relay-verified-ack, 3 cases)"
       targeted_warm_cargo_test: "~8s wall (38-test crate)"
       full_workspace_check_warm: "~35s (fmt + check + clippy strict x2); first cold run ~10 min"
     do_locally_via_wsl2:

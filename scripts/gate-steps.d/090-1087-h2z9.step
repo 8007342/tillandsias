@@ -18,7 +18,7 @@ STEP_DESC="Checking every landing-gate/release-gate difference is declared (1087
 STEP_LUA="scripts/lua/test-gate-divergence-is-declared.lua"
 STEP_ERROR="a check runs in --ci-full and not in --check without being declared, or the untriaged ratchet turned the wrong way (1087-h2z9) — see the verdict line above"
 STEP_OK="Gate-divergence declaration check passed"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:gate-divergence-declared:18"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:gate-divergence-declared:25 at 2627fa738 (the Lua fixture, 2341-324y; rc 0, relayed by macuahuitl)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
 STEP_LANES="timing"
