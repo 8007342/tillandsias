@@ -135,7 +135,6 @@ scripts/test-fleet-msg-mcp.sh
 scripts/test-fleet-msg-same-host.sh
 scripts/test-fleet-msg-store.sh
 scripts/test-forge-findings-persisted.sh
-scripts/test-forge-git-identity-source.sh
 scripts/test-forge-gitconfig-bidirectional-quarantine.sh
 scripts/test-forge-localization-staged.sh
 scripts/test-forge-project-guard-hooks.sh
@@ -158,7 +157,6 @@ scripts/test-gate-stamp-names-content-movers.sh
 scripts/test-gate-stamp-scope.sh
 scripts/test-gate-stamp.sh
 scripts/test-gate-step-append-no-conflict.sh
-scripts/test-gate-step-metrics-isolation.sh
 scripts/test-gate-step-prefix-allocation.sh
 scripts/test-gate-step-regimes.sh
 scripts/test-gate-step-skip-exit.sh
@@ -173,7 +171,6 @@ scripts/test-groundtruth-corpus-declaration.sh
 scripts/test-guest-binaries-nix-lane.sh
 scripts/test-guest-crashloop-detection.sh
 scripts/test-guest-staging-refuses-a-wireless-binary.sh
-scripts/test-harness-affinity-selection.sh
 scripts/test-harness-byte-cheap.sh
 scripts/test-harness-contract-probe.sh
 scripts/test-harness-rollback.sh
@@ -352,9 +349,6 @@ scripts/test-validator-surface-currency.sh
 scripts/test-vault-shutdown-forwards-sigterm.sh
 scripts/test-version-bump-isolation-scope.sh
 scripts/test-windows-only-sources-verified.sh
-scripts/test-windows-tray-clippy.sh
 scripts/test-worktree-boundary-guard.sh
-scripts/test-wsl2-builder-shell-options.sh
-scripts/test-yaml-reader-availability.sh
 scripts/verify-closure.sh
 scripts/verify-version-monotonic.sh
