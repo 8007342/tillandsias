@@ -104,7 +104,6 @@ scripts/test-headless-env-lock-is-single.sh 1
 scripts/test-hook-mover-enumeration-is-batched.sh 2
 scripts/test-host-slug-resolution.sh 2
 scripts/test-image-build-convergence.sh 1
-scripts/test-inference-mkdir-fatal-1183-j9dk.sh 1
 scripts/test-installer-probes-by-attempt-not-by-help.sh 2
 scripts/test-installer-provisions-once.sh 1
 scripts/test-land-merges-trunk.sh 1

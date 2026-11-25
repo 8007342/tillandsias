@@ -6745,7 +6745,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     #
     # The rule and its entry point are one Lua file since 1637-5765 (the .sh
     # and scripts/lib/litmus-grep-escapes.awk are retired). The 8-arm fixture
-    # (scripts/test-litmus-grep-escapes.sh) is already wired into local-ci.sh,
+    # (scripts/lua/test-litmus-grep-escapes.lua) is already wired into local-ci.sh,
     # so --check needs only the check itself.
     _step "Checking litmus grep patterns use no GNU-undefined escapes (901-jtvi)..."
     # PORTED to Lua (1637-5765): scripts/lua/check-litmus-grep-escapes.lua.
