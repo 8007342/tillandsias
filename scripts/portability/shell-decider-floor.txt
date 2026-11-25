@@ -294,7 +294,6 @@ scripts/test-set-field-yaml-shapes.sh
 scripts/test-shipped-diagnostic-tool-dispatch.sh
 scripts/test-sidecar-staleness-stamp.sh
 scripts/test-sigpipe-guard-sees-paths-and-continuations.sh
-scripts/test-sigpipe-verdict-measured.sh
 scripts/test-sigpipe-verdict-pipelines.sh
 scripts/test-silverblue-update-skew-probe.sh
 scripts/test-skill-canonicalization-remedy.sh
@@ -306,7 +305,6 @@ scripts/test-smoke-verifies-a-signature.sh
 scripts/test-spawn-failure-names-program.sh
 scripts/test-spec-index-durable-tier-demotion.sh
 scripts/test-spec-index-endpoint-classification.sh
-scripts/test-spec-index-repo-relative-rung.sh
 scripts/test-spec-index-staging-capacity.sh
 scripts/test-squid-supervisor.sh
 scripts/test-ssh-lane-sidecar.sh

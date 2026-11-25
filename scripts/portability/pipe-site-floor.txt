@@ -683,13 +683,11 @@ scripts scripts/test-set-field-refuses-unknown-flags.sh 8
 scripts scripts/test-set-field-yaml-shapes.sh 1
 scripts scripts/test-shipped-diagnostic-tool-dispatch.sh 4
 scripts scripts/test-sidecar-staleness-stamp.sh 2
-scripts scripts/test-sigpipe-verdict-measured.sh 1
 scripts scripts/test-sigpipe-verdict-pipelines.sh 3
 scripts scripts/test-silverblue-update-skew-probe.sh 7
 scripts scripts/test-skills-single-source.sh 8
 scripts scripts/test-smoke-verifies-a-signature.sh 7
 scripts scripts/test-spawn-failure-names-program.sh 3
-scripts scripts/test-spec-index-repo-relative-rung.sh 3
 scripts scripts/test-spec-index-staging-capacity.sh 4
 scripts scripts/test-ssh-lane-sidecar.sh 6
 scripts scripts/test-status-channel-absent-is-first-class.sh 10
