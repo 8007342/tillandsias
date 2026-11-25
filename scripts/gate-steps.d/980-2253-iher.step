@@ -10,9 +10,9 @@
 STEP_DESC="Checking --keep-going names every red gate step (2253-iher)"
 STEP_LUA="scripts/lua/test-gate-keep-going.lua"
 STEP_ERROR="--keep-going no longer names every refusing gate step, or the default is no longer fail-fast (2253-iher); see which arm failed above"
-STEP_OK="--keep-going names every red step; the default stays fail-fast"
+STEP_OK="--keep-going names every red step; the default stays fail-fast; a step that could not run is a skip"
 # Runs nested build.sh --gate-steps gates: alone, never beside a sibling.
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:gate-keep-going:5 arms at e32414dea (bash 3.2.57; red at 9adad1c83 on BASHPID)"
-STEP_SERIAL="runs four nested build.sh --gate-steps gates over scratch roots"
+STEP_SERIAL="runs seven nested build.sh --gate-steps gates over scratch roots"
 # ORDER 2157-ginp: recorded only.
-STEP_READS="build.sh scripts/lua/test-gate-keep-going.lua"
+STEP_READS="build.sh images/inference/entrypoint.sh scripts/gate-steps.d/345-1183-j9dk.step scripts/lua/test-gate-keep-going.lua scripts/lua/test-inference-mkdir-fatal-1183-j9dk.lua"
