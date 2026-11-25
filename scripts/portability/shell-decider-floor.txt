@@ -70,7 +70,6 @@ scripts/test-cloudflare-oauth-core.sh
 scripts/test-cloudflare-token-rotation.sh
 scripts/test-codex-oauth-restore.sh
 scripts/test-concurrent-forge-shared-stack.sh
-scripts/test-cycle-checkout-lock.sh
 scripts/test-daily-maintenance-day-boundary.sh
 scripts/test-e2e-preflight-live-runtime.sh
 scripts/test-enclave-network-internal-discovery.sh

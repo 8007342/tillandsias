@@ -393,7 +393,7 @@ esac
 # best-effort stub in a scratch copy and asserts that copy silently resolves a
 # /tmp path instead of refusing, proving arm 8 has teeth. Same shape as the
 # mutation arms in test-check-credential-channel.sh (876-exg2 / 877-mynm) and
-# test-cycle-checkout-lock.sh arm 7 (1098-q7bk).
+# test-cycle-checkout-lock.lua arm 7 (1098-q7bk).
 MUT="$MD/pre-1096-cycle-metrics.sh"
 awk '/# ORDER 1096-p3tn: A WRITER THAT CANNOT RESOLVE/{skip=1}
      skip && /^# shellcheck source=scripts\/metrics-log-path\.sh$/{skip=0}

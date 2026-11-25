@@ -50,7 +50,6 @@ scripts/test-check-credential-channel.sh 1
 scripts/test-cloudflare-oauth-core.sh 1
 scripts/test-codex-oauth-restore.sh 1
 scripts/test-concurrent-forge-shared-stack.sh 1
-scripts/test-cycle-checkout-lock.sh 1
 scripts/test-e2e-preflight-live-runtime.sh 2
 scripts/test-enclave-network-internal-discovery.sh 2
 scripts/test-exec-bits-guard-end-to-end.sh 1
