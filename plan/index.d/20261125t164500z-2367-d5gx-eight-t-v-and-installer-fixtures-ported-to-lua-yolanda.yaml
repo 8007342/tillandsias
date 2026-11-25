@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: eight-t-v-and-installer-fixtures-ported-to-lua
+    order: "2367-d5gx"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/test-timing-record-carries-root.lua
+      - scripts/lua/test-validator-surface-currency.lua
+      - scripts/lua/test-trace-coverage.lua
+      - scripts/lua/test-tellme-routes-to-expert-serve.lua
+      - scripts/lua/test-uninstall-confirms-before-destroying.lua
+      - scripts/lua/test-uninstall-keeps-models.lua
+      - scripts/lua/test-installer-provisions-once.lua
+      - scripts/lua/test-installer-probes-by-attempt-not-by-help.lua
+    title: "eight shell fixtures ported to Lua: the rest of test-[t-v] that needs no podman, plus two installer fixtures"
+    context: |
+      ports: test-timing-record-carries-root, test-validator-surface-currency, test-trace-coverage,
+      test-tellme-routes-to-expert-serve, test-uninstall-confirms-before-destroying, test-uninstall-keeps-models,
+      test-installer-provisions-once, test-installer-probes-by-attempt-not-by-help.
+      Left in test-[t-v]: test-tool-dispatch-lib and test-tool-materialize (toolbox), test-vault-shutdown-forwards-sigterm
+      (podman), test-uninstall-matcher-spares-bystanders (Darwin), and six that open PRs touch.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its main assertions are mutated; callers run the .lua; the eight .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by four gate steps and four litmus tests"
+    provenance: "coordinator 2026-11-25 (batches of 8-10), yolanda"
+    related: [1299-s2sv, 1287-h6qn, 1077-vzwq, 1814-x78v, 1437-evzi, 1181-bkem, 1565-qtuk, 1323-5taw]
+    events:
+      - {type: claimed, ts: "2026-11-25T16:30:00Z", host: yolanda, summary: "claimed; work ref work/2367-d5gx"}
