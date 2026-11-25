@@ -551,7 +551,6 @@ scripts scripts/test-dispatch-reap.sh 4
 scripts scripts/test-enclave-network-internal-discovery.sh 1
 scripts scripts/test-enclave-proxy-lib.sh 4
 scripts scripts/test-enclave-service-health.sh 102
-scripts scripts/test-ensure-cosign.sh 5
 scripts scripts/test-ensure-toolbox-properties.sh 23
 scripts scripts/test-expire-claims-list-live-rows.sh 8
 scripts scripts/test-expire-claims-reads-the-status-write.sh 9
@@ -570,7 +569,6 @@ scripts scripts/test-forge-swap-service.sh 6
 scripts scripts/test-fragment-batch-never-collapses-verdicts.sh 1
 scripts scripts/test-fragment-status-loss.sh 7
 scripts scripts/test-freshness-regime-budget.sh 22
-scripts scripts/test-gate-stamp-names-content-movers.sh 5
 scripts scripts/test-gate-step-prefix-allocation.sh 8
 scripts scripts/test-gate-step-skip-exit.sh 3
 scripts scripts/test-git-credential-helper.sh 5

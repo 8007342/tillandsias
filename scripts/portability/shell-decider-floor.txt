@@ -115,7 +115,6 @@ scripts/test-e2e-preflight-live-runtime.sh
 scripts/test-enclave-network-internal-discovery.sh
 scripts/test-enclave-proxy-lib.sh
 scripts/test-enclave-service-health.sh
-scripts/test-ensure-cosign.sh
 scripts/test-ensure-toolbox-properties.sh
 scripts/test-exec-bits-guard-end-to-end.sh
 scripts/test-expire-claims-list-live-rows.sh
@@ -135,7 +134,6 @@ scripts/test-forge-runtime-ca-trust.sh
 scripts/test-forge-src-budget-report.sh
 scripts/test-forge-standard-gitconfig-path.sh
 scripts/test-forge-swap-service.sh
-scripts/test-forge-validate.sh
 scripts/test-fragment-batch-never-collapses-verdicts.sh
 scripts/test-fragment-status-loss-row-boundary.sh
 scripts/test-fragment-status-loss.sh
@@ -143,7 +141,6 @@ scripts/test-freshness-regime-budget.sh
 scripts/test-gate-memory-wsl2-guest.sh
 scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh
 scripts/test-gate-stamp-memoization.sh
-scripts/test-gate-stamp-names-content-movers.sh
 scripts/test-gate-stamp.sh
 scripts/test-gate-step-prefix-allocation.sh
 scripts/test-gate-step-regimes.sh

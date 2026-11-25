@@ -72,7 +72,6 @@ scripts/test-fleet-msg-store.sh 1
 scripts/test-forge-gitconfig-bidirectional-quarantine.sh 1
 scripts/test-forge-runtime-ca-trust.sh 1
 scripts/test-forge-standard-gitconfig-path.sh 1
-scripts/test-forge-validate.sh 1
 scripts/test-fragment-batch-never-collapses-verdicts.sh 1
 scripts/test-fragment-status-loss.sh 1
 scripts/test-gate-memory-wsl2-guest.sh 1
