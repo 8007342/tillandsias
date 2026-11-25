@@ -56,7 +56,6 @@ scripts/test-codex-mcp-registration.sh 1
 scripts/test-codex-oauth-restore.sh 1
 scripts/test-codex-safe-state.sh 1
 scripts/test-command-policy-evaluator.sh 1
-scripts/test-competing-gate-consumer.sh 1
 scripts/test-concurrent-forge-shared-stack.sh 1
 scripts/test-credential-verdict-script.sh 1
 scripts/test-cycle-checkout-lock.sh 1

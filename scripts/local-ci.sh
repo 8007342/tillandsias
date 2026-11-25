@@ -1088,8 +1088,8 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
 
     # ============================================================================
     log_section "CentiColon Grader (1395-88tp)"
-    if [[ -f "scripts/test-centicolon-grade.sh" ]]; then
-        if bash scripts/test-centicolon-grade.sh > /tmp/test-centicolon-grade.log 2>&1; then
+    if [[ -f "scripts/lua/test-centicolon-grade.lua" ]]; then
+        if "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" script run scripts/lua/test-centicolon-grade.lua > /tmp/test-centicolon-grade.log 2>&1; then
             log_pass "CentiColon Grader holds"
             archive_check_log "centicolon-grade" "pass" /tmp/test-centicolon-grade.log
         else
@@ -1098,7 +1098,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "centicolon-grade" "fail" /tmp/test-centicolon-grade.log
         fi
     else
-        log_fail_missing_guard "centicolon-grade" "scripts/test-centicolon-grade.sh"
+        log_fail_missing_guard "centicolon-grade" "scripts/lua/test-centicolon-grade.lua"
     fi
 
     # ============================================================================

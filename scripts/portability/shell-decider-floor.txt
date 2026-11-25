@@ -73,12 +73,10 @@ scripts/test-build-step-timing-attribution.sh
 scripts/test-capability-routing.sh
 scripts/test-capture-helper.sh
 scripts/test-centicolon-extract.sh
-scripts/test-centicolon-grade.sh
 scripts/test-change-class.sh
 scripts/test-check-bash-dialect.sh
 scripts/test-check-carry-forward.sh
 scripts/test-check-credential-channel.sh
-scripts/test-check-jq-callsite-ratchet.sh
 scripts/test-check-test-baseline.sh
 scripts/test-claims-across-branches.sh
 scripts/test-claims-fleet-visible.sh
@@ -92,7 +90,6 @@ scripts/test-codex-oauth-restore.sh
 scripts/test-codex-safe-state.sh
 scripts/test-command-policy-consent.sh
 scripts/test-command-policy-evaluator.sh
-scripts/test-competing-gate-consumer.sh
 scripts/test-concurrent-forge-shared-stack.sh
 scripts/test-convergence-dashboard.sh
 scripts/test-credential-channel-affordances.sh
