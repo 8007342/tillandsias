@@ -93,7 +93,6 @@ scripts/test-clear-vault-host-credentials.sh
 scripts/test-cloudflare-login.sh
 scripts/test-cloudflare-oauth-core.sh
 scripts/test-cloudflare-token-rotation.sh
-scripts/test-cmdkey-predicate-discriminates.sh
 scripts/test-codex-mcp-registration.sh
 scripts/test-codex-oauth-restore.sh
 scripts/test-codex-safe-state.sh
