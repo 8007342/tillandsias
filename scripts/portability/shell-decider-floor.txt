@@ -258,7 +258,6 @@ scripts/test-mirror-refuses-when-broken.sh
 scripts/test-mirror-sshd-posture.sh
 scripts/test-mirror-sync-state.sh
 scripts/test-mo-full-attest.sh
-scripts/test-mo-full-record-precedes-marker.sh
 scripts/test-mode-only-regression-887-bz88.sh
 scripts/test-must-ship-rows.sh
 scripts/test-nix-cache-service.sh
