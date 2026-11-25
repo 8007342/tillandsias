@@ -1,5 +1,5 @@
 -- preflight: serial — runs the litmus runner, which wipes its runtime dirs
--- @trace order:1204-3s2s, order:1096-p3tn, order:2244-ge9s, order:2344-zk8r, spec:observability-metrics
+-- @trace order:1204-3s2s, order:1096-p3tn, order:2244-ge9s, order:2344-zk8r, order:2365-mskt, spec:observability-metrics
 --
 -- test-gate-step-metrics-isolation.lua — a gate step must not write into the host's
 -- shared metrics path. Measured on lenovinha 2026-09-15: a fixture ran the litmus
@@ -17,6 +17,9 @@
 --   3 NEGATIVE CONTROL: the runner in a non-checkout dir DOES split. It tests the
 --     mechanism, not a doctored copy of the fixture: that copy never reached the
 --     runner and "passed" for nothing
+--     The runner's copy of metrics-log-path.sh has its ABSOLUTE fallback replaced by a
+--     scratch dir, so a broken fallback-dir knob reds here and leaks nowhere (2365-mskt:
+--     it once left four records in the host's real /tmp log)
 --   4 the guard keys on GROWTH: a pre-existing file alone is not an offence
 --
 -- Verdict: ok:step-metrics-isolation:<n> | violation:step-metrics-isolation:<n>-failed
@@ -56,6 +59,11 @@ fs.write(W.rel .. "/nc/openspec/litmus-bindings.yaml", "version: '1.0'\ndescript
 fs.write(W.rel .. "/nc/openspec/litmus-tests/litmus-" .. spec .. ".yaml", "name: " .. name .. "\nspec: " .. spec
     .. "\nphase: pre-build\ndescription: >\n  A throwaway probe.\nseverity: high\nsize: instant\ncritical_path:\n"
     .. '  - step: "the probe step"\n    command: "echo ok-probe"\n    timeout_ms: 30000\n    expected_behavior: "ok-probe"\n')
+-- The pin, or no arm 3: without it a broken knob writes the host's real log.
+local lib, pinned = fs.read("scripts/metrics-log-path.sh"):gsub('(_mdl_fb="%${[%w_]+:%-)[^}]*(}")', "%1" .. W.abs .. "/spill%2")
+if pinned ~= 1 then T:refuse("no-fallback-to-pin", "metrics-log-path.sh: " .. pinned .. " absolute fallback(s) found, want 1") end
+fs.mkdir(W.rel .. "/spill"); fs.mkdir(W.rel .. "/nc/scripts")
+fs.write(W.rel .. "/nc/scripts/metrics-log-path.sh", lib)
 -- Outside this checkout: under it, the runner would find a repository and not fall
 -- back. It is handed THIS checkout's plan binary (1427-utmy); none on this host is a
 -- named skip of the arm, never an opt-out.
@@ -74,7 +82,7 @@ git rev-parse --git-dir >/dev/null 2>&1 && { echo "premise: $nc is inside a git 
 bash "$nc/scripts/run-litmus-test.sh" "$3" --phase pre-build --size all </dev/null 2>&1
 ]] }
     l = log_in("fb3")
-    T:arm("3 NEGATIVE CONTROL an unnamed run outside a checkout does write the fallback log", l ~= nil,
+    T:arm("3 NEGATIVE CONTROL an unnamed run outside a checkout does write the fallback log", l ~= nil and log_in("spill") == nil,
         "rc=" .. tostring(r.code) .. " so arm 2 proves nothing: " .. (r.stdout or ""):sub(-300))
 end
 
