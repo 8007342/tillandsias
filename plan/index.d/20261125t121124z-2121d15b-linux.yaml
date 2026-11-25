@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-forge-queue-job-runs-with-the-forges-environment-and-host-kind
+    event:
+      type: note
+      ts: "2026-11-25T12:11:24Z"
+      agent_id: linux-lenovinha-claude-20261125t121122z
+      host: linux
+      summary: |-
+        Coordinator ruling 2026-11-25: the exit-3 criterion is dropped, closed by design. The queue runs any user's command, so it cannot read exit 3 as could-not-run; it reports reason exit-code-3. The audit host_kind=bare-metal criterion is split to 2354-5biy.
