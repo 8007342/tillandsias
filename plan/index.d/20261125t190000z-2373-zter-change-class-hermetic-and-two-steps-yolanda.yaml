@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: test-change-class-is-hermetic-under-the-gate
+    order: "2373-zter"
+    status: in_progress
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, fixtures]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-change-class.sh
+      - scripts/gate-steps.d
+    title: "test-change-class drops the gate's own selector environment, and it and command-policy-consent become gate steps"
+    context: |
+      Evicted #1574 from land run 76: blocked:change-class:2-failed-of-28 inside the gate, 28/28 standalone. The lines:
+      "FAIL: S1: a plan-only change could not skip a guard that reads neither plan nor docs" and "FAIL: N1: a guard keyed
+      to the plan crate ran for a change to a different crate".
+      Reproduced on yolanda: TILLANDSIAS_CLASS_SELECTOR=off gives exactly S1 and N1. scripts/land-queue.sh exports it
+      around its gate. TILLANDSIAS_CLASS_BASE=HEAD does not change the result.
+      test-command-policy-consent became Lua on trunk (2372-snfs) after its darwin run, so its step waits for a
+      non-Linux record of the .lua; it has four red arms on msys (2371-r2v9).
+    exit_criteria:
+      - "test-change-class answers 28/28 with TILLANDSIAS_CLASS_SELECTOR=off exported, and an arm or a run proves it."
+      - "Both fixtures are run by a gate step."
+    unscoreable: "fixture-scored: the fixture's own verdict line is the score"
+    provenance: "coordinator 2026-11-25 (land run 76 eviction), yolanda"
+    related: [2371-knda, 2371-r2v9]
+    events:
+      - {type: claimed, ts: "2026-11-25T19:36:04Z", host: yolanda, summary: "claimed; work ref work/2373-zter"}
