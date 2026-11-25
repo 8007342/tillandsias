@@ -7,7 +7,7 @@ STEP_DESC="Checking the wt-reparse workarounds stay deleted (823-u5zf)"
 STEP_LUA="scripts/lua/test-wt-reparse-scan.lua"
 STEP_ERROR="the wt-reparse deletion scan cannot tell a live symbol from a comment about it (823-u5zf) — see the verdict line above"
 STEP_OK="wt-reparse deletion scan check passed"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:wt-reparse-scan:6"
+STEP_SECOND_REGIME="macbookair 2026-11-25 darwin ok:wt-reparse-scan:8 arms"
 STEP_SECOND_REGIME="yolanda 2026-11-25 msys ok:wt-reparse-scan:8 arms"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
