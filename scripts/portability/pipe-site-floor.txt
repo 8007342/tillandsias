@@ -737,8 +737,6 @@ scripts scripts/test-tray-asset-placeholder-refused.sh 1
 scripts scripts/test-tray-surface-parity-gate.sh 1
 scripts scripts/test-unrunnable-platform-arms.sh 9
 scripts scripts/test-vault-shutdown-forwards-sigterm.sh 2
-scripts scripts/test-wsl-exec-channel-carries-exit-status.sh 2
-scripts scripts/test-wt-reparse-scan.sh 2
 scripts scripts/tillandsias-cycle-driver.sh 2
 scripts scripts/tillandsias-host-push-cert.sh 2
 scripts scripts/timing-log.sh 4

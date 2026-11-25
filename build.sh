@@ -4967,7 +4967,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "YAML reader available and its verdicts stay distinct"
 
     _step "Checking the wsl.exe transport can carry an exit status (1155-jurn)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-wsl-exec-channel-carries-exit-status.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-wsl-exec-channel-carries-exit-status.lua" 2>&1; then
         _error "the exit-status canary is wrong: a check that probes the local shell cannot see a transport that drops the status written in the argument string"
         exit 1
     fi
@@ -5385,7 +5385,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # recreate the very stall it removes on a GPU. Wired here so the policy
     # cannot ship as a guard nobody invokes (the 865-n8vq shape).
     _step "Checking the tier-model warm selection (965-hz3f)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-warm-tier-model.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-warm-tier-model.lua" 2>&1; then
         _error "the tier-model warm selection regressed — the CPU floor could be handed a model it cannot serve in-budget"
         exit 1
     fi
