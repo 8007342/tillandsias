@@ -62,6 +62,8 @@ local RULES = {
     B .. "echo[^|;&]*>",
     ">>",
     "(^|[ \\t;&|(\"'])((bash|sh)[ \\t]+|\\./)?scripts/[A-Za-z0-9_.-]+\\.sh",
+    -- 2325-qmsb: a Lua fixture is run by `script run`; the bare path could be any command's argument.
+    "script[ \\t]+run[ \\t]+scripts/lua/[A-Za-z0-9_.-]+\\.lua",
 }
 local function mutates(s)
     for _, re in ipairs(RULES) do

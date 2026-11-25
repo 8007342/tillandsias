@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: the-mutation-arm-guard-accepts-a-delegation-to-a-scripts-lua-fixture
+    field: status
+    value: implemented
+    ts: "2026-11-25T00:16:00Z"
+    host: yoga
+events:
+  - packet_id: the-mutation-arm-guard-accepts-a-delegation-to-a-scripts-lua-fixture
+    event: {type: implemented, ts: "2026-11-25T00:16:00Z", host: yoga, summary: "implemented on work/2325-qmsb"}
