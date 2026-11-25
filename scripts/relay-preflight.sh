@@ -406,7 +406,9 @@ _run_decider() { # name -> sets DEC_OUT, returns rc
         check-scorable-obligation-added) _cap bash "$SELF_DIR/check-scorable-obligation-added.sh" "$BASE" ;;
         check-gate-step-regimes) _cap bash "$SELF_DIR/check-gate-step-regimes.sh" ;;
         check-added-test-is-referenced) DEC_OUT="$(TILLANDSIAS_ADDED_TEST_BASE="$BASE" bash "$SELF_DIR/check-added-test-is-referenced.sh" 2>&1)"; return $? ;;
-        check-refusal-affordance-added) DEC_OUT="$(TILLANDSIAS_AFFORDANCE_BASE="$BASE" bash "$SELF_DIR/check-refusal-affordance-added.sh" 2>&1)"; return $? ;;
+        check-refusal-affordance-added)
+            _lua_runner "$name" || return 3
+            _cap env TILLANDSIAS_REPO_ROOT="$ROOT" TILLANDSIAS_AFFORDANCE_BASE="$BASE" "$_lb" script run "$SELF_DIR/lua/check-refusal-affordance-added.lua" ;;
         check-rust-source-pin-added)
             _lua_runner "$name" || return 3
             _cap env TILLANDSIAS_REPO_ROOT="$ROOT" TILLANDSIAS_RUST_PIN_BASE="$BASE" "$_lb" script run "$SELF_DIR/lua/check-rust-source-pin-added.lua" ;;

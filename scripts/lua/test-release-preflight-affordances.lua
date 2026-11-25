@@ -1,4 +1,5 @@
 -- @trace order:1505-hedu, order:1247-amcu, order:2197-h5kv
+-- @env TILLANDSIAS_SCRIPT_RUNNER_BIN TILLANDSIAS_PLAN_BIN CARGO_TARGET_DIR
 --
 -- test-release-preflight-affordances.lua — PORTED from
 -- test-release-preflight-affordances.sh (2197-h5kv), same arms, same lines.
@@ -34,10 +35,18 @@ local function count_prefix(s, p)
     for _, l in ipairs(text.lines(s)) do if l:sub(1, #p) == p then n = n + 1 end end
     return n
 end
+-- 2221-rfaa: the runner for the Lua affordance audit.
+local AUDIT_RUNNER = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN") or ""
+if AUDIT_RUNNER == "" then AUDIT_RUNNER = env.get("TILLANDSIAS_PLAN_BIN") or "" end
+if AUDIT_RUNNER == "" then
+    local ctd = env.get("CARGO_TARGET_DIR") or ""
+    AUDIT_RUNNER = (ctd ~= "" and ctd or "target") .. "/release/tillandsias-plan"
+end
 local function oneline(s) return (s or ""):gsub("\n", "|") end
 
 -- ── ARM 1 ────────────────────────────────────────────────────────────────
-local audit = proc.run{ argv = { "bash", "scripts/check-refusal-affordance-added.sh", "--audit" },
+-- 2221-rfaa: the audit is Lua, run by the runner that runs this fixture.
+local audit = proc.run{ argv = { AUDIT_RUNNER, "script", "run", "scripts/lua/check-refusal-affordance-added.lua", "--", "--audit" },
     timeout_ms = 120000 }.stdout or ""
 local bare = count_prefix(audit, "bare " .. RP .. ":")
 local covered = count_prefix(audit, "covered " .. RP .. ":")

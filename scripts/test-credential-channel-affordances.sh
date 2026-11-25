@@ -33,7 +33,10 @@ bad()  { printf 'FAIL: %s\n' "$1"; FAIL=1; }
 skip() { printf 'skip: %s\n' "$1"; }
 
 # ── ARM 1 ────────────────────────────────────────────────────────────────
-audit="$(bash "$ROOT/scripts/check-refusal-affordance-added.sh" --audit 2>/dev/null)"
+# 2221-rfaa: the audit is Lua.
+_pb="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || _pb=""
+case "$_pb" in ./*) _pb="$ROOT/${_pb#./}" ;; esac
+audit="$(cd "$ROOT" && "$_pb" script run scripts/lua/check-refusal-affordance-added.lua -- --audit 2>/dev/null)"
 bare="$(grep -c '^bare scripts/check-credential-channel.sh:' <<<"$audit")"
 covered="$(grep -c '^covered scripts/check-credential-channel.sh:' <<<"$audit")"
 if [ "$bare" -eq 0 ] && [ "$covered" -ge 15 ]; then

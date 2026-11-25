@@ -17,4 +17,4 @@ STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-29 darwin PASS: release-prefli
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="plan/index.d/** plan/index.yaml scripts/check-refusal-affordance-added.sh scripts/plan-binary-probe.sh scripts/release-preflight.sh scripts/lua/test-release-preflight-affordances.lua scripts/verify-version-monotonic.sh"
+STEP_READS="plan/index.d/** plan/index.yaml scripts/lua/check-refusal-affordance-added.lua scripts/plan-binary-probe.sh scripts/release-preflight.sh scripts/lua/test-release-preflight-affordances.lua scripts/verify-version-monotonic.sh"

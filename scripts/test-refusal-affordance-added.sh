@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # @trace order:1470-v67y, spec:methodology-accountability
 #
-# Fixture for scripts/check-refusal-affordance-added.sh (1470-v67y, the guard
+# Fixture for scripts/lua/check-refusal-affordance-added.lua (1470-v67y, the guard
 # and per-site audit for 1247-amcu), over scratch repos whose origin/linux-next
 # is the base:
 #
@@ -27,13 +27,18 @@ set -uo pipefail
 # the gated checkout) is not its base; its scratch origin/linux-next is.
 unset TILLANDSIAS_GATE_DIFF_BASE
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GUARD="$ROOT/scripts/check-refusal-affordance-added.sh"
-pass=0; total=8
+# ORDER 2221-rfaa: the guard is Lua. Each scratch repo is the CALLER's
+# checkout (the Lua asks git in its PWD), so it is not copied in any more.
+GUARD="$ROOT/scripts/lua/check-refusal-affordance-added.lua"
+pass=0; total=9
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1"; }
 
 [ -f "$GUARD" ] || { echo "fail:refusal-affordance-added-fixture:0/$total (guard missing)"; exit 1; }
 command -v git >/dev/null 2>&1 || { echo "skip:refusal-affordance-added-fixture:no-git"; exit 0; }
+PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || PLAN=""
+case "$PLAN" in ./*) PLAN="$ROOT/${PLAN#./}" ;; esac
+[ -n "$PLAN" ] || { echo "skip:refusal-affordance-added-fixture:no-plan-binary — build one: cargo build --release -p tillandsias-plan"; exit 0; }
 
 _tmpbase="$ROOT/target/plan-scratch"; mkdir -p "$_tmpbase" 2>/dev/null || _tmpbase="${TMPDIR:-/tmp}"
 W="$(mktemp -d "$_tmpbase/refusal-affordance.XXXXXX")"
@@ -43,13 +48,15 @@ GC=(-c user.email=f@x -c user.name=f)
 repo() { # repo <name> [base content of scripts/x.sh]
     local r="$W/$1"
     mkdir -p "$r/scripts"
-    cp "$GUARD" "$r/scripts/"
     printf '%s\n' "${2:-#!/bin/bash}" > "$r/scripts/x.sh"
     scratch_git "$r" init -q && scratch_git "$r" "${GC[@]}" add -A && scratch_git "$r" "${GC[@]}" commit -qm base
     scratch_git "$r" update-ref refs/remotes/origin/linux-next HEAD
     echo "$r"
 }
-run() { OUT="$(cd "$1" && bash scripts/check-refusal-affordance-added.sh "${@:2}" 2>&1)"; RC=$?; }
+# TILLANDSIAS_REPO_ROOT pins the runner to the scratch repo: an inherited one
+# (the litmus runner exports the real checkout's) roots `script run` there, and
+# the arms would judge the real tree instead of the one they built.
+run() { OUT="$(cd "$1" && TILLANDSIAS_REPO_ROOT="$1" "$PLAN" script run "$GUARD" -- "${@:2}" 2>&1)"; RC=$?; }
 put() { printf '%s\n' "$2" > "$1/scripts/x.sh"; }
 
 # 1 — bare.
@@ -163,6 +170,19 @@ if [ "$xc" = 1 ] && [ "$xb" = 2 ] && grep -q '^audit:refusal-affordance:covered=
 else
     bad "arm 8: [$OUT]"
 fi
+
+# 9 — 2241-f8jg: a base that is a 40-hex with NO such object is unavailable,
+#     by name; it must not "verify" and then judge nothing (0 checked).
+R="$(repo nine)"
+put "$R" '#!/bin/bash
+if [ -z "$X" ]; then
+    echo "refused:thing:no-x" >&2
+    exit 1
+fi'
+OUT="$(cd "$R" && TILLANDSIAS_REPO_ROOT="$R" TILLANDSIAS_AFFORDANCE_BASE=0123456789abcdef0123456789abcdef01234567 "$PLAN" script run "$GUARD" 2>&1)"; RC=$?
+[ "$RC" -eq 0 ] && grep -q '^ok:refusal-affordance-added:base-unavailable$' <<<"$OUT" \
+    && ok "arm 9: a bogus 40-hex base is named base-unavailable, not a silent 0 checked" \
+    || bad "arm 9: rc=$RC [$OUT]"
 
 if [ "$pass" -eq "$total" ]; then
     echo "ok:refusal-affordance-added-fixture:$pass/$total"

@@ -3,7 +3,7 @@
 # WHAT IT GUARDS. The operator ruled (2026-09-17, 1247-amcu) that every refusal
 # says why it refused and what would make it not a refusal; a bare verdict
 # token leaves an agent stuck with no next action. build.sh --check runs
-# scripts/check-refusal-affordance-added.sh, which refuses an ADDED
+# scripts/lua/check-refusal-affordance-added.lua, which refuses an ADDED
 # refused:/blocked:/violation: emission with no why/remedy (or _afford, or a
 # reasoned affordance-ok marker) nearby; --audit counts coverage per site. The
 # fixture drives the guard over scratch repos, and checks the audit per site.
@@ -20,4 +20,4 @@ STEP_LANES="checkout"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/check-refusal-affordance-added.sh scripts/test-refusal-affordance-added.sh"
+STEP_READS="scripts/lua/check-refusal-affordance-added.lua scripts/test-refusal-affordance-added.sh"
