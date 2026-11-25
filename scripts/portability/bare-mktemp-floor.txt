@@ -9,7 +9,6 @@ scripts/check-capability-row.sh 2
 scripts/check-containers-conf-proxy-env.sh 1
 scripts/check-daily-maintenance.sh 1
 scripts/check-dead-env-branches.sh 1
-scripts/check-enclave-ca-consistency.sh 1
 scripts/check-forge-findings-persisted.sh 1
 scripts/check-mcp-expert-health.sh 1
 scripts/check-mcp-live-build.sh 1

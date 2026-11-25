@@ -15,7 +15,6 @@ scripts/check-dead-env-branches.sh
 scripts/check-decider-retirement.sh
 scripts/check-deslop-due.sh
 scripts/check-deslop-sweep-health.sh
-scripts/check-enclave-ca-consistency.sh
 scripts/check-enclave-network-internal.sh
 scripts/check-enclave-service-health.sh
 scripts/check-fleet-membership.sh

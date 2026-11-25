@@ -79,7 +79,7 @@ gating_points:
     assert_output_matches: "(ok:ca-bind-current:[0-9]+|skip:)"
 
   # MEASURED RED ON yoga 2026-09-04 AND FILED, not wired-and-hoped: this host
-  # returns `desync:enclave-ca-key-secret` rc=1 because the CA bundle was
+  # returned `desync:enclave-ca-key-secret` rc=1 (now `violation:enclave-ca-desync:key-secret`, from scripts/lua/check-enclave-ca-consistency.lua) because the CA bundle was
   # regenerated at 06:37 while the `tillandsias-ca-key` secret is 21 hours old,
   # so the proxy's cert and key do not match. That is the guard being RIGHT —
   # squid would start and die with X509_check_private_key() naming neither
@@ -88,7 +88,7 @@ gating_points:
   # not a trunk defect; filed separately so a red here is diagnosed rather than
   # absorbed.
   - step: "the proxy's key secret matches the CA bundle it is bound to (998-3z6g)"
-    command: "bash scripts/check-enclave-ca-consistency.sh"
+    command: "P=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) && \"$P\" script run scripts/lua/check-enclave-ca-consistency.lua"
     timeout_ms: 60000
     assert_output_matches: "(ok:enclave-ca-consistent|skip:)"
     expected_behavior: "ok:enclave-ca-consistent, or an explicit skip: when the secret or cert is absent"

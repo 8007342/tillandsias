@@ -409,9 +409,26 @@ if [ "$ACT" -eq 1 ] && [ -n "${down_list:-}" ]; then
         # precondition, applied on the path that was missing it. It runs ONLY
         # for the proxy and ONLY when the pair actually disagrees, so a healthy
         # host pays one modulus comparison and nothing is rotated needlessly.
-        _ca_check="${TILLANDSIAS_CA_CONSISTENCY_CHECK:-$_HEALTH_DIR/check-enclave-ca-consistency.sh}"
-        if [ "$name" = "tillandsias-proxy" ] && [ -x "$_ca_check" ]; then
-            if ! bash "$_ca_check" >/dev/null 2>&1; then
+        # The check is Lua (ported from the .sh). TILLANDSIAS_CA_CONSISTENCY_CHECK
+        # stays a seam for an executable stub (the fixture injects one); by
+        # default the Lua port runs through the resolved plan binary, and with no
+        # binary that can run it the check is skipped, as an absent .sh was.
+        _ca_ran=0; _ca_ok=1
+        if [ "$name" = "tillandsias-proxy" ]; then
+            if [ -n "${TILLANDSIAS_CA_CONSISTENCY_CHECK:-}" ]; then
+                if [ -x "$TILLANDSIAS_CA_CONSISTENCY_CHECK" ]; then
+                    _ca_ran=1; bash "$TILLANDSIAS_CA_CONSISTENCY_CHECK" >/dev/null 2>&1 || _ca_ok=0
+                fi
+            else
+                _ca_plan="$(cd "$_HEALTH_DIR/.." && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _ca_plan=""
+                case "$_ca_plan" in ./*) _ca_plan="$_HEALTH_DIR/../${_ca_plan#./}" ;; esac
+                if [ -n "$_ca_plan" ] && [ -f "$_HEALTH_DIR/lua/check-enclave-ca-consistency.lua" ]; then
+                    _ca_ran=1; (cd "$_HEALTH_DIR/.." && "$_ca_plan" script run scripts/lua/check-enclave-ca-consistency.lua) >/dev/null 2>&1 || _ca_ok=0
+                fi
+            fi
+        fi
+        if [ "$_ca_ran" = 1 ]; then
+            if [ "$_ca_ok" = 0 ]; then
                 _cadir="${TILLANDSIAS_CA_DIR}"
                 if [ -r "$_cadir/intermediate.key" ] \
                    && _run podman secret create --replace tillandsias-ca-key "$_cadir/intermediate.key" >/dev/null 2>&1; then

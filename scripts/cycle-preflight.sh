@@ -375,13 +375,19 @@ plan_verdict="${plan_verdict}+services-${services_report}"
 # cycle unsafe, and a preflight that refuses on it would strand a host that can
 # still do most of its work.
 ca_report="skip"
-if [ -x "$ROOT/scripts/check-enclave-ca-consistency.sh" ]; then
+# The check is Lua on `script run` (ported from the .sh); with no plan binary
+# that can run it this ADVISORY stays a skip, exactly as an absent .sh did.
+. "$ROOT/scripts/plan-binary-probe.sh"
+_ca_plan="$(cd "$ROOT" && resolve_plan_binary 2>/dev/null)" || _ca_plan=""
+case "$_ca_plan" in ./*) _ca_plan="$ROOT/${_ca_plan#./}" ;; esac
+if [ -n "$_ca_plan" ] && [ -f "$ROOT/scripts/lua/check-enclave-ca-consistency.lua" ]; then
     _ca_err="$(mktemp)"
-    ca_line="$(bash "$ROOT/scripts/check-enclave-ca-consistency.sh" 2>"$_ca_err" | tail -1)"
+    ca_line="$(cd "$ROOT" && "$_ca_plan" script run scripts/lua/check-enclave-ca-consistency.lua 2>"$_ca_err")"
+    ca_line="${ca_line##*$'\n'}"
     case "$ca_line" in
         ok:enclave-ca-consistent) ca_report="ok" ;;
-        desync:*|absent:*)
-            ca_report="${ca_line%%:*}"
+        violation:enclave-ca-desync:*|violation:enclave-ca-absent:*)
+            ca_report="${ca_line#violation:enclave-ca-}"; ca_report="${ca_report%%:*}"
             cat "$_ca_err" >&2
             ;;
         skip:*) ca_report="skip" ;;
