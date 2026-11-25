@@ -1,4 +1,4 @@
--- @env PATH HOME XDG_RUNTIME_DIR
+-- @env PATH HOME TMPDIR XDG_RUNTIME_DIR TOOLBOX_PATH container CARGO_TARGET_DIR TILLANDSIAS_HOST_KIND TILLANDSIAS_SKIP_TOOLBOX
 -- @trace order:2343-3ch4, order:1384-bqhy, order:1087-h2z9
 --
 -- test-gate-step-skip-is-not-a-pass.lua — a gate step that skips at exit 0 is not reported
@@ -17,14 +17,21 @@ local fixture = require "common.fixture"
 local T = fixture.new("gate-step-skip-is-not-a-pass")
 local ROOT, SH = fixture.repo_root(), fixture.posix_shell()
 local PASSED = "the planted step passed"
+-- build.sh asks these where it runs (forge, toolbox); proc.run scrubs them.
+local ENV = { TILLANDSIAS_GATE_STEP_JOBS = "1" }
+for _, k in ipairs{ "PATH", "HOME", "TMPDIR", "XDG_RUNTIME_DIR", "TOOLBOX_PATH", "container", "CARGO_TARGET_DIR", "TILLANDSIAS_HOST_KIND", "TILLANDSIAS_SKIP_TOOLBOX" } do
+    local v = env.get(k)
+    if v and v ~= "" then ENV[k] = v end
+end
+-- On Windows build.sh re-execs into the builder distro, whose own gate runs this.
+if SH ~= "bash" then T:skip("build-sh-re-execs-into-wsl") end
 local function gate(runner, body)
     local d = T:scratch()
     fs.mkdir(d.rel .. "/scripts/gate-steps.d"); fs.mkdir(d.rel .. "/scripts/lua")
     local p = runner == "LUA" and "scripts/lua/planted.lua" or "scripts/planted.sh"
     fs.write(d.rel .. "/" .. p, body)
     fs.write(d.rel .. "/scripts/gate-steps.d/100-planted.step", 'STEP_DESC="planted"\nSTEP_' .. runner .. '="' .. p .. '"\nSTEP_ERROR="the planted step failed"\nSTEP_OK="' .. PASSED .. '"\n')
-    local r = proc.run{ argv = { SH, ROOT .. "/build.sh", "--gate-steps", d.abs }, cwd = ROOT, env_unset = { "TILLANDSIAS_*" }, timeout_ms = 300000,
-        env = { PATH = env.get("PATH"), HOME = env.get("HOME"), XDG_RUNTIME_DIR = env.get("XDG_RUNTIME_DIR"), TILLANDSIAS_GATE_STEP_JOBS = "1" } }
+    local r = proc.run{ argv = { SH, ROOT .. "/build.sh", "--gate-steps", d.abs }, cwd = ROOT, env = ENV, stdin = "", timeout_ms = 300000 }
     local o = (r.stdout or "") .. (r.stderr or "")
     return { rc = r.code, has = function(s) return text.contains(o, s) end, why = "rc=" .. tostring(r.code) .. "\n" .. o }
 end
