@@ -96,7 +96,7 @@ critical_path:
     # loop + polls 127.0.0.1:9090 (max 5s) BEFORE exec'ing caddy.
     command: "grep -F '/usr/local/bin/tillandsias-router-sidecar' images/router/entrypoint.sh && grep -F '9090' images/router/entrypoint.sh"
     timeout_ms: 3000
-    expected_behavior: "9090"
+    expected_behavior: "TILLANDSIAS_VALIDATE_PORT:-9090"
 
   - step: "router-sidecar: DEFAULT_VALIDATE_PORT = 9090 + TILLANDSIAS_VALIDATE_PORT override"
     # Spec § "Access control" — the forward_auth port is the
