@@ -65,14 +65,11 @@ scripts/test-fragment-status-loss.sh 1
 scripts/test-gate-memory-wsl2-guest.sh 1
 scripts/test-gate-stamp-memoization.sh 1
 scripts/test-git-credential-helper.sh 1
-scripts/test-git-mirror-existing-volume-hardening.sh 1
-scripts/test-git-mirror-relay-token-expiry.sh 1
 scripts/test-git-mirror-vault-agent-auto-auth.sh 1
 scripts/test-groundtruth-corpus-declaration.sh 3
 scripts/test-guest-binaries-nix-lane.sh 1
 scripts/test-guest-staging-refuses-a-wireless-binary.sh 2
 scripts/test-harness-byte-cheap.sh 1
-scripts/test-harness-contract-probe.sh 1
 scripts/test-harness-rollback.sh 1
 scripts/test-headless-env-lock-is-single.sh 1
 scripts/test-hook-mover-enumeration-is-batched.sh 2

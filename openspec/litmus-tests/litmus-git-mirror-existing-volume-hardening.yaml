@@ -18,14 +18,14 @@ description: >
 
 preconditions:
   - workspace contains images/git/entrypoint.sh and images/git/pre-receive-hook.sh
-  - workspace contains scripts/test-git-mirror-existing-volume-hardening.sh
+  - workspace contains scripts/lua/test-git-mirror-existing-volume-hardening.lua
 
 critical_path:
   - step: "existing-volume migration, pre-relay rejection, and fast-forward convergence all pass"
-    command: "scripts/test-git-mirror-existing-volume-hardening.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-git-mirror-existing-volume-hardening.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "PASS: git mirror existing-volume receive hardening fixture (order 579)"
-    assert_output_contains: "PASS: git mirror existing-volume receive hardening fixture (order 579)"
+    expected_behavior: "ok:git-mirror-existing-volume-hardening:21 arms"
+    assert_output_contains: "ok:git-mirror-existing-volume-hardening:21 arms"
 
   - step: "entrypoint reapplies all mandatory receive keys outside one-time initialization"
     command: "grep -Fq 'config receive.denyNonFastForwards true' images/git/entrypoint.sh && grep -Fq 'config receive.denyDeletes true' images/git/entrypoint.sh && grep -Fq 'config receive.fsckObjects true' images/git/entrypoint.sh && echo 'ok: every-start receive hardening present'"
@@ -50,4 +50,4 @@ rollback:
     Do not move receive config back into the fresh-init branch and do not rely
     on receive-pack config alone: pre-receive runs first and can otherwise relay
     a destructive ref transaction upstream before rejecting it locally.
-  command: "scripts/test-git-mirror-existing-volume-hardening.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-git-mirror-existing-volume-hardening.lua 2>&1"

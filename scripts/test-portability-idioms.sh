@@ -114,7 +114,6 @@ _pre_fix_has 737bd10c5 scripts/test-plan-binary-freshness.sh \
 
 # ── HALF 2: it does not flag those same files now ──────────────────────────
 for f in audit-guard-activation.sh check-cheatsheet-refs.sh \
-         test-gate-stamp-does-not-memoize-guard-owned-paths.sh \
          test-plan-binary-freshness.sh; do
     if grep -q <<<"$OUT" "$f"; then
         bad "HALF 2: $f still flagged after its fix"
