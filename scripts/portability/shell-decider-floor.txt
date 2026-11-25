@@ -67,9 +67,6 @@ scripts/test-check-credential-channel.sh
 scripts/test-claims-fleet-visible.sh
 scripts/test-clear-vault-credentials-partial-is-nonzero.sh
 scripts/test-clear-vault-host-credentials.sh
-scripts/test-cloudflare-login.sh
-scripts/test-cloudflare-oauth-core.sh
-scripts/test-cloudflare-token-rotation.sh
 scripts/test-codex-oauth-restore.sh
 scripts/test-concurrent-forge-shared-stack.sh
 scripts/test-credential-channel-affordances.sh

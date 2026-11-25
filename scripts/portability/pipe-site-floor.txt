@@ -514,8 +514,6 @@ scripts scripts/test-awk-float-lc-numeric.sh 6
 scripts scripts/test-capture-helper.sh 4
 scripts scripts/test-check-credential-channel.sh 12
 scripts scripts/test-claims-fleet-visible.sh 13
-scripts scripts/test-cloudflare-login.sh 33
-scripts scripts/test-cloudflare-token-rotation.sh 16
 scripts scripts/test-codex-oauth-restore.sh 1
 scripts scripts/test-credential-channel-affordances.sh 1
 scripts scripts/test-credential-channel-names-a-locked-keyring.sh 6
