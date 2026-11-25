@@ -4961,7 +4961,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # class on a run where the check never executed. A test that checked only
     # the code would have stayed green through the incident.
     _step "Checking a fragment-events check that could not run never claims what it would have found (1021-a944)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-fragment-events-land-callsite.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-fragment-events-land-callsite.lua" 2>&1; then
         _error "the fragment-events could-not-run path regressed (1021-a944) — a gate that cannot RUN a check must never assert what the check would have FOUND"
         exit 1
     fi
@@ -5268,7 +5268,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "promote-stable gate + dry-run fixture passed"
 
     _step "Checking host-identity derivation..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-derive-host-identity.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-derive-host-identity.lua" 2>&1; then
         _error "host identity derivation is wrong — every host's work seed depends on it"
         exit 1
     fi

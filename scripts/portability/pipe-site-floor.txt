@@ -549,7 +549,6 @@ scripts scripts/test-cycle-preflight-cargo-resolution.sh 3
 scripts scripts/test-daily-maintenance-day-boundary.sh 1
 scripts scripts/test-decider-retirement.sh 1
 scripts scripts/test-default-vault-cli-security.sh 4
-scripts scripts/test-derive-host-identity.sh 1
 scripts scripts/test-dispatch-reap.sh 4
 scripts scripts/test-enclave-network-internal-discovery.sh 1
 scripts scripts/test-enclave-proxy-lib.sh 4
@@ -571,7 +570,6 @@ scripts scripts/test-forge-src-budget-report.sh 1
 scripts scripts/test-forge-standard-gitconfig-path.sh 2
 scripts scripts/test-forge-swap-service.sh 6
 scripts scripts/test-fragment-batch-never-collapses-verdicts.sh 1
-scripts scripts/test-fragment-events-land-callsite.sh 8
 scripts scripts/test-fragment-status-loss.sh 7
 scripts scripts/test-freshness-regime-budget.sh 22
 scripts scripts/test-gate-stamp-names-content-movers.sh 5
@@ -580,7 +578,6 @@ scripts scripts/test-gate-step-skip-exit.sh 3
 scripts scripts/test-git-credential-helper.sh 5
 scripts scripts/test-git-mirror-dns-identity.sh 2
 scripts scripts/test-git-mirror-existing-volume-hardening.sh 14
-scripts scripts/test-git-mirror-ref-convergence.sh 1
 scripts scripts/test-git-mirror-relay-token-expiry.sh 6
 scripts scripts/test-git-mirror-vault-agent-auto-auth.sh 18
 scripts scripts/test-github-token-auto-rotation.sh 1

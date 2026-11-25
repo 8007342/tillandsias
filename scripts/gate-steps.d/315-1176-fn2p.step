@@ -22,7 +22,7 @@ STEP_OK="gate memory floor and OOM post-mortem check passed"
 # by name rather than passing. Exit 1 remains a real regression.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="one of the two probes is absent, so neither half could be exercised"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   NC2 structurally: the driver consults the OOM record only on the no-failing-line path"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:gate-memory-refusal:16 arms at ebb2dc29f (the Lua fixture, 2355-ncuh; bash 3.2, relayed by macuahuitl)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="builds with cargo into the shared target; runs the litmus runner (it wipes its runtime dirs)"
 STEP_LANES="cargo litmus"
