@@ -15,7 +15,7 @@ STEP_DESC="Checking the second-regime checker can still discriminate (1302-7j8p 
 STEP_LUA="scripts/lua/test-gate-step-regimes.lua"
 STEP_ERROR="the second-regime checker no longer discriminates (1302-7j8p) — arm 1 unrecorded-is-named, arm 2 recorded-passes, arm 3 linux-only-is-refused, arm 4 named-skip-counts; read which arm failed rather than assuming the records are at fault"
 STEP_OK="second-regime checker discriminates"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:gate-step-regimes-fixture:4/4"
+STEP_SECOND_REGIME="macbookair 2026-11-25 darwin ok:gate-step-regimes-fixture:10 arms"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="drives podman"
 STEP_LANES="podman"
