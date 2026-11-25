@@ -18,7 +18,7 @@
 | 3 init | exit 0, 451 s; Vault recovered its share, kept its data and came up healthy |
 | 3b shutdown | tillandsias-vault under 1 s of 10 s grace, exit 0, not OOM (bash / vault / tee) |
 | 4 lane, default | exit 0 in 120 s; GPU container refused, fell back to CPU by name, lane continued |
-| 4b egress | proxy present in 8 of 8 samples |
+| 4b egress | proxy present in 8 of 9 samples (the first was taken at launch, before bring-up) |
 | 4c health | vault unsealed, proxy and router up, lane-scoped containers gone |
 
 ## Claim checked
