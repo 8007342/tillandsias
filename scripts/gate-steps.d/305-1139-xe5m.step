@@ -13,9 +13,9 @@
 # field discriminates and the proof nothing else does — the capability matrix
 # folds rows from machines nobody can go and ask.
 #
-# STEP_SCRIPT is a LITERAL path (1063-nraf).
+# STEP_LUA is a LITERAL path (1063-nraf).
 STEP_DESC="Checking a capability envelope says whether it was measured or served (1139-xe5m)"
-STEP_SCRIPT="scripts/test-capabilities-envelope-names-its-source.sh"
+STEP_LUA="scripts/lua/test-capabilities-envelope-names-its-source.lua"
 STEP_ERROR="the capability envelope no longer distinguishes a measurement from a replay (1139-xe5m) — a cached document may again be serving a stale provisioning state under a timestamp that is not this run's, and no reader of a folded matrix row can tell; see the verdict line above"
 STEP_OK="capability envelope source check passed"
 # Exit 3 means the product binary is not built — nothing was examined, and the
@@ -31,4 +31,4 @@ STEP_LANES="timing"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/plan-binary-probe.sh scripts/test-capabilities-envelope-names-its-source.sh"
+STEP_READS="scripts/plan-binary-probe.sh scripts/lua/test-capabilities-envelope-names-its-source.lua"
