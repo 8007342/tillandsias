@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: port-metrics-isolation-gate-changed-affinity-git-identity-fixtures-to-lua
+    field: status
+    value: completed
+    ts: "2026-11-25T11:49:27Z"
+    host: lenovinha
+
+events:
+  - packet_id: port-metrics-isolation-gate-changed-affinity-git-identity-fixtures-to-lua
+    event:
+      type: completed
+      ts: "2026-11-25T11:49:27Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: land:8dfe00b4163e1f1f9865370b017da2f3de563dd3
+  - packet_id: port-metrics-isolation-gate-changed-affinity-git-identity-fixtures-to-lua
+    event:
+      type: note
+      ts: "2026-11-25T11:49:27Z"
+      host: lenovinha
+      summary: |-
+        #1544 landed; steps 380 and 842 pass on darwin too (recorded in 2347-dufz).
