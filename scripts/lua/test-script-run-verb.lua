@@ -1,5 +1,5 @@
 -- @trace order:1384-bqhy, order:2375-psb9
--- @env PATH HOME TOOLBOX_PATH container TILLANDSIAS_SKIP_TOOLBOX
+-- @env PATH HOME TOOLBOX_PATH container TILLANDSIAS_SKIP_TOOLBOX TILLANDSIAS_SHARED_TARGET_HELD TILLANDSIAS_SHARED_TARGET CARGO_TARGET_DIR
 --
 -- test-script-run-verb.lua — `tillandsias-plan script run` is the ONE runner for a Lua
 -- decider, and `script classify` the ONE classifier the gate loop and the preflight door both
@@ -41,7 +41,12 @@ local UNSET = { "TILLANDSIAS_*" }
 -- runner's base env drops the first two and env_unset strips the third, so inside a
 -- gate's toolbox arm 5's build.sh re-exec'd into a fresh toolbox and died ("TOOLBOX_PATH
 -- not set", land run 79). Carry whichever the caller has.
-for _, k in ipairs{ "TOOLBOX_PATH", "container", "TILLANDSIAS_SKIP_TOOLBOX" } do
+-- Land run 82 (diagnosed by the status line below): inside the gate each build.sh child ran past
+-- 300 s. The outer gate holds the shared-target flock and exports TILLANDSIAS_SHARED_TARGET_HELD
+-- (scripts/shared-target.sh: "fixtures calling build.sh" inherit the lock through it); env_unset
+-- stripped it, so the nested build.sh waited on its own parent's lock (flock -w 1800). macOS has
+-- no flock, so the shared target is off there and the Mac never showed it.
+for _, k in ipairs{ "TOOLBOX_PATH", "container", "TILLANDSIAS_SKIP_TOOLBOX", "TILLANDSIAS_SHARED_TARGET_HELD", "TILLANDSIAS_SHARED_TARGET", "CARGO_TARGET_DIR" } do
     local v = env.get(k)
     if v and v ~= "" then ENV[k] = v end
 end
