@@ -737,7 +737,6 @@ scripts scripts/test-support/secret-tool-fake.sh 1
 scripts scripts/test-timing-clock-resolution.sh 2
 scripts scripts/test-timing-record-carries-reproduced.sh 2
 scripts scripts/test-timing-record-carries-root.sh 3
-scripts scripts/test-timing-supervisor-lost.sh 2
 scripts scripts/test-token-instrument.sh 2
 scripts scripts/test-tool-dispatch-lib.sh 18
 scripts scripts/test-tool-materialize-litmus-surfaces-arm.sh 3
@@ -748,7 +747,6 @@ scripts scripts/test-tray-asset-placeholder-refused.sh 1
 scripts scripts/test-tray-surface-parity-gate.sh 1
 scripts scripts/test-unrunnable-platform-arms.sh 9
 scripts scripts/test-vault-shutdown-forwards-sigterm.sh 2
-scripts scripts/test-verify-closure.sh 1
 scripts scripts/test-wsl-exec-channel-carries-exit-status.sh 2
 scripts scripts/test-wt-reparse-scan.sh 2
 scripts scripts/tillandsias-cycle-driver.sh 2

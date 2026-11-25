@@ -366,7 +366,6 @@ scripts/test-sync-image-cheatsheets-for-commit.sh
 scripts/test-timing-clock-resolution.sh
 scripts/test-timing-record-carries-reproduced.sh
 scripts/test-timing-record-carries-root.sh
-scripts/test-timing-supervisor-lost.sh
 scripts/test-token-instrument.sh
 scripts/test-tool-dispatch-lib.sh
 scripts/test-tool-dispatch-rejects-unusable-host-tool.sh
@@ -379,11 +378,9 @@ scripts/test-tray-refresh-no-polling.sh
 scripts/test-tray-surface-parity-gate.sh
 scripts/test-uninstall-keeps-models.sh
 scripts/test-uninstall-matcher-spares-bystanders.sh
-scripts/test-uninstall-path-block.sh
 scripts/test-unrunnable-platform-arms.sh
 scripts/test-validator-surface-currency.sh
 scripts/test-vault-shutdown-forwards-sigterm.sh
-scripts/test-verify-closure.sh
 scripts/test-version-bump-isolation-scope.sh
 scripts/test-warm-tier-model.sh
 scripts/test-windows-only-sources-verified.sh
