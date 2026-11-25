@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: eight-a-c-shell-fixtures-ported-to-lua-batch-6
+    order: "2372-snfs"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 6
+    owned_files:
+      - scripts/lua/test-a-claim-names-a-workstation.lua
+      - scripts/lua/test-build-step-timing-attribution.lua
+      - scripts/lua/test-check-log-index-survives-cargo-clean.lua
+      - scripts/lua/test-claims-across-branches.lua
+      - scripts/lua/test-codex-mcp-registration.lua
+      - scripts/lua/test-command-policy-consent.lua
+      - scripts/lua/test-convergence-dashboard.lua
+      - scripts/lua/test-cycle-metrics-recurrence.lua
+    title: "eight a-c shell fixtures ported to Lua (batch 6)"
+    context: |
+      ports: a-claim-names-a-workstation build-step-timing-attribution check-log-index-survives-cargo-clean claims-across-branches codex-mcp-registration command-policy-consent convergence-dashboard cycle-metrics-recurrence.
+      Claimed by yoga before the work. Batch size and 2-3 mutants per fixture by the operator's rule relayed 2026-11-25.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its main assertions are mutated; callers run the .lua; the eight .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by gate steps and litmus tests"
+    provenance: "coordinator queue 2026-11-25 (test-[a-c]* range), yoga"
+    related: [2367-wtse]
+    events:
+      - {type: claimed, ts: "2026-11-25T17:38:40Z", host: yoga, summary: "claimed; work ref work/2372-snfs"}
