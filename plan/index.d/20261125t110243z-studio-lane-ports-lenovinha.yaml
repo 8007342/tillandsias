@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-studio-decap-tina-puck-fixtures-to-lua
+    order: 2347-dufz
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, podman]
+    estimated_hours: 3
+    title: |
+      Three whole-file shell-to-Lua ports: test-studio-decap.sh, test-studio-tina.sh and test-studio-puck.sh become scripts/lua/*.lua, verified with podman.
+    context: |
+      Coordinator queue 2026-11-25, after 2344-zk8r. yolanda keeps the Puck lane and asked for the Puck fixture port here: only the fixture and its litmus lines change, and #1160 merges over it.
+      ports: scripts/test-studio-decap.sh scripts/test-studio-tina.sh scripts/test-studio-puck.sh
+      No origin/work/* ref modifies or deletes any of the three (checked against every ref, 2026-11-25).
+    exit_criteria:
+      - "each .lua gives the same verdict as its .sh with the real image built, and the same red arm as the .sh under a mutant of the image sources"
+      - "every litmus runs the .lua; the three .sh files are deleted"
+    unscoreable: "unpinnable-until-the-guard-exists: the mutant parity is the deliverable."
+    next_action: "Port, run on lenovinha's podman, mutant-parity each, rewire three litmus files, delete the .sh."
+    provenance: coordinator queue; filed by lenovinha.
+    related: [1862-wrx5, 1863-dmke, 1864-ay3x]
+    events:
+      - {type: filed, ts: '2026-11-25T11:02:43Z', host: lenovinha, summary: studio lane fixture ports filed}
