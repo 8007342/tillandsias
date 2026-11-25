@@ -29,7 +29,8 @@
 //! figures an agent reads are computed for the host that serves them.
 //!
 //! The admitted job runs in the submitting lane's forge (`podman exec`, the
-//! argv as given, no shell). The 2081-v7qx watch registry has not landed; when
+//! argv as given, no shell), with [`JOB_ENV`] and nothing else added to the
+//! container's environment. The 2081-v7qx watch registry has not landed; when
 //! it does, an admitted job registers there, and [`JobQueue::may_restart`] is
 //! the run-once rule the watch must consult.
 // Critical, swap_free and the live launch path are read by 2094-mzap and in
@@ -42,6 +43,76 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 const GIB: u64 = 1 << 30;
+
+/// The forge environment a queued job gets. `podman exec` starts it with the
+/// image's environment alone: what the lane's entrypoint exports (lib-common.sh)
+/// reaches the agent and its children only, so a job ran with
+/// CARGO_HOME=/usr/local/cargo (unwritable) and no TILLANDSIAS_HOST_KIND
+/// (2329-at6p). An ALLOWLIST of fixed, non-secret values, never inheritance: the
+/// agent's environment can hold credentials. The fixture below holds it to
+/// lib-common.sh's project-cache exports.
+pub(crate) const JOB_ENV: &[(&str, &str)] = &[
+    ("TILLANDSIAS_HOST_KIND", "forge"),
+    (
+        "TILLANDSIAS_PROJECT_CACHE",
+        "/home/forge/.cache/tillandsias-project",
+    ),
+    ("CARGO_HOME", "/home/forge/.cache/tillandsias-project/cargo"),
+    (
+        "CARGO_TARGET_DIR",
+        "/home/forge/.cache/tillandsias-project/cargo/target",
+    ),
+    ("RUSTUP_HOME", "/usr/local/rustup"),
+    ("TMPDIR", "/home/forge/.cache/tillandsias-project/tmp"),
+    ("GOPATH", "/home/forge/.cache/tillandsias-project/go"),
+    (
+        "GOMODCACHE",
+        "/home/forge/.cache/tillandsias-project/go/pkg/mod",
+    ),
+    (
+        "GRADLE_USER_HOME",
+        "/home/forge/.cache/tillandsias-project/gradle",
+    ),
+    ("PUB_CACHE", "/home/forge/.cache/tillandsias-project/pub"),
+    (
+        "npm_config_cache",
+        "/home/forge/.cache/tillandsias-project/npm",
+    ),
+    (
+        "NPM_CONFIG_PREFIX",
+        "/home/forge/.cache/tillandsias-project/npm/global",
+    ),
+    (
+        "YARN_CACHE_FOLDER",
+        "/home/forge/.cache/tillandsias-project/yarn",
+    ),
+    (
+        "PLAYWRIGHT_BROWSERS_PATH",
+        "/home/forge/.cache/tillandsias-project/ms-playwright",
+    ),
+    ("PNPM_HOME", "/home/forge/.cache/tillandsias-project/pnpm"),
+    ("UV_CACHE_DIR", "/home/forge/.cache/tillandsias-project/uv"),
+    (
+        "UV_PYTHON_INSTALL_DIR",
+        "/home/forge/.cache/tillandsias-project/uv-python",
+    ),
+    (
+        "PIP_CACHE_DIR",
+        "/home/forge/.cache/tillandsias-project/pip",
+    ),
+];
+
+/// The `podman` arguments that start a job's argv in its lane's forge.
+pub(crate) fn exec_args(checkout: &str, forge_id: &str, argv: &[String]) -> Vec<String> {
+    let mut args: Vec<String> = vec!["exec".into(), "-w".into(), checkout.into()];
+    for (name, value) in JOB_ENV {
+        args.push("-e".into());
+        args.push(format!("{name}={value}"));
+    }
+    args.push(forge_id.into());
+    args.extend(argv.iter().cloned());
+    args
+}
 
 /// The policy file, compiled in so the figures cannot go missing at run time.
 const POLICY_TOML: &str = include_str!("job_classes.toml");
@@ -1243,13 +1314,11 @@ pub(crate) mod live {
             let outcome = crate::local_web_preview::resolve_live_source(project, instance)
                 .and_then(|lane| {
                     let mut cmd = tillandsias_podman::podman_cmd_sync();
-                    cmd.args([
-                        "exec",
-                        "-w",
+                    cmd.args(exec_args(
                         &crate::studio::checkout_dir(project),
                         &lane.forge_id,
-                    ])
-                    .args(&job.argv)
+                        &job.argv,
+                    ))
                     .stdin(std::process::Stdio::null())
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null());
@@ -1305,6 +1374,50 @@ mod tests {
             .filter(|j| j.state == State::Running)
             .map(|j| j.name.clone())
             .collect()
+    }
+
+    /// 2329-at6p: the job starts with the forge's cache paths and host kind, and
+    /// its argv still follows the container name untouched.
+    #[test]
+    fn a_job_starts_with_the_forge_environment() {
+        let argv: Vec<String> = ["cargo", "test", "-e", "X=1"].map(String::from).to_vec();
+        let args = exec_args("/home/forge/src/p", "forge-id", &argv);
+        assert_eq!(args[..3], ["exec", "-w", "/home/forge/src/p"]);
+        let at = args.iter().position(|a| a == "forge-id").unwrap();
+        assert_eq!(args[at + 1..], argv[..]);
+        for want in [
+            "CARGO_HOME=/home/forge/.cache/tillandsias-project/cargo",
+            "CARGO_TARGET_DIR=/home/forge/.cache/tillandsias-project/cargo/target",
+            "RUSTUP_HOME=/usr/local/rustup",
+            "TMPDIR=/home/forge/.cache/tillandsias-project/tmp",
+            "TILLANDSIAS_HOST_KIND=forge",
+        ] {
+            let i = args[..at].iter().position(|a| a == want);
+            assert!(i.is_some_and(|i| args[i - 1] == "-e"), "{want}: {args:?}");
+        }
+    }
+
+    /// 2329-at6p: the table is lib-common.sh's project-cache exports, value for
+    /// value. MAVEN_OPTS and PATH extend a value the container already has, so
+    /// they cannot be fixed values here. NEGATIVE CONTROL: nothing outside those
+    /// exports but the host kind and the rustup root, so no credential can be in it.
+    #[test]
+    fn the_job_environment_is_the_entrypoints_cache_block() {
+        const LIB: &str = include_str!("../../../images/default/lib-common.sh");
+        const CACHE: &str = "/home/forge/.cache/tillandsias-project";
+        assert!(LIB.contains(&format!("\nPROJECT_CACHE=\"{CACHE}\"\n")));
+        let mut want: BTreeMap<&str, String> = LIB
+            .lines()
+            .filter_map(|l| l.strip_prefix("export ")?.split_once("=\"$PROJECT_CACHE"))
+            .filter_map(|(k, v)| Some((k, format!("{CACHE}{}", v.strip_suffix('"')?))))
+            .collect();
+        assert!(want.len() > 10, "the extractor found {}", want.len());
+        assert!(LIB.contains("\nexport RUSTUP_HOME=\"/usr/local/rustup\"\n"));
+        want.insert("RUSTUP_HOME", "/usr/local/rustup".into());
+        want.insert("TILLANDSIAS_HOST_KIND", "forge".into());
+        let got: BTreeMap<&str, String> =
+            JOB_ENV.iter().map(|(k, v)| (*k, v.to_string())).collect();
+        assert_eq!(got, want);
     }
 
     /// On 16 GiB a build reserves 4 GiB and the floor is 4 GiB: 8.5 GiB free
