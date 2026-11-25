@@ -1,7 +1,10 @@
 # @trace spec:tillandsias-vault
 name: litmus:vault-auto-unseal-no-prompt
 spec: tillandsias-vault
-phase: 6.5
+# RETIRED (2357-5quw, 2026-11-25): its commands no longer exist. start-vm-headless, wait-vm-ready, vm-exec and
+# replay-audit-log were cargo examples of tillandsias-host-shell, which has none. It ran in no phase
+# and is unbound; a real one is filed (no-passphrase-prompt-ever, unseal-key-tmpfs-only).
+phase: retired
 description: >
   VM boots, vault container auto-unseals from host-OS-keychain-stored key,
   and 'vault status' reports sealed=false within 5s of vault container start.
