@@ -8,7 +8,10 @@
 --   ARM 2  a smoke skill with the fixed one-turn prompt                           -> ok
 --   ARM 3  a NON-smoke skill launching the loop (meta-orchestration's own home)   -> not judged
 --   ARM 4  no smoke skill at all                                                  -> could-not-run, never ok
--- and ARM 5 checks the live skills/ tree as it stands.
+-- ARM 5 checks the live skills/ tree as it stands. ARMS 6-8 (2333-kaf2) run each
+-- live file's own answer check, cut from its text, over the recorded logs: the
+-- refusal sentence that named the token (lenovinha, v56.11.24.1), the token in a
+-- sentence, no token, and the real answer.
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-smoke-agent-prompt-is-minimal.lua [-- --plan <bin>]
 
@@ -81,6 +84,29 @@ arm("no smoke skill reads could-not-run, not ok", c4 == 3
 -- ARM 5: the live tree.
 local c5, o5 = check(ROOT .. "/skills")
 arm("the live skills/ tree passes", c5 == 0 and o5:find("ok:smoke-agent-prompt:skills=", 1, true) ~= nil, "code=" .. tostring(c5) .. " " .. o5)
+
+-- ARMS 6-8: the answer check in each live file.
+local LOGS = {
+    { "refusal", "I can't append `SMOKE-AGENT-OK` — that string attests success, but the check's last line is a blocker.\n", false },
+    { "in a sentence", "done: SMOKE-AGENT-OK\n", false },
+    { "with a suffix", "SMOKE-AGENT-OK-NOT\n", false },
+    { "no token", "blocked:upstream-push-unauthorized\n", false },
+    { "the answer", "some line\n  SMOKE-AGENT-OK \r\n", true },
+}
+for _, f in ipairs({ "run_smoke.sh", "skills/build-install-and-smoke-test-e2e/SKILL.md", "skills/smoke-curl-install-and-test-e2e/SKILL.md" }) do
+    local body, why, n = fs.read(f), {}, 0
+    local flags, expr
+    for a, b in body:gmatch("grep (%-%w+) '([^'\n]*SMOKE%-AGENT%-OK[^'\n]*)'") do n = n + 1; flags, expr = a, b end
+    if n ~= 1 then why[1] = n .. " answer checks, want 1"
+    else
+        for _, l in ipairs(LOGS) do
+            local r = run({ "grep", flags, expr }, { stdin = l[2] })
+            if (r.code == 0) ~= l[3] then why[#why + 1] = l[1] .. " rc=" .. tostring(r.code) end
+        end
+    end
+    if not body:find("print it whatever the check said", 1, true) then why[#why + 1] = "the prompt does not say the token reports the turn" end
+    arm(f .. ": only the token alone on a line is an answer", #why == 0, table.concat(why, "; "))
+end
 
 if fails > 0 then verdict.refused("smoke-agent-prompt-fixture", fails .. "-of-" .. arms .. "-arms-failed") end
 verdict.ok("smoke-agent-prompt-fixture:" .. arms)
