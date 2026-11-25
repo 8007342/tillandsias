@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-plan-mcp-answers-nothing-on-bash-3-2-for-an-empty-argument-array
+    field: status
+    value: completed
+    ts: "2026-11-25T20:11:35Z"
+    host: lenovinha
+
+events:
+  - packet_id: forge-plan-mcp-answers-nothing-on-bash-3-2-for-an-empty-argument-array
+    event:
+      type: completed
+      ts: "2026-11-25T20:11:35Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: land:1696e603fff2dab4937f164863136cfc9a2633e1
+  - packet_id: forge-plan-mcp-answers-nothing-on-bash-3-2-for-an-empty-argument-array
+    event:
+      type: note
+      ts: "2026-11-25T20:11:35Z"
+      host: lenovinha
+      summary: |-
+        #1575 landed; darwin fleet-msg-mcp 9/9 (macbookair, relayed by macuahuitl)
