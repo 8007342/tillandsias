@@ -68,7 +68,6 @@ scripts/test-exec-bits-guard-end-to-end.sh 1
 scripts/test-expire-claims-list-live-rows.sh 1
 scripts/test-expire-claims-write-is-opt-in.sh 1
 scripts/test-fake-cloudflare.sh 1
-scripts/test-fixture-git-dir-scope.sh 1
 scripts/test-fleet-msg-store.sh 1
 scripts/test-forge-gitconfig-bidirectional-quarantine.sh 1
 scripts/test-forge-runtime-ca-trust.sh 1
@@ -78,11 +77,9 @@ scripts/test-fragment-batch-never-collapses-verdicts.sh 1
 scripts/test-fragment-status-loss.sh 1
 scripts/test-gate-memory-wsl2-guest.sh 1
 scripts/test-gate-stamp-memoization.sh 1
-scripts/test-gate-stamp-scope.sh 1
 scripts/test-gate-stamp.sh 1
 scripts/test-git-credential-helper.sh 1
 scripts/test-git-mirror-existing-volume-hardening.sh 1
-scripts/test-git-mirror-ref-convergence.sh 1
 scripts/test-git-mirror-relay-token-expiry.sh 1
 scripts/test-git-mirror-vault-agent-auto-auth.sh 1
 scripts/test-groundtruth-corpus-declaration.sh 3

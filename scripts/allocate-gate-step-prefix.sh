@@ -6,7 +6,7 @@
 #
 # WHY. scripts/gate-steps.d/NNN-<order>.step files are ordered by a scarce
 # integer prefix chosen at authoring time, and the gate's own fixture
-# (test-gate-step-append-no-conflict.sh, arm 7) refuses a tree where two
+# (test-gate-step-append-no-conflict.lua, arm 7) refuses a tree where two
 # files share one — the spacing exists so a later step can land between
 # two without renaming either, and a doubly-occupied slot loses that gap.
 # The skill's advice was "pick the prefix after the integrate"; MEASURED
