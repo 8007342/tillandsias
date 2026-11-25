@@ -724,9 +724,11 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     # runs a gh auth command (1025-a896). The delay is overridable so the
     # fixture (scripts/lua/test-land-auth-retry.lua) does not wait.
     _auth_retried=0
+    # LANGUAGE=en (2281-amjg): the verdicts below match git's English. Not LC_ALL=C:
+    # the push runs the hooks, and their character handling must not change.
     while :; do
     if [ -n "$_bounder" ]; then
-        "$_bounder" "$_push_timeout" git push origin "HEAD:refs/heads/$BRANCH" > "$_plog" 2>&1
+        LANGUAGE=en "$_bounder" "$_push_timeout" git push origin "HEAD:refs/heads/$BRANCH" > "$_plog" 2>&1
         rc=$?
     else
         # No coreutils timeout (some macOS hosts without gnu-coreutils): do not
@@ -739,7 +741,7 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         # better than silence, but it is not a fix, and the packet says so.
         echo "land: warn — no 'timeout' or 'gtimeout' found; push is UNBOUNDED on this host (1131-iax2)" >&2
         echo "land:        install GNU coreutils to bound it: brew install coreutils" >&2
-        git push origin "HEAD:refs/heads/$BRANCH" > "$_plog" 2>&1
+        LANGUAGE=en git push origin "HEAD:refs/heads/$BRANCH" > "$_plog" 2>&1
         rc=$?
     fi
     if [ "$rc" -ne 0 ] && [ "$_auth_retried" -eq 0 ] \
