@@ -297,7 +297,6 @@ scripts/test-running-image-freshness.sh
 scripts/test-rust-source-pin-added.sh
 scripts/test-salvage-audit.sh
 scripts/test-salvage-net.sh
-scripts/test-salvage-preserves-exec-bits.sh
 scripts/test-salvage-refs-ledger.sh
 scripts/test-scorable-closure-quoting.sh
 scripts/test-scorable-obligation-gate.sh
@@ -308,7 +307,6 @@ scripts/test-seam-writers-canonical.sh
 scripts/test-secrets.sh
 scripts/test-selector-drops-cross-branch-claims.sh
 scripts/test-selector-flags-host-scoped-criteria.sh
-scripts/test-session-tokens.sh
 scripts/test-set-field-prose-guard.sh
 scripts/test-set-field-refuses-unknown-flags.sh
 scripts/test-set-field-yaml-shapes.sh
@@ -323,7 +321,6 @@ scripts/test-skills-single-source.sh
 scripts/test-smoke-agent-watch.sh
 scripts/test-smoke-evidence-dir-is-fresh.sh
 scripts/test-smoke-forge-lane-cold-host-outcome.sh
-scripts/test-smoke-skill-reset-env-matches-policy.sh
 scripts/test-smoke-verifies-a-signature.sh
 scripts/test-spawn-failure-names-program.sh
 scripts/test-spec-index-durable-tier-demotion.sh

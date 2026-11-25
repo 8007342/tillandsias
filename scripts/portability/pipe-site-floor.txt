@@ -293,7 +293,6 @@ litmus openspec/litmus-tests/litmus-skills-canonical-and-mcp-first-shape.yaml 1
 litmus openspec/litmus-tests/litmus-smoke-agent-watch-shape.yaml 1
 litmus openspec/litmus-tests/litmus-smoke-consecutive-lanes-shape.yaml 1
 litmus openspec/litmus-tests/litmus-smoke-release-channel-shape.yaml 2
-litmus openspec/litmus-tests/litmus-smoke-skill-reset-env-matches-policy.yaml 1
 litmus openspec/litmus-tests/litmus-socket-cleanup.yaml 2
 litmus openspec/litmus-tests/litmus-spawn-failure-names-program.yaml 3
 litmus openspec/litmus-tests/litmus-spec-script-paths.yaml 1
@@ -697,7 +696,6 @@ scripts scripts/test-seam-writers-canonical.sh 7
 scripts scripts/test-secrets.sh 7
 scripts scripts/test-selector-drops-cross-branch-claims.sh 6
 scripts scripts/test-selector-flags-host-scoped-criteria.sh 4
-scripts scripts/test-session-tokens.sh 2
 scripts scripts/test-set-field-prose-guard.sh 1
 scripts scripts/test-set-field-refuses-unknown-flags.sh 8
 scripts scripts/test-set-field-yaml-shapes.sh 1
