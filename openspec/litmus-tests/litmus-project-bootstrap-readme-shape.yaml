@@ -19,8 +19,18 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "readme-discipline contract present"
 
+  - step: "negative control: the Lua validator must FAIL on an undisciplined README (openspec/litmus-tests has a plain one)"
+    command: "out=$(\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-readme-discipline.lua -- openspec/litmus-tests 2>&1); rc=$?; case \"$out\" in *violation:readme-discipline:*) [ \"$rc\" -ne 0 ] && echo 'validator refuses an undisciplined readme' ;; *) echo \"no violation verdict: $out\"; exit 1 ;; esac"
+    timeout_ms: 30000
+    expected_behavior: "validator refuses an undisciplined readme"
+
+  - step: "verify no live file still names the deleted shell validator (1779-udga)"
+    command: "if git grep -n 'check-readme-discipline[.]sh' -- . ':!plan' ':!openspec/changes/archive'; then echo 'refused:readme-validator-shell-mention'; exit 1; fi; echo 'no shell validator mention'"
+    timeout_ms: 10000
+    expected_behavior: "no shell validator mention"
+
   - step: "verify the cheatsheet documents the summarizer interface and validator exit codes"
-    command: "grep -Fq 'summarize-cargo.sh' cheatsheets/welcome/readme-discipline.md && grep -Fq 'check-readme-discipline.sh' cheatsheets/welcome/readme-discipline.md && grep -Fq 'requires_cheatsheets' cheatsheets/welcome/readme-discipline.md && echo 'readme-discipline interface present'"
+    command: "grep -Fq 'summarize-cargo.sh' cheatsheets/welcome/readme-discipline.md && grep -Fq 'check-readme-discipline.lua' cheatsheets/welcome/readme-discipline.md && grep -Fq 'requires_cheatsheets' cheatsheets/welcome/readme-discipline.md && echo 'readme-discipline interface present'"
     timeout_ms: 10000
     expected_behavior: "readme-discipline interface present"
 
