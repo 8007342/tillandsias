@@ -125,7 +125,6 @@ scripts/test-enclave-service-health.sh
 scripts/test-ensure-cosign.sh
 scripts/test-ensure-toolbox-properties.sh
 scripts/test-exec-bits-guard-end-to-end.sh
-scripts/test-expert-capability-behaviour-skew.sh
 scripts/test-expire-claims-list-live-rows.sh
 scripts/test-expire-claims-reads-the-status-write.sh
 scripts/test-expire-claims-write-is-opt-in.sh
@@ -140,7 +139,6 @@ scripts/test-forge-findings-persisted.sh
 scripts/test-forge-git-identity-source.sh
 scripts/test-forge-gitconfig-bidirectional-quarantine.sh
 scripts/test-forge-launch-openspec-init-clean.sh
-scripts/test-forge-liveness-probe.sh
 scripts/test-forge-localization-staged.sh
 scripts/test-forge-project-guard-hooks.sh
 scripts/test-forge-project-trust-seeds.sh
@@ -155,7 +153,6 @@ scripts/test-fragment-events-land-callsite.sh
 scripts/test-fragment-status-loss-row-boundary.sh
 scripts/test-fragment-status-loss.sh
 scripts/test-freshness-regime-budget.sh
-scripts/test-gate-divergence-is-declared.sh
 scripts/test-gate-fast-refusals.sh
 scripts/test-gate-memory-refusal.sh
 scripts/test-gate-memory-wsl2-guest.sh

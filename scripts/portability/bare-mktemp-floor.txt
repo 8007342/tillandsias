@@ -67,7 +67,6 @@ scripts/test-default-vault-cli-security.sh 1
 scripts/test-e2e-preflight-live-runtime.sh 2
 scripts/test-enclave-network-internal-discovery.sh 2
 scripts/test-exec-bits-guard-end-to-end.sh 1
-scripts/test-expert-capability-behaviour-skew.sh 1
 scripts/test-expire-claims-list-live-rows.sh 1
 scripts/test-expire-claims-write-is-opt-in.sh 1
 scripts/test-fake-cloudflare.sh 1
