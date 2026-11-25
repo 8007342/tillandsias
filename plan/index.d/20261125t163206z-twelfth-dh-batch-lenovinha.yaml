@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-nine-fleet-msg-podman-vault-and-gate-stamp-fixtures-to-lua
+    order: "2368-efqj"
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, podman]
+    estimated_hours: 6
+    title: |
+      Nine whole-file shell-to-Lua ports, test-fleet-msg-mcp.sh first (its bash-4 coproc is a syntax error on macOS).
+    context: |
+      Coordinator queue 2026-11-25, under the operator's new cleanup rules (8-10 ports per PR, 2-3 mutants per fixture). Twelfth batch, after 2360-ud6i.
+      ports: scripts/test-fleet-msg-mcp.sh scripts/test-fleet-msg-store.sh scripts/test-fleet-msg-same-host.sh scripts/test-forge-standard-gitconfig-path.sh scripts/test-forge-gitconfig-bidirectional-quarantine.sh scripts/test-git-mirror-dns-identity.sh scripts/test-forge-runtime-ca-trust.sh scripts/test-default-vault-cli-security.sh scripts/test-gate-stamp.sh
+      No origin/work/* ref modifies or deletes any of the nine (checked against every ref, 2026-11-25).
+    exit_criteria:
+      - "each .lua gives the same verdict as its .sh on the trunk tree, and the same red arm as the .sh under two or three mutants of its main assertions"
+      - "every caller runs the .lua; the nine .sh files are deleted"
+      - "test-fleet-msg-mcp.lua drives its long-lived server through two pipes with no bash 4 feature"
+    unscoreable: "unpinnable-until-the-guard-exists: the mutant parity is the deliverable."
+    next_action: "Port, mutants, rewire the litmus files and the two readers, delete the .sh. Any fixture that cannot be ported well is dropped from the batch and named."
+    provenance: coordinator queue; filed by lenovinha.
+    related: [2360-ud6i]
+    events:
+      - {type: filed, ts: '2026-11-25T16:32:06Z', host: lenovinha, summary: twelfth d-h batch filed}
