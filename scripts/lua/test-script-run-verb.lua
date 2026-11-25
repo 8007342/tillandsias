@@ -88,20 +88,25 @@ local function mkroot(leaf)
 end
 local function gate(abs)
     local r = T:run{ "./build.sh", "--gate-steps", abs, cwd = ROOT, env = ENV, env_unset = UNSET, timeout_ms = 300000 }
-    return r.code, (r.stdout or "") .. (r.stderr or "")
+    -- No code means the child never exited on its own: refused at spawn, timed out, or
+    -- signalled. Name which, so a red in a gate (land run 80: rc=nil, empty output)
+    -- carries its cause instead of an empty tail.
+    local why = r.code == nil and (" [status=" .. tostring(r.status) .. " why=" .. tostring(r.why)
+        .. " signal=" .. tostring(r.signal) .. "]") or ""
+    return r.code, (r.stdout or "") .. (r.stderr or ""), why
 end
 local R = mkroot("root-ok")
 fs.write(R .. "/scripts/lua/fixture-step.lua", 'verdict.ok("fixture-lua-step", 7)\n')
 fs.write(R .. "/scripts/gate-steps.d/100-lua.step",
     'STEP_DESC="a Lua step"\nSTEP_LUA="scripts/lua/fixture-step.lua"\nSTEP_ERROR="lua step failed"\nSTEP_OK="lua step passed"\n')
-local r5, o5 = gate(W.abs .. "/root-ok")
+local r5, o5, w5 = gate(W.abs .. "/root-ok")
 local R2 = mkroot("root-missing")
 fs.write(R2 .. "/scripts/gate-steps.d/100-lua.step", 'STEP_DESC="a missing Lua step"\nSTEP_LUA="scripts/lua/absent.lua"\n')
-local r5m, o5m = gate(W.abs .. "/root-missing")
+local r5m, o5m, w5m = gate(W.abs .. "/root-missing")
 local R3 = mkroot("root-both")
 fs.write(R3 .. "/scripts/lua/both.lua", 'verdict.ok("both")\n'); fs.write(R3 .. "/scripts/both.sh", "echo ok:both\n")
 fs.write(R3 .. "/scripts/gate-steps.d/100-both.step", 'STEP_DESC="both"\nSTEP_LUA="scripts/lua/both.lua"\nSTEP_SCRIPT="scripts/both.sh"\n')
-local r5b, o5b = gate(W.abs .. "/root-both")
+local r5b, o5b, w5b = gate(W.abs .. "/root-both")
 local tail = {}
 local l5 = text.lines(o5)
 for i = math.max(1, #l5 - 2), #l5 do tail[#tail + 1] = l5[i] end
@@ -109,7 +114,7 @@ T:arm("ARM 5: build.sh's loop runs a STEP_LUA-only step and shows its verdict; a
     r5 == 0 and text.contains(o5, "ok:fixture-lua-step:7")
         and r5m ~= 0 and text.contains(o5m, "absent.lua, which does not exist")
         and r5b ~= 0 and text.contains(o5b, "names both STEP_SCRIPT and STEP_LUA"),
-    "ok-root rc=" .. tostring(r5) .. " missing rc=" .. tostring(r5m) .. " both rc=" .. tostring(r5b)
+    "ok-root rc=" .. tostring(r5) .. w5 .. " missing rc=" .. tostring(r5m) .. w5m .. " both rc=" .. tostring(r5b) .. w5b
         .. "; ok-root tail: " .. table.concat(tail, "|"))
 
 -- ARM 6: timing goes where it is told, and never to /tmp (outside the repo: no fs.*).
