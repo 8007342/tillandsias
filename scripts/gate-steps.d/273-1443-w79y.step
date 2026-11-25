@@ -10,7 +10,7 @@ STEP_DESC="Checking the branch-discipline seed and verb (1443-w79y)"
 STEP_LUA="scripts/lua/test-branch-discipline-verb.lua"
 STEP_ERROR="the discipline verb stopped answering from the seed, refused a level-0 project, lost the seeded message or digest, accepted a bad seed, or the MCP tool diverged (1443-w79y) — see the verdict line above"
 STEP_OK="Branch discipline verb passed"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-27 darwin ok:branch-discipline-verb:6/6"
+STEP_SECOND_REGIME="macbookair 2026-11-25 darwin ok:branch-discipline-verb:15 arms"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.

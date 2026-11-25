@@ -457,7 +457,7 @@ rm -f "$query_err"
 # only ready packets are tier-reserved held a frontier slot no routed host could
 # serve, and the host on that slot walked onto slot 1: measured 2026-10-12,
 # local-telemetry-for-bottleneck-finding-milestone (one low-end packet) put 8
-# hosts on 7 epics, which test-capability-routing.sh case 1 refused.
+# hosts on 7 epics, which test-capability-routing.lua case 1 refused.
 
 # select-rows already applied: status ready, role claimability, release,
 # dependency-clearance (unresolvable ids count as BLOCKING, matching the

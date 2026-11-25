@@ -29,7 +29,7 @@ preconditions:
 
 critical_path:
   - step: "macOS-plausible scripts digest only through the portable dispatch"
-    command: "bad=0; for f in scripts/test-gate-stamp-memoization.sh scripts/spec-index-ensure.sh scripts/hash-image-sources.sh scripts/test-release-asset-integrity.sh scripts/forge-diagnostics-annex.sh scripts/test-build-sh-ci-full-install-prep.sh scripts/host-capability-probe.sh; do grep -n 'sha256sum' \"$f\" | grep -v 'PORTABLE_SHA256' | grep -v 'command -v' | grep -v 'shasum' | grep -vE '^[0-9]+:[[:space:]]*#' | grep . && { echo \"FAIL: bare digest in $f\"; bad=1; }; done; [ \"$bad\" -eq 0 ] && echo 'ok: dispatch-only'"
+    command: "bad=0; for f in scripts/test-gate-stamp-memoization.sh scripts/spec-index-ensure.sh scripts/hash-image-sources.sh scripts/test-release-asset-integrity.sh scripts/forge-diagnostics-annex.sh scripts/host-capability-probe.sh; do grep -n 'sha256sum' \"$f\" | grep -v 'PORTABLE_SHA256' | grep -v 'command -v' | grep -v 'shasum' | grep -vE '^[0-9]+:[[:space:]]*#' | grep . && { echo \"FAIL: bare digest in $f\"; bad=1; }; done; [ \"$bad\" -eq 0 ] && echo 'ok: dispatch-only'"
     timeout_ms: 10000
     expected_behavior: "ok: dispatch-only"
 

@@ -75,7 +75,7 @@ done
 # a comma does not fail to match — it TRUNCATES: prefill_tok_s=100,00 is read as
 # 100, and prefill_range=1512,00-2195,00 as 1512-2195. The numbers still look
 # like numbers, the harness still exits 0, and the published figure is wrong by
-# whatever the decimals carried. scripts/test-bench-prompt-uniqueness.sh caught
+# whatever the decimals carried. scripts/lua/test-bench-prompt-uniqueness.lua caught
 # it here only because it compares against the exact string "100.00".
 #
 # C for the WHOLE script, not per-awk: sort, printf and any later numeric

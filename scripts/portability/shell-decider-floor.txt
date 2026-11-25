@@ -61,15 +61,9 @@ scripts/check-tracked-files-unwritten.sh
 scripts/check-unrunnable-platform-arms.sh
 scripts/check-yaml-reader-availability.sh
 scripts/test-a-claim-names-a-workstation.sh
-scripts/test-append-event-archived-refusal.sh
-scripts/test-append-vs-origin-fold.sh
-scripts/test-archiver-ruby-could-not-run.sh
 scripts/test-awk-float-lc-numeric.sh
-scripts/test-bench-prompt-uniqueness.sh
 scripts/test-build-image-installed-version-alias.sh
-scripts/test-build-sh-ci-full-install-prep.sh
 scripts/test-build-step-timing-attribution.sh
-scripts/test-capability-routing.sh
 scripts/test-capture-helper.sh
 scripts/test-change-class.sh
 scripts/test-check-bash-dialect.sh
@@ -86,7 +80,6 @@ scripts/test-codex-mcp-registration.sh
 scripts/test-codex-oauth-restore.sh
 scripts/test-codex-safe-state.sh
 scripts/test-command-policy-consent.sh
-scripts/test-command-policy-evaluator.sh
 scripts/test-concurrent-forge-shared-stack.sh
 scripts/test-convergence-dashboard.sh
 scripts/test-credential-channel-affordances.sh
@@ -95,7 +88,6 @@ scripts/test-credential-channel-names-a-locked-keyring.sh
 scripts/test-credential-channel-survives-a-killed-probe.sh
 scripts/test-credential-verdict-script.sh
 scripts/test-cycle-checkout-lock.sh
-scripts/test-cycle-lock-attested-release.sh
 scripts/test-cycle-metrics-recurrence.sh
 scripts/test-cycle-preflight-cargo-resolution.sh
 scripts/test-daily-maintenance-day-boundary.sh
@@ -155,10 +147,7 @@ scripts/test-installers-quiet-progress.sh
 scripts/test-join-the-fleet-idempotent.sh
 scripts/test-json-query-jq-parity.sh
 scripts/test-land-gate-refusal-names-its-step.sh
-scripts/test-land-merges-trunk.sh
-scripts/test-land-push-bounded.sh
 scripts/test-land-queue.sh
-scripts/test-land-verdict-through-a-pipe.sh
 scripts/test-ledger-node-claim-resolution.sh
 scripts/test-ledger-prose-roundtrip.sh
 scripts/test-ledger-write-reaches-its-reader.sh
@@ -175,15 +164,12 @@ scripts/test-litmus-podman-preflight-diagnosis.sh
 scripts/test-litmus-podman-preflight-trigger.sh
 scripts/test-litmus-runner-reads-without-jq.sh
 scripts/test-litmus-runner-reports-rc.sh
-scripts/test-litmus-step-model.sh
 scripts/test-litmus-step-pipefail.sh
 scripts/test-litmus-structured-assert.sh
 scripts/test-litmus-terminal-verdict.sh
 scripts/test-litmus-tracked-file-kill-safety.sh
 scripts/test-loop-status-append-input.sh
-scripts/test-lww-channel-consumers.sh
 scripts/test-macos-vsock-inference-closure.sh
-scripts/test-mcp-run-command-tool.sh
 scripts/test-mcp-transport-death-trace.sh
 scripts/test-memo-hit-observability.sh
 scripts/test-metrics-log-fallback-is-loud.sh
@@ -199,7 +185,6 @@ scripts/test-must-ship-rows.sh
 scripts/test-nix-cache-service.sh
 scripts/test-nix-toolbox.sh
 scripts/test-no-competing-gate.sh
-scripts/test-opencode-entrypoint-prompt.sh
 scripts/test-opencode-render-probe.sh
 scripts/test-opencode-vault-auth-content.sh
 scripts/test-openspec-pin.sh
