@@ -1103,8 +1103,8 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
 
     # ============================================================================
     log_section "CentiColon Advisory R Line (1395-ue3i)"
-    if [[ -f "scripts/test-centicolon-ratchet.sh" ]]; then
-        if bash scripts/test-centicolon-ratchet.sh > /tmp/test-centicolon-ratchet.log 2>&1; then
+    if [[ -f "scripts/lua/test-centicolon-ratchet.lua" ]]; then
+        if "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" script run scripts/lua/test-centicolon-ratchet.lua > /tmp/test-centicolon-ratchet.log 2>&1; then
             log_pass "CentiColon Advisory R Line holds"
             archive_check_log "centicolon-ratchet" "pass" /tmp/test-centicolon-ratchet.log
         else
@@ -1113,7 +1113,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "centicolon-ratchet" "fail" /tmp/test-centicolon-ratchet.log
         fi
     else
-        log_fail_missing_guard "centicolon-ratchet" "scripts/test-centicolon-ratchet.sh"
+        log_fail_missing_guard "centicolon-ratchet" "scripts/lua/test-centicolon-ratchet.lua"
     fi
 
     # ============================================================================
