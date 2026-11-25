@@ -1,7 +1,8 @@
 # @trace spec:vm-provisioning-lifecycle
 name: litmus:vm-shutdown-drains-forges
 spec: vm-provisioning-lifecycle, vm-idiomatic-layer
-phase: 2
+# RETIRED (2357-42x9, 2026-11-25): its commands are cargo examples of tillandsias-host-shell, which has none; it ran in no phase.
+phase: retired
 description: >
   Start a forge container inside the VM, then signal shutdown via
   VmShutdownRequest. The forge must die cleanly within 10s, all per-container

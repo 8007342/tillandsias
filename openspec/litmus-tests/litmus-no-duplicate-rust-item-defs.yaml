@@ -7,8 +7,8 @@ description: >
   build failures where the same commit content is re-applied under
   a new hash and thus escapes git merge detection.
 severity: high
-size: small
-phase: instant
+size: long
+phase: pre-build
 
 preconditions:
   - cargo is available

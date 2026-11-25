@@ -8,6 +8,8 @@
 --   5 CONTROL another section's list: accepted  6 the corpus is clean
 --   7 PREMISE the runner still reads only the top level
 --   8 a directory that is not there is refused
+--   9 a numeric top-level phase, 10 a word outside the four: refused; 11 the four, quoted or not,
+--   and 12 none at all: accepted
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-litmus-step-phase.lua
 -- Verdict: ok:litmus-step-phase-fixture:<n> arms | violation:...
@@ -38,6 +40,19 @@ arm("2 as the step's first key", 4, 'critical_path:\n  - phase: pre-build\n    s
 arm("3 CONTROL a top-level phase is accepted", nil, 'critical_path:\n  - step: "a"\n    command: "true"\n')
 arm("4 CONTROL a phase inside a block scalar is accepted", nil, 'critical_path:\n  - step: "a"\n    command: |\n      cat <<X\n      phase: pre-build\n      - step: q\n        phase: post-build\n      X\n')
 arm("5 CONTROL a list under another key is accepted", nil, 'critical_path:\n  - step: "a"\nobservability:\n  - step: "a"\n    phase: pre-build\n')
+-- 9-12 (2357-42x9): the top level.
+local function top(name, refused, line)
+    local d = T:scratch()
+    fs.write(d.rel .. "/x.yaml", "name: x\n" .. line .. "critical_path:\n  - step: \"a\"\n")
+    local rc, o, why = check(d.rel)
+    T:arm(name, refused and rc == 1 and text.contains(o, "x.yaml:2: phase: ") or not refused and rc == 0, why)
+end
+top("9 a numeric top-level phase is refused", true, "phase: 6.5\n")
+top("10 a word outside the four is refused", true, "phase: integration # why\n")
+top("11a CONTROL quoted, with a comment", false, "phase: \"post-build\" # why\n")
+top("11b CONTROL runtime", false, "phase: runtime\n")
+top("11c CONTROL retired", false, "phase: retired\n")
+top("12 CONTROL none at all is accepted (read as runtime)", false, "")
 local rc, o, why = check(nil)
 T:arm("6 the corpus is clean", rc == 0, why)
 local RUN = fs.read("scripts/run-litmus-test.sh")
