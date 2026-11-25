@@ -121,9 +121,9 @@ critical_path:
   # unrelated edits. All three are negative-controlled, so the count again moved
   # by getting stronger, not by getting longer.
   - step: "the gate reports whether Windows-only sources were actually compiled"
-    command: "bash scripts/test-windows-only-sources-verified.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-windows-only-sources-verified.lua"
     timeout_ms: 60000
-    expected_behavior: "PASS: windows-only source verification report (11/11)"
+    expected_behavior: "ok:windows-only-sources-fixture:25 arms"
 
   - step: "build.sh --check carries that report rather than staying silent"
     command: "grep -F 'check-windows-only-sources-verified.lua' build.sh && grep -F 'this gate did NOT read them' build.sh && echo 'ok: the gate reports the stub substitution'"
