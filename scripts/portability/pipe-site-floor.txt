@@ -297,7 +297,6 @@ litmus openspec/litmus-tests/litmus-spec-traceability-usage-shape.yaml 7
 litmus openspec/litmus-tests/litmus-ssh-lane-sidecar-shape.yaml 3
 litmus openspec/litmus-tests/litmus-stable-channel-shape.yaml 2
 litmus openspec/litmus-tests/litmus-startup-context-addendum-shape.yaml 3
-litmus openspec/litmus-tests/litmus-stdlib-portability-shape.yaml 1
 litmus openspec/litmus-tests/litmus-subdomain-naming-flip-shape.yaml 2
 litmus openspec/litmus-tests/litmus-teardown-liveness-shared-scope-agreement.yaml 3
 litmus openspec/litmus-tests/litmus-terminal-status-vocabulary-shape.yaml 7
