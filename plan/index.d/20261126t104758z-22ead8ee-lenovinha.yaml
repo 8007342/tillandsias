@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: daily-and-mode-only-fixtures-report-arm-counts
+    field: status
+    value: in_progress
+    ts: "2026-11-26T10:47:58Z"
+    host: lenovinha
+
+events:
+  - packet_id: daily-and-mode-only-fixtures-report-arm-counts
+    event:
+      type: note
+      ts: "2026-11-26T10:47:58Z"
+      host: lenovinha
+      summary: |-
+        back to in_progress: PR #1600 awaits the land queue; waiting is not blocked (macuahuitl 2026-11-26, distributed-work 1906-8vxe)

@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: private-metrics-fallback-fixture-cannot-run-its-nested-gate-inside-a-toolbox
+    order: 2405-ai5t
+    status: in_progress
+    kind: fix
+    title: "test-gate-step-private-metrics-fallback fails all 9 arms inside the builder toolbox: its nested build.sh loses TOOLBOX_PATH and container"
+    capability_tags: [linux, tooling]
+    owned_files:
+      - scripts/lua/test-gate-step-private-metrics-fallback.lua
+    depends_on: []
+    context: |
+      Quick-tier red 3 on trunk 9cdfeea94 (toolbox, yoga, 2026-11-26; release-blocking per the coordinator). Every arm's
+      inner ./build.sh --gate-steps printed "[dnf] Error: TOOLBOX_PATH not set" and the fixture reported 9-failed; on the
+      bare host it passes 9/9, run directly or through the litmus. The commit: ac2c4f711 (2031-dwwy, 2026-11-07, one
+      child-environment builder) made TOOLBOX_PATH a DECLARED inherit, reaching a child only when the script's @env names
+      it; this fixture declares only PATH. fixture.gate_inherit (2384-svqx, #1592) is the kit's remedy for exactly this.
+    exit_criteria:
+      - "Red first: the fixture run inside the builder toolbox fails with TOOLBOX_PATH not set; green after, there and on the host."
+      - "Its inner gate gets TOOLBOX_PATH, container, TILLANDSIAS_SKIP_TOOLBOX, the shared-target pair and CARGO_TARGET_DIR through fixture.gate_inherit."
+    verifiable_closure: |
+      litmus:gate-step-private-metrics-fallback
+    provenance: "coordinator 2026-11-26 (quick-tier red 3), yoga"
+    events:
+      - {type: claimed, ts: "2026-11-26T10:23:02Z", host: yoga, summary: "claimed; work ref work/2405-ai5t"}

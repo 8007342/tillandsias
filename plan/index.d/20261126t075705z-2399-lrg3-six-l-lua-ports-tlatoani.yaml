@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-26. l range, batch 3 (the last free l files and the pipefail pair), per macuahuitl 2026-11-26.
+packets:
+- packet_id: port-l-fixtures-batch-3
+  order: 2399-lrg3
+  status: implemented
+  kind: chore
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [shell-to-lua, macos, fixtures, portability]
+  size: M
+  implementer_tier: sonnet
+  estimated_hours: 4
+  title: 'Six whole-file shell-to-Lua ports from the l range (batch 3: last free l files and the pipefail pair)'
+  ports: [scripts/test-litmus-fake-podman-hermetic.sh, scripts/test-litmus-podman-preflight-diagnosis.sh, scripts/test-litmus-podman-preflight-trigger.sh, scripts/test-litmus-terminal-verdict.sh, scripts/test-litmus-budget-tally.sh, scripts/test-litmus-step-pipefail.sh]
+  context: >-
+    With this the l range is done except test-land-queue.sh (lenovinha, 2398-zvug). The three podman fixtures use
+    shims or quoted data only; the real podman is never reached. The pipefail pair had been held because two Lua
+    fixtures drove the .sh by path. test-gate-step-metrics-isolation now runs the .lua subject through script run.
+    Its arm 2 no longer reds when the subject stops naming its timing log, because script run already routes the
+    child's timing into target/plan-scratch: the kit now carries that isolation, and arm 3 still proves the fallback
+    mechanism. This is stated in the fixture. test-checkout-writers arm 11 reads the post-fix guard from history
+    (d21584a19), the way arm 10 already read PRE_REV. Callers: steps 380, 415 (STEP_LUA) and 461, with fresh darwin
+    regimes; the local-ci budget-tally row becomes a Lua row; gate-divergence-declared; three litmus tests without
+    pipes. Linux-only and unexercised here: podman-preflight-diagnosis (the whole fixture) and podman-preflight-trigger
+    arms 1-2.
+  exit_criteria:
+  - 'Each .lua gives the same verdict as its .sh on the trunk tree, and the same red arms under a mutant.'
+  - 'Every caller runs the .lua; the six .sh files and their floor lines are gone.'
+  verifiable_closure: 'Mutant parity in the PR; steps 380, 415 and 461 and the three litmus tests green on darwin and in the Linux land gate.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the mutant parity is the deliverable.'
+  next_action: 'Implemented. Linux land gate to run podman-preflight-diagnosis and trigger arms 1-2.'
+  provenance: 'tlatoanis-macbook-air 2026-11-26, on macuahuitl-fedora''s direction.'
+  related: [2387-lrg2, 2386-lrg1, 2398-zvug]
+  events:
+  - {type: filed, ts: '2026-11-26T07:57:05Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}

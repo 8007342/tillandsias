@@ -163,6 +163,47 @@ recommended.
   The wrapper redirects stdout to `/dev/null`, so the MCP stream is untouched.
 - Keep `mcp_now_ms` and `mcp_log_usage` names and signatures.
 
+### D3.6 — Wave 1b: the remaining images/default value helpers (2393-j27x)
+
+**Authority.** This extends D1–D3, not a new design: the same `--helper` shape (a thin
+sourced shell shim, the body in `images/default/lua/<name>.lua`, no second implementation,
+named fallback when the runner is absent). It is admitted by the operator's 2026-11-25 ruling
+that shell under `images/` is ported on its own track and verified in a container on a podman
+host (`openspec/specs/ci-release/spec.md`, the shell-to-lua batching requirement;
+`methodology/convergence.yaml` → `carried_obligations.backlogs` → `shell-to-lua` →
+`batching`), and approved by the coordinator (macuahuitl-fedora) on 2026-11-26. At most 3–4
+helpers per PR, because they are sourced libraries.
+
+**Admission test: D3's own.** A helper is ported only if the port spawns fewer processes than
+the shell body. Every `--helper` call costs one runner exec plus, measured, the runner's own
+`git` reads (the 3 `git` in each post count below), so a body that spawns one or two
+processes gets worse. Counts are `strace -f -e trace=execve` inside the forge image
+(`localhost/tillandsias-forge`, `--network=none`, the checkout mounted read-only), yoga,
+2026-11-26:
+
+| helper | pre | post | disposition |
+|---|---|---|---|
+| `lib-push-capability.sh` → `lua/push-capability.lua` | 9 (git, upload-pack, sed, awk, sort, tail, 2 cut, sh) | 6 (runner, 3 git, upload-pack, sh) | ported, 2393-j27x |
+| `lib-project-engine-capability.sh` → `lua/project-engine-capability.lua` | 20 (6 sed, 2 awk, 2 sort, 2 tr, 2 head, timeout, the engine and its 4) | 9 (2 runner, cat, the engine and its 5) | ported, 2393-j27x |
+| `lib-expert-capability.sh` | 24 | — | next PR, split in two |
+| `lib-lane.sh` | 0 (curl only with a live socket) | ≥ 1 | stays shell: fails the admission test |
+| `lib-embed-endpoint.sh` | 1 (curl) | ≥ 2 | stays shell: fails the admission test |
+| `lib-provider-limit.sh` | 1–5 (date, mkdir) | ≥ 2 | stays shell: fails the admission test, and it writes the limit file outside the `fs` root (the D3.4 reason) |
+
+**Contracts kept.** `push_state` / `push_branch` and `project_engine:` grammars are
+unchanged, and every existing pin stays green (`scripts/lua/test-push-capability.lua`,
+`litmus:project-engine-capability-verdict-grammar`). Without the runner or the module:
+`push_state=unknown push_reason=no-plan-binary`, and `project_engine: state=unknown … probe=no-plan-binary`
+with its own advice line — the shape `lib-common.sh` already renders for a missing probe
+(`probe=helper-missing`). Neither ever reports a verdict it did not measure. The
+`project_engine` closed vocabulary (four states) now lives in the Lua module and is pinned
+there; that pin was unfalsifiable before this change (`… done; echo ok` printed its ok for any
+count) and is one `&&` chain now.
+
+**Red first.** Each helper has arms that fail against the shell body and pass on the port:
+a run with only the stub `git` (push) or only `bash`, `cat` and the plan binary (engine) on
+`PATH`, where the pipelines cannot run, and a run without the runner.
+
 ## D4 — Hardening
 
 - **Ratchet, as a carried-obligation backlog (2006-me5t).** Not a second,

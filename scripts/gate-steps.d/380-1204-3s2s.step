@@ -30,12 +30,12 @@ STEP_OK="gate-step metrics isolation check passed"
 # Exit 3 means the subject fixture is absent — nothing was exercised, and the
 # fixture says so by name rather than passing.
 STEP_SKIP_EXIT=3
-STEP_SKIP_DESC="scripts/test-litmus-budget-tally.sh is absent, so the isolation could not be exercised"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:step-metrics-isolation:4 at b022b6b85 (the Lua fixture, 2344-zk8r; bash 3.2, relayed by macuahuitl)"
+STEP_SKIP_DESC="scripts/lua/test-litmus-budget-tally.lua is absent, so the isolation could not be exercised"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-26 darwin ok:step-metrics-isolation:4 (driving the Lua subject) (work/2399-lrg3 @ 56c4964e9)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="runs the litmus runner (it wipes its runtime dirs)"
 STEP_LANES="litmus"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="openspec/litmus-bindings.yaml openspec/litmus-tests/** scripts/plan-binary-probe.sh scripts/run-litmus-test.sh scripts/lua/test-gate-step-metrics-isolation.lua scripts/test-litmus-budget-tally.sh"
+STEP_READS="openspec/litmus-bindings.yaml openspec/litmus-tests/** scripts/plan-binary-probe.sh scripts/run-litmus-test.sh scripts/lua/test-gate-step-metrics-isolation.lua scripts/lua/test-litmus-budget-tally.lua"

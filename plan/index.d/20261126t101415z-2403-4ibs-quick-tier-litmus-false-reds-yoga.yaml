@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: two-quick-tier-litmus-red-on-a-cold-target-for-reasons-that-are-not-defects
+    order: 2403-4ibs
+    status: in_progress
+    kind: fix
+    title: "quick-tier false reds: podman-idiomatic-error-discrimination dies of SIGPIPE through head, and log-field-stability-schema's failure regex matches 'Compiling thiserror'"
+    capability_tags: [linux, tooling]
+    owned_files:
+      - openspec/litmus-tests/litmus-podman-idiomatic-error-discrimination.yaml
+      - openspec/litmus-tests/litmus-log-field-stability-schema.yaml
+      - scripts/lua/test-log-field-gating-anchored.lua
+    depends_on: []
+    context: |
+      From the quick-tier red list on trunk 9cdfeea94 in the builder toolbox (yoga, 2026-11-26; release-blocking per the
+      coordinator, since the release gate runs the quick tier). (1) podman-idiomatic-error-discrimination step 5 is
+      cargo check -p tillandsias-podman 2>&1 | grep -v '^warning' | head -20, judged by exit code: head exits after 20 lines
+      and grep dies of SIGPIPE under pipefail (rc=141) whenever cargo prints more, as a cold check does. (2)
+      log-field-stability-schema passes all 13 steps and then fails gating_points.failure "mismatch|error", matched against
+      the COMBINED output: a cold build prints "Compiling thiserror v2.0.18" (a dependency of tillandsias-logging). Both are
+      red only on a cold target, so they read as flakes.
+    exit_criteria:
+      - "Each is shown red first: step 5 with more than 20 lines of cargo output, and the log-field gating patterns against a passing output that contains 'Compiling thiserror'."
+      - "Step 5 captures and filters without a pipe into head and still exits with cargo's status; the failure patterns match only verdict lines (a real cargo error still trips them)."
+    verifiable_closure: |
+      litmus:log-field-stability-schema
+    provenance: "coordinator 2026-11-26 (quick-tier reds 1 and 2), yoga"
+    events:
+      - {type: claimed, ts: "2026-11-26T10:14:15Z", host: yoga, summary: "claimed; work ref work/2403-4ibs"}
