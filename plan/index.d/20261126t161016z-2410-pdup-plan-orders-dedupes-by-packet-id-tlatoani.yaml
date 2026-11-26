@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-26, at macuahuitl's request.
+packets:
+- packet_id: plan-orders-counts-a-same-id-redeclaration-as-a-duplicate
+  order: 2410-pdup
+  status: implemented
+  owner_host: any
+  pickup_role: any
+  verifiable_closure: 'cargo test -p tillandsias-policy plan_orders_same_id_redeclaration_is_not_a_duplicate (red on trunk first).'
+  notes: |
+    size: S
+    implementer_tier: sonnet
+  next_action: >-
+    Implemented. tillandsias-policy plan-orders appended every fragment packets: entry, so a fragment re-declaring
+    a filed packet (same packet_id) became a second member of its order group and failed as duplicate-order. On
+    2026-11-26T16:10:16Z that held every gate red on trunk (2381-tfna). The fold now treats packets: as a G-Set keyed by packet_id,
+    as plan/index.d/README.md describes. A different packet_id on the same order still violates. Checked on the real
+    pre-fix ledger (8b9ee0bfa): red before, ok after.
+  events:
+  - {type: filed, ts: "2026-11-26T16:10:16Z", host: tlatoanis-macbook-air, summary: 'filed and claimed at macuahuitl''s request after the 2381-tfna trunk red'}
+  - {type: implemented, ts: "2026-11-26T16:10:16Z", host: tlatoanis-macbook-air, summary: 'fold dedupes by packet_id; unit test red first; fold fixture PASS; real pre-fix ledger ok'}
