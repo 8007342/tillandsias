@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed and fixed by doris-windows 2026-11-26 at macuahuitl's request. Same family as 2365-mskt (lenovinha's leak).
+packets:
+  - packet_id: metrics-agreement-fixture-leaks-a-default-path-timing-log-on-msys-and-later-runs-skip-arms-9-9c
+    order: 2402-4avd
+    status: implemented
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, msys, metrics, fixture, cleanup]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-metrics-log-path-agreement.lua
+    related: [2365-mskt, 2392-tv47]
+    title: |
+      test-metrics-log-path-agreement leaves its one-record /tmp/tillandsias-timing.jsonl behind on msys, and every later run skips its own arms 9-9c as if a real log were there
+    context: |
+      Measured on yolanda (msys) 2026-11-26, relayed by macuahuitl: /tmp/tillandsias-timing.jsonl held one fixture
+      record ({"step":"fixture","host":"fixture"}), left around 01:00 by a run of this fixture, so the next runs read
+      17 arms where doris read 21: "skip: 9-9c a real /tmp/tillandsias-timing.jsonl exists". The arm's only
+      cleanup was the shell's EXIT trap, and on msys a deadline kill of the runner terminates that shell before
+      its trap runs (the 2392-tv47 finding). Reproduced on doris: with the leftover planted, the fixture reported
+      16 arms and left the file in place.
+    verifiable_closure: |
+      tillandsias-plan script run scripts/lua/test-metrics-log-path-agreement.lua reports arm 9z ok and all 9-9c
+      arms on msys, and with a fixture-only leftover planted it sweeps it and runs every arm. Measured on doris:
+      ok:metrics-log-path-agreement:21 arms with and without the planted leftover. CONTROL: a log holding any
+      non-fixture line is left untouched and 9-9c decline (16 arms, both lines kept).
+    unscoreable: "the closure is the existing fixture, run by gate step 279-1455-d7hc; no separate litmus pin"
+    next_action: >
+      Implemented: a sweep removes the default-path file only when every line is this fixture's record, before
+      the arm and again after it; new arm 9z pins that the arm's shell left nothing behind.
+status:
+  - packet_id: metrics-agreement-fixture-leaks-a-default-path-timing-log-on-msys-and-later-runs-skip-arms-9-9c
+    field: status
+    value: implemented
+    ts: "2026-11-26T09:32:05Z"
+    host: doris
