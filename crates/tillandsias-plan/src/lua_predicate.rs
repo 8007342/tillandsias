@@ -1167,10 +1167,11 @@ fn locate_repo_root_from(
     // checkout instead: a negative control "passed a dead glob", and the
     // status-loss fixture read real rows. Otherwise the cwd's own repo wins (the
     // walk below). TILLANDSIAS_REPO_ROOT stays an explicit override.
-    if let Some(pb) = project_root_env.map(PathBuf::from).filter(|p| p.is_dir()) {
-        if project_root_is_the_cwds_repo(&pb, cwd.as_deref()) {
-            return Some(pb);
-        }
+    if let Some(pb) = project_root_env
+        .map(PathBuf::from)
+        .filter(|p| p.is_dir() && project_root_is_the_cwds_repo(p, cwd.as_deref()))
+    {
+        return Some(pb);
     }
     if let Some(found) = cwd.and_then(walk_up_to_repo) {
         return Some(found);
