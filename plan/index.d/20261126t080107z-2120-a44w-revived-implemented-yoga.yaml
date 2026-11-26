@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: a-script-run-from-a-scratch-repo-under-the-litmus-runner-resolves-the-scratch-repo-not-the-exported-project-root
+    field: status
+    value: implemented
+    ts: "2026-11-26T08:01:07Z"
+    host: yoga
+events:
+  - packet_id: a-script-run-from-a-scratch-repo-under-the-litmus-runner-resolves-the-scratch-repo-not-the-exported-project-root
+    event: {type: implemented, ts: "2026-11-26T08:01:07Z", host: yoga, summary: "revived on work/2120-a44w by yoga (coordinator, from macbookair): trunk merged in; the fix re-applied to trunk's refactored locate_repo_root_from (PROJECT_ROOT only when it is the cwd's nearest repo; TILLANDSIAS_REPO_ROOT unchanged); a unit test added; both the unit test and test-script-run-ignores-foreign-project-root.lua red with trunk's resolver and green with the fix"}
