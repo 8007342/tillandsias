@@ -558,7 +558,6 @@ scripts scripts/test-nix-toolbox.sh 9
 scripts scripts/test-no-competing-gate.sh 2
 scripts scripts/test-opencode-vault-auth-content.sh 3
 scripts scripts/test-order-citations-resolve.sh 7
-scripts scripts/test-packet-tier-fields.sh 4
 scripts scripts/test-pending-capability-row-does-not-wedge.sh 1
 scripts scripts/test-plan-binary-copy-refresh.sh 1
 scripts scripts/test-plan-binary-probe-usage-determinism.sh 2
@@ -570,11 +569,9 @@ scripts scripts/test-podman-mock-refusal.sh 4
 scripts scripts/test-portability-idioms.sh 13
 scripts scripts/test-pre-push-empty-ref-list.sh 6
 scripts scripts/test-pre-push-honours-a-live-freeze.sh 11
-scripts scripts/test-pre-push-linux-next-merged.sh 3
 scripts scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh 7
 scripts scripts/test-pre-push-work-ref-lane.sh 12
 scripts scripts/test-preflight-front-door.sh 8
-scripts scripts/test-preflight-verdict-categories.sh 3
 scripts scripts/test-pretooluse-command-policy.sh 3
 scripts scripts/test-promote-stable-evidence-gate.sh 18
 scripts scripts/test-provider-device-auth.sh 1
@@ -601,10 +598,8 @@ scripts scripts/test-set-field-refuses-unknown-flags.sh 8
 scripts scripts/test-shipped-diagnostic-tool-dispatch.sh 4
 scripts scripts/test-sigpipe-verdict-pipelines.sh 3
 scripts scripts/test-silverblue-update-skew-probe.sh 7
-scripts scripts/test-skills-single-source.sh 8
 scripts scripts/test-smoke-verifies-a-signature.sh 7
 scripts scripts/test-spawn-failure-names-program.sh 3
-scripts scripts/test-status-channel-absent-is-first-class.sh 10
 scripts scripts/test-support/github-login-fake.sh 2
 scripts scripts/test-support/litmus-fake-podman-guard.sh 1
 scripts scripts/test-support/podman-mock.sh 25

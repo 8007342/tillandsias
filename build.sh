@@ -5359,7 +5359,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # because scripts/test-*.sh is not globbed and a fixture reaching the gate
     # by neither route is a file, not a gate.
     _step "Checking the probe refuses a stale candidate (1172-dyvd)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-probe-refuses-stale-candidate.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-probe-refuses-stale-candidate.lua" 2>&1; then
         _error "host-capability-probe.sh would publish a capability row from a binary it cannot show is current — the matrix routes on that row"
         exit 1
     fi
