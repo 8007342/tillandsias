@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: rust-metrics-fallback-tmp-is-the-drive-root-tmp-on-native-windows-not-msys-tmp
+    field: status
+    value: implemented
+    ts: "2026-11-26T07:58:58Z"
+    host: doris
+events:
+  - packet_id: rust-metrics-fallback-tmp-is-the-drive-root-tmp-on-native-windows-not-msys-tmp
+    event: {type: implemented, ts: "2026-11-26T07:58:58Z", host: doris, summary: "Implemented on work/2392-nuca (stacked on work/2387-x65b, #1608). Git for Windows mounts /tmp on the user temp dir (usertemp, %TEMP%), which is std::env::temp_dir(). metrics_default_log's fallback is now fallback_tmp(): temp_dir() on Windows, /tmp elsewhere. The metrics-log-path answer maps a temp_dir path back to /tmp under msys (printed_metrics_path), so the strings still agree, and native Windows prints the real dir. Three unit tests. New fixture arm 1e compares the DIRECTORY on msys: the binary's native spelling (MSYSTEM unset) against cygpath -m of the shell's /tmp. Red first on the stock binary (rust=/tmp/forge-expert-usage.jsonl, i.e. <drive>:\\tmp; shell=C:/Users/<user>/AppData/Local/Temp/...), green with the fix: ok:metrics-log-path-agreement:21 arms on doris. Unix and darwin are unchanged. Nothing is written to /tmp; the arm compares resolved paths only."}
