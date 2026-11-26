@@ -1,4 +1,4 @@
--- @env PATH
+-- @env PATH TOOLBOX_PATH container TILLANDSIAS_SKIP_TOOLBOX TILLANDSIAS_SHARED_TARGET_HELD TILLANDSIAS_SHARED_TARGET CARGO_TARGET_DIR
 -- @trace order:1966-ubsw, order:1204-3s2s, order:1916-tsel, order:2238-3skn, spec:ci-release
 --
 -- test-gate-step-private-metrics-fallback.lua — a record some OTHER process
@@ -88,10 +88,15 @@ local function gate(r, extra)
     -- refusal names a gate-fallback/ path.
     local fb = ABS .. "/gate-fallback/gate-fixture-" .. tostring(gates)
     fs.mkdir(REL .. "/gate-fallback/gate-fixture-" .. tostring(gates))
+    -- ORDER 2405-ai5t: the inner build.sh must keep what lets it see it already runs inside
+    -- the builder toolbox (and holds the shared target). Since ac2c4f711 (2031-dwwy) TOOLBOX_PATH
+    -- reaches a child only when declared, and without it every arm's gate re-entered the toolbox
+    -- and died "TOOLBOX_PATH not set" (9-failed in the toolbox, 9/9 on a bare host).
     local res = proc.run({ argv = { "./build.sh", "--gate-steps", r }, timeout_ms = 300000,
-        env = { TILLANDSIAS_GATE_SHARED_TIMING_PATH = SHARED, TILLANDSIAS_TIMING_RUN_ID = "gate-fixture-1966",
+        env = require("common.fixture").gate_inherit({ TILLANDSIAS_GATE_SHARED_TIMING_PATH = SHARED,
+                TILLANDSIAS_TIMING_RUN_ID = "gate-fixture-1966",
                 TILLANDSIAS_METRICS_FALLBACK_DIR = fb,
-                TILLANDSIAS_GATE_METRICS_ATTRIBUTION = extra and extra.attr or nil } })
+                TILLANDSIAS_GATE_METRICS_ATTRIBUTION = extra and extra.attr or nil }) })
     return res.code, (res.stdout or "") .. (res.stderr or "")
 end
 

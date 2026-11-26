@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: two-litmus-files-declare-one-id-and-one-never-runs
+    field: status
+    value: implemented
+    ts: "2026-11-26T09:38:39Z"
+    host: yoga
+events:
+  - packet_id: two-litmus-files-declare-one-id-and-one-never-runs
+    event: {type: implemented, ts: "2026-11-26T09:38:39Z", host: yoga, summary: "implemented on work/2402-mw57: check-litmus-id-unique.lua red on trunk (violation:2, the duplicate and the mismatch), green after (647 checked); the orphan's double-source-guard step moved into the file the id resolves to and the orphan deleted; wired in build.sh after the litmus parse gate; mutating the mismatch check is caught, the duplicate check is subsumed by it"}

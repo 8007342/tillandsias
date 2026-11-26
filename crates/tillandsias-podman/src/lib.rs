@@ -1443,7 +1443,7 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
             }
         }
 
-        let dir = std::env::temp_dir().join(format!(
+        let dir = tillandsias_core::test_scratch::path(format!(
             "tillandsias-sync-stub-{}-{:?}",
             std::process::id(),
             std::thread::current().id()

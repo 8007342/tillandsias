@@ -111,6 +111,13 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: cleaned"
 
+  - step: "Req: LITMUS_STDLIB_LOADED guard prevents double-source"
+    # ORDER 2402-mw57: moved from litmus-stdlib-portability-shape.yaml, which declared this same id,
+    # never ran, and is deleted; this was the one step of it no step here covered.
+    command: "grep -q 'LITMUS_STDLIB_LOADED' scripts/litmus-stdlib.sh && echo 'ok: double-source guard present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: double-source guard present"
+
 observability:
   traces:
     - "@trace spec:spec-traceability"

@@ -1,0 +1,4 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: workspace-tests-leak-tmp-dirs-and-exhaust-tmpfs-inodes-headless-and-gate
+    event: {type: progress, ts: "2026-11-26T12:10:32Z", host: yoga, summary: "slice 1 on work/2407-aana: tillandsias_core::test_scratch (dirs recorded, removed by an atexit hook when the test process exits; a child-process test proves it and reds without the hook); the headless, podman and core leaking sites use it; measured with a private TMPDIR under /tmp: headless (listen-vsock) 70 -> 0 per run; the workspace under nextest now leaves only the tillandsias-plan crate's 29 (row 2407-aq7x, next). The gate check lands after that, so the row stays in_progress."}
