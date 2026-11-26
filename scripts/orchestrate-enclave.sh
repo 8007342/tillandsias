@@ -74,7 +74,7 @@ STATUS_CHECK_MODE="${TILLANDSIAS_STATUS_CHECK:-}"
 # ORDER 923-rmtw. Was a pasted copy, frozen at its pre-801-kqme value for
 # eleven days: `git-service` still named after the Rust constant dropped it,
 # `nix-cache` never added after 801-kqme added it. One definition now, kept in
-# step with ENCLAVE_NO_PROXY_BASE by scripts/test-enclave-proxy-lib.sh.
+# step with ENCLAVE_NO_PROXY_BASE by scripts/lua/test-enclave-proxy-lib.lua.
 # shellcheck source=scripts/lib/enclave-proxy.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/enclave-proxy.sh"
 if [ -n "$PROMPT_MODE" ]; then

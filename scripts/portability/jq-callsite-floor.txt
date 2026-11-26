@@ -28,7 +28,6 @@
 9 scripts/bench-inference-floor.sh
 1 scripts/build-image.sh
 18 scripts/check-mcp-expert-health.sh
-2 scripts/check-must-ship-rows.sh
 2 scripts/check-nix-deps-stability.sh
 1 scripts/check-stranded-in-progress.sh
 1 scripts/check-yaml-reader-availability.sh
@@ -57,7 +56,6 @@
 1 scripts/run-litmus-test.sh
 8 scripts/spec-index-ensure.sh
 1 scripts/test-opencode-vault-auth-content.sh
-1 scripts/test-tool-dispatch-lib.sh
 6 scripts/tillandsias-host-push-cert.sh
 10 scripts/update-convergence-dashboard.sh
 3 scripts/windows-host-capability-probe.sh

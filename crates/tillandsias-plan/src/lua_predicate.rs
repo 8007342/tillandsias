@@ -1110,6 +1110,23 @@ pub(crate) fn enter_script_mode(script: &Path) {
     let _ = SCRIPT_PATH.set(abs);
 }
 
+/// Whether `root` is the cwd's NEAREST repository: the first ancestor of the
+/// cwd, itself included, holding plan/index.yaml or .git, both canonicalised.
+/// Containment alone is not enough: fixtures build scratch trees under the
+/// checkout's own target/, so the cwd is inside PROJECT_ROOT while its tree is
+/// the scratch one (2120-a44w). No marker above the cwd keeps the old answer
+/// (PROJECT_ROOT counts when it contains the cwd); no cwd, or an unreadable cwd
+/// or root, answers false.
+fn project_root_is_the_cwds_repo(root: &Path, cwd: Option<&Path>) -> bool {
+    let (Some(Ok(cwd)), Ok(root)) = (cwd.map(|c| c.canonicalize()), root.canonicalize()) else {
+        return false;
+    };
+    match walk_up_to_repo(cwd.clone()) {
+        Some(nearest) => nearest == root,
+        None => cwd.starts_with(&root),
+    }
+}
+
 /// The first ancestor of `start` (inclusive) that holds plan/index.yaml or .git.
 fn walk_up_to_repo(mut dir: PathBuf) -> Option<PathBuf> {
     loop {
@@ -1141,11 +1158,20 @@ fn locate_repo_root_from(
     script: Option<PathBuf>,
     exe: Option<PathBuf>,
 ) -> Option<PathBuf> {
-    for p in [repo_root_env, project_root_env].into_iter().flatten() {
-        let pb = PathBuf::from(p);
-        if pb.is_dir() {
-            return Some(pb);
-        }
+    if let Some(pb) = repo_root_env.map(PathBuf::from).filter(|p| p.is_dir()) {
+        return Some(pb);
+    }
+    // ORDER 2120-a44w: PROJECT_ROOT counts only when it is the cwd's own repo.
+    // The litmus runner exports it for its children (1268-m2ir), so a fixture
+    // that runs a guard from a scratch repo used to have the guard read the REAL
+    // checkout instead: a negative control "passed a dead glob", and the
+    // status-loss fixture read real rows. Otherwise the cwd's own repo wins (the
+    // walk below). TILLANDSIAS_REPO_ROOT stays an explicit override.
+    if let Some(pb) = project_root_env
+        .map(PathBuf::from)
+        .filter(|p| p.is_dir() && project_root_is_the_cwds_repo(p, cwd.as_deref()))
+    {
+        return Some(pb);
     }
     if let Some(found) = cwd.and_then(walk_up_to_repo) {
         return Some(found);
@@ -1960,13 +1986,64 @@ mod tests {
         assert!(validate_repo_root(std::env::temp_dir()).is_ok());
     }
 
+    /// ORDER 2120-a44w. PROJECT_ROOT names the real checkout (the litmus runner
+    /// exports it); a fixture's scratch repository lives under that checkout's
+    /// target/. From inside the scratch repo the scratch repo is the root, not
+    /// the checkout; from the checkout itself PROJECT_ROOT is honoured; and
+    /// TILLANDSIAS_REPO_ROOT is still the explicit override.
+    #[test]
+    fn project_root_is_honoured_only_from_its_own_repository() {
+        let base = std::env::temp_dir().join(format!("a44w-{}", std::process::id()));
+        let project = base.join("project");
+        let scratch = project.join("target/plan-scratch/fixture");
+        std::fs::create_dir_all(project.join(".git")).unwrap();
+        std::fs::create_dir_all(scratch.join(".git")).unwrap();
+        let pr = Some(project.to_string_lossy().into_owned());
+        let canon = |p: Option<PathBuf>| p.map(|p| p.canonicalize().unwrap());
+
+        // The defect: PROJECT_ROOT beat the scratch repo the cwd is in.
+        assert_eq!(
+            canon(locate_repo_root_from(
+                None,
+                pr.clone(),
+                Some(scratch.clone()),
+                None,
+                None
+            )),
+            Some(scratch.canonicalize().unwrap())
+        );
+        // From the project itself (or a subdir with no marker of its own) it counts.
+        assert_eq!(
+            canon(locate_repo_root_from(
+                None,
+                pr.clone(),
+                Some(project.join("target")),
+                None,
+                None
+            )),
+            Some(project.canonicalize().unwrap())
+        );
+        // The explicit override is not narrowed.
+        assert_eq!(
+            canon(locate_repo_root_from(
+                Some(project.to_string_lossy().into_owned()),
+                None,
+                Some(scratch.clone()),
+                None,
+                None
+            )),
+            Some(project.canonicalize().unwrap())
+        );
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
     /// ORDER 2213-ag5u. In script mode the runner binary's own checkout is
     /// never the root: a scratch dir that is not a repository (the fixture
     /// that measured the real tree 27/27) resolves to NOTHING, and a script
     /// inside a repository roots at that repository even from a foreign cwd.
     #[test]
     fn script_mode_never_falls_back_to_the_runners_checkout() {
-        let base = std::env::temp_dir().join(format!("ag5u-{}", std::process::id()));
+        let base = crate::test_scratch::path(format!("ag5u-{}", std::process::id()));
         let scratch = base.join("scratch");
         let repo = base.join("repo");
         let runner_checkout = base.join("runner");

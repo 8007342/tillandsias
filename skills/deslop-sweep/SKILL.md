@@ -20,13 +20,13 @@ budget, and every rule below was applied there before it was written here.
 `methodology.yaml` is the source of truth. The sweep is a scheduled
 meta-orchestration step, never a build gate. Its clock, record grammar and
 kill rule live in `scripts/check-deslop-due.sh` and
-`scripts/check-deslop-sweep-health.sh`; this file does not redefine them.
+`scripts/lua/check-deslop-sweep-health.lua`; this file does not redefine them.
 
 ## 0 — Is it due, and is it budgeted?
 
 ```bash
 scripts/check-deslop-due.sh check     # exit 0 = NOT due; prints ok:deslop-not-due:… or deslop-due:…
-scripts/check-deslop-sweep-health.sh  # the ritual detector; a red here retires the sweep, not the queue
+tillandsias-plan script run scripts/lua/check-deslop-sweep-health.lua  # the ritual detector; a red here retires the sweep, not the queue
 ```
 
 Due is event-counted (200 orders since the last sweep, 48 h floor, no

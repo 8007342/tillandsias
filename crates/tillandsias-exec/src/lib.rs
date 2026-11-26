@@ -197,6 +197,112 @@ async fn reap_group(pgid: libc::pid_t) {
     alive(libc::SIGKILL);
 }
 
+/// A TERM or INT to the RUNNER ends its live child groups (order 2408-fsxe).
+///
+/// A grouped child leads its own process group, so a signal to this process
+/// never reached it: the runner died with 143, the child was reparented, and
+/// the deadline that would have bounded it died with the runner (#1610 arm
+/// 11b, land run 94: "live=1 left=1 rc=143"). Each grouped run registers its
+/// pgid here for as long as it is live. On the first one this process installs
+/// a TERM and an INT handler, but ONLY where the disposition is still the
+/// default: a process that handles or ignores the signal itself keeps its own
+/// behaviour. The handler TERMs every registered group, gives them
+/// GROUP_TERM_GRACE, KILLs the rest, restores the default and re-raises, so the
+/// runner still exits with the signal's status. Everything it calls (killpg,
+/// nanosleep, signal, raise) is async-signal-safe. RESIDUAL: more than
+/// `SLOTS` concurrent grouped runs go unregistered, and a descendant that
+/// setsid()s out of its group escapes this as it escapes the deadline.
+#[cfg(unix)]
+mod term_guard {
+    use std::sync::atomic::{AtomicI32, Ordering};
+
+    const SLOTS: usize = 64;
+    static GROUPS: [AtomicI32; SLOTS] = [const { AtomicI32::new(0) }; SLOTS];
+    static INSTALL: std::sync::Once = std::sync::Once::new();
+
+    /// Holds a group's slot; dropping it unregisters the group.
+    pub(crate) struct Registered(Option<usize>);
+
+    impl Drop for Registered {
+        fn drop(&mut self) {
+            if let Some(i) = self.0 {
+                GROUPS[i].store(0, Ordering::SeqCst);
+            }
+        }
+    }
+
+    pub(crate) fn register(pgid: libc::pid_t) -> Registered {
+        INSTALL.call_once(install);
+        for (i, slot) in GROUPS.iter().enumerate() {
+            if slot
+                .compare_exchange(0, pgid, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+            {
+                return Registered(Some(i));
+            }
+        }
+        Registered(None)
+    }
+
+    fn install() {
+        for sig in [libc::SIGTERM, libc::SIGINT] {
+            // SAFETY: sigaction with valid, zeroed structs; the handler only
+            // makes async-signal-safe calls.
+            unsafe {
+                let mut old: libc::sigaction = std::mem::zeroed();
+                if libc::sigaction(sig, std::ptr::null(), &mut old) != 0
+                    || old.sa_sigaction != libc::SIG_DFL
+                {
+                    continue;
+                }
+                let mut new: libc::sigaction = std::mem::zeroed();
+                new.sa_sigaction = on_signal as extern "C" fn(libc::c_int) as libc::sighandler_t;
+                libc::sigemptyset(&mut new.sa_mask);
+                libc::sigaction(sig, &new, std::ptr::null_mut());
+            }
+        }
+    }
+
+    extern "C" fn on_signal(sig: libc::c_int) {
+        let each = |s: libc::c_int| {
+            let mut any = false;
+            for slot in &GROUPS {
+                let pgid = slot.load(Ordering::SeqCst);
+                // SAFETY: killpg takes no pointers; a stale pgid fails ESRCH.
+                if pgid > 0 && unsafe { libc::killpg(pgid, s) } == 0 {
+                    any = true;
+                }
+            }
+            any
+        };
+        if each(libc::SIGTERM) {
+            let step = libc::timespec {
+                tv_sec: 0,
+                tv_nsec: 20_000_000,
+            };
+            let rounds = super::GROUP_TERM_GRACE.as_millis() / 20;
+            let mut left = true;
+            for _ in 0..rounds {
+                // SAFETY: nanosleep with a valid timespec.
+                unsafe { libc::nanosleep(&step, std::ptr::null_mut()) };
+                left = each(0);
+                if !left {
+                    break;
+                }
+            }
+            if left {
+                each(libc::SIGKILL);
+            }
+        }
+        // SAFETY: restore the default and re-raise, so the exit status is the
+        // signal's, exactly as without this handler.
+        unsafe {
+            libc::signal(sig, libc::SIG_DFL);
+            libc::raise(sig);
+        }
+    }
+}
+
 /// Put `rest` on `cmd` as argv entries, ONE ENTRY EACH, byte-identical
 /// (order 1553-q3wi; executor contract CRITERION 4).
 ///
@@ -523,6 +629,9 @@ impl Command {
         };
         #[cfg(unix)]
         let group_leader = if self.group { child.id() } else { None };
+        // 2408-fsxe: held for the whole run, so a TERM/INT to the runner reaches it.
+        #[cfg(unix)]
+        let _term_guard = group_leader.map(|p| term_guard::register(p as libc::pid_t));
 
         // Take both pipes BEFORE awaiting anything, then drain them together.
         // Reading one to EOF and then the other is the deadlock this crate

@@ -29,28 +29,23 @@ size: long
 # fail:fleet-msg-same-host:0/9.
 
 preconditions:
-  - workspace contains scripts/test-fleet-msg-same-host.sh
+  - workspace contains scripts/lua/test-fleet-msg-same-host.lua
   - workspace contains crates/tillandsias-headless/src/msg_serve.rs
   - workspace contains crates/tillandsias-msg/src/store.rs
   - workspace contains crates/tillandsias-msg/src/lanefs.rs
   - cargo is available in PATH (the fixture builds tillandsias and tillandsias-plan)
 
 critical_path:
-  - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-fleet-msg-same-host.sh && test -x scripts/test-fleet-msg-same-host.sh && echo 'ok: fleet-msg-same-host-fixture-parses'"
-    timeout_ms: 3000
-    expected_behavior: "ok: fleet-msg-same-host-fixture-parses"
-
   - step: "nine arms (ack, mount, secret, reply, ttl, wake, wildcard, plain, leak) and three controls pass by name"
-    command: "out=$(bash scripts/test-fleet-msg-same-host.sh 2>&1); rc=$?; case \"$out\" in (*'ok:fleet-msg-same-host:9/9+3-controls'*) [ \"$rc\" = 0 ] && echo 'ok: fleet-msg-same-host 9/9+3' ;; (*) printf '%s\\n' \"$out\" | grep -E '^(FAIL|fail:)' | head -12; exit 1 ;; esac"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-fleet-msg-same-host.lua 2>&1"
     timeout_ms: 900000
-    expected_behavior: "ok: fleet-msg-same-host 9/9+3"
+    expected_behavior: "ok:fleet-msg-same-host:"
 
 observability:
   traces:
     - "@trace order:1506-q7ab"
     - "@trace openspec/changes/fleet-messaging-poc/design.md#decision-3"
-  expected_log: "ok:fleet-msg-same-host:9/9+3-controls"
+  expected_log: "ok:fleet-msg-same-host:"
   log_fields:
     spec: "ci-release"
     test: "fleet-msg-same-host"
@@ -58,10 +53,10 @@ observability:
 
 rollback:
   on_failure: >
-    A named arm or control failed. Re-run `bash scripts/test-fleet-msg-same-host.sh`
+    A named arm or control failed. Re-run `tillandsias-plan script run scripts/lua/test-fleet-msg-same-host.lua`
     and read its FAIL lines and the mover log it prints. Do not let the mover
     ack before mailbox_accept_with returned (the fsync proof), trust an
     envelope's `from` over the lane directory it sits in, drop the mover's
     second secret check, honour a seam without an explicit
     TILLANDSIAS_MSG_ROOT, or follow a symlink inside a lane to make it pass.
-  command: "bash scripts/test-fleet-msg-same-host.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-fleet-msg-same-host.lua 2>&1"

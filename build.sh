@@ -2387,7 +2387,7 @@ PFEOF
     _pf_now
     _pf_iso="$_pf_iso deadline-clock=$_PF_CLOCK"
     # ORDER 1616-njfd: and the budget that applies, so a regression reads
-    # against the right number (test-preflight-front-door.sh judges by it).
+    # against the right number (test-preflight-front-door.lua judges by it, through common.preflight_judge).
     _pf_budget
     _pf_iso="$_pf_iso budget=${_PF_BUDGET}s budget-regime=$_PF_BUDGET_REGIME decider-deadline=${_pf_ddeadline}s"
 
@@ -5237,7 +5237,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # stale claim, because "writes nothing" is trivially satisfied by breaking
     # the reaper and would silently delete 641-e2qa criterion 2.
     _step "Checking expire-claims writes only when asked (1067-24q6)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-expire-claims-write-is-opt-in.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-expire-claims-write-is-opt-in.lua" 2>&1; then
         _error "expire-claims mutates without an explicit --write, or --write no longer expires — a read probe can release another host's lease"
         exit 1
     fi
@@ -5261,7 +5261,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "vault-shutdown classifier fixture passed"
 
     _step "Checking the promote-stable evidence gate and dry-run..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-promote-stable-evidence-gate.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-promote-stable-evidence-gate.lua" 2>&1; then
         _error "promote-stable's gate or its --dry-run regressed — this script flips an outward-facing release channel"
         exit 1
     fi
@@ -5517,7 +5517,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # it, so this asserts it directly, and its negative control reproduces the
     # shell mangling that started the order.
     _step "Checking ledger prose round-trips byte-identically (971-7muc)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-ledger-prose-roundtrip.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-ledger-prose-roundtrip.lua" 2>&1; then
         _error "a ledger write alters the prose it was given — the record cannot be trusted to say what its author wrote"
         exit 1
     fi
@@ -5538,7 +5538,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # main.rs rather than restating the value, so the next change to
     # ENCLAVE_NO_PROXY_BASE breaks the build instead of stranding the fleet.
     _step "Checking the enclave proxy list has one definition (923-rmtw)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-enclave-proxy-lib.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-enclave-proxy-lib.lua" 2>&1; then
         _error "the shell enclave proxy list drifted from ENCLAVE_NO_PROXY_BASE, or a script re-pasted it"
         exit 1
     fi
@@ -5742,20 +5742,31 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # yoga, 0 failures in a 10-run soak. Its log is rewritten into this
     # transcript's shape by scripts/lua/nextest-to-libtest.lua (same keys), and
     # doctests, which nextest does not run, still come from `cargo test --doc`.
+    # ORDER 2408-rkvd. The run gets its own temp dir, under /tmp (a TMPDIR under the checkout
+    # fails tests that assert the temp dir is outside the repository), and must leave it empty:
+    # leftover test dirs filled /tmp's inodes on 2026-11-26 and the land queue evicted 19 PRs.
+    _ws_tmp="$(mktemp -d /tmp/tillandsias-gate-tests.XXXXXX)" || { _error "could not make the test run's temp dir under /tmp (2408-rkvd)"; exit 1; }
     if _test_runner_is_nextest; then
         _ws_nx_log="$SCRIPT_DIR/target/test-nextest-workspace-gate.log"
-        _run cargo nextest run --workspace --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" \
+        TMPDIR="$_ws_tmp" _run cargo nextest run --workspace --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" \
             >"$_ws_nx_log" 2>&1 || _ws_test_rc=$?
         cat "$_ws_nx_log"
         _nextest_transcript "$_ws_nx_log" >"$_WS_TEST_TRANSCRIPT" || { _error "could not convert the nextest log $_ws_nx_log (2243-urcy)"; exit 1; }
         _ws_doc_rc=0
-        _run cargo test --workspace --doc --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" \
+        TMPDIR="$_ws_tmp" _run cargo test --workspace --doc --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" \
             2>&1 | tee -a "$_WS_TEST_TRANSCRIPT" || _ws_doc_rc="${PIPESTATUS[0]}"
         [ "$_ws_test_rc" -eq 0 ] && _ws_test_rc="$_ws_doc_rc"
     else
-    _run cargo test --workspace --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" \
+    TMPDIR="$_ws_tmp" _run cargo test --workspace --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" \
         2>&1 |
         tee "$_WS_TEST_TRANSCRIPT" || _ws_test_rc="${PIPESTATUS[0]}"
+    fi
+    _ws_tmp_rc=0
+    _run_lua_decider "scripts/lua/check-test-tmp-leftovers.lua" "$_ws_tmp" 2>&1 || _ws_tmp_rc=$?
+    rm -rf -- "${_ws_tmp:?}"
+    if [ "$_ws_tmp_rc" -ne 0 ]; then
+        _error "the workspace tests left entries in their temp dir (the REFUSED lines above name them) — 2408-rkvd"
+        exit 1
     fi
     if ! _ws_baseline_verdict="$(bash "$SCRIPT_DIR/scripts/check-test-baseline.sh" --from "$_WS_TEST_TRANSCRIPT")"; then
         _error "$_ws_baseline_verdict"
@@ -5863,16 +5874,26 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # in-process races --test-threads=1 serialised cannot occur (~45 s against
     # ~97 s on yoga, 0 failures in a 10-run soak); _fg_filter is libtest's
     # --exact form, which nextest accepts after `--`.
+    # ORDER 2408-rkvd: this pass compiles mod tray, which the --workspace pass cannot see, so
+    # it gets its own temp dir under /tmp and the same leftovers check.
+    _fg_tmp="$(mktemp -d /tmp/tillandsias-gate-fg-tests.XXXXXX)" || { _error "could not make the feature-gated run's temp dir under /tmp (2408-rkvd)"; exit 1; }
     if _test_runner_is_nextest; then
-    _run cargo nextest run -p tillandsias-headless --bin tillandsias \
+    TMPDIR="$_fg_tmp" _run cargo nextest run -p tillandsias-headless --bin tillandsias \
         --features tray,listen-vsock --no-fail-fast \
         --manifest-path "$SCRIPT_DIR/Cargo.toml" ${_fg_filter[@]+-- "${_fg_filter[@]}"} 2>&1 |
         tee "$_fg_transcript" || _fg_rc="${PIPESTATUS[0]}"
     else
-    _run cargo test -p tillandsias-headless --bin tillandsias \
+    TMPDIR="$_fg_tmp" _run cargo test -p tillandsias-headless --bin tillandsias \
         --features tray,listen-vsock --no-fail-fast \
         --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 ${_fg_filter[@]+"${_fg_filter[@]}"} 2>&1 |
         tee "$_fg_transcript" || _fg_rc="${PIPESTATUS[0]}"
+    fi
+    _fg_tmp_rc=0
+    _run_lua_decider "scripts/lua/check-test-tmp-leftovers.lua" "$_fg_tmp" 2>&1 || _fg_tmp_rc=$?
+    rm -rf -- "${_fg_tmp:?}"
+    if [ "$_fg_tmp_rc" -ne 0 ]; then
+        _error "the tray/listen-vsock tests left entries in their temp dir (the REFUSED lines above name them) — 2408-rkvd"
+        exit 1
     fi
     if [[ $_fg_rc -ne 0 ]]; then
         _error "the tray/listen-vsock test set failed (cargo rc=$_fg_rc) — transcript: $_fg_transcript"
@@ -6020,7 +6041,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # advisory can RUN — a broken checkout is a build break; a ledger finding is
     # not.
     _step "Checking the base ledger for completions the fold hides (751-i9mb, advisory)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-base-ledger-status-loss.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-base-ledger-status-loss.lua" 2>&1; then
         _error "the base-ledger status-loss advisory could not run — that is a broken checkout, not a clean ledger"
         exit 1
     fi
@@ -6624,6 +6645,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus YAML parse gate passed"
 
+    # ORDER 2402-mw57 — two files declared one litmus id and the runner loaded
+    # only one of them, so the other's steps never ran.
+    _step "Checking every litmus id is declared once, by the file it resolves to (2402-mw57)..."
+    if ! _run_lua_decider "scripts/lua/check-litmus-id-unique.lua" 2>&1; then
+        _error "a litmus id is declared twice, or by a file it does not resolve to — the runner loads one and the other never runs (2402-mw57; the REFUSED lines are above)"
+        exit 1
+    fi
+    _info "Litmus id uniqueness gate passed"
+
     # ORDER 1594-mtc3 — relay-preflight's phase 5 does not select a test-*.sh
     # the diff deletes (every shell->lua port deletes one) as a touched fixture.
     _step "Checking relay-preflight skips deleted fixtures (1594-mtc3)..."
@@ -7161,7 +7191,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # negative control matters as much as the rest: arms that only check a
     # refusal are satisfied by a tool that refuses unconditionally.
     _step "Checking a land gate refusal names its step and its log (1033-iycs)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-land-gate-refusal-names-its-step.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-land-gate-refusal-names-its-step.lua" 2>&1; then
         _error "the land tool's gate refusal lost its diagnostic (1033-iycs) — see the verdict line above"
         exit 1
     fi

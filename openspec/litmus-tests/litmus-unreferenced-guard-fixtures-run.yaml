@@ -99,3 +99,9 @@ critical_path:
     assert_exit: 0
     assert_output_contains: "ok:host-slug-resolution:"
     timeout_ms: 120000
+  - step: "a scratch-repo script run ignores a PROJECT_ROOT naming another checkout"
+    command: "P=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) && TILLANDSIAS_PLAN_BIN=\"$P\" \"$P\" script run scripts/lua/test-script-run-ignores-foreign-project-root.lua 2>&1"
+    expected_behavior: "ok:script-run-foreign-project-root:3 arms"
+    assert_exit: 0
+    assert_output_contains: "ok:script-run-foreign-project-root:3 arms"
+    timeout_ms: 120000

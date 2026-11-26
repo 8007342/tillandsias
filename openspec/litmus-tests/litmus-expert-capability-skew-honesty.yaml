@@ -185,12 +185,33 @@ critical_path:
     timeout_ms: 30000
     expected_behavior: "ok: no-manifest-no-phantom-regression"
 
-  - step: "the skew vocabulary is CLOSED — exactly four values can ever be assigned"
+  - step: "D3.6 PIPELINE-FREE: with only bash, cat, test and the expert on PATH, binary and checkout in sync still read skew=none"
+    # ORDER 2396-x2x9. The awk | sort, tr | sed and sed | head chains are the
+    # helper's now; the shell body could not run them on this PATH (red before the
+    # port, measured). The fixture-visible half of the execve drop (21 -> see D3.6).
+    command: "F=/tmp/.litmus-569; cp crates/tillandsias-plan/capabilities.txt $F/checkout/crates/tillandsias-plan/capabilities.txt && B=$F/bare; rm -rf \"$B\" $F/state/state $F/state/started_at && mkdir -p \"$B\" && for t in bash cat test; do ln -s \"$(command -v $t)\" \"$B/$t\" || exit 1; done && ln -s $F/bin/plan \"$B/tillandsias-plan\" && O=$(env -i PATH=\"$B\" FORGE_EXPERTS_STATE_DIR=$F/state /bin/sh images/default/lib-expert-capability.sh $F/bin/plan $F/checkout) && case \"$O\" in 'expert_capability: now='[a-z]*' skew=none blocked_capabilities=- lost_on_relaunch=- '*) echo 'ok: pipeline-free-skew-none' ;; *) echo \"got: $O\"; exit 1 ;; esac"
+    timeout_ms: 30000
+    expected_behavior: "ok: pipeline-free-skew-none"
+
+  - step: "D3.6 NO-RUNNER: with no binary to run the helper, currency is unknown and the line says why, never skew=none"
+    command: "F=/tmp/.litmus-569; B=$F/bare-norun; rm -rf \"$B\" && mkdir -p \"$B\" && for t in bash cat test; do ln -s \"$(command -v $t)\" \"$B/$t\" || exit 1; done && O=$(env -i PATH=\"$B\" FORGE_EXPERTS_STATE_DIR=$F/state /bin/sh images/default/lib-expert-capability.sh '' $F/checkout) && case \"$O\" in 'expert_capability: now=none after_relaunch=none skew=unknown-currency blocked_capabilities=- lost_on_relaunch=- '*' probe=no-plan-binary'*'CURRENCY UNKNOWN'*) echo 'ok: no-runner-unknown-currency' ;; *) echo \"got: $O\"; exit 1 ;; esac"
+    timeout_ms: 30000
+    expected_behavior: "ok: no-runner-unknown-currency"
+
+  - step: "the skew vocabulary is CLOSED — exactly six values can ever be reported, each non-default one with advice"
     # An open-ended verdict string is an unfalsifiable state, and this project
     # forbids the indeterminate 'may still be...' branch by construction. The
     # assignment count is asserted EXACTLY so a fifth verdict cannot be added
     # without an action being written for it in the advice function.
-    command: "n=$(grep -c 'TILLANDSIAS_EXPERT_CAP_SKEW=\"' images/default/lib-expert-capability.sh); test $n = 4 && for v in pending-build relaunch-required relaunch-regresses; do grep -q \"TILLANDSIAS_EXPERT_CAP_SKEW=\\\"$v\\\"\" images/default/lib-expert-capability.sh || exit 1; grep -q \"^        $v)\" images/default/lib-expert-capability.sh || exit 1; done; echo \"ok: closed-skew-vocabulary n=$n\""
+    # ORDER 2396-x2x9: this step was UNFALSIFIABLE (`... done; echo ok` printed its ok
+    # whatever the count was) and had been FALSE since rebuild-required and
+    # unknown-currency joined the vocabulary: the count was 6, the test said 4, the
+    # step said ok. The vocabulary now lives in lua/expert-capability.lua, and the
+    # shim accepts exactly these six from it (anything else is
+    # probe=helper-out-of-grammar), so the pin is that one case line, the six
+    # literals in the helper, and the advice label for every non-default value —
+    # one && chain.
+    command: "L=images/default/lua/expert-capability.lua S=images/default/lib-expert-capability.sh; grep -qx '[[:space:]]*none|pending-build|relaunch-required|relaunch-regresses|rebuild-required|unknown-currency)' \"$S\" && for v in none pending-build relaunch-required relaunch-regresses rebuild-required unknown-currency; do grep -qF \"\\\"$v\\\"\" \"$L\" || exit 1; done && for v in pending-build relaunch-required relaunch-regresses rebuild-required unknown-currency; do grep -q \"^        $v)\" \"$S\" || exit 1; done && echo 'ok: closed-skew-vocabulary n=6'"
     timeout_ms: 10000
     expected_behavior: "ok: closed-skew-vocabulary"
 
@@ -293,11 +314,11 @@ critical_path:
     timeout_ms: 30000
     expected_behavior: "ok: embed-endpoint-discoverable"
 
-  - step: "NO-PYTHON: the capability probe is POSIX shell + awk only"
+  - step: "NO-PYTHON: the capability probe is POSIX shell and its Lua helper only"
     # Comments are stripped before the check: the file's own header says it uses
     # no python, and a guard that cannot tell a PROHIBITION from a VIOLATION is
     # not a guard.
-    command: "mf_stage prod 0 OUT -- sed 's/#.*//' images/default/lib-expert-capability.sh && mf_holds_i_ere OUT '(^|[^a-z])python' && exit 1; grep -q 'awk' images/default/lib-expert-capability.sh && sh -n images/default/lib-expert-capability.sh && bash -n images/default/config-overlay/mcp/forge-plan.sh && echo 'ok: no-python-posix-only'"
+    command: "mf_stage prod 0 OUT -- sed 's/#.*//' images/default/lib-expert-capability.sh && mf_holds_i_ere OUT '(^|[^a-z])python' && exit 1; mf_stage prod 0 LOUT -- sed 's/--.*//' images/default/lua/expert-capability.lua && mf_holds_i_ere LOUT '(^|[^a-z])python' && exit 1; sh -n images/default/lib-expert-capability.sh && bash -n images/default/config-overlay/mcp/forge-plan.sh && echo 'ok: no-python-posix-only'"
     timeout_ms: 10000
     expected_behavior: "ok: no-python-posix-only"
 

@@ -29,7 +29,7 @@ description: >
   silently making the door useless (it is judged on the --daily-full gate). The budget is SET from a
   measurement and the standing no-raise rule applies from the day it lands.
 preconditions:
-  - workspace contains scripts/test-preflight-front-door.sh
+  - workspace contains scripts/lua/test-preflight-front-door.lua
   - build.sh accepts --preflight
 
 critical_path:
@@ -39,7 +39,7 @@ critical_path:
   # and a second live run would outlast this step. What this pins is that the
   # plain run says so by name (never ok:, never silence) ...
   - step: "without the live switch the fixture names itself not-run, rc 0"
-    command: "env -u TILLANDSIAS_FRONT_DOOR_LIVE -u FRONT_DOOR_SCRATCH bash scripts/test-preflight-front-door.sh"
+    command: "env -u TILLANDSIAS_FRONT_DOOR_LIVE -u FRONT_DOOR_SCRATCH \"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-preflight-front-door.lua"
     timeout_ms: 30000
     expected_behavior: "not-run:preflight-front-door"
     assert_exit: 0
@@ -48,7 +48,7 @@ critical_path:
   # ... and that the gate that does run it live is wired: the step binds the
   # script, and the daily-full gate's own subshell exports the switch.
   - step: "the --daily-full gate runs it live through gate step 928"
-    command: "grep -qx 'STEP_SCRIPT=\"scripts/test-preflight-front-door.sh\"' scripts/gate-steps.d/928-*.step && grep -E '^ *export .*TILLANDSIAS_FRONT_DOOR_LIVE=1; eval' scripts/land-queue.sh >/dev/null && echo 'ok: daily-full runs the front door live'"
+    command: "grep -qx 'STEP_LUA=\"scripts/lua/test-preflight-front-door.lua\"' scripts/gate-steps.d/928-*.step && grep -E '^ *export .*TILLANDSIAS_FRONT_DOOR_LIVE=1; eval' scripts/land-queue.sh >/dev/null && echo 'ok: daily-full runs the front door live'"
     timeout_ms: 5000
     expected_behavior: "ok: daily-full runs the front door live"
     assert_exit: 0

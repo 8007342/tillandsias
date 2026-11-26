@@ -9,11 +9,10 @@
 # rule, which judged forge steps by the host's runqueue. Three arms, run
 # through the real runner in a temp root with injected counters.
 STEP_DESC="Checking the kill-time adjudicator diffs cpu.pressure (956-llei)"
-STEP_SCRIPT="scripts/test-litmus-kill-adjudicator.sh"
+STEP_LUA="scripts/lua/test-litmus-kill-adjudicator.lua"
 STEP_ERROR="the litmus kill-time adjudicator does not classify by cpu.pressure diff (956-llei) — see the verdict line above"
 STEP_OK="Litmus kill-time adjudicator check passed"
 STEP_SERIAL="runs the real litmus runner"
 STEP_LANES="litmus"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin PASS 7/7 arms at 213905e79 (fleet-run)"
-STEP_READS="scripts/test-litmus-kill-adjudicator.sh"
-STEP_SECOND_REGIME="yolanda 2026-11-23 msys PASS 7/7 arms at c9f4464cb (fleet-run)"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-26 darwin ok:litmus-kill-adjudicator:7 arms (work/2387-lrg2 @ 4e3a2a540)"
+STEP_READS="scripts/lua/test-litmus-kill-adjudicator.lua"

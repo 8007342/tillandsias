@@ -33,20 +33,20 @@ severity: high
 size: instant
 
 preconditions:
-  - repository contains scripts/test-loop-status-append-input.sh
+  - repository contains scripts/lua/test-loop-status-append-input.lua
   - repository contains crates/tillandsias-plan/src/main.rs
   - a built tillandsias-plan binary, or a cargo toolchain to build one
 
 critical_path:
   - step: "SHAPE: the fixture exists and is executable"
-    command: "test -x scripts/test-loop-status-append-input.sh && echo 'ok: fixture-present'"
+    command: "test -f scripts/lua/test-loop-status-append-input.lua && echo 'ok: fixture-present'"
     timeout_ms: 5000
     expected_behavior: "ok: fixture-present"
 
   - step: "BEHAVIOURAL: every input arm passes against the real binary (bare path honoured, blocking stdin refused bounded, empty read named, both explicit forms still write)"
-    command: "bash scripts/test-loop-status-append-input.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-loop-status-append-input.lua"
     timeout_ms: 120000
-    expected_behavior: "PASS: loop-status-append input handling 6/6 (1004-8vkv)"
+    expected_behavior: "ok:loop-status-append-input:6 arms"
 
   - step: "ANTI-REGRESSION: the bounded-read path is present in the dispatch, not a comment claiming it"
     command: "grep -q 'recv_timeout' crates/tillandsias-plan/src/main.rs && grep -q 'read_loop_status_fragment' crates/tillandsias-plan/src/main.rs && echo 'ok: bounded-read-wired'"
