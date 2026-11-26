@@ -595,6 +595,18 @@ done <<FXEOF
 $fixtures
 FXEOF
 
+# ORDER 2399-vsok: a fixture that drives the macOS VM (boots the guest through
+# the installed tray, execs in it) declares `# drives-vm: <why>` in its header,
+# and the preflight names it skipped unless this run opts in. It was selected
+# on 2026-11-26 because it names a path the diff touched, and it drove the
+# operator's VM through a stale dev tray for ~300 s. A bare `# drives-vm:` with
+# no reason is not a declaration.
+# BEGIN-DRIVES-VM
+_drives_vm() { # fixture path: 0 when it declares drives-vm and the run did not opt in
+    [ "${TILLANDSIAS_RELAY_DRIVE_VM:-0}" = 1 ] && return 1
+    grep -qE '^# drives-vm: [^ ]' "$1" 2>/dev/null
+}
+# END-DRIVES-VM
 if [ "$PLAN_MODE" != 1 ]; then
     _fx_ran=0
     while IFS= read -r _fx; do
@@ -602,6 +614,11 @@ if [ "$PLAN_MODE" != 1 ]; then
         _name="fixture:$(basename "$_fx" .sh)"
         _t="$(timing_now_ms)"
         _fx_ran=$((_fx_ran + 1))
+        if _drives_vm "$_fx"; then
+            _item "$_name" skip-drives-vm 0
+            echo "skip:relay-preflight:$_name:drives-the-macos-vm — set TILLANDSIAS_RELAY_DRIVE_VM=1 to run it (2399-vsok)" >&2
+            continue
+        fi
         if _cap bash "$_fx"; then
             _item "$_name" ok "$_t"
         else
