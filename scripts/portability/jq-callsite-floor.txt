@@ -58,4 +58,3 @@
 1 scripts/test-opencode-vault-auth-content.sh
 6 scripts/tillandsias-host-push-cert.sh
 10 scripts/update-convergence-dashboard.sh
-3 scripts/windows-host-capability-probe.sh
