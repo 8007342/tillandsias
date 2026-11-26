@@ -43,7 +43,6 @@ scripts/check-script-exec-bits.sh
 scripts/check-sigpipe-verdict-pipelines-added.sh
 scripts/check-skill-canonicalization.sh
 scripts/check-skills-single-source.sh
-scripts/check-spec-index-resolution-agreement.sh
 scripts/check-stranded-in-progress.sh
 scripts/check-test-baseline.sh
 scripts/check-yaml-reader-availability.sh
