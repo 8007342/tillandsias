@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: plan-binary-probe-debug-build-shadows-release-on-path
+    order: "2404-7yv4"
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 1
+    title: "plan-binary-probe answered a leftover target/debug build ahead of the current release on PATH"
+    context: |
+      lenovinha 2026-11-26 (macuahuitl asked why): the w12 worktree had no release build, and its crate tests had left
+      target/debug/tillandsias-plan behind hours earlier. resolve_plan_binary tries debug second inside each group, so it answered that
+      leftover ahead of the release copy in ~/.local/bin. Three ci-release litmus went red on that worktree only: two door deadlines
+      (debug is slow) and selector-urgency (the old debug build lacked the feature). The fix puts every release build and PATH before
+      any debug build; debug still answers when nothing else runs. Red first: the new arm of
+      test-plan-binary-probe-release-over-debug.lua fails on the old probe (its control runs the probe as it was on trunk).
+    exit_criteria:
+      - "the new arm is green and its control red on the old probe; test-plan-binary-probe.sh unchanged"
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture arm is the pin."
+    next_action: "PR."
+    provenance: filed by lenovinha; asked by macuahuitl 2026-11-26.
+    related: [2398-zvug, 2364-qgr7]
+    events:
+      - {type: filed, ts: '2026-11-26T10:19:51Z', host: lenovinha, summary: debug build shadows release on PATH}
