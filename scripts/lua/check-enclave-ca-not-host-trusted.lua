@@ -51,12 +51,18 @@ local files, allowed, sites = 0, 0, {}
 for _, root in ipairs(roots) do
     local ok, list = pcall(fs.walk, root)
     if ok and list then
+        local keep = {}
         for _, f in ipairs(list) do
             local ext = f:match("%.(%w+)$")
             local base = f:match("([^/]+)$") or f
-            if ext and SUFFIX[ext] and base ~= SELF and base ~= TEST and not f:find("/target/", 1, true) then
-                local okr, src = pcall(fs.read, f)
-                if okr and src then
+            if ext and SUFFIX[ext] and base ~= SELF and base ~= TEST and not f:find("/target/", 1, true) then keep[#keep + 1] = f end
+        end
+        -- 2417-jzhh: every scanned source is read, or the check blocks naming it
+        local SRC = require("common.listed_read").read_all(NAME, keep)
+        for _, f in ipairs(keep) do
+            do
+                local src = SRC[f]
+                if src then
                     files = files + 1
                     local prev = ""
                     local runs_certutil = src:find("certutil", 1, true) ~= nil

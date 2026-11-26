@@ -62,13 +62,16 @@ for _, p in ipairs(walk("images/default")) do
 end
 table.sort(annotated)
 
+-- 2417-jzhh: every annotated file is read, or the check blocks naming it
+local SRC = require("common.listed_read").read_all("cheatsheet-refs", annotated)
+
 local ANNOT = [=[@cheatsheet[[:space:]]+([A-Za-z0-9_./-]+\.md(?:[[:space:]]*,[[:space:]]*[A-Za-z0-9_./-]+\.md)*)]=]
 local function cap1(m) return (type(m) == "table" and (m[1] or m[0])) or m end
 
 local refs = {} -- { file, line, path }
 for _, f in ipairs(annotated) do
-    local ok_r, c = pcall(fs.read, f)
-    if ok_r and c:find("@cheatsheet", 1, true) then
+    local c = SRC[f]
+    if c and c:find("@cheatsheet", 1, true) then
         local n = 0
         for _, l in ipairs(text.lines(c)) do
             n = n + 1
@@ -87,8 +90,8 @@ end
 -- `## See also` bullets, per cheatsheet, section-scoped.
 for _, f in ipairs(walk(CHEATSHEETS)) do
     if f:match("%.md$") then
-        local ok_r, c = pcall(fs.read, f)
-        if ok_r and c:find("## See also", 1, true) then
+        local c = SRC[f]
+        if c and c:find("## See also", 1, true) then
             local n, in_section = 0, false
             for _, l in ipairs(text.lines(c)) do
                 n = n + 1

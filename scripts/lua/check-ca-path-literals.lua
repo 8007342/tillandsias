@@ -49,11 +49,15 @@ local count = 0
 for _, dir in ipairs({ "crates", "scripts", "images" }) do
     local ok_walk, files = pcall(fs.walk, dir)
     if ok_walk then
-        for _, f in ipairs(files) do
-            local base = f:match("([^/]+)$")
-            if not EXCLUDE[base] then
-                local ok_read, content = pcall(fs.read, f)
-                if ok_read then
+        -- 2417-jzhh: fs.read returns non-UTF-8 files (measured), so a failed read is a
+        -- genuinely unreadable file, never "binary": block naming it instead of skipping it.
+        local keep = {}
+        for _, f in ipairs(files) do if not EXCLUDE[f:match("([^/]+)$")] then keep[#keep + 1] = f end end
+        local SRC = require("common.listed_read").read_all("ca-path-literals", keep)
+        for _, f in ipairs(keep) do
+            do
+                local content = SRC[f]
+                if content then
                     -- A file fs.read cannot hand back as valid UTF-8 (binary
                     -- content) cannot be matched by the regex engine either;
                     -- skip it, the same as grep classifying it binary.

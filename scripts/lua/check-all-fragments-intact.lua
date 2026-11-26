@@ -99,6 +99,9 @@ end
 -- Leading whitespace allowed is the whole point: a marker indented inside a
 -- `summary: |` block scalar parses as valid YAML and is invisible to a
 -- column-0 grep.
+-- 2417-jzhh: a fragment that cannot be read is not intact; block naming it
+local SRC = require("common.listed_read").read_all("all-fragments-intact", files, function(d) return read_path[d] end)
+
 local MARKER = [=[^[[:space:]]*(<{7}|={7}|>{7})( |$)]=]
 
 local checked = 0
@@ -107,9 +110,9 @@ local yaml_candidates = {}
 
 for _, disp in ipairs(files) do
     checked = checked + 1
-    local ok_r, content = pcall(fs.read, read_path[disp])
+    local content = SRC[read_path[disp]]
     local has_marker = false
-    if ok_r then
+    if content then
         for _, line in ipairs(text.lines(content)) do
             if text.is_match(line, MARKER) then
                 has_marker = true
