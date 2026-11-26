@@ -1989,7 +1989,7 @@ pub enum OwnershipScope {
 ///
 /// ONE COMPUTATION, TWO READERS, on purpose. [`answer_next`] built this fold
 /// inline and consumed only the KEY SET; the arrival-routing check (order
-/// 831-ezea, `scripts/check-arrival-routing.sh`) needs the same fold plus the
+/// 831-ezea, `scripts/lua/check-arrival-routing.lua`) needs the same fold plus the
 /// owner names, and re-deriving "who owns this file" beside the selector is
 /// exactly how an invariant with two implementations acquires two answers.
 /// 831-ezea's own design note claims a second copy already exists at
@@ -3042,7 +3042,7 @@ events:
     /// difference is load-bearing: the selector excludes ACTIVE CLAIMS, the
     /// arrival rule reads every OPEN row. A regression that collapsed
     /// `OpenRows` onto `ActiveClaims` would leave
-    /// `scripts/check-arrival-routing.sh` reporting green over an almost-empty
+    /// `scripts/lua/check-arrival-routing.lua` reporting green over an almost-empty
     /// set on any ledger where nothing happens to be in flight — the exact
     /// green-over-nothing failure 831-ezea was filed against.
     #[test]

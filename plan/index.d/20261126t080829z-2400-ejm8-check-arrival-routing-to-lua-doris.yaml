@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-check-arrival-routing-to-lua-with-a-fixture
+    order: 2400-ejm8
+    status: implemented
+    kind: refactor
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua-port, arrival-routing, decider]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/check-arrival-routing.lua
+      - scripts/check-arrival-routing.sh
+      - scripts/lua/test-arrival-routing.lua
+      - scripts/gate-steps.d/956-2400-ejm8.step
+    title: |
+      Port scripts/check-arrival-routing.sh to Lua, and give it the fixture it never had (handed to doris by yolanda, 2026-11-26)
+    context: |
+      Stdout, exit code and stderr lines are identical to the .sh: diffed on doris (msys) for a
+      missing base and for a real advisory (1 of 1 new rows), with only the .sh -> .lua name in one
+      note changed. build.sh runs it through _run_lua_decider; test-added-deciders-refuse-a-missing-base,
+      the litmus, check-scorable-obligation-added.sh and the answer.rs/main.rs prose name the .lua.
+      The .sh had no fixture. New scripts/lua/test-arrival-routing.lua, bound by gate step 956, pins
+      every verdict against a stub plan binary (ok 0 of 0, no-diff-base, no-plan-binary, stale,
+      advisory by distinct row with the rule and remedies on stderr, ok over a population,
+      unreadable-fragment, fail on any other exit, fail on a missing population), plus a mutation
+      that counts overlap lines instead of rows. Stale draft #1186 has no change to this file.
+    verifiable_closure: |
+      tillandsias-plan script run scripts/lua/test-arrival-routing.lua prints
+      ok:arrival-routing-fixture:12 arms. Measured on doris (msys): 12 arms.
+    unscoreable: "the closure is the new fixture, bound by gate step 956-2400-ejm8; no separate litmus pin"
+status:
+  - packet_id: port-check-arrival-routing-to-lua-with-a-fixture
+    field: status
+    value: implemented
+    ts: "2026-11-26T08:08:30Z"
+    host: doris

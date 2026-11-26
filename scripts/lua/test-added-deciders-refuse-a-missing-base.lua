@@ -38,7 +38,7 @@ for _, k in ipairs(OVERRIDES) do ENV[k] = "" end
 -- { family, path, marker the named unavailable-base path prints }
 local CASES = {
     { "sh",  "scripts/check-added-test-is-referenced.sh",           "unavailable — added-test" },
-    { "sh",  "scripts/check-arrival-routing.sh",                    "no-diff-base" },
+    { "lua", "scripts/lua/check-arrival-routing.lua",               "no-diff-base" },
     { "sh",  "scripts/check-issue-citation-convention.sh",          "unavailable — added-citation" },
     { "sh",  "scripts/check-sigpipe-verdict-pipelines-added.sh",    "base-unavailable" },
     { "sh",  "scripts/preflight-fixtures-default-target.sh",        "base-ref-unavailable" },
