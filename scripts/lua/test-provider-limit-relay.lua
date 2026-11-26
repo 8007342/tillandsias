@@ -31,6 +31,8 @@ local LIB = "images/default/lib-provider-limit.sh"
 
 local top = proc.run({ argv = { "git", "rev-parse", "--show-toplevel" }, timeout_ms = 30000 })
 local ROOT = text.trim(top.stdout or "")
+-- 2392-gmqe: the POSIX shell by a name the native runner can spawn (2246-fkea); a bare "bash" is WSL's on Windows.
+local SH = require("common.fixture").posix_shell()
 if top.status ~= "exited" or top.code ~= 0 or ROOT == "" then
     verdict.could_not_run(NAME, "git rev-parse --show-toplevel did not answer")
 end
@@ -74,7 +76,7 @@ end
 
 -- relay(host, args...) runs the relay as `host`, sharing the plan dir.
 local function relay(host, args, extra)
-    local argv = { "bash", ROOT .. "/" .. RELAY }
+    local argv = { SH, ROOT .. "/" .. RELAY }
     for _, a in ipairs(args) do argv[#argv + 1] = a end
     local env = {
         PATH = PATH0, HOME = ABS .. "/" .. host,
@@ -101,7 +103,7 @@ local function forge(host, shared, extra, provider)
         TILLANDSIAS_PROVIDER_LIMIT_SHARED = shared,
     }
     for k, v in pairs(extra or {}) do env[k] = v end
-    return proc.run({ argv = { "bash", ABS .. "/forge-check.sh", provider or "opencode" },
+    return proc.run({ argv = { SH, ABS .. "/forge-check.sh", provider or "opencode" },
         env = env, timeout_ms = 30000 })
 end
 
@@ -141,6 +143,8 @@ r = forge("hostB", shared, { TILLANDSIAS_IGNORE_PROVIDER_LIMIT = "1" })
 arm("override: TILLANDSIAS_IGNORE_PROVIDER_LIMIT=1 still goes ahead", (r.stdout or ""):find("WENT", 1, true) ~= nil, r.stdout)
 
 -- expired: a past deadline in the plan seeds nothing and B goes ahead
+-- 2392-gmqe: the dir is not guaranteed by an earlier arm (native Windows: fs.write refused it).
+fs.mkdir(REL .. "/plan")
 fs.write(REL .. "/plan/20261101t000000z-provider-limit-claude-hostC.yaml", table.concat({
     "events:", "  - packet_id: x", "    event:", "      type: note",
     "      summary: |-",
