@@ -3,7 +3,7 @@ events:
   - packet_id: safe-roots-hook-allow-gives-no-answer-for-a-forge-on-windows
     event:
       type: note
-      ts: "2026-11-26T11:00:00Z"
+      ts: "2026-11-26T07:08:51Z"
       host: doris
       summary: >-
         DIAGNOSED, read-only, no logic changed (waiting on 2354-5biy). Code path on native Windows:
