@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: workspace-tests-leak-tmp-dirs-and-exhaust-tmpfs-inodes-plan-crate
+    field: status
+    value: in_progress
+    ts: "2026-11-26T12:33:54Z"
+    host: yoga
+events:
+  - packet_id: workspace-tests-leak-tmp-dirs-and-exhaust-tmpfs-inodes-plan-crate
+    event: {type: claimed, ts: "2026-11-26T12:33:54Z", host: yoga, summary: "claimed by yoga (lenovinha declined: at its claim limit); work ref work/2407-aq7x"}
