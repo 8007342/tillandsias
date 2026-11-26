@@ -20,6 +20,7 @@
 --   1b  the Rust writer and the shell rule resolve the same usage-log path (1125-92xa)
 --   1c  the real CLI writer appends inside its OWN checkout; the host's log is unchanged
 --   1d  outside a checkout the Rust writer falls back to /tmp
+--   1e  (msys) and that fallback is the SAME FILE the shell's /tmp names, not only the same string (2392-nuca)
 --   2   in a checkout the default is repo-relative   2b and gitignored
 --   3   NEGATIVE CONTROL outside a checkout the shell rule falls back to /tmp
 --   4   an explicit TILLANDSIAS_*_LOG still wins
@@ -108,6 +109,12 @@ R="$(cd "$R" && pwd)"
 say rust "$("$BIN" metrics-log-path forge-expert-usage.jsonl "$R" 2>/dev/null)"
 say shell "$(. "$R/scripts/metrics-log-path.sh" 2>/dev/null || true; metrics_default_log forge-expert-usage.jsonl "$R")"
 say outside "$("$BIN" metrics-log-path forge-expert-usage.jsonl "/nonexistent-checkout-$$" 2>/dev/null)"
+# 2392-nuca: the DIRECTORY, not the string. Without MSYSTEM the binary prints its native spelling of the
+# fallback; the shell's /tmp, made native by cygpath (msys only), must name the same file.
+if command -v cygpath >/dev/null 2>&1; then
+    say native_rust "$(MSYSTEM= "$BIN" metrics-log-path forge-expert-usage.jsonl "/nonexistent-checkout-$$" 2>/dev/null)"
+    say native_shell "$(cygpath -m /tmp/forge-expert-usage.jsonl)"
+fi
 ]==], { bin = BIN })
     if (x.rust or "") == "" then
         T:arm("1b the binary answers 'metrics-log-path' (1125-92xa)", false, x.why)
@@ -145,6 +152,12 @@ say tmp_after "$(lines /tmp/forge-expert-usage.jsonl)"; say canon_after "$(lines
     -- NEGATIVE CONTROL for the Rust half: outside a checkout it still falls back to /tmp.
     T:arm("1d outside a checkout the Rust writer falls back to /tmp (forge path preserved)",
         x.outside == "/tmp/forge-expert-usage.jsonl", "got " .. tostring(x.outside))
+    -- 2392-nuca: on msys the strings in 1d agreed while Rust's /tmp was <drive>:\tmp and the shell's was
+    -- Git's usertemp mount (%TEMP%): two directories. Off msys the two spellings are one, so this is 1d.
+    if x.native_shell then
+        T:arm("1e outside a checkout the Rust fallback is the SAME FILE the shell's /tmp names (msys)",
+            x.native_rust == x.native_shell, "rust=" .. tostring(x.native_rust) .. " shell=" .. tostring(x.native_shell))
+    end
 end
 
 -- ── arm 2: inside a checkout the default is repo-relative, not /tmp ───────────

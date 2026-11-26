@@ -5,7 +5,7 @@
 -- test-gate-step-not-also-inline.lua — check-gate-step-not-also-inline.lua on
 -- scratch copies of build.sh and scripts/gate-steps.d/.
 --   1 LIVE     today's tree: no script runs both inline and as a step
---   2 MUTANT   the inline test-land-queue.sh block re-added (the 2026-09-28 ..
+--   2 MUTANT   a STEP_SCRIPT step's script re-added inline (first: the 2026-09-28 ..
 --              2266-4w3c duplicate of step 286) -> refused, naming the
 --              script and the step. PRE-FIX: no guard saw it.
 --   3 LUA      an inline _run_lua_decider duplicating a STEP_LUA step -> refused
@@ -51,13 +51,20 @@ local r1, o1 = check(nil)
 T:arm("1 LIVE no script runs both inline and as a gate step on this tree",
     r1.status == "exited" and r1.code == 0 and o1:find("ok:gate-step-not-also-inline:", 1, true) ~= nil, o1:sub(1, 300))
 
-local LQ = '    _step "Checking test-land-queue (1316-bnzt, 1255-s4im; ~14s)..."\n'
-    .. '    if ! _run bash "$SCRIPT_DIR/scripts/test-land-queue.sh" 2>&1; then\n'
-    .. '        _error "scripts/test-land-queue.sh failed"\n        exit 1\n    fi\n'
-local r2, o2 = check(LQ)
-T:arm("2 MUTANT the inline test-land-queue.sh block re-added is refused, naming the script and step 286",
+-- 2: a STEP_SCRIPT step's script re-added inline. Until 2398-zvug this was the
+-- 2026-09-28 test-land-queue.sh block and step 286; that fixture is Lua now, so
+-- the arm takes the first shell step there is, the way arm 3 takes a Lua one.
+local sh_step
+for name, body in pairs(STEPS) do
+    local s = body:match('\nSTEP_SCRIPT="([^"]+)"') or body:match('^STEP_SCRIPT="([^"]+)"')
+    if s and (not sh_step or name < sh_step[1]) then sh_step = { name, s } end
+end
+local r2, o2 = check('    _step "Checking a re-added inline block..."\n'
+    .. '    if ! _run bash "$SCRIPT_DIR/' .. sh_step[2] .. '" 2>&1; then\n'
+    .. '        _error "' .. sh_step[2] .. ' failed"\n        exit 1\n    fi\n')
+T:arm("2 MUTANT a STEP_SCRIPT step's script re-added inline is refused, naming the script and its step",
     r2.status == "exited" and r2.code ~= 0
-        and o2:find("violation:gate-step-not-also-inline:scripts/test-land-queue.sh: gate step 286-", 1, true) ~= nil,
+        and o2:find("violation:gate-step-not-also-inline:" .. sh_step[2] .. ": gate step " .. sh_step[1], 1, true) ~= nil,
     "rc=" .. tostring(r2.code) .. " " .. o2:sub(1, 300))
 
 -- 3: a Lua step's script run inline by _run_lua_decider
@@ -72,7 +79,7 @@ T:arm("3 LUA an inline _run_lua_decider duplicating a STEP_LUA step is refused",
         and o3:find("violation:gate-step-not-also-inline:" .. lua_step[2] .. ": gate step " .. lua_step[1], 1, true) ~= nil,
     "rc=" .. tostring(r3.code) .. " " .. o3:sub(1, 300))
 
-local r4, o4 = check('    # if ! _run bash "$SCRIPT_DIR/scripts/test-land-queue.sh" 2>&1; then\n')
+local r4, o4 = check('    # if ! _run bash "$SCRIPT_DIR/' .. sh_step[2] .. '" 2>&1; then\n')
 T:arm("4 COMMENT a commented-out inline line is not a run",
     r4.status == "exited" and r4.code == 0, "rc=" .. tostring(r4.code) .. " " .. o4:sub(1, 300))
 

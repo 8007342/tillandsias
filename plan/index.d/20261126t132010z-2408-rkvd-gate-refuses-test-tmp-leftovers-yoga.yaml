@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: gate-refuses-a-workspace-test-run-that-leaves-temp-dirs
+    order: 2408-rkvd
+    status: in_progress
+    kind: fix
+    priority: p1
+    title: "the gate runs the workspace tests under a fresh TMPDIR and refuses any entry they leave (slice 3 of the /tmp inode leak)"
+    capability_tags: [linux, tooling]
+    owned_files:
+      - build.sh
+      - scripts/lua/check-test-tmp-leftovers.lua
+      - scripts/lua/test-check-test-tmp-leftovers.lua
+    depends_on: []
+    context: |
+      Slice 3 of the p1 /tmp inode leak (coordinator 2026-11-26: "add a gate check that counts /tmp entries before and after
+      the workspace test run and fails on growth. Red first."), after 2407-aana (#1642, headless/podman/core) and 2407-aq7x
+      (#1646, tillandsias-plan). Counting the shared /tmp before and after measures every other process on the host too, so
+      the gate gives its own workspace test run a fresh TMPDIR under /tmp (one under the checkout fails tests that assert the
+      temp dir is outside the repo) and refuses any entry left in it. MEASURED on trunk: the workspace under nextest leaves
+      129 entries in such a dir; with both slices, 0. Stacked on both slices' refs by merge.
+    exit_criteria:
+      - "The checker is red on a dir holding a test's leftovers and green on an empty one, with a fixture pinning both."
+      - "build.sh's workspace test step runs under the fresh TMPDIR and refuses a leftover; red on trunk's tests, green with both slices."
+    verifiable_closure: |
+      tillandsias-plan script run scripts/lua/test-check-test-tmp-leftovers.lua
+    unscoreable: "fixture-scored: scripts/lua/test-check-test-tmp-leftovers.lua"
+    provenance: "macuahuitl-fedora 2026-11-26 (p1), yoga"
+    related: [2407-aana, 2407-aq7x]
+    events:
+      - {type: claimed, ts: "2026-11-26T13:20:10Z", host: yoga, summary: "claimed; work ref work/2408-rkvd"}

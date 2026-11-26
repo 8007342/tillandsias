@@ -5,7 +5,7 @@
 # as candidate reds and evicted innocent PRs. The landing queue now asks a host
 # door (scripts/lua/land-queue-host-door.lua) before every candidate; a host
 # problem is could-not-run:host:<cause> and nobody is evicted
-# (scripts/test-land-queue.sh ARM 34). This litmus forces each cause through
+# (scripts/lua/test-land-queue-eviction.lua ARM 34). This litmus forces each cause through
 # the door's seams. Red before 2118-tpmy: there was no door.
 name: litmus:land-queue-host-door-names-its-cause
 spec: ci-release

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: test-land-queue-to-lua-in-three-fixtures
+    field: status
+    value: blocked
+    ts: "2026-11-26T10:35:05Z"
+    host: lenovinha
+
+events:
+  - packet_id: test-land-queue-to-lua-in-three-fixtures
+    event:
+      type: note
+      ts: "2026-11-26T10:35:05Z"
+      host: lenovinha
+      summary: |-
+        reopen-evidence: PR #1628 is queued on the land queue; closes on its land commit

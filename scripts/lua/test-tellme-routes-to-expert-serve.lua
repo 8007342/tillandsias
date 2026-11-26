@@ -1,5 +1,5 @@
 -- @env PATH HOME TMPDIR
--- @trace order:1814-x78v, order:1815-tei4, spec:expert-serve-grounded-pipeline, order:2367-d5gx
+-- @trace order:1814-x78v, order:1815-tei4, order:2392-kww7, spec:expert-serve-grounded-pipeline, order:2367-d5gx
 --
 -- test-tellme-routes-to-expert-serve.lua — `tellme howto` and free-form `tellme about` answer through
 -- expert-serve when it answers; only when it does not, the keyword-grep + /api/generate path runs,
@@ -56,12 +56,33 @@ case "$url" in
 esac
 ]=])
 
--- The PATH is set inside the shell, in its own spelling. Returns {out=, chat={bodies}, gen={bodies}, calls=}.
-local RUN = 'cd "$1" || exit 96; W="$(pwd)"; case_dir="$2"; subject="$3"; shift 3; chmod +x bin/curl; export PATH="$W/bin:$PATH"\n'
-    .. 'export SHIM_DIR="$W/$case_dir" TILLANDSIAS_CHEATSHEETS="$W/cheatsheets"\n'
-    .. '[ -z "${PACK-}" ] || export TILLANDSIAS_EXPERT_CONTEXT_PACK="$W/$PACK"\n'
-    .. '"$BASH" "$subject" "$@" 2>&1 </dev/null\n'
+-- tellme is stock Lua: it is loaded here with io.popen backed by proc.run of
+-- the shell (the command line on stdin: the runtime refuses `sh -c <string>`).
+proc.run{ argv = { "chmod", "+x", W.abs .. "/bin/curl" }, timeout_ms = 10000 }
 local seq = 0
+local function load_tellme(path, e, args)
+    local so, stop = {}, {}
+    local function sink(t) return { write = function(self, ...) for _, v in ipairs({ ... }) do t[#t + 1] = v end return self end,
+        flush = function(self) return self end } end
+    local world = { string = string, table = table, math = math, ipairs = ipairs, pairs = pairs, select = select,
+        tonumber = tonumber, tostring = tostring, type = type,
+        arg = { [0] = path, table.unpack(args) },
+        io = { stdout = sink(so), stderr = sink(so), popen = function(c)
+            -- The shim goes first on PATH inside the shell, in its own spelling (msys turns
+            -- a PATH passed through env into Windows form, and the real curl ran).
+            local r = proc.run({ argv = { SH, "-s" }, stdin = 'PATH="$(cd "$SHIM_BIN" && pwd):$PATH"; export PATH\n' .. c .. "\n",
+                env = e, timeout_ms = 60000 })
+            local s = r.stdout or ""
+            return { read = function() local x = s; s = ""; return x end,
+                close = function() return r.code == 0 or nil, "exit", r.code end }
+        end },
+        os = { getenv = function(n) return e[n] end, exit = function(c) stop.code = c; error(stop) end } }
+    local f, why = load((fs.read(path):gsub("^#![^\n]*", "")), "=tellme", "t", world)
+    if not f then return "load: " .. tostring(why) end
+    local ok, got = pcall(f)
+    if not ok and got ~= stop then so[#so + 1] = "error: " .. tostring(got) end
+    return table.concat(so)
+end
 local function tellme(args, o)
     o = o or {}
     seq = seq + 1
@@ -69,12 +90,12 @@ local function tellme(args, o)
     local dir = W.rel .. "/" .. tag
     fs.mkdir(dir)
     if o.down then fs.write(dir .. "/expert.down", "") end
-    local argv = { SH, "-s", "--", W.abs, tag, o.subject or (ROOT .. "/" .. SUBJECT) }
-    for _, a in ipairs(args) do argv[#argv + 1] = a end
-    local r = proc.run{ argv = argv, stdin = RUN, timeout_ms = 60000, env_unset = { "TILLANDSIAS_*", "TELLME_*", "FORGE_STARTUP_CONTEXT_FILE", "PROJECT_DIR" },
-        env = { PATH = env.get("PATH"), HOME = W.abs, SHIM_EXPERT = EXPERT, SHIM_INFER = INFER, TELLME_EXPERT_URL = EXPERT,
-            TILLANDSIAS_INFERENCE_URL = INFER, TELLME_PLAN_BIN = PLAN, TILLANDSIAS_INFERENCE_MODEL = o.model, PACK = o.pack } }
-    local res = { out = (r.stdout or "") .. (r.stderr or ""), chat = {}, gen = {}, calls = 0 }
+    local e = { PATH = env.get("PATH") or "/usr/bin:/bin", SHIM_BIN = W.abs .. "/bin", HOME = W.abs, SHIM_DIR = W.abs .. "/" .. tag,
+        SHIM_EXPERT = EXPERT, SHIM_INFER = INFER, TELLME_EXPERT_URL = EXPERT, TILLANDSIAS_CHEATSHEETS = W.abs .. "/cheatsheets",
+        TILLANDSIAS_INFERENCE_URL = INFER, TELLME_PLAN_BIN = PLAN, TILLANDSIAS_INFERENCE_MODEL = o.model,
+        TILLANDSIAS_EXPERT_CONTEXT_PACK = o.pack and (W.abs .. "/" .. o.pack) or nil }
+    local outp = load_tellme(o.subject or (ROOT .. "/" .. SUBJECT), e, args)
+    local res = { out = outp, chat = {}, gen = {}, calls = 0 }
     if fs.exists(dir .. "/calls.log") then
         for n, url in fs.read(dir .. "/calls.log"):gmatch("(%d+) ([^\r\n]+)") do
             res.calls = res.calls + 1
@@ -129,11 +150,11 @@ local function mutant(name, from, to)
     fs.write(W.rel .. "/" .. name, src:sub(1, a - 1) .. to .. src:sub(b + 1))
     return W.abs .. "/" .. name
 end
-r = tellme({ "howto", Q }, { subject = mutant("skips-expert", 'if expert_serve_ask cheatsheet "$query"; then', "if false; then") })
+r = tellme({ "howto", Q }, { subject = mutant("skips-expert", 'if expert_serve_ask("cheatsheet", query) then', "if false then") })
 T:arm("6 MUTATION a howto that skips expert-serve fails arm 1", #r.chat == 0 and #r.gen == 1, r.got)
 r = tellme({ "howto", Q }, { down = true, subject = mutant("unlabelled", "[UNGROUNDED: expert-serve", "[expert-serve") })
 T:arm("6 MUTATION an unlabelled fallback fails arm 3", #r.gen == 1 and not ungrounded(r), r.got)
-r = tellme({ "howto", Q }, { down = true, model = "llama3.2:3b", subject = mutant("fixed-model", '"${TILLANDSIAS_INFERENCE_MODEL:-}"', '""') })
+r = tellme({ "howto", Q }, { down = true, model = "llama3.2:3b", subject = mutant("fixed-model", 'env("TILLANDSIAS_INFERENCE_MODEL")\n', 'nil\n') })
 T:arm("6 MUTATION a fallback that ignores the environment's model fails arm 4", r.gen[1] and r.gen[1].model ~= "llama3.2:3b", r.got)
 
 T:finish()

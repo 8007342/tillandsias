@@ -28,7 +28,7 @@ critical_path:
     assert_output_contains: "ok:litmus-diff-scope:20 arms"
     timeout_ms: 120000
   - step: "a fabricated skip after a failure stays red"
-    command: "bash scripts/test-litmus-terminal-verdict.sh 2>&1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-terminal-verdict.lua 2>&1"
     expected_behavior: "ok:litmus-terminal-verdict:"
     assert_exit: 0
     assert_output_contains: "ok:litmus-terminal-verdict:"

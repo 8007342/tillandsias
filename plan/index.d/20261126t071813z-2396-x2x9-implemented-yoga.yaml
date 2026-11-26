@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: forge-lua-helpers-d36-expert-capability-core
+    field: status
+    value: implemented
+    ts: "2026-11-26T07:18:13Z"
+    host: yoga
+events:
+  - packet_id: forge-lua-helpers-d36-expert-capability-core
+    event: {type: implemented, ts: "2026-11-26T07:18:13Z", host: yoga, summary: "implemented on work/2396-x2x9: the core is lua/expert-capability.lua, 21->13 execve in the forge image; red first; litmus:expert-capability-skew-honesty 31 steps and the behaviour-skew fixture green; 3 mutants red; the vocabulary pin was unfalsifiable and FALSE (6 values, test said 4) and is one && chain now"}

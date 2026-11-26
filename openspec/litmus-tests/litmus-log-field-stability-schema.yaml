@@ -79,7 +79,19 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "Found"
 
+  - step: "the gating failure regexes match verdict lines, not a crate name (2403-4ibs)"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-log-field-gating-anchored.lua 2>&1"
+    timeout_ms: 60000
+    assert_exit: 0
+    assert_output_contains: "ok:log-field-gating-anchored:4 arms"
+
 gating_points:
+  # ORDER 2403-4ibs: the runner greps each failure regex against the COMBINED output of every step.
+  # Bare words ("error", "mismatch") matched "Compiling thiserror v2.0.18" on a cold build and
+  # failed a litmus whose 13 steps all passed; every step already fails on its own exit code. So a
+  # failure regex names a VERDICT line (cargo's error[E…]:, jq's error, a failed test result, a
+  # panic), at the start of a line or right after the runner's [step:name] prefix, which the Pinned by scripts/lua/test-log-field-gating-anchored.lua.
+  # runner puts on the same line as a step's first output line.
   - signal: "core fields extracted successfully"
     success: "schema_version"
     spec_linkage: "runtime-logging"
@@ -89,43 +101,43 @@ gating_points:
 
   - signal: "schema version consistency"
     success: "Schema versions match"
-    failure: "mismatch|error"
+    failure: "(^|[]])error(:|[[]E[0-9]+[]]:)|(^|[]])jq: error"
 
   - signal: "core field immutability"
     success: "All core fields marked immutable"
-    failure: "error"
+    failure: "(^|[]])error(:|[[]E[0-9]+[]]:)|(^|[]])jq: error"
 
   - signal: "required core fields present"
     success: "All required core fields found"
-    failure: "error|not found"
+    failure: "(^|[]])error(:|[[]E[0-9]+[]]:)|(^|[]])jq: error"
 
   - signal: "optional field alignment"
     success: "Optional fields match golden schema"
-    failure: "error|differ|mismatch"
+    failure: "(^|[]])error(:|[[]E[0-9]+[]]:)|(^|[]])jq: error"
 
   - signal: "unit tests pass"
     success: "test result: ok"
-    failure: "test result: FAILED|error|panicked"
+    failure: "(^|[]])test result: FAILED|(^|[]])thread '.*' panicked at|(^|[]])error(:|[[]E[0-9]+[]]:)|(^|[]])jq: error"
 
   - signal: "no breaking field changes"
     success: "No breaking field changes detected"
-    failure: "BREAKING CHANGE|error|removed|renamed"
+    failure: "BREAKING CHANGE|(^|[]])error(:|[[]E[0-9]+[]]:)|(^|[]])jq: error"
 
   - signal: "field types stable"
     success: "Field types verified"
-    failure: "BREAKING CHANGE|error|type mismatch"
+    failure: "BREAKING CHANGE|(^|[]])error(:|[[]E[0-9]+[]]:)|(^|[]])jq: error"
 
   - signal: "accountability optional"
     success: "correctly optional"
-    failure: "error|not found"
+    failure: "(^|[]])error(:|[[]E[0-9]+[]]:)|(^|[]])jq: error"
 
   - signal: "serialization behavior correct"
     success: "Serialization correctly|correctly optional"
-    failure: "error|not found"
+    failure: "(^|[]])error(:|[[]E[0-9]+[]]:)|(^|[]])jq: error"
 
   - signal: "optional field serde directives"
     success: "Found"
-    failure: "error|no matches"
+    failure: "(^|[]])error(:|[[]E[0-9]+[]]:)|(^|[]])jq: error"
 
 observability:
   traces:

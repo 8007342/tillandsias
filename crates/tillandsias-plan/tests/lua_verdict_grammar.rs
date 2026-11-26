@@ -105,6 +105,7 @@ const LEGACY: &[(&str, &[i32])] = &[
     ("missing:", &[0, 1]),
     ("claimed-elsewhere:", &[1]),
     ("unknown-packet:", &[2]),
+    ("unknown:", &[2]),
 ];
 
 #[test]
