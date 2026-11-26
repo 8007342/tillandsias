@@ -5742,20 +5742,31 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # yoga, 0 failures in a 10-run soak. Its log is rewritten into this
     # transcript's shape by scripts/lua/nextest-to-libtest.lua (same keys), and
     # doctests, which nextest does not run, still come from `cargo test --doc`.
+    # ORDER 2408-rkvd. The run gets its own temp dir, under /tmp (a TMPDIR under the checkout
+    # fails tests that assert the temp dir is outside the repository), and must leave it empty:
+    # leftover test dirs filled /tmp's inodes on 2026-11-26 and the land queue evicted 19 PRs.
+    _ws_tmp="$(mktemp -d /tmp/tillandsias-gate-tests.XXXXXX)" || { _error "could not make the test run's temp dir under /tmp (2408-rkvd)"; exit 1; }
     if _test_runner_is_nextest; then
         _ws_nx_log="$SCRIPT_DIR/target/test-nextest-workspace-gate.log"
-        _run cargo nextest run --workspace --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" \
+        TMPDIR="$_ws_tmp" _run cargo nextest run --workspace --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" \
             >"$_ws_nx_log" 2>&1 || _ws_test_rc=$?
         cat "$_ws_nx_log"
         _nextest_transcript "$_ws_nx_log" >"$_WS_TEST_TRANSCRIPT" || { _error "could not convert the nextest log $_ws_nx_log (2243-urcy)"; exit 1; }
         _ws_doc_rc=0
-        _run cargo test --workspace --doc --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" \
+        TMPDIR="$_ws_tmp" _run cargo test --workspace --doc --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" \
             2>&1 | tee -a "$_WS_TEST_TRANSCRIPT" || _ws_doc_rc="${PIPESTATUS[0]}"
         [ "$_ws_test_rc" -eq 0 ] && _ws_test_rc="$_ws_doc_rc"
     else
-    _run cargo test --workspace --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" \
+    TMPDIR="$_ws_tmp" _run cargo test --workspace --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" \
         2>&1 |
         tee "$_WS_TEST_TRANSCRIPT" || _ws_test_rc="${PIPESTATUS[0]}"
+    fi
+    _ws_tmp_rc=0
+    _run_lua_decider "scripts/lua/check-test-tmp-leftovers.lua" "$_ws_tmp" 2>&1 || _ws_tmp_rc=$?
+    rm -rf -- "${_ws_tmp:?}"
+    if [ "$_ws_tmp_rc" -ne 0 ]; then
+        _error "the workspace tests left entries in their temp dir (the REFUSED lines above name them) — 2408-rkvd"
+        exit 1
     fi
     if ! _ws_baseline_verdict="$(bash "$SCRIPT_DIR/scripts/check-test-baseline.sh" --from "$_WS_TEST_TRANSCRIPT")"; then
         _error "$_ws_baseline_verdict"
