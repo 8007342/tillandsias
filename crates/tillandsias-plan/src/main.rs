@@ -3147,6 +3147,32 @@ pub fn metrics_default_log(basename: &str, repo_root: Option<&Path>) -> PathBuf 
     }
 }
 
+/// ORDER 2387-x65b. The spelling the shell rule prints for the same path, so the
+/// writer's answer and the reader's compare equal as STRINGS (cycle-metrics.sh's
+/// 1096-p3tn split guard and the agreement fixture both do). On Windows
+/// `Path::join` adds backslashes, so the answer was `C:/<checkout>\.cache\metrics\x`
+/// and `/tmp\x` while the shell said `/c/<checkout>/.cache/metrics/x` and `/tmp/x`:
+/// one file, never equal. Only the PRINTED answer changes; the writer opens the
+/// same file either way. Pure, so all three regimes are testable on any host.
+fn shell_spelling(p: &str, windows: bool, msys: bool) -> String {
+    if !windows {
+        return p.to_string();
+    }
+    let s = p.replace('\\', "/");
+    if msys {
+        let b = s.as_bytes();
+        if b.len() >= 2
+            && b[0].is_ascii_alphabetic()
+            && b[1] == b':'
+            && (b.len() == 2 || b[2] == b'/')
+        {
+            let rest = if b.len() > 2 { &s[2..] } else { "/" };
+            return format!("/{}{}", (b[0] as char).to_ascii_lowercase(), rest);
+        }
+    }
+    s
+}
+
 /// Find the checkout THIS BINARY came from — not the one the caller happens to
 /// be standing in.
 ///
@@ -6054,11 +6080,13 @@ fn main() {
             std::process::exit(2);
         }
         let root = args.get(2).map(PathBuf::from);
-        emit(
-            metrics_default_log(base, root.as_deref())
-                .to_string_lossy()
-                .as_ref(),
-        );
+        let resolved = metrics_default_log(base, root.as_deref());
+        let msys = cfg!(windows) && std::env::var_os("MSYSTEM").is_some_and(|v| !v.is_empty());
+        emit(&shell_spelling(
+            &resolved.to_string_lossy(),
+            cfg!(windows),
+            msys,
+        ));
         return;
     }
 
@@ -13871,5 +13899,34 @@ owned_files:
         // unable to ADD a scalar field that does not exist yet.
         let p = packet();
         assert!(!field_is_list(&p, "verifiable_closure"));
+    }
+}
+
+#[cfg(test)]
+mod shell_spelling_tests_2387_x65b {
+    use super::shell_spelling;
+
+    #[test]
+    fn unix_is_identity() {
+        assert_eq!(shell_spelling(r"/a\b/c", false, false), r"/a\b/c");
+    }
+
+    #[test]
+    fn windows_native_uses_forward_slashes() {
+        assert_eq!(
+            shell_spelling(r"C:/r\.cache\metrics\x.jsonl", true, false),
+            "C:/r/.cache/metrics/x.jsonl"
+        );
+        assert_eq!(shell_spelling(r"/tmp\x.jsonl", true, false), "/tmp/x.jsonl");
+    }
+
+    #[test]
+    fn msys_uses_the_shell_drive_form() {
+        assert_eq!(
+            shell_spelling(r"C:/r\.cache\metrics\x.jsonl", true, true),
+            "/c/r/.cache/metrics/x.jsonl"
+        );
+        assert_eq!(shell_spelling(r"/tmp\x.jsonl", true, true), "/tmp/x.jsonl");
+        assert_eq!(shell_spelling("D:", true, true), "/d/");
     }
 }
