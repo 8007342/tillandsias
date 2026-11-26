@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: macos-inference-engine-benchmark-on-base-m5
+    field: status
+    value: completed
+    ts: "2026-11-26T16:02:08Z"
+    host: tlatoanis-macbook-air
+events:
+  - packet_id: macos-inference-engine-benchmark-on-base-m5
+    event: {type: correction, ts: "2026-11-26T16:02:08Z", host: tlatoanis-macbook-air, summary: "20261126t140326z-2381-tfna-measured re-declared this packet under packets: instead of set-field, and plan-orders read it as duplicate-order:2381-tfna (trunk red). The deliverable (plan/issues/macos-inference-engine-benchmark-2026-11-26.md) landed in land(1649) 6ca5211cb, so the status is completed, which also grandfathers the duplicate."}
