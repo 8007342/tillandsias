@@ -3681,8 +3681,16 @@ _gs_lanes() {
 }
 
 if [ -n "$GATE_STEPS_ROOT" ]; then
+    # ORDER 2413-39uv: a root this shell cannot enter used to become "" here, match no
+    # step file and exit 0, so a gate that ran nothing read as green. Refuse instead.
+    if ! _gs_root_abs="$(cd "$GATE_STEPS_ROOT" 2>/dev/null && pwd)" || [ -z "$_gs_root_abs" ]; then
+        echo "refused:gate-steps:root-unreadable:$GATE_STEPS_ROOT"
+        _afford "--gate-steps was given a root this shell cannot cd into, so no step could run and none was counted" \
+            "pass an existing directory that holds scripts/gate-steps.d/ (on Windows, one the shell running build.sh can read)"
+        exit 2
+    fi
     if [ -n "$GATE_STEP_ONLY" ]; then
-        _gs_root="$(cd "$GATE_STEPS_ROOT" && pwd)"
+        _gs_root="$_gs_root_abs"
         _gs_sel=()
         for _gs_f in "$_gs_root"/scripts/gate-steps.d/"$GATE_STEP_ONLY"-*.step; do
             [ -e "$_gs_f" ] && _gs_sel+=("$_gs_f")
@@ -3700,7 +3708,7 @@ if [ -n "$GATE_STEPS_ROOT" ]; then
         exit $?
     fi
     _kg_arm
-    _run_gate_steps "$(cd "$GATE_STEPS_ROOT" && pwd)" || builtin exit $?
+    _run_gate_steps "$_gs_root_abs" || builtin exit $?
     _kg_summary || builtin exit 1  # ORDER 2253-iher
     builtin exit 0
 fi
