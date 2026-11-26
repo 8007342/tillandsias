@@ -29,6 +29,7 @@
 --   8   an unresolvable rule file REFUSES   8b MUTATION the pre-1096-p3tn script does not
 --   9   a second live timing log is refused   9b CONTROL a named log stands the guard down
 --   9c  CONTROL --emit-* is unaffected by a split, the report still refuses it
+--   9z  the run leaves no default-path timing log behind; a fixture-only leftover is swept first
 --   W   in a linked worktree the Rust writer and the shell reader agree (1455-d7hc)
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-metrics-log-path-agreement.lua
@@ -254,6 +255,20 @@ T:arm("8b MUTATION the pre-fix script silently accepts an unresolvable rule (arm
 -- an append (9c). The split needs the REAL /tmp/tillandsias-timing.jsonl, so an existing one is
 -- never touched: the arm declines. Each reporter runs as `( ... ) & wait` (2006-wahn) and the
 -- shell removes the file on any exit while it holds only this fixture's record.
+--
+-- ORDER 2402-4avd. THE TRAP IS NOT ENOUGH ON MSYS. A deadline kill of the runner terminates this shell
+-- before its trap runs (2392-tv47's finding), and the one-record file it leaves makes every later run
+-- skip 9-9c as if a REAL log were there: measured on yolanda, 17 of 21 arms. So a file holding ONLY
+-- this fixture's record is ours, and is swept before the arm (a real log, with any other line, is
+-- never touched); arm 9z pins that the shell left nothing; and the same sweep runs after it whatever
+-- happened, so a failing run cannot poison the next one.
+local SWEEP = [==[
+F=/tmp/tillandsias-timing.jsonl
+if [ -f "$F" ] && ! grep -qv '"host":"fixture"' "$F"; then rm -f "$F" && say swept yes; fi
+[ -e "$F" ] && say present yes || say present no
+]==]
+local pre = sh(SWEEP)
+if pre.swept == "yes" then out.line("note: swept a fixture-only /tmp/tillandsias-timing.jsonl an earlier run left behind (2402-4avd)") end
 x = sh [==[
 F=/tmp/tillandsias-timing.jsonl
 if [ -e "$F" ]; then say real yes; exit 0; fi
@@ -277,6 +292,9 @@ else
         x.named_rc == "0", x.why)
     T:arm("9c CONTROL --emit-* is unaffected by a split", x.emit_rc == "0", x.why)
     T:arm("9c' CONTROL the REPORTING path still refuses the same split", n(x.rep_rc) > 0, x.why)
+    local post = sh(SWEEP)
+    T:arm("9z the run leaves no default-path /tmp/tillandsias-timing.jsonl behind (2402-4avd)",
+        post.swept ~= "yes" and post.present == "no", "swept=" .. tostring(post.swept) .. " present=" .. tostring(post.present))
 end
 
 -- ── arm W: a LINKED WORKTREE is a checkout on both sides (1455-d7hc) ─────────
