@@ -200,7 +200,7 @@ arm("wired: the tray module calls the relay's seed-env and on-exit",
     relay_rs:find('"seed-env"', 1, true) ~= nil and relay_rs:find('"on-exit"', 1, true) ~= nil, #relay_rs)
 arm("wired: forge launches are seeded and forge exits relayed", seeded >= 2 and relayed >= 2,
     "seeded=" .. seeded .. " relayed=" .. relayed)
-local fm = readf("scripts/check-fleet-membership.sh")
+local fm = readf("scripts/lua/check-fleet-membership.lua")
 arm("wired: the slot run retries deferred pushes", fm:find("provider-limit-relay.sh retry", 1, true) ~= nil, "")
 
 proc.run({ argv = { "rm", "-rf", ABS } })

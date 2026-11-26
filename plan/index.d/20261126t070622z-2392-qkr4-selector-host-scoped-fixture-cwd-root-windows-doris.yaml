@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by doris-windows 2026-11-26 checking #1610's callers.
+packets:
+  - packet_id: test-selector-flags-host-scoped-criteria-passes-cwd-root-which-the-native-runner-refuses
+    order: 2392-qkr4
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [lua-fixture, windows, msys, selector]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-selector-flags-host-scoped-criteria.lua
+    title: |
+      test-selector-flags-host-scoped-criteria.lua runs the selector with cwd = "/", which the native Windows runner refuses as relative, so the whole fixture is a script error there
+    context: |
+      Measured on doris (native Windows) 2026-11-26, origin/linux-next:
+        refused:script-error:test-selector-flags-host-scoped-criteria
+        runtime error: proc.run: cwd '/' is relative; pass an absolute path
+      at select_as (line ~83), so no arm runs on msys. Linux and darwin accept "/". The cwd is
+      there to keep the caller's checkout out of the selector's view.
+    verifiable_closure: |
+      tillandsias-plan script run scripts/lua/test-selector-flags-host-scoped-criteria.lua prints
+      its ok line on msys. PRE-FIX: refused:script-error on doris.
+    unscoreable: "the closure is the existing fixture run on msys; no separate litmus pin"
+    next_action: >
+      Use a scratch directory outside any checkout (or fixture.native_path of the drive root) as the cwd.
+    notes: |
+      size: XS

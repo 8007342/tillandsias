@@ -10,7 +10,7 @@ STEP_DESC="Checking the metrics writer and reader resolve one log (1455-d7hc)"
 STEP_LUA="scripts/lua/test-metrics-log-path-agreement.lua"
 STEP_ERROR="the Rust metrics writer and the shell reader resolve different logs, or the outside-a-checkout fallback broke (1455-d7hc) — see the FAIL lines above"
 STEP_OK="Metrics log path agreement passed"
-STEP_SECOND_REGIME="doris 2026-11-26 msys violation:metrics-log-path-agreement:3-failed (1b, 1d, W red on msys, packet 2387-x65b)"
+STEP_SECOND_REGIME="doris 2026-11-26 msys ok:metrics-log-path-agreement:20 arms"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
 # 2192-excl: EXCLUSIVE, not just the timing lane. It writes the fixed
