@@ -35,5 +35,5 @@ status:
   - packet_id: port-check-fleet-membership-and-its-fixture-to-lua
     field: status
     value: implemented
-    ts: "2026-11-26T12:00:00Z"
+    ts: "2026-11-26T07:06:57Z"
     host: doris
