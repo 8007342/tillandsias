@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: safe-roots-hook-allow-gives-no-answer-for-a-forge-on-windows
+    field: status
+    value: implemented
+    ts: "2026-11-26T07:08:53Z"
+    host: doris
+events:
+  - packet_id: safe-roots-hook-allow-gives-no-answer-for-a-forge-on-windows
+    event: {type: implemented, ts: "2026-11-26T07:08:53Z", host: doris, summary: "Option 3, ruled by macuahuitl 2026-11-26 (this is Windows path normalisation, not the 2354-5biy forge-detection question, so it does not wait on the operator). No logic change: on Windows the two tests now assert fail-closed (hook_allow is None even for a forge; safe_root_removal is None for every safe-root shape), behind WINDOWS_PREFIX_FAILS_CLOSED = cfg!(windows), whose comment names the Prefix behaviour and why widening an allow path for a host that never runs a forge is the wrong direction. Linux and darwin keep the original assertions. Measured on doris: safe_roots 4/4 pass; clippy clean. Accepting a Prefix is a later row if a native Windows forge ever exists."}
