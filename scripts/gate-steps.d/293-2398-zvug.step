@@ -9,7 +9,9 @@ STEP_DESC="Checking the land queue, arms 40-63 (2398-zvug)"
 STEP_LUA="scripts/lua/test-land-queue-trains.lua"
 STEP_ERROR="the land queue fixture (arms 40-63) failed — see the FAIL lines above"
 STEP_OK="land queue arms 40-63 behave"
-STEP_SECOND_REGIME="@PENDING-DARWIN@"
+# The darwin red is ARM 60 b-order alone, which trunk's .sh also reds there
+# (pre-existing; own row). Every other arm is green on darwin.
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-26 darwin violation:land-queue-trains:1-failed (ARM 60 b-order only, pre-existing on the .sh) at 1d37addfb (relayed by macbookair)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
 STEP_LANES="timing"

@@ -9,7 +9,7 @@ STEP_DESC="Checking the land queue, arms 14-35 (2398-zvug)"
 STEP_LUA="scripts/lua/test-land-queue-eviction.lua"
 STEP_ERROR="the land queue fixture (arms 14-35) failed — see the FAIL lines above"
 STEP_OK="land queue arms 14-35 behave"
-STEP_SECOND_REGIME="@PENDING-DARWIN@"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-26 darwin ok:land-queue-eviction:36 arms at 1d37addfb (relayed by macbookair)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
 STEP_LANES="timing"
