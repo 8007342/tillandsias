@@ -24,16 +24,16 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-plan-only-lane-structural.sh
+  - workspace contains scripts/lua/test-plan-only-lane-structural.lua
   - workspace contains scripts/hooks/pre-push-local-gate.sh and scripts/check-plan-binary-current.sh
 
 critical_path:
   - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-plan-only-lane-structural.sh && test -x scripts/test-plan-only-lane-structural.sh && echo 'ok: lane-structural-fixture-parses'"
+    command: "test -f scripts/lua/test-plan-only-lane-structural.lua && echo 'ok: lane-structural-fixture-parses'"
     timeout_ms: 3000
     expected_behavior: "ok: lane-structural-fixture-parses"
 
   - step: "trunk-identical paths take the lane, differing ones do not; validator-surface staleness with its negative control; content-built mutants"
-    command: "bash scripts/test-plan-only-lane-structural.sh | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-plan-only-lane-structural.lua"
     timeout_ms: 120000
-    expected_behavior: "PASS: plan-only-lane-structural"
+    expected_behavior: "ok:plan-only-lane-structural:15 arms"

@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-26. p range, batch 5 (the four lighter files), per macuahuitl 2026-11-26.
+packets:
+- packet_id: port-p-fixtures-batch-5
+  order: 2401-prg5
+  status: implemented
+  kind: chore
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [shell-to-lua, macos, fixtures, portability]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 3
+  title: 'Four whole-file shell-to-Lua ports from the p range (batch 5)'
+  ports: [scripts/test-preflight-fixtures-default-target.sh, scripts/test-plan-only-lane-structural.sh, scripts/test-podman-mock-refusal.sh, scripts/test-plan-binary-copy-refresh.sh]
+  context: >-
+    Each port keeps its arms. podman-mock-refusal reaches only the mock, plan-binary-copy-refresh only scratch copies,
+    and plan-only-lane-structural runs the hook only against scratch remotes. preflight-fixtures-default-target.sh
+    skips its own fixture, and that self-exclusion now names the .lua; without the change the decider would nest its
+    own fixture. Callers: step 540 (STEP_LUA, fresh darwin regime; yolanda's msys regime recorded the .sh), step 095's
+    STEP_READS, build.sh's copy-refresh decider, two litmus tests without pipes, and three comment pointers. The three
+    release and push guards (promote-stable-evidence-gate, pre-push-honours-a-live-freeze, preflight-front-door) go
+    in their own PR with the full mutant set, per macuahuitl.
+  exit_criteria:
+  - 'Each .lua gives the same verdict as its .sh on the trunk tree, and the same red arms under a mutant.'
+  - 'Every caller runs the .lua; the four .sh files and their floor lines are gone.'
+  verifiable_closure: 'Mutant parity in the PR; step 540, the build.sh decider and two litmus tests green on darwin and in the Linux land gate.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the mutant parity is the deliverable.'
+  next_action: 'Implemented.'
+  provenance: 'tlatoanis-macbook-air 2026-11-26, on macuahuitl-fedora''s direction.'
+  related: [2400-prg4, 2399-vsok]
+  events:
+  - {type: filed, ts: '2026-11-26T08:19:31Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}

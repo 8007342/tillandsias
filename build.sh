@@ -7063,7 +7063,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # 30ms, and it pins both the refusal and that preflight still routes through
     # the guarded function rather than installing directly.
     _step "Checking an unrunnable binary is never installed over the canonical copy (1060-wxdh)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-copy-refresh.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-plan-binary-copy-refresh.lua" 2>&1; then
         _error "the expert-refresh no longer refuses an unrunnable binary (1060-wxdh) — see the verdict line above"
         exit 1
     fi

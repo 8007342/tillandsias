@@ -30,18 +30,18 @@ size: instant
 
 preconditions:
   - workspace contains scripts/test-support/podman-mock.sh
-  - workspace contains scripts/test-podman-mock-refusal.sh
+  - workspace contains scripts/lua/test-podman-mock-refusal.lua
   - shell utilities (bash, grep, printf) are available in PATH
 
 inputs:
   - scripts/test-support/podman-mock.sh
-  - scripts/test-podman-mock-refusal.sh
+  - scripts/lua/test-podman-mock-refusal.lua
 
 critical_path:
   - step: "the refusal fixture passes every scenario (refusal, interpolated subject, nested dispatch, deliberate no-ops, handled arms)"
-    command: "bash scripts/test-podman-mock-refusal.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-podman-mock-refusal.lua"
     timeout_ms: 60000
-    expected_behavior: "ok: all podman-mock-refusal scenarios passed"
+    expected_behavior: "ok:podman-mock-refusal:15 arms"
 
   - step: "NEGATIVE CONTROL: a deliberately absurd subcommand exits non-zero and the diagnostic names that subcommand"
     command: "err=$(scripts/test-support/podman-mock.sh frobnicate-the-widget 2>&1 >/dev/null); rc=$?; if [ \"$rc\" -ne 0 ] && printf '%s' \"$err\" | grep -q frobnicate-the-widget; then echo 'ok: absurd-subcommand-refused-and-named'; else echo \"BAD rc=$rc err=$err\"; fi"

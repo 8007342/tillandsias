@@ -11,13 +11,13 @@
 # dropping the skip rule reds ARM 4 (7/8 each; dropping the no-timeout skip reds ARM 7). The real pre-fix subject
 # (test-hardware-fingerprint.sh at 84f37ff24^) is refused; on trunk, admitted.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking the default-target fixture decider refuses masked fixtures (1401-x76w)"
-STEP_SCRIPT="scripts/test-preflight-fixtures-default-target.sh"
+STEP_LUA="scripts/lua/test-preflight-fixtures-default-target.lua"
 STEP_ERROR="the decider no longer catches a fixture that passes only under a masking plan-binary regime (1401-x76w); see which arm failed above"
 STEP_OK="default-target fixture decider refuses masked fixtures and admits absolutising ones"
-STEP_SECOND_REGIME="yolanda 2026-09-26 msys ok:fixture-default-target-fixture:8"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-26 darwin ok:fixture-default-target-fixture:18 arms (work/2401-prg5 @ 4e44d746e)"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/plan-binary-probe.sh scripts/preflight-fixtures-default-target.sh scripts/test-preflight-fixtures-default-target.sh"
+STEP_READS="scripts/plan-binary-probe.sh scripts/preflight-fixtures-default-target.sh scripts/lua/test-preflight-fixtures-default-target.lua"
