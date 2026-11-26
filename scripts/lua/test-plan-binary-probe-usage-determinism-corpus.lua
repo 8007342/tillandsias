@@ -6,7 +6,7 @@
 -- outcome.
 --
 -- --ci-full ONLY, declared in scripts/gate-divergence-declared.txt. Its cheap
--- sibling, test-plan-binary-probe-usage-determinism.sh, runs on every --check
+-- sibling, lua/test-plan-binary-probe-usage-determinism.lua, runs on every --check
 -- against a two-file tree holding the one file known to flake, and pins THAT
 -- mechanism (SIGPIPE from `grep -q` killing its upstream writer under
 -- pipefail). It is NARROW by construction: it cannot see a non-determinism that

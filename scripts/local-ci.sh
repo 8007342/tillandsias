@@ -1640,7 +1640,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
 
     # Sub-check 8a2: probe-usage guard determinism over the WHOLE corpus
     # (order 1130-qk7d). The BREADTH arm. Its cheap sibling,
-    # test-plan-binary-probe-usage-determinism.sh, runs on every --check against
+    # lua/test-plan-binary-probe-usage-determinism.lua, runs on every --check against
     # a two-file tree and pins the SIGPIPE mechanism in ~200 ms. This one asks
     # the question that arm cannot: is the guard deterministic across the whole
     # repository, including files nobody has identified? ~66 s here, ~99 s on a
