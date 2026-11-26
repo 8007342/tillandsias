@@ -34,5 +34,5 @@ status:
   - packet_id: port-check-claims-across-branches-sh-to-lua
     field: status
     value: implemented
-    ts: "2026-11-26T09:00:00Z"
+    ts: "2026-11-26T07:03:57Z"
     host: doris
