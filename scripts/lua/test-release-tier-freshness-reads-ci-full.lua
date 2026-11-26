@@ -1,4 +1,4 @@
--- @env PATH HOME TMPDIR TOOLBOX_PATH container TILLANDSIAS_SKIP_TOOLBOX TILLANDSIAS_SKIP_WSL2
+-- @env PATH HOME TMPDIR TOOLBOX_PATH container TILLANDSIAS_SKIP_TOOLBOX TILLANDSIAS_SHARED_TARGET_HELD TILLANDSIAS_SHARED_TARGET CARGO_TARGET_DIR TILLANDSIAS_SKIP_WSL2
 -- @trace order:1185-9qx6, order:2409-qbgu, spec:ci-release
 --
 -- test-release-tier-freshness-reads-ci-full.lua — pin the WRITER/READER contract that 1185-9qx6 closed. Ported from
@@ -86,10 +86,10 @@ T:arm("6 the recorder REFUSES an unknown phase and an unknown status at rc=2, wi
 -- 7. local-ci.sh refuses a malformed run id at rc=2 BEFORE running anything.
 local lci = fs.read("scripts/local-ci.sh")
 if text.contains(lci, "TILLANDSIAS_CI_RUN_ID") then
-    -- The builder markers pass through: without them local-ci.sh re-enters the
+    -- fixture.gate_inherit (2384-svqx): without it local-ci.sh re-enters the
     -- builder from inside the gate and exits 1 before it reads the run id.
     local e = base(idx("lci.jsonl")); e.TILLANDSIAS_CI_RUN_ID = "not-a-run-id"
-    for _, k in ipairs{ "TOOLBOX_PATH", "container", "TILLANDSIAS_SKIP_TOOLBOX", "TILLANDSIAS_SKIP_WSL2" } do e[k] = env.get(k) end
+    fixture.gate_inherit(e); e.TILLANDSIAS_SKIP_WSL2 = env.get("TILLANDSIAS_SKIP_WSL2")
     local r = T:run{ SH, "scripts/local-ci.sh", "--phase", "pre-build", cwd = ROOT, env = e, env_unset = { "TILLANDSIAS_*" }, timeout_ms = 120000 }
     T:arm("7 local-ci.sh refuses a malformed TILLANDSIAS_CI_RUN_ID at rc=2 before running anything", r.code == 2,
         "rc=" .. tostring(r.code) .. " " .. (r.stderr or ""):sub(1, 300))
