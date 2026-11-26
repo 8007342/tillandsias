@@ -1,5 +1,5 @@
 -- @env PATH HOME SCORABLE_PIN_SHA
--- @trace order:1331-884p, order:2386-zxgc
+-- @trace order:1331-884p, order:2386-zxgc, order:2406-7f88
 --
 -- test-scorable-obligation-splitter.lua — the row splitter in check-scorable-obligation-added.sh
 -- reads a verifiable_closure below a nested list at any indent, invents no row, loses no closure on
@@ -72,8 +72,30 @@ local function keyed(prog)
     for _, f in ipairs(fs.list("plan/index.d")) do
         if f:match("%.yaml$") then files[#files + 1] = "plan/index.d/" .. f end
     end
-    for _, f in ipairs(files) do
-        for _, r in ipairs(records(prog, f)) do k[f .. "|" .. (r[1] or "")] = r[3] or "" end
+    -- ONE shell per splitter, awk still once per FILE: the splitter's own END
+    -- flushes a file's last row, so one awk over every file would read
+    -- differently. One proc.run per file was 2 x 7,740 spawns through the runner
+    -- on 2026-11-26, 74-105 s against the 60 s litmus budget (2364-qgr7); this
+    -- pass is 27 s on the same host. Arm 3 compares closures only as empty or
+    -- not, so a marker line names each file and ONE awk compacts the stream to
+    -- <file>\036<packet>\037<x when the closure is non-empty>. The full closure
+    -- text was 13.7 MB, past the runner's capture cap (which silently lost 8 rows
+    -- when this was first tried), so truncation is a failed arm, never trusted.
+    -- A record that does not split into three fields keys as <file>| with no
+    -- closure, exactly as the per-file pass keyed it.
+    local r = T:run{ SH, "-s", "--", w.abs .. "/" .. prog, cwd = ROOT, timeout_ms = 600000,
+        stdin = 'prog="$1"\n{ while IFS= read -r f; do printf \'\\036%s\\n\' "$f"; awk -f "$prog" "$f"; done <<\'__FILES__\'\n'
+            .. table.concat(files, "\n") .. "\n__FILES__\n"
+            .. "} | awk -F'\\037' '/^\\036/ { f = substr($0, 2); next }"
+            .. " { if (NF >= 3) print f \"\\036\" $1 \"\\037\" ($3 != \"\" ? \"x\" : \"\");"
+            .. " else print f \"\\036\\037\" }'" }
+    if r.code ~= 0 or r.truncated then
+        T:arm("3 the live-ledger pass ran and its output was whole", false,
+            "rc=" .. tostring(r.code) .. " truncated=" .. tostring(r.truncated) .. " " .. (r.stderr or ""):sub(1, 200))
+    end
+    for line in ((r.stdout or "") .. "\n"):gmatch("([^\n]*)\n") do
+        local f, id, x = line:match("^([^\30]*)\30([^\31]*)\31(x?)$")
+        if f then k[f .. "|" .. id] = x end
     end
     return k
 end
