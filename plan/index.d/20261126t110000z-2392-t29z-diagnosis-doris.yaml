@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: safe-roots-hook-allow-gives-no-answer-for-a-forge-on-windows
+    event:
+      type: note
+      ts: "2026-11-26T11:00:00Z"
+      host: doris
+      summary: >-
+        DIAGNOSED, read-only, no logic changed (waiting on 2354-5biy). Code path on native Windows:
+        hook_allow (safe_roots.rs:52) passes the host-kind gate (HostKind::Forge), then
+        safe_root_removal (:72) passes cwd.is_absolute() and split_simple, and rm_targets returns
+        [".dart_tool"]. Then normalise(cwd, ".dart_tool") (:173) returns None at :181,
+        `Component::ParentDir | Component::Prefix(_) => return None`. Every absolute Windows path
+        begins with a Prefix component (the fixture's canonicalize() gives the verbatim
+        \\?\C:\..., and a plain C:\ is a Prefix too), so EVERY target fails closed before
+        safe_root_of / worktree_root / no_symlinked_ancestor run. Linux paths have no Prefix, which
+        is the only difference. Consequence: on Windows hook_allow is None for every command, so it
+        never allows and the normal prompt always applies (the safe direction). A second test in the
+        module is red for the same reason: safe_roots::tests::removals_inside_the_safe_roots_are_allowed
+        (panics at :335); the other two pass. Production impact today: none known, since
+        SafeRoots::forge() is a Linux container layout (/home/forge/src, /work/tmp, /tmp). It
+        matters only if a Windows-native forge, or a Windows host classified as Forge, is ever
+        possible, which is the 2354-5biy question. Fix options for the ruling, none applied:
+        (1) cfg(windows) the two tests, documenting that the module is Linux-forge-only;
+        (2) accept a Prefix in normalise and compare it against the roots' own prefix;
+        (3) keep it as is and assert fail-closed on Windows in a new test.
