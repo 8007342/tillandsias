@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: two-quick-tier-litmus-red-on-a-cold-target-for-reasons-that-are-not-defects
+    field: status
+    value: implemented
+    ts: "2026-11-26T10:18:16Z"
+    host: yoga
+events:
+  - packet_id: two-quick-tier-litmus-red-on-a-cold-target-for-reasons-that-are-not-defects
+    event: {type: implemented, ts: "2026-11-26T10:18:16Z", host: yoga, summary: "implemented on work/2403-4ibs: podman step 5 captures then filters with one awk (cold: rc=141 before, 0 after; a planted compile error still 101); log-field failure regexes anchored to verdict lines with no backslash, matching after the runner's [i:step] prefix too; through the real runner trunk's patterns fail a planted 'Compiling thiserror' and the new ones pass it while still failing a planted cargo error; test-log-field-gating-anchored.lua (4 arms) runs as a step of the litmus"}
