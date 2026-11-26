@@ -27,6 +27,7 @@ packets:
   - 'check-lua-posix-only-absolute is red on the unswept tree and green after the sweep.'
   - 'The swept fixtures stay green on darwin and Linux, and go green on msys (yolanda).'
   verifiable_closure: 'scripts/lua/test-lua-posix-only-absolute.lua (gate step 152): 8 arms, including the corpus arm.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the guard is scripts/lua/test-lua-posix-only-absolute.lua (gate step 152), written in this commit; no litmus yet.'
   next_action: 'Implemented. yolanda to rerun the swept fixtures on msys.'
   provenance: 'tlatoanis-macbook-air 2026-11-26; root cause from #1627''s msys reds.'
   related: [2400-prg4]
