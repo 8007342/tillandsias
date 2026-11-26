@@ -634,7 +634,7 @@ _lane_scoped_diff() { # remote_sha local_sha -> "<status>\t<path>" lines
 # defined here (the READER, consulted at push time) and in
 # scripts/check-plan-binary-current.sh (the WRITER, which mints the stamp
 # once it has independently confirmed — via the OLD, broader mtime check —
-# that the binary is current). scripts/test-plan-only-lane-structural.sh pins
+# that the binary is current). scripts/lua/test-plan-only-lane-structural.lua pins
 # that the two copies agree on the same input, so a drift between them fails
 # loudly instead of silently mis-scoring one side.
 _validator_surface_files() {

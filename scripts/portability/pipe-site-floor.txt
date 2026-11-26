@@ -535,13 +535,10 @@ scripts scripts/test-no-competing-gate.sh 2
 scripts scripts/test-opencode-vault-auth-content.sh 3
 scripts scripts/test-order-citations-resolve.sh 7
 scripts scripts/test-pending-capability-row-does-not-wedge.sh 1
-scripts scripts/test-plan-binary-copy-refresh.sh 1
 scripts scripts/test-plan-binary-probe-usage-determinism.sh 2
 scripts scripts/test-plan-binary-runnability-precondition.sh 10
 scripts scripts/test-plan-field-get.sh 2
-scripts scripts/test-plan-only-lane-structural.sh 8
 scripts scripts/test-plan-orders-fragment-fold.sh 7
-scripts scripts/test-podman-mock-refusal.sh 4
 scripts scripts/test-portability-idioms.sh 13
 scripts scripts/test-pre-push-empty-ref-list.sh 6
 scripts scripts/test-pre-push-honours-a-live-freeze.sh 11

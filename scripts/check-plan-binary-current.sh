@@ -99,7 +99,7 @@ esac
 # DUPLICATED FROM scripts/hooks/pre-push-local-gate.sh, not shared: 1152-y3bv's
 # owned-files list has no library file in scope for one copy, and
 # plan-binary-probe.sh belongs to a different packet's concurrent edit. Keep
-# the two hash computations in lockstep — scripts/test-plan-only-lane-structural.sh
+# the two hash computations in lockstep — scripts/lua/test-plan-only-lane-structural.lua
 # pins that they agree on the same input.
 if ! command -v plan_binary_is_stale >/dev/null 2>&1; then
     . scripts/plan-binary-probe.sh 2>/dev/null || true

@@ -142,7 +142,7 @@ esac
 rm -rf "$d"
 
 # ── 5. MUST NOT ACCUSE: the verb as DATA, with no podman on the line ─────────
-# scripts/test-podman-mock-refusal.sh iterates over "network create
+# scripts/lua/test-podman-mock-refusal.lua iterates over "network create
 # tillandsias-enclave" as a string. It creates nothing.
 d="$(_mkrepo)"
 cat > "$d/scripts/data.sh" <<'EOF'
