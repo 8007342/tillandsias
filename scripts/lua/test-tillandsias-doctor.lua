@@ -20,6 +20,10 @@
 --   8 STALE     a lane that ANSWERS but which the tray marked lane-stale (an
 --               older launcher still serves it, 2070-mtf9) is failed as
 --               host_lane=stale-build, naming the serving pid and the remedy
+--   9 HELP      --help prints the usage block, rc 0; an unknown argument is rc 2
+--  10 TEXT      without --json each row is one padded line, and the exit is 1
+--  11 QUOTING   an MCP command, a project name and a socket path holding a
+--               quote and a ; reach the shell as data: nothing they name runs
 -- Red before 1874-6p63: there is no tillandsias-doctor.
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-tillandsias-doctor.lua
@@ -27,6 +31,30 @@
 local DOCTOR = "images/default/cli/tillandsias-doctor"
 if not fs.exists(DOCTOR) then
     verdict.emit("violation:tillandsias-doctor:no-subject", 1, DOCTOR .. " does not exist (1874-6p63)")
+end
+
+-- The forge runs the command with its own lua (2389-8rmy); a host has none, so
+-- it is loaded here with io.popen and os answered by this fixture: every shell
+-- line it builds still runs for real, under the env the case sets.
+local function run_doctor(e, ...)
+    local so, se, stop = {}, {}, {}
+    local function sink(t) return { write = function(self, ...) for _, v in ipairs({ ... }) do t[#t + 1] = v end return self end } end
+    local world = { string = string, table = table, math = math, ipairs = ipairs, pairs = pairs, select = select,
+        tonumber = tonumber, tostring = tostring, type = type,
+        arg = { [0] = "/usr/local/bin/tillandsias-doctor", ... },
+        io = { stdout = sink(so), stderr = sink(se), popen = function(c)
+            -- The command line goes to a shell on stdin: the runtime refuses `sh -c <string>`.
+            local r = proc.run({ argv = { "bash", "-s" }, stdin = c .. "\n", env = e, timeout_ms = 120000 })
+            local s = r.stdout or ""
+            return { read = function() local x = s; s = ""; return x end,
+                close = function() return r.code == 0 or nil, "exit", r.code end }
+        end },
+        os = { getenv = function(n) return e[n] end, exit = function(c) stop.code = c; error(stop) end } }
+    local f, why = load((fs.read(DOCTOR):gsub("^#![^\n]*", "")), "=tillandsias-doctor", "t", world)
+    if not f then return { stdout = "", stderr = tostring(why), code = "load" } end
+    local ok, got = pcall(f)
+    if not ok and got ~= stop then return { stdout = table.concat(so), stderr = tostring(got), code = "error" } end
+    return { stdout = table.concat(so), stderr = table.concat(se), code = stop.code or 0 }
 end
 
 local top = proc.run({ argv = { "git", "rev-parse", "--show-toplevel" }, timeout_ms = 30000 })
@@ -81,9 +109,7 @@ fs.write(REL .. "/config.json", json.encode({
     },
 }))
 
-local r = proc.run({
-    argv = { "bash", ROOT .. "/" .. DOCTOR, "--json" },
-    env = {
+local r = run_doctor({
         PATH = DIR .. "/bin:" .. (env.get("PATH") or "/usr/bin:/bin"),
         HOME = DIR,
         TILLANDSIAS_PROJECT = "doctor-smoke",
@@ -94,9 +120,7 @@ local r = proc.run({
         TILLANDSIAS_DOCTOR_SRC_DIR = DIR,
         TILLANDSIAS_DOCTOR_CACHE_DIR = DIR,
         TILLANDSIAS_DOCTOR_PROBE_SECS = "3",
-    },
-    timeout_ms = 120000,
-})
+}, "--json")
 
 local ok_p, report = pcall(json.parse, r.stdout or "")
 arm("1 JSON --json prints one object, ok=false, exit 1",
@@ -138,9 +162,7 @@ local ok_l, live = pcall(fs.listen_unix, REL .. "/live/m.s")
 if ok_l then
     fs.write(REL .. "/live/lane-stale",
         "warn:lane-stale:doctor-smoke-default: runs 56.11.9.1+bbbb, installed 56.11.10.1+aaaa; relaunch that forge to use the installed build; served by pid 1020477 (exe deleted)\n")
-    local r2 = proc.run({
-        argv = { "bash", ROOT .. "/" .. DOCTOR, "--json" },
-        env = {
+    local r2 = run_doctor({
             PATH = DIR .. "/bin:" .. (env.get("PATH") or "/usr/bin:/bin"),
             HOME = DIR,
             TILLANDSIAS_PROJECT = "doctor-smoke",
@@ -151,9 +173,7 @@ if ok_l then
             TILLANDSIAS_DOCTOR_SRC_DIR = DIR,
             TILLANDSIAS_DOCTOR_CACHE_DIR = DIR,
             TILLANDSIAS_DOCTOR_PROBE_SECS = "3",
-        },
-        timeout_ms = 120000,
-    })
+    }, "--json")
     live:close()
     local ok2, rep2 = pcall(json.parse, r2.stdout or "")
     local lane2
@@ -169,6 +189,56 @@ if ok_l then
 else
     arm("8 STALE a live fixture socket could be bound", false, tostring(live))
 end
+
+local function base(extra)
+    local e = {
+        PATH = DIR .. "/bin:" .. (env.get("PATH") or "/usr/bin:/bin"),
+        HOME = DIR,
+        TILLANDSIAS_PROJECT = "doctor-smoke",
+        TILLANDSIAS_CONTROL_SOCKET = DIR .. "/s.s",
+        TILLANDSIAS_DOCTOR_LIB_DIR = ROOT .. "/images/default",
+        TILLANDSIAS_DOCTOR_MCP_CONFIG = DIR .. "/config.json",
+        TILLANDSIAS_DOCTOR_CHEATSHEETS = DIR .. "/sheets",
+        TILLANDSIAS_DOCTOR_SRC_DIR = DIR,
+        TILLANDSIAS_DOCTOR_CACHE_DIR = DIR,
+        TILLANDSIAS_DOCTOR_PROBE_SECS = "3",
+    }
+    for k, v in pairs(extra or {}) do e[k] = v end
+    return e
+end
+
+local h = run_doctor(base(), "--help")
+local u = run_doctor(base(), "--bogus")
+arm("9 HELP --help prints the usage, rc 0; an unknown argument is rc 2 with nothing on stdout",
+    h.code == 0 and h.stdout:find("^tillandsias%-doctor — one command") and h.stdout:find("\nUsage: tillandsias-doctor [--json]\n\nExit 0", 1, true)
+        and u.code == 2 and u.stdout == "" and u.stderr:find("unknown arg '--bogus'", 1, true),
+    h.code .. " " .. h.stdout .. " / " .. u.code .. " " .. u.stderr)
+
+local t = run_doctor(base())
+arm("10 TEXT each row is one padded line, exit 1",
+    t.code == 1 and t.stdout:find("^lane               failed  host_lane=stale: ")
+        and t.stdout:find("\nmcp:good           ok      initialize answered\n", 1, true)
+        and t.stdout:find("\nrenderer           info    no in-forge renderer", 1, true),
+    t.code .. " " .. t.stdout .. t.stderr)
+
+fs.write(REL .. "/bin/touched", "#!/bin/sh\n: > '" .. DIR .. "/pwned'\n")
+proc.run({ argv = { "chmod", "+x", DIR .. "/bin/touched" }, timeout_ms = 10000 })
+local Q = "x'; touched; '"
+fs.write(REL .. "/evil.json", json.encode({ mcp = {
+    [Q] = { type = "local", command = { Q } },
+    good = { type = "local", command = { DIR .. "/bin/good-mcp", Q, "$(touched)" } },
+} }))
+local ev = run_doctor(base({ TILLANDSIAS_PROJECT = Q .. "$(touched)", TILLANDSIAS_DOCTOR_MCP_CONFIG = DIR .. "/evil.json",
+    TILLANDSIAS_DOCTOR_CHEATSHEETS = DIR .. "/" .. Q, TILLANDSIAS_DOCTOR_PROBE_SECS = "3" .. Q }), "--json")
+local ok_e, rep_e = pcall(json.parse, ev.stdout or "")
+local named = false
+if ok_e and type(rep_e) == "table" then
+    for _, c in ipairs(rep_e.checks or {}) do
+        if c.name == "mcp:" .. Q and c.status == "failed" and c.detail == "command not found: " .. Q then named = true end
+    end
+end
+arm("11 QUOTING a quote and a ; in a server, an argument, a project and a path run nothing",
+    not fs.exists(REL .. "/pwned") and named, (fs.exists(REL .. "/pwned") and "touched RAN " or "") .. (ev.stdout or "") .. (ev.stderr or ""))
 
 proc.run({ argv = { "rm", "-rf", DIR }, timeout_ms = 30000 })
 if #failed > 0 then
