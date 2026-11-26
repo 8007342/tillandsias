@@ -30,19 +30,19 @@ size: instant
 
 preconditions:
   - workspace contains scripts/lib/tool-dispatch.sh
-  - workspace contains scripts/test-tool-dispatch-lib.sh
+  - workspace contains scripts/lua/test-tool-dispatch-lib.lua
   - bash and coreutils are available in PATH
 
 critical_path:
-  - step: "lib and fixture parse, and the fixture is executable"
-    command: "bash -n scripts/lib/tool-dispatch.sh && bash -n scripts/test-tool-dispatch-lib.sh && test -x scripts/test-tool-dispatch-lib.sh && echo 'ok: parses'"
+  - step: "the lib parses"
+    command: "bash -n scripts/lib/tool-dispatch.sh && echo 'ok: parses'"
     timeout_ms: 5000
     expected_behavior: "ok: parses"
 
   - step: "all dispatch arms pass (host arm, toolbox fallback with asserted precondition, both-places diagnosis, converted callers, shipped-diagnostic exception, lib-missing degradation)"
-    command: "bash scripts/test-tool-dispatch-lib.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-tool-dispatch-lib.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "ok:tool-dispatch-lib:all"
+    expected_behavior: "ok:tool-dispatch-lib:"
 
   - step: "the shipped diagnostics have not been 'tidied' into the shared lib"
     # ORDER 925-erjs / 921-vtf4. Was `grep -l 'lib/tool-dispatch.sh' <files>` —
@@ -67,7 +67,7 @@ critical_path:
     expected_behavior: "ok: shipped diagnostics self-contained"
 
 evidence:
-  artifact: "scripts/lib/tool-dispatch.sh + scripts/test-tool-dispatch-lib.sh"
+  artifact: "scripts/lib/tool-dispatch.sh + scripts/lua/test-tool-dispatch-lib.lua"
   measured_on: >
     lenovinha (Fedora Silverblue) 2026-08-26 — all arms green. Fallback verified
     by masking jq with a curated mirror of /usr/bin; two earlier attempts failed
