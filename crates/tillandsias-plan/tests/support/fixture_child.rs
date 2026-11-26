@@ -74,6 +74,7 @@ fn pgid() -> i64 {
 /// process start time), kept as a STRING: the observer in the test compares it
 /// textually to tell this process from a later reuse of its pid.
 fn identity() -> String {
+    // host-path: Linux-only, but read with .ok() so elsewhere start is "" and the test still runs
     let start = std::fs::read_to_string("/proc/self/stat")
         .ok()
         .and_then(|stat| {
