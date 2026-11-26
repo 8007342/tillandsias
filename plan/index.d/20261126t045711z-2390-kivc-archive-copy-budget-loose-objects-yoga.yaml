@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: archive-answerability-copy-budget-counts-loose-git-objects
+    order: 2390-kivc
+    status: in_progress
+    kind: fix
+    title: "check-archive-answerability's 1 GiB copy budget counts .git's loose objects, so it trips on any host that has not run gc"
+    capability_tags: [linux, tooling]
+    owned_files:
+      - scripts/check-archive-answerability.sh
+      - scripts/lua/test-archive-answerability-tree-copy.lua
+    depends_on: []
+    context: |
+      #1599 was evicted by check-archive-answerability: copy-would-be-1049356KB-over-budget-1048576KB.
+      On macuahuitl the copy is the work tree at 198 MB plus .git at 851 MB, of which 532 MB is loose
+      objects (macuahuitl-fedora, 2026-11-26). The budget is du over the pruned tree, .git included, so it
+      measures whether a host last ran git gc rather than what the change costs, and it reds the gate for
+      any change. Fix: copy .git without objects/ and point the copy at the live object store through
+      objects/info/alternates (git only reads an alternate). The check keeps full history (gitref.rs shells
+      out to git), new objects land in the copy, and the budget measures what is actually copied.
+    exit_criteria:
+      - "The tree-copy fixture is RED on a scratch repo whose .git holds loose objects over a lowered budget before the fix, and green after, on both copy paths."
+      - "In the copy, a loose object of the live repo is readable and the live object store is unchanged by the copy."
+    verifiable_closure: |
+      litmus:archive-answerability-tree-copy
+    provenance: "macuahuitl-fedora 2026-11-26 (#1599 eviction), yoga"
+    events:
+      - {type: claimed, ts: "2026-11-26T04:57:11Z", host: yoga, summary: "claimed; work ref work/2390-kivc"}
