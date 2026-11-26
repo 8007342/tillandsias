@@ -984,6 +984,10 @@ git	alpine	libpsl	0.21.5-r1	MIT
 git	alpine	libssl3	3.3.7-r0	Apache-2.0
 git	alpine	libucontext	1.2-r3	ISC
 git	alpine	libunistring	1.2-r0	GPL-2.0-or-later OR LGPL-3.0-or-later
+git	alpine	lua5.4	5.4.6-r1	MIT
+git	alpine	lua5.4-filesystem	1.8.0-r4	MIT
+git	alpine	lua5.4-libs	5.4.6-r1	MIT
+git	alpine	lua5.4-lpeg	1.0.2-r3	MIT
 git	alpine	musl	1.2.5-r3	MIT
 git	alpine	musl-utils	1.2.5-r3	MIT AND BSD-2-Clause AND GPL-2.0-or-later
 git	alpine	ncurses-terminfo-base	6.4_p20240420-r2	X11

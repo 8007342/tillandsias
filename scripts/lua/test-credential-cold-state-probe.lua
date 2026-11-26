@@ -82,18 +82,27 @@ local function probe(path, cache, fmt)
     return r.code, (r.stdout or "") .. (r.stderr or "")
 end
 local LINUX, DARWIN = "echo Linux", "echo Darwin"
+-- 2415-s79h: on msys the probe's shell is Git's bin/bash.exe, which PREPENDS /ucrt64/bin:/usr/bin to the
+-- PATH it is handed, so the real uname (MINGW64_NT) and tools shadow every stub below. The arms
+-- that need a stubbed host are then named and skipped, never counted green; the probe is unchanged.
+local STUB_SHADOWED = fixture.posix_shell() ~= "bash"
+local function sarm(name, ok, why)
+    if STUB_SHADOWED then
+        out.line("skip: " .. name .. " (msys: Git bash prepends /usr/bin over the stub PATH)")
+    else T:arm(name, ok, why) end
+end
 
 -- 3 — linux, no busctl.
 local p = bin("linux-nobus", { uname = LINUX })
 local rc, o = probe(p)
-T:arm("3 linux with no busctl is could-not-run, says it is NOT cold, and exits 3",
+sarm("3 linux with no busctl is could-not-run, says it is NOT cold, and exits 3",
     rc == 3 and text.contains(o, "could-not-run:credential-state:no-busctl") and text.contains(o, "NOT a cold verdict")
         and not text.contains(o, "credential-state:cold"), "rc=" .. tostring(rc) .. " " .. o)
 
 -- 4 — darwin, no security.
 p = bin("darwin-nosec", { uname = DARWIN })
 rc, o = probe(p)
-T:arm("4 darwin with no security is could-not-run, NOT cold, exit 3",
+sarm("4 darwin with no security is could-not-run, NOT cold, exit 3",
     rc == 3 and text.contains(o, "could-not-run:credential-state:no-security") and not text.contains(o, "credential-state:cold"),
     "rc=" .. tostring(rc) .. " " .. o)
 
@@ -126,11 +135,11 @@ local cache = W.rel .. "/cache"
 fs.mkdir(cache .. "/tillandsias")
 fs.write(cache .. "/tillandsias/fallback_vault-shamir-share-v1", "")
 rc, o = probe(p, W.abs .. "/cache")
-T:arm("7 linux: an empty keychain with a fallback share reads WARM, naming the fallback",
+sarm("7 linux: an empty keychain with a fallback share reads WARM, naming the fallback",
     rc == 0 and text.contains(o, "ok:credential-state:warm") and text.contains(o, "fallback share present"), "rc=" .. tostring(rc) .. " " .. o)
 T:must{ "rm", "-f", W.abs .. "/cache/tillandsias/fallback_vault-shamir-share-v1" }
 rc, o = probe(p, W.abs .. "/cache")
-T:arm("8 CONTROL linux: the same keychain with no fallback reads COLD", rc == 0 and text.contains(o, "ok:credential-state:cold"),
+sarm("8 CONTROL linux: the same keychain with no fallback reads COLD", rc == 0 and text.contains(o, "ok:credential-state:cold"),
     "rc=" .. tostring(rc) .. " " .. o)
 
 -- 9 — darwin: no item.
@@ -141,7 +150,7 @@ rc, o = probe(p, W.abs .. "/cache")
 local cold = rc == 0 and text.contains(o, "ok:credential-state:cold") and text.contains(o, "macOS Keychain")
 fs.write(cache .. "/tillandsias/fallback_vault-shamir-share-v1", "")
 local rc2, o2 = probe(p, W.abs .. "/cache")
-T:arm("9 darwin: no Keychain item is COLD; with a fallback share it is WARM",
+sarm("9 darwin: no Keychain item is COLD; with a fallback share it is WARM",
     cold and rc2 == 0 and text.contains(o2, "ok:credential-state:warm") and text.contains(o2, "fallback share present"),
     "rc=" .. tostring(rc) .. " " .. o .. " | with fallback rc=" .. tostring(rc2) .. " " .. o2)
 T:must{ "rm", "-f", W.abs .. "/cache/tillandsias/fallback_vault-shamir-share-v1" }
@@ -157,7 +166,7 @@ local flagged = false
 for l in argv_seen:gmatch("[^\n]+") do
     for w in l:gmatch("%S+") do if w == "-g" or w == "-w" then flagged = true end end
 end
-T:arm("10 darwin: an item present is WARM with its creation date, and security was never asked for the password",
+sarm("10 darwin: an item present is WARM with its creation date, and security was never asked for the password",
     rc == 0 and text.contains(o, "ok:credential-state:warm") and text.contains(o, "created=2026-11-25T00:59:52Z")
         and argv_seen ~= "" and not flagged, "rc=" .. tostring(rc) .. " " .. o .. " argv=[" .. argv_seen .. "]")
 

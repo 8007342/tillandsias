@@ -42,7 +42,7 @@ local OK_PARSEABLE = "ok:" .. LIT .. "-parseable"
 -- Resolve from this checkout (1401-x76w), not the caller's PATH.
 local READER = fixture.plan_binary()
 if READER == "" then T:skip("no-yaml-reader") end
-if READER:sub(1, 1) ~= "/" then READER = ROOT .. "/" .. READER:gsub("^%./", "") end
+if not fixture.is_abs(READER) then READER = ROOT .. "/" .. READER:gsub("^%./", "") end
 
 local W = T:scratch()
 local TMP = W.abs

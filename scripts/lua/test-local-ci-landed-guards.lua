@@ -64,7 +64,15 @@ else
         .. " absent=" .. table.concat(absent, ","))
 end
 
-if not B then cleanup(); verdict.could_not_run("local-ci-landed-guards:no-bash-gate-left-in-the-roster") end
+-- 2412-ewmt ported the last bash gate. "Every gate is Lua" is the goal, not a fault, and arms 2 and
+-- 4 (a failing gate, a missing gate) do not depend on the runtime: they then break the Lua gate the
+-- stub runner already fails, litmus-dead-inputs. Only if that row is gone too is there no subject.
+if not B then
+    for _, f in ipairs(rows) do
+        if f[1] == "litmus-dead-inputs" and f[2] == "gate" then B = { id = f[1], path = f[4], log = (f[6] or ""):match("[^/]+$"), fail = f[8] } end
+    end
+end
+if not B then cleanup(); verdict.could_not_run("local-ci-landed-guards:no-gate-for-arms-2-and-4") end
 
 -- the harness: local-ci.sh's block over stubs in a scratch repo
 fs.write(rel .. "/harness.sh", [==[
