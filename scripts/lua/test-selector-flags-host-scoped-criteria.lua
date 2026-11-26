@@ -35,6 +35,9 @@ if PLAN == "" then T:refuse("no-plan-binary", "build one: cargo build --release 
 if not fixture.is_abs(PLAN) then PLAN = ROOT .. "/" .. PLAN:gsub("^%./", "") end
 
 local W = T:scratch()
+-- 2392-qkr4: the filesystem root, outside any checkout. A native runner refuses "/" as relative on
+-- Windows, so there it is the checkout's drive root (C:/).
+local FS_ROOT = ROOT:match("^%a:[/\\]") and (ROOT:sub(1, 2) .. "/") or "/"
 fs.mkdir(W.rel .. "/plan/index.d")
 T:must{ "ln", "-s", ROOT .. "/scripts", W.abs .. "/scripts" }
 fs.write(W.rel .. "/plan/index.yaml", [[
@@ -81,7 +84,7 @@ local ROSTER = "lenovinha\tcpu\tnone\nmacuahuitl\tgpu-cuda\tnone\nyoga\tcpu\tnon
 -- stripped so nothing live leaks in.
 local function select_as(host)
     local r = T:run{ SH, W.abs .. "/scripts/select-work-batch.sh", "linux", "--release", "v0.5", "--budget", "3",
-        "--seed", "host-scoped-fixture", cwd = "/", timeout_ms = 120000, env_unset = { "TILLANDSIAS_*" },
+        "--seed", "host-scoped-fixture", cwd = FS_ROOT, timeout_ms = 120000, env_unset = { "TILLANDSIAS_*" },
         env = { TILLANDSIAS_PLAN_BIN = W.abs .. "/plan-bin", TILLANDSIAS_CAP_HOSTS = ROSTER,
             TILLANDSIAS_WORKSTATION = host, TILLANDSIAS_HOST_TIER = "general", TILLANDSIAS_HOST_CAPS = "nix",
             TILLANDSIAS_HOST_ACCELS = "", TILLANDSIAS_XBRANCH_CHECK = W.abs .. "/xbranch" } }
