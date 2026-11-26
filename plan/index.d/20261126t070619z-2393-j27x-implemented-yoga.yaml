@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: forge-lua-helpers-d36-push-and-project-engine-capability
+    field: status
+    value: implemented
+    ts: "2026-11-26T07:06:19Z"
+    host: yoga
+events:
+  - packet_id: forge-lua-helpers-d36-push-and-project-engine-capability
+    event: {type: implemented, ts: "2026-11-26T07:06:19Z", host: yoga, summary: "implemented on work/2393-j27x: push-capability 9->6 and project-engine-capability 20->9 execve in the forge image; red first, existing pins green, 7 mutants red; D3.6 written into the forge-lua-helpers design"}
