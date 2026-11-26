@@ -6681,6 +6681,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus id uniqueness gate passed"
 
+    # ORDER 814-75yf — --check runs the workspace suite on Linux on every host, so a test
+    # that reads /proc is green here and red natively on Windows and macOS.
+    _step "Checking no ungated test reads a Linux-only host path (814-75yf)..."
+    if ! _run_lua_decider "scripts/lua/check-test-host-paths.lua" 2>&1; then
+        _error "a test reads /proc, /sys or /dev (or builds MetricsSampler::new()) outside cfg(target_os); it can only pass on Linux (814-75yf; the REFUSED lines are above)"
+        exit 1
+    fi
+    _info "Test host-path gate passed"
+
     # ORDER 1594-mtc3 — relay-preflight's phase 5 does not select a test-*.sh
     # the diff deletes (every shell->lua port deletes one) as a touched fixture.
     _step "Checking relay-preflight skips deleted fixtures (1594-mtc3)..."
