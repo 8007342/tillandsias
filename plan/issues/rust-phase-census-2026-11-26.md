@@ -43,7 +43,7 @@ Runtime gaps behind this list. Fixing these would fix the runner, not one script
 
 ## D. Stale records found on the way
 
-- **lib-rerun-failed-rust-tests.sh:** 2214-pj7i says it must stay shell. It is gone from this tree (scripts/lua/run-rust-test-on-host.lua exists), but `scripts/gate-divergence-declared.txt` still names it.
+- **lib-rerun-failed-rust-tests.sh:** 2214-pj7i says it must stay shell, but it is gone from this tree; scripts/lua/run-rust-test-on-host.lua replaced it (2215-beb5). `scripts/gate-divergence-declared.txt` names it only inside that Lua runner's entry ("It replaces scripts/lib-rerun-failed-rust-tests.sh ..."), as history. That is not a stale entry, so nothing needs removing. (Corrected 2026-11-26 after the census's first wording called it stale.)
 
 ## Proposed operator decisions
 
