@@ -6103,7 +6103,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # open rows carrying owned_files at >= 40%, today 0.6% (3/490) — is recorded
     # in the script header along with the clause that must never be promoted.
     _step "Checking that newly filed rows are independently schedulable (831-ezea, advisory)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-arrival-routing.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-arrival-routing.lua" 2>&1; then
         _error "the arrival-routing advisory could not run — that is a broken checkout, not a clean ledger"
         exit 1
     fi

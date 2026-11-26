@@ -2,7 +2,6 @@
 scripts/check-added-test-is-referenced.sh
 scripts/check-append-vs-origin-fold.sh
 scripts/check-archive-answerability.sh
-scripts/check-arrival-routing.sh
 scripts/check-base-ledger-status-loss.sh
 scripts/check-build-cache-sweep.sh
 scripts/check-capability-row.sh

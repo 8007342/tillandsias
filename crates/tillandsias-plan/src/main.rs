@@ -272,7 +272,7 @@ const USAGE: &str = concat!(
     "                                     the re-filing class, never semantic sameness). Does NOT\n",
     "                                     decide the pickup_role disjunct: both roles are printed\n",
     "                                     for the reader. Exit 0 with overlaps (ADVISORY, bar in\n",
-    "                                     scripts/check-arrival-routing.sh), 3 on a named fragment\n",
+    "                                     scripts/lua/check-arrival-routing.lua), 3 on a named fragment\n",
     "                                     the fold could not read.\n",
     "           next-order [prefix] [--quiet]\n",
     "                                     mint a COLLISION-FREE order token for a new packet.\n",
@@ -8233,7 +8233,7 @@ fn main() {
             // string EQUALITY, nothing cleverer. It catches the re-filing class
             // (a finding written twice in the same words) and nothing else.
             // Stated as its own predicate token so a reader can never mistake
-            // it for semantic sameness — see scripts/check-arrival-routing.sh.
+            // it for semantic sameness — see scripts/lua/check-arrival-routing.lua.
             //
             // NEWLY DEFINED is decided by `origin_source_of`, not by the
             // fragment text: a `packets:` entry that RE-declares an existing

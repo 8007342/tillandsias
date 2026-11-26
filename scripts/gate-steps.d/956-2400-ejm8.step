@@ -1,0 +1,14 @@
+# Gate step 2400-ejm8 — data, not code (order 1072-b7eq).
+#
+# The fixture for the arrival-routing advisory (831-ezea), ported to Lua with its
+# decider. The .sh had no fixture of its own; this one pins every verdict branch
+# against a stub plan binary, with a mutation control on the distinct-row count.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking the arrival-routing advisory's verdicts (2400-ejm8)"
+STEP_LUA="scripts/lua/test-arrival-routing.lua"
+STEP_ERROR="the arrival-routing advisory mis-reports a verdict (2400-ejm8) — see the FAIL lines above"
+STEP_OK="Arrival-routing verdicts pinned"
+STEP_SECOND_REGIME="doris 2026-11-26 msys ok:arrival-routing-fixture:12 arms"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY.
+STEP_READS="scripts/lua/check-arrival-routing.lua scripts/plan-binary-probe.sh scripts/lua/test-arrival-routing.lua"
