@@ -20,7 +20,8 @@ if not fs.exists(LUA_REL) then T:refuse("gate-not-found", LUA_REL) end
 local LUA = ROOT .. "/" .. LUA_REL
 local PLAN = fixture.plan_binary()
 if PLAN == "" then T:skip("no-validator") end
-if PLAN:sub(1, 1) ~= "/" then PLAN = ROOT .. "/" .. PLAN:gsub("^%./", "") end
+-- is_abs: a native Windows drive path C:/x is absolute too (yolanda msys, #1627).
+if not fixture.is_abs(PLAN) then PLAN = ROOT .. "/" .. PLAN:gsub("^%./", "") end
 
 local W = T:scratch()
 local UNSET = { "TILLANDSIAS_*", "PODMAN_SYNC_*", "PROJECT_ROOT" }

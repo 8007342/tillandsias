@@ -33,7 +33,8 @@ if not fs.exists(STUB_REL) then T:refuse("stub-absent", STUB_REL) end
 local STUB = ROOT .. "/" .. STUB_REL
 local PLAN = fixture.plan_binary()
 if PLAN == "" then T:refuse("no-runnable-plan-binary", "the bridge execs it") end
-if PLAN:sub(1, 1) ~= "/" then PLAN = ROOT .. "/" .. PLAN:gsub("^%./", "") end
+-- is_abs: a native Windows drive path C:/x is absolute too (yolanda msys, #1627).
+if not fixture.is_abs(PLAN) then PLAN = ROOT .. "/" .. PLAN:gsub("^%./", "") end
 
 local W = T:scratch()
 local AUDIT = W.abs .. "/decisions.jsonl"

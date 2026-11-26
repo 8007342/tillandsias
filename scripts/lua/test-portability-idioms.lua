@@ -28,7 +28,8 @@ local GUARD = "scripts/lua/check-portability-idioms.lua"
 local PINNED_SH_SHA = "152240b1332bbe675c83b283f908846345cb6ccd"
 local PLAN = fixture.plan_binary()
 if PLAN == "" then T:skip("no-script-runner") end
-if PLAN:sub(1, 1) ~= "/" then PLAN = ROOT .. "/" .. PLAN:gsub("^%./", "") end
+-- is_abs: a native Windows drive path C:/x is absolute too (yolanda msys, #1627).
+if not fixture.is_abs(PLAN) then PLAN = ROOT .. "/" .. PLAN:gsub("^%./", "") end
 local caps = T:run{ PLAN, "capabilities", cwd = ROOT, timeout_ms = 30000 }
 if not ("\n" .. (caps.stdout or "") .. "\n"):find("\nscript\n", 1, true) then T:skip("no-script-runner") end
 
