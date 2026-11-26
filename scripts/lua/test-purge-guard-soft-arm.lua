@@ -1,7 +1,7 @@
 -- @env PATH
 -- @trace spec:host-state-lifecycle, order:1559-2uw3, order:1437-3iux
 --
--- test-purge-guard-soft-arm.lua — check-purge-clears-vault-credentials.sh's
+-- test-purge-guard-soft-arm.lua — check-purge-clears-vault-credentials.lua's
 -- NEGATIVE arm (1437-3iux S4): the Windows SOFT reset body calls NO credential
 -- clearer. The guard's positive arm (every path that unregisters the distro
 -- must clear) is unchanged; this pins the other direction, so a later edit that
@@ -21,7 +21,9 @@
 -- Usage: tillandsias-plan script run scripts/lua/test-purge-guard-soft-arm.lua
 -- Verdict: ok:purge-guard-soft-arm:4 arms | fail:purge-guard-soft-arm:<n>
 
-local GUARD = "scripts/check-purge-clears-vault-credentials.sh"
+local GUARD = "scripts/lua/check-purge-clears-vault-credentials.lua"
+local PLAN = require("common.fixture").plan_binary()
+if PLAN == "" then verdict.emit("could-not-run:purge-guard-soft-arm:no-plan-binary", 3) end
 local SRC = "crates/tillandsias-windows-tray/src/notify_icon.rs"
 local SIG = "pub fn reset_state_once() -> i32 {"
 local CALL = "    let _ = crate::installation_uuid::clear_guest_vault_credentials();"
@@ -39,7 +41,7 @@ local ENV = env
 local function guard(soft)
     local e = { PATH = ENV.get("PATH") or "/usr/bin:/bin" }
     if soft then e.TILLANDSIAS_PURGE_GUARD_SOFT_SRC = root .. "/" .. soft end
-    local r = proc.run({ argv = { "bash", GUARD }, env = e, timeout_ms = 120000 })
+    local r = proc.run({ argv = { PLAN, "script", "run", GUARD }, env = e, timeout_ms = 120000 })
     local o = (r.stdout or "") .. (r.stderr or "")
     return r.code, text.trim(o)
 end

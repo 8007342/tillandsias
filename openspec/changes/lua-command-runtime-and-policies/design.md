@@ -311,7 +311,7 @@ What exists (read before designing; none of it is re-filed):
     must stay shell (installers, the cargo bootstrap, hook stubs, image
     entrypoints before the binary ships). The three bash deciders print
     `population=<n> bootstrap=<b>` on STDERR (their stdout verdict is an
-    interface) and `check-decider-retirement.sh` prints `retire:<decider>`
+    interface) and `scripts/lua/check-decider-retirement.lua` prints `retire:<decider>`
     when the two are equal. 1384-bxhk's ratchet counts the whole tree; this
     gives each decider its own denominator.
 
