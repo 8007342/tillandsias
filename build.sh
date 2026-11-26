@@ -1437,7 +1437,7 @@ _preflight_preconditions() {
     cat <<'PRECONDS'
 check-no-python-scripts.lua|policy-binary|compiles before it resolves (its first command is `cargo build -p tillandsias-policy`); runs only when that binary already exists
 check-no-competing-gate.sh|gate-context|answers about a RUNNING gate's dispatch, not about the tree; it has no subject outside one
-check-tracked-files-unwritten.sh|gate-context|compares against a snapshot the gate takes at its own start; outside a gate there is nothing to compare
+check-tracked-files-unwritten.lua|gate-context|compares against a snapshot the gate takes at its own start; outside a gate there is nothing to compare
 PRECONDS
 }
 
@@ -3908,7 +3908,7 @@ _write_gate_stamp() {
     # that lets it push.
     if [ -n "${_TRACKED_STATE:-}" ]; then
         _step "Checking the gate did not write into the checkout (1063-363b)..."
-        if ! _run bash "$SCRIPT_DIR/scripts/check-tracked-files-unwritten.sh" verify "$_TRACKED_STATE" 2>&1; then
+        if ! _run_lua_decider "scripts/lua/check-tracked-files-unwritten.lua" verify "$_TRACKED_STATE" 2>&1; then
             _error "the gate modified tracked files while measuring them (1063-363b) — every verdict after the write is suspect; restore with 'git checkout --' and see the named paths above"
             exit 1
         fi
@@ -4551,7 +4551,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # after the write measured something other than the tree under test, and
     # said so confidently. 61ms against a 254s gate.
     _TRACKED_STATE="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-tracked-baseline"
-    bash "$SCRIPT_DIR/scripts/check-tracked-files-unwritten.sh" snapshot "$_TRACKED_STATE" >/dev/null 2>&1 || true
+    _run_lua_decider "scripts/lua/check-tracked-files-unwritten.lua" snapshot "$_TRACKED_STATE" >/dev/null 2>&1 || true
 
     _step "Fast refusals: sub-second deciders before any compile (1009-gccx)..."
 
@@ -7117,7 +7117,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # a comparison that drops paths with spaces, or reads a missing baseline as
     # a clean tree, would be worse than none.
     _step "Checking the tracked-file guard still detects a write (1063-363b)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-tracked-files-unwritten-guard.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-tracked-files-unwritten-guard.lua" 2>&1; then
         _error "the tracked-file guard lost an arm (1063-363b) — see the verdict line above"
         exit 1
     fi
