@@ -391,13 +391,21 @@ local function arm60(name, k, files, o60)
     L:write(S0.dir .. "/stub.sh", stub)
     local cmd = o60.cmd
     if cmd == nil then cmd = "bash " .. S0.dir .. "/stub.sh" end
-    local out0 = L:run_queue(S0, { BATCH_K = tostring(k), SHADOW = cmd, SHADOW_LOCK = S0.dir .. "/lock", SHADOW_TREE = S0.dir .. "/shtree",
-        SHADOW_LOG = S0.dir .. "/shadow.log", SHADOW_PR_S = o60.pr_s or "60", SHADOW_RUN_S = o60.run_s or "60", LOGDIR = S0.dir .. "/logs", wrap = o60.wrap })
-    if L:sh("[ -d " .. q(S0.WORK .. "/.git/tillandsias-land-queue.lock") .. " ] && echo held") ~= "" then b60[#b60 + 1] = name .. "-land-lock-held" end
-    if not o60.j then
-        L:sh("for w in $(seq 1 600); do n=$(grep -cE '^(shadow:accept|unmeasured):' " .. q(S0.dir .. "/shadow.log") .. " 2>/dev/null); "
-            .. "[ \"${n:-0}\" -ge " .. (o60.lines or 1) .. " ] && [ ! -d " .. q(S0.dir .. "/lock") .. " ] && break; sleep 0.1; done")
+    -- The shadow runs DETACHED. Where there is no setsid (darwin) it stays in this
+    -- shell's process group, and proc.run ends the group when the shell exits: the
+    -- shell must outlive it. So the wait for its log lines runs in the SAME shell
+    -- as the queue, as the .sh's did (macbookair 2026-11-26: ten sub-checks red
+    -- on darwin when the wait was a second proc.run).
+    local waitloop = o60.j and "" or ("for w in $(seq 1 600); do n=$(grep -cE '^(shadow:accept|unmeasured):' " .. q(S0.dir .. "/shadow.log")
+        .. " 2>/dev/null); [ \"${n:-0}\" -ge " .. (o60.lines or 1) .. " ] && [ ! -d " .. q(S0.dir .. "/lock") .. " ] && break; sleep 0.1; done\n")
+    local wrap = function(c)
+        local body = o60.wrap and o60.wrap(c):gsub("exit %$RC$", "return $RC") or c
+        return "__run() {\n" .. body .. "\n}\n__run; RC=$?\n"
+            .. "[ -d " .. q(S0.WORK .. "/.git/tillandsias-land-queue.lock") .. " ] && echo __LAND_LOCK_HELD__\n" .. waitloop .. "exit $RC"
     end
+    local out0 = L:run_queue(S0, { BATCH_K = tostring(k), SHADOW = cmd, SHADOW_LOCK = S0.dir .. "/lock", SHADOW_TREE = S0.dir .. "/shtree",
+        SHADOW_LOG = S0.dir .. "/shadow.log", SHADOW_PR_S = o60.pr_s or "60", SHADOW_RUN_S = o60.run_s or "60", LOGDIR = S0.dir .. "/logs", wrap = wrap })
+    if has(out0, "__LAND_LOCK_HELD__") then b60[#b60 + 1] = name .. "-land-lock-held" end
     return out0, L:read(S0.dir .. "/shadow.log"), S0
 end
 local o60, l60, S60 = arm60("arm60a", 1, { "c81.txt", "c82.txt", "c83.txt" }, { lines = 3 })
