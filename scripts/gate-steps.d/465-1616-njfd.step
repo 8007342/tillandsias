@@ -15,4 +15,4 @@ STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:preflight-regime-
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/lua/test-preflight-regime-budget.lua scripts/test-preflight-front-door.sh"
+STEP_READS="scripts/lua/test-preflight-regime-budget.lua lib/lua/common/preflight_judge.lua"

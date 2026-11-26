@@ -2387,7 +2387,7 @@ PFEOF
     _pf_now
     _pf_iso="$_pf_iso deadline-clock=$_PF_CLOCK"
     # ORDER 1616-njfd: and the budget that applies, so a regression reads
-    # against the right number (test-preflight-front-door.sh judges by it).
+    # against the right number (test-preflight-front-door.lua judges by it, through common.preflight_judge).
     _pf_budget
     _pf_iso="$_pf_iso budget=${_PF_BUDGET}s budget-regime=$_PF_BUDGET_REGIME decider-deadline=${_pf_ddeadline}s"
 

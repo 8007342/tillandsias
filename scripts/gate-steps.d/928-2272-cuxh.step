@@ -4,11 +4,11 @@
 # (TILLANDSIAS_FRONT_DOOR_LIVE=1, scripts/land-queue.sh); a normal gate prints
 # not-run:preflight-front-door.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking the preflight front door's own fixture (1305-udgs, daily-full only: 2272-cuxh)..."
-STEP_SCRIPT="scripts/test-preflight-front-door.sh"
+STEP_LUA="scripts/lua/test-preflight-front-door.lua"
 STEP_ERROR="the preflight front door's fixture is red — see the FAIL lines above"
 STEP_OK="preflight front-door fixture passed, or named not-run"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:preflight-front-door:20/20 at e49301129 (live, budget judged 142s <= 200s; a normal gate prints not-run)"
 STEP_SERIAL="runs the preflight door several times; a busy pool skews its deadlines and its wall-clock arm"
-STEP_READS="build.sh scripts/** scripts/test-preflight-front-door.sh"
+STEP_READS="build.sh scripts/** lib/lua/common/preflight_judge.lua"
