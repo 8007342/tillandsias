@@ -89,7 +89,6 @@ scripts/test-host-tools.sh
 scripts/test-if-not-pipeline-guard.sh
 scripts/test-image-build-convergence.sh
 scripts/test-image-usability-check.sh
-scripts/test-land-queue.sh
 scripts/test-macos-vsock-inference-closure.sh
 scripts/test-mo-full-attest.sh
 scripts/test-nix-cache-service.sh

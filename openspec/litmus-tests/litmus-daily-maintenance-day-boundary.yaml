@@ -40,7 +40,7 @@ critical_path:
   - step: "all boundary arms pass (flip-once, both offset signs, grammar, marker fields, mutation control)"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-daily-maintenance-day-boundary.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "ok:daily-maintenance-day-boundary:all"
+    expected_behavior: "ok:daily-maintenance-day-boundary:11 arms"
 
   - step: "the boundary is UTC in the source, not local — the one line the whole packet turns on"
     command: "if grep -qE '^TODAY=\"\\$\\{TILLANDSIAS_DAILY_MAINTENANCE_TODAY:-\\$\\(date -u \\+%Y-%m-%d' scripts/check-daily-maintenance.sh; then echo 'ok: utc-boundary'; else echo 'FAIL: TODAY no longer derives from date -u'; fi"
