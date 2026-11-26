@@ -17,7 +17,7 @@
 --
 -- COULD-NOT-RUN IS NOT A VIOLATION (1005-m6rz): a host with no toolchain gets
 -- a named skip, never a bare `cargo: command not found` under an ERROR
--- heading. Cargo resolves as scripts/lib-cargo-sites.sh cargo_resolve does: on
+-- heading. Cargo resolves through lib/lua/common/cargosites.lua (1005-m6rz): on
 -- PATH, else $CARGO_HOME/bin, else $HOME/.cargo/bin (an unset CARGO_HOME is
 -- never read as /bin).
 --
@@ -46,14 +46,9 @@ if not fs.exists("cheatsheets") then
         "  why: the validator judges cheatsheets/, and this tree has none\n  remedy: run from the repository root")
 end
 
--- cargo_resolve
+-- 1005-m6rz: the shared resolver.
 local function runs(bin, a) local p = proc.run{ argv = { bin, a }, timeout_ms = 60000 }; return p.code ~= nil and p.code ~= 126 and p.code ~= 127, p end
-local cargo = nil
-if select(1, runs("cargo", "--version")) then cargo = "cargo" else
-    for _, d in ipairs({ (env.get("CARGO_HOME") or "") .. "/bin", (env.get("HOME") or "") .. "/.cargo/bin" }) do
-        if d ~= "/bin" and d ~= "/.cargo/bin" and select(1, runs(d .. "/cargo", "--version")) then cargo = d .. "/cargo"; break end
-    end
-end
+local cargo = require("common.cargosites").resolve(function(bin) return (runs(bin, "--version")) end)
 if not cargo then
     verdict.emit("skip:cheatsheet-tiers:cargo-absent (no toolchain on this host; check not run)", 0)
 end
@@ -62,7 +57,8 @@ local b = proc.run{ argv = { cargo, "build", "--quiet", "--manifest-path", ROOT 
     timeout_ms = 1800000 }
 if not b.ok then
     log.raw(b.stderr or "")
-    verdict.emit("refused:cheatsheet-tiers:policy-build-failed", b.code or 1,
+    -- cargo exits 101; a verdict code is 0-3.
+    verdict.emit("refused:cheatsheet-tiers:policy-build-failed", 1,
         "  why: cargo could not build tillandsias-policy, so no cheatsheet was judged\n  remedy: fix the build error above")
 end
 

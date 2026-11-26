@@ -10,7 +10,7 @@
 --   4 an unset CARGO_HOME never probes /bin     5 no git identity is refused with the remedy
 --   6 cheatsheet-tiers names an absent cargo    7 the cargo-site registry
 --   8 no cargo: a runnable binary serves, none blocks; cargo present builds
---   9 the shipped refusal carries why and remedy
+--   9 the shipped refusal carries why and remedy   10 the shared resolver (lib/lua/common/cargosites.lua)
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-cycle-preflight-cargo-resolution.lua
 -- Verdict: ok:cycle-preflight-cargo-resolution:<n> arms | violation:...
@@ -77,19 +77,19 @@ T:must{ "git", "-C", w.abs .. "/noident", "config", "user.name", "t" }
 T:must{ "git", "-C", w.abs .. "/noident", "config", "user.email", "t@example.invalid" }
 x = sh(EMPTY, GUARD, w.abs .. "/noident")
 T:arm("5c CONTROL with one it passes", x.out:match("^ok:branch%-") ~= nil, x.why)
-T:arm("6a cheatsheet-tiers looks past PATH too", text.contains(fs.read("scripts/lua/check-cheatsheet-tiers.lua"), '"/.cargo/bin"'), "gone")
+T:arm("6a cheatsheet-tiers looks past PATH too, through the shared resolver", text.contains(fs.read("scripts/lua/check-cheatsheet-tiers.lua"), "require(\"common.cargosites\").resolve") and text.contains(fs.read("lib/lua/common/cargosites.lua"), "/.cargo/bin"), "gone")
 x = sh(EMPTY, 'exec "' .. PLAN .. '" script run scripts/lua/check-cheatsheet-tiers.lua 2>&1\n', ROOT)
 T:arm("6b and an absent cargo is a named skip, never command-not-found", x.out:match("^skip:cheatsheet%-tiers:cargo%-absent") ~= nil or (x.out ~= "" and not text.contains(x.out, "command not found")), x.why)
 
-x = sh(EMPTY, '. "$ROOT/scripts/lib-cargo-sites.sh"\ncargo_sites\n')
+local SITES = require("common.cargosites").SITES
 local n, missing = 0, {}
-for site in x.out:gmatch("%S+") do
+for _, site in ipairs(SITES) do
     n = n + 1
     if not fs.exists(site) then missing[#missing + 1] = site end
 end
 T:arm("7a every cargo site in the registry exists", n > 0 and #missing == 0, n .. " " .. table.concat(missing, " "))
 for _, s in ipairs{ "scripts/cycle-preflight.sh", "scripts/lua/check-cheatsheet-tiers.lua", "scripts/host-capability-probe.sh" } do
-    T:arm("7b it lists " .. s, text.contains("\n" .. x.out .. "\n", "\n" .. s .. "\n"), x.out)
+    T:arm("7b it lists " .. s, text.contains("\n" .. table.concat(SITES, "\n") .. "\n", "\n" .. s .. "\n"), table.concat(SITES, " "))
 end
 local PROBE = [==[
 plan_verdict=skipped
@@ -109,4 +109,22 @@ T:arm("8c cargo present takes the build path", x.out == "skipped", x.why)
 x = sh({ HOME = EMPTY.HOME, TILLANDSIAS_PLAN_BIN = w.abs .. "/no-such-plan" }, 'exec bash "$ROOT/scripts/cycle-preflight.sh"\n')
 T:arm("9a the shipped preflight refuses cargo-absent", text.contains(x.out, "blocked:preflight:plan:cargo-absent"), x.why)
 T:arm("9b with a why and a remedy naming TILLANDSIAS_PLAN_BIN", text.contains(x.err, "\n  why: ") and x.err:find("\n  remedy: [^\n]*TILLANDSIAS_PLAN_BIN") ~= nil, x.why)
+
+-- The shared resolver itself (lib/lua/common/cargosites.lua): which directories it tries, and that it
+-- returns what runs. A probe script under each environment, since the module reads the runner's.
+local probe = T:scratch()
+fs.write(probe.rel .. "/probe.lua", '-- @env HOME CARGO_HOME WANT\nlocal tried = {}\nlocal got = require("common.cargosites").resolve(function(b) tried[#tried + 1] = b; return b == (env.get("WANT") or "") end)\nprint("got=" .. tostring(got))\nfor _, b in ipairs(tried) do print("tried=" .. b) end\nverdict.ok("probe")\n')
+local function resolver(vars)
+    local a = { SH, "-s", "--", "env", "-i", "PATH=" .. NOCARGO }
+    for k, v in pairs(vars) do a[#a + 1] = k .. "=" .. v end
+    a[#a + 1] = PLAN; a[#a + 1] = "script"; a[#a + 1] = "run"; a[#a + 1] = probe.abs .. "/probe.lua"
+    local r = proc.run{ argv = a, cwd = ROOT, stdin = 'exec "$@" </dev/null\n', env_unset = { "TILLANDSIAS_*" }, timeout_ms = 30000 }
+    return "\n" .. (r.stdout or ""):gsub("\r", ""), "rc=" .. tostring(r.code) .. " " .. (r.stdout or "") .. (r.stderr or ""):sub(1, 300)
+end
+local o, why = resolver{ HOME = w.abs .. "/home", WANT = w.abs .. "/home/.cargo/bin/cargo" }
+T:arm("10a the resolver returns ~/.cargo/bin's cargo", text.contains(o, "\ngot=" .. w.abs .. "/home/.cargo/bin/cargo\n"), why)
+o, why = resolver{ HOME = "", WANT = "none" }
+T:arm("10b with HOME and CARGO_HOME unset it tries PATH alone, never /bin or /.cargo/bin", text.contains(o, "\ngot=nil\n") and text.contains(o, "\ntried=cargo\n") and not text.contains(o, "\ntried=/"), why)
+o, why = resolver{ HOME = w.abs .. "/empty-home", CARGO_HOME = w.abs .. "/altcargo", WANT = w.abs .. "/altcargo/bin/cargo" }
+T:arm("10c CARGO_HOME comes first", text.contains(o, "\ngot=" .. w.abs .. "/altcargo/bin/cargo\n") and not text.contains(o, "\ntried=" .. w.abs .. "/empty-home"), why)
 T:finish()
