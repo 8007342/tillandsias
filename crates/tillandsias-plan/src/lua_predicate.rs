@@ -2043,7 +2043,7 @@ mod tests {
     /// inside a repository roots at that repository even from a foreign cwd.
     #[test]
     fn script_mode_never_falls_back_to_the_runners_checkout() {
-        let base = std::env::temp_dir().join(format!("ag5u-{}", std::process::id()));
+        let base = crate::test_scratch::path(format!("ag5u-{}", std::process::id()));
         let scratch = base.join("scratch");
         let repo = base.join("repo");
         let runner_checkout = base.join("runner");

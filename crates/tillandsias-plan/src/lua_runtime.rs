@@ -573,7 +573,7 @@ mod tests {
     }
 
     fn fixture_lua_dir(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("tilland-lua-{tag}-{}", std::process::id()));
+        let dir = crate::test_scratch::path(format!("tilland-lua-{tag}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).expect("fixture dir");
         dir

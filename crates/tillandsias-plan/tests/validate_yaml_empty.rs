@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn scratch() -> PathBuf {
-    let d = std::env::temp_dir().join(format!(
+    let d = tillandsias_plan::test_scratch::path(format!(
         "validate-yaml-empty-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()

@@ -338,7 +338,6 @@ scripts scripts/check-added-test-is-referenced.sh 5
 scripts scripts/check-append-vs-origin-fold.sh 15
 scripts scripts/check-archive-answerability.sh 5
 scripts scripts/check-arrival-routing.sh 3
-scripts scripts/check-base-ledger-status-loss.sh 7
 scripts scripts/check-build-cache-sweep.sh 3
 scripts scripts/check-capability-row.sh 17
 scripts scripts/check-carry-forward.sh 6
@@ -360,7 +359,6 @@ scripts scripts/check-mcp-expert-health.sh 46
 scripts scripts/check-mcp-live-build.sh 4
 scripts scripts/check-mcp-surface.sh 4
 scripts scripts/check-mo-full-attestations.sh 4
-scripts scripts/check-must-ship-rows.sh 5
 scripts scripts/check-nix-builder-e2e.sh 7
 scripts scripts/check-nix-deps-stability.sh 6
 scripts scripts/check-no-competing-gate.sh 6
@@ -378,7 +376,6 @@ scripts scripts/check-script-exec-bits.sh 6
 scripts scripts/check-sigpipe-verdict-pipelines-added.sh 15
 scripts scripts/check-skill-canonicalization.sh 4
 scripts scripts/check-skills-single-source.sh 8
-scripts scripts/check-spec-index-resolution-agreement.sh 4
 scripts scripts/check-stranded-in-progress.sh 5
 scripts scripts/check-test-baseline.sh 8
 scripts scripts/claim-ledger-node.sh 6
@@ -537,12 +534,9 @@ scripts scripts/test-plan-orders-fragment-fold.sh 7
 scripts scripts/test-podman-mock-refusal.sh 4
 scripts scripts/test-portability-idioms.sh 13
 scripts scripts/test-pre-push-empty-ref-list.sh 6
-scripts scripts/test-pre-push-honours-a-live-freeze.sh 11
 scripts scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh 7
 scripts scripts/test-pre-push-work-ref-lane.sh 12
-scripts scripts/test-preflight-front-door.sh 8
 scripts scripts/test-pretooluse-command-policy.sh 3
-scripts scripts/test-promote-stable-evidence-gate.sh 18
 scripts scripts/test-provider-device-auth.sh 1
 scripts scripts/test-reclaim-stranded-claims.sh 9
 scripts scripts/test-relay-preflight.sh 15

@@ -69,14 +69,14 @@ use tracing::{debug, error, info, warn};
 
 use serde::{Deserialize, Serialize};
 
+mod bringup_progress;
 /// ORDER 626-w3fn (b). User-facing bring-up progress, on the DEFAULT path.
 /// UNCONDITIONAL: the packet's whole point is that this reaches users without
 /// --debug and on every platform, so it must not sit behind a feature gate.
-mod bringup_progress;
-mod egress;
-mod fs_stall;
 // 1991-dovl: dev-build overlay over the compiled-in studio tables.
 mod dev_overlay;
+mod egress;
+mod fs_stall;
 // 1984-pexe: this binary's path, robust to an upgrade replacing it on disk.
 mod bringup_timer;
 mod device_poll_view;
@@ -8453,7 +8453,7 @@ pub(crate) fn vsock_forward_dir() -> PathBuf {
             .chars()
             .filter(char::is_ascii_alphanumeric)
             .collect::<String>();
-        std::env::temp_dir().join(format!(
+        tillandsias_core::test_scratch::path(format!(
             "tillandsias-vsock-forward-test-{}-{thread}",
             std::process::id()
         ))
@@ -25459,7 +25459,7 @@ pub(crate) async fn service_stop(
 fn test_cache_root() -> std::path::PathBuf {
     use std::sync::atomic::{AtomicU64, Ordering};
     static SEQ: AtomicU64 = AtomicU64::new(0);
-    let dir = std::env::temp_dir().join(format!(
+    let dir = tillandsias_core::test_scratch::path(format!(
         "tillandsias-test-cache-{}-{}",
         std::process::id(),
         SEQ.fetch_add(1, Ordering::Relaxed)
@@ -25622,7 +25622,8 @@ mod tests {
         }
         use std::process::Command;
 
-        let root = std::env::temp_dir().join(format!("tz-checkout-{}", std::process::id()));
+        let root =
+            tillandsias_core::test_scratch::path(format!("tz-checkout-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("temp root");
 
