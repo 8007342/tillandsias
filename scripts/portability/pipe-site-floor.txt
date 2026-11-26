@@ -525,10 +525,6 @@ scripts scripts/test-host-tools.sh 30
 scripts scripts/test-image-build-convergence.sh 2
 scripts scripts/test-image-usability-check.sh 1
 scripts scripts/test-land-queue.sh 1
-scripts scripts/test-litmus-fake-podman-hermetic.sh 1
-scripts scripts/test-litmus-podman-preflight-trigger.sh 1
-scripts scripts/test-litmus-step-pipefail.sh 3
-scripts scripts/test-litmus-terminal-verdict.sh 2
 scripts scripts/test-nix-cache-service.sh 1
 scripts scripts/test-nix-toolbox.sh 9
 scripts scripts/test-no-competing-gate.sh 2

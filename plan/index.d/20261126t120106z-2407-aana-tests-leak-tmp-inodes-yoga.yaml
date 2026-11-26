@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: workspace-tests-leak-tmp-dirs-and-exhaust-tmpfs-inodes-headless-and-gate
+    order: 2407-aana
+    status: in_progress
+    kind: fix
+    priority: p1
+    title: "tillandsias-headless tests leave dirs in the temp dir on every run, and no gate notices; /tmp ran out of inodes and the land queue read it as merge conflicts"
+    capability_tags: [linux, rust, tooling]
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/msg_serve.rs
+      - crates/tillandsias-headless/src/resource_lock.rs
+      - crates/tillandsias-headless/src/tray/mod.rs
+    depends_on: []
+    context: |
+      macuahuitl-fedora 2026-11-26: land run 93 evicted 19 PRs on false "conflicts"; /tmp was at 98% of 1,048,576
+      inodes from ~99,000 leftover test dirs (tillandsias-test-cache-* 28.9k, tillandsias-test-msg-* 11.8k,
+      tillandsias-locks-test* 9.6k, tilland-ctext-j5is* 6.2k, ...). MEASURED on yoga with a private TMPDIR outside the
+      checkout (a TMPDIR under it fails 12 tests that assert the temp dir is not in the repo): one cargo test run of
+      tillandsias-headless leaves 70 entries (58 tillandsias-test-cache-*, tillandsias-locks-test, tillandsias-test-msg,
+      vsock-forward, pty/relay/wedge/keepalive scratch, ...); one of tillandsias-plan leaves 29 (the plan half,
+      2407-aq7x). Under nextest every test is its own process, so the per-process dirs (msg, locks) leak once per test.
+      This row: the headless half, and the gate check (a workspace test run under a fresh TMPDIR whose leftovers must
+      be zero), which lands last.
+    exit_criteria:
+      - "Red first: a headless test run under a private TMPDIR leaves 70 entries; after, 0."
+      - "A gate step runs the workspace tests under a fresh TMPDIR and refuses any entry left; red on trunk, green once both halves land."
+    verifiable_closure: |
+      cargo test -p tillandsias-headless --features listen-vsock
+    provenance: "macuahuitl-fedora 2026-11-26 (p1, run 93 evictions), yoga"
+    events:
+      - {type: claimed, ts: "2026-11-26T12:01:06Z", host: yoga, summary: "claimed; work ref work/2407-aana"}
+  - packet_id: workspace-tests-leak-tmp-dirs-and-exhaust-tmpfs-inodes-plan-crate
+    order: 2407-aq7x
+    status: ready
+    kind: fix
+    priority: p1
+    title: "tillandsias-plan tests leave 29 dirs in the temp dir on every run (tilland-ctext-*, tilland-ocg-*, tilland-398e-*, tilland-ladder-*, validate-yaml-empty-*, next-order-ergonomics-*, ...)"
+    capability_tags: [linux, rust]
+    owned_files:
+      - crates/tillandsias-plan/src/fragments.rs
+      - crates/tillandsias-plan/tests/validate_yaml_empty.rs
+      - crates/tillandsias-plan/tests/next_order_ergonomics.rs
+    depends_on: []
+    context: |
+      The plan-crate half of 2407-aana (split by crate at the coordinator's suggestion; offered to lenovinha). MEASURED on yoga:
+      TMPDIR=/tmp/<fresh> cargo test -q -p tillandsias-plan leaves 29 entries: 6 tilland-ctext-j5is*, tilland-ocg-{clean,bare,
+      badbase,misplaced-def,unknown-key}, tilland-398e-{basic,compact,refused,ts,tie-alpha,tie-omega}, tilland-ladder-*,
+      tilland-cache-binary, ag5u, validate-yaml-empty-*, next-order-ergonomics-*, and more. A TMPDIR under the checkout
+      breaks tests that assert the temp dir is outside the repo, so measure with one under /tmp.
+    exit_criteria:
+      - "Red first: the plan crate's test run under a private TMPDIR leaves N>0 entries; after, 0 (a drop guard or tempfile::TempDir per test)."
+    verifiable_closure: |
+      cargo test -p tillandsias-plan
+    provenance: "macuahuitl-fedora 2026-11-26, split by yoga"

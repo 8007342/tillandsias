@@ -1,4 +1,4 @@
--- @trace order:1611-imnj
+-- @trace order:1611-imnj, order:2399-lrg3
 -- @env PATH TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
 --
 -- test-checkout-writers.lua — both exit criteria of 1611-imnj.
@@ -29,7 +29,12 @@
 --  17 MUTANT    with local-following removed, the two local-held writers go uncounted
 -- THE DOOR KILL, in one run, on scripts/test-litmus-step-pipefail.sh: the
 -- pre-fix file (git show PRE_REV, the trunk commit before the move) and the
--- file as it stands. Each is held in ARM 3, while its runner copy exists, by a
+-- post-fix file (git show POST_REV, its last trunk revision). The guard was ported
+-- to scripts/lua/test-litmus-step-pipefail.lua in 2399-lrg3 and the .sh deleted, so
+-- both sides now come from history; the door's KILL and the TMPDIR cleanup it
+-- relies on are what these arms still measure. The Lua port keeps its pre-fix
+-- runner copy in its kit scratch and never calls timeout(1), so it cannot be held
+-- by the shim below. Each is held in ARM 3, while its runner copy exists, by a
 -- `timeout` shim that holds only for that copy. Then the door's KILL lands:
 -- KILL to the pid (and its group), and the guard's TMPDIR is deleted.
 --  10 PRE-FIX    the copy is left in scripts/ (the defect)
@@ -51,6 +56,7 @@
 -- Usage: tillandsias-plan script run scripts/lua/test-checkout-writers.lua
 
 local PRE_REV = "c1a390082"
+local POST_REV = "d21584a19"
 local SUBJECT_REL = "scripts/lua/check-checkout-writers.lua"
 if not fs.exists(SUBJECT_REL) then
     verdict.emit("violation:checkout-writers-fixture:no-subject", 1, SUBJECT_REL .. " does not exist (1611-imnj)")
@@ -213,15 +219,17 @@ local function pinned(body)
 end
 local pre_src = proc.run({ argv = { "git", "show", PRE_REV .. ":" .. GUARD }, cwd = ROOT, timeout_ms = 30000 })
 local pre, n_pre = pinned(pre_src.stdout or "")
-local post, n_post = pinned(fs.read(GUARD))
+local post_src = proc.run({ argv = { "git", "show", POST_REV .. ":" .. GUARD }, cwd = ROOT, timeout_ms = 30000 })
+local post, n_post = pinned(post_src.stdout or "")
 fs.write(REL .. "/has-timeout.sh", "command -v timeout\n")
 local ht = proc.run({ argv = { "bash", ROOT .. "/" .. REL .. "/has-timeout.sh" }, timeout_ms = 10000 })
 local has_pre = proc.run({ argv = { "git", "cat-file", "-e", PRE_REV .. "^{commit}" }, cwd = ROOT, timeout_ms = 30000 })
+if has_pre.code == 0 then has_pre = proc.run({ argv = { "git", "cat-file", "-e", POST_REV .. "^{commit}" }, cwd = ROOT, timeout_ms = 30000 }) end
 if has_pre.code ~= 0 then
-    out.line("not run: 10-11 need " .. PRE_REV .. " in this clone (a shallow or one-commit tree lacks it)")
-elseif pre_src.code ~= 0 or n_pre ~= 1 or n_post ~= 1 then
+    out.line("not run: 10-11 need " .. PRE_REV .. " and " .. POST_REV .. " in this clone (a shallow or one-commit tree lacks it)")
+elseif pre_src.code ~= 0 or post_src.code ~= 0 or n_pre ~= 1 or n_post ~= 1 then
     arm("10/11 DOOR premise: both versions of " .. GUARD .. " found and pinned", false,
-        "git show rc=" .. tostring(pre_src.code) .. " pinned pre=" .. n_pre .. " post=" .. n_post)
+        "git show rc=" .. tostring(pre_src.code) .. "/" .. tostring(post_src.code) .. " pinned pre=" .. n_pre .. " post=" .. n_post)
 elseif ht.code ~= 0 then
     out.line("not run: 10-11 the door-kill arms (no timeout(1) on this host; the guard needs it too)")
 else
@@ -277,7 +285,7 @@ else
     arm("10 PRE-FIX (" .. PRE_REV .. ") held in ARM 3 and killed: its runner copy is left in scripts/ (the defect)",
         pre_out:find("held=yes", 1, true) ~= nil and pre_out:find("left=" .. ROOT .. "/scripts/.wka4-prefix-runner.", 1, true) ~= nil, pre_out)
     local post_out = held("post")
-    arm("11 POST-FIX held in ARM 3 and killed: nothing is left in the checkout",
+    arm("11 POST-FIX (" .. POST_REV .. ") held in ARM 3 and killed: nothing is left in the checkout",
         post_out:find("held=yes", 1, true) ~= nil and post_out:find("left=none", 1, true) ~= nil, post_out)
     local os_ = text.trim(proc.run({ argv = { "uname", "-s" }, timeout_ms = 10000 }).stdout or "")
     out.line("observed: " .. os_ .. " pre-fix under TERM, 1 s, KILL (not a control): " .. door("pre", "term"))
