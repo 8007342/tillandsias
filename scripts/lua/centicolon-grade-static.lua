@@ -21,7 +21,7 @@
 --               enforcement.sh's rule: assert_exit, assert_output_contains,
 --               assert_output_matches, assert_output_nonempty, success_pattern)
 --   reachable — the file's name is bound in litmus-bindings.yaml under a spec
---               the file itself declares (test-litmus-binding-truth.sh), its
+--               the file itself declares (test-litmus-binding-truth.lua), its
 --               phase is not retired, and it is not in unbound-grandfathered.txt
 --   tier      — pre-build (phase pre-build, size instant|quick) or release
 --               (any other non-retired phase); otherwise untiered

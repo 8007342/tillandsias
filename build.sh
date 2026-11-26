@@ -5237,7 +5237,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # stale claim, because "writes nothing" is trivially satisfied by breaking
     # the reaper and would silently delete 641-e2qa criterion 2.
     _step "Checking expire-claims writes only when asked (1067-24q6)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-expire-claims-write-is-opt-in.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-expire-claims-write-is-opt-in.lua" 2>&1; then
         _error "expire-claims mutates without an explicit --write, or --write no longer expires — a read probe can release another host's lease"
         exit 1
     fi
@@ -5517,7 +5517,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # it, so this asserts it directly, and its negative control reproduces the
     # shell mangling that started the order.
     _step "Checking ledger prose round-trips byte-identically (971-7muc)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-ledger-prose-roundtrip.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-ledger-prose-roundtrip.lua" 2>&1; then
         _error "a ledger write alters the prose it was given — the record cannot be trusted to say what its author wrote"
         exit 1
     fi
@@ -5538,7 +5538,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # main.rs rather than restating the value, so the next change to
     # ENCLAVE_NO_PROXY_BASE breaks the build instead of stranding the fleet.
     _step "Checking the enclave proxy list has one definition (923-rmtw)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-enclave-proxy-lib.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-enclave-proxy-lib.lua" 2>&1; then
         _error "the shell enclave proxy list drifted from ENCLAVE_NO_PROXY_BASE, or a script re-pasted it"
         exit 1
     fi
@@ -7161,7 +7161,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # negative control matters as much as the rest: arms that only check a
     # refusal are satisfied by a tool that refuses unconditionally.
     _step "Checking a land gate refusal names its step and its log (1033-iycs)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-land-gate-refusal-names-its-step.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-land-gate-refusal-names-its-step.lua" 2>&1; then
         _error "the land tool's gate refusal lost its diagnostic (1033-iycs) — see the verdict line above"
         exit 1
     fi
