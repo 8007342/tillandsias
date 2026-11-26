@@ -8,14 +8,14 @@
 #
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking a status is preserved or declared absent through the agent door (1260-2qgi)"
-STEP_SCRIPT="scripts/test-status-channel-absent-is-first-class.sh"
+STEP_LUA="scripts/lua/test-status-channel-absent-is-first-class.lua"
 STEP_ERROR="the status channel substituted an integer for an absent status, or lost a real exit code (1260-2qgi) — see the FAIL lines above"
 STEP_OK="Status channel passed"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:status-channel:absent-distinct-from-zero:3/3 skipped=1"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:status-channel:3 arms skipped=1 (work/2385-psbb @ 10fa474d9)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
 STEP_LANES="checkout"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="methodology/convergence.yaml scripts/lib-wsl-exec.sh scripts/plan-binary-probe.sh scripts/test-status-channel-absent-is-first-class.sh"
+STEP_READS="methodology/convergence.yaml scripts/lib-wsl-exec.sh scripts/plan-binary-probe.sh scripts/lua/test-status-channel-absent-is-first-class.lua"

@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-25. p-s fixtures, PR 3 of 3 (macuahuitl: 8-10 ports per PR, operator rule 2026-11-25).
+packets:
+- packet_id: port-p-s-fixtures-pr-3-of-3
+  order: 2385-psbb
+  status: implemented
+  kind: chore
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [shell-to-lua, macos, fixtures, portability]
+  size: M
+  implementer_tier: sonnet
+  estimated_hours: 4
+  title: 'Nine whole-file shell-to-Lua ports from the p-s range (PR 3 of 3)'
+  ports: [scripts/test-rust-source-pin-added.sh, scripts/test-squid-supervisor.sh, scripts/test-status-channel-absent-is-first-class.sh, scripts/test-pre-push-linux-next-merged.sh, scripts/test-packet-tier-fields.sh, scripts/test-probe-refuses-stale-candidate.sh, scripts/test-sigpipe-guard-sees-paths-and-continuations.sh, scripts/test-preflight-verdict-categories.sh, scripts/test-skills-single-source.sh]
+  context: >-
+    Each port keeps its arms and moves to the common.fixture grammar. preflight-verdict-categories arm 9 re-enters
+    build.sh and uses fixture.gate_inherit (2384-svqx, which this branch is built on). Callers: gate steps 289, 283,
+    272, 330, 422 (STEP_LUA, fresh darwin regime lines); build.sh (probe-refuses-stale-candidate); litmus
+    proxy-crash-supervision-shape, pre-push-linux-next-merged-shape, preflight-runs-or-names-the-capability,
+    unreferenced-lane-fixtures-run; three comment pointers. Left out:
+    - pending-capability-row-does-not-wedge: test-capability-row-could-not-run-is-not-a-code-red.lua runs its .sh
+      by path, and the port's arm 7 could not keep its scaffold-removal assertion under the runner's TERM handler.
+    - plan-binary-probe*: #1435 is still open.
+    - spec-index-durable-tier-demotion, podman-sync-budgets: they drive podman.
+    - provider-device-auth: needs its own careful read.
+  exit_criteria:
+  - 'Each .lua gives the same verdict as its .sh on the trunk tree, and the same red arms under a mutant.'
+  - 'Every caller runs the .lua; the nine .sh files and their floor lines are gone.'
+  verifiable_closure: 'Mutant parity in the PR; the five gate steps and four litmus tests green on darwin and in the Linux land gate.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the mutant parity is the deliverable.'
+  next_action: 'Implemented. Ask for a Linux run of preflight-verdict-categories arm 9 (it re-enters build.sh).'
+  provenance: 'tlatoanis-macbook-air 2026-11-25, on macuahuitl-fedora''s direction.'
+  related: [2380-psba, 2384-svqx]
+  events:
+  - {type: filed, ts: '2026-11-26T01:07:35Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}
