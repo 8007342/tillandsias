@@ -200,7 +200,7 @@ pub fn measure(transcript: Option<&Path>, since: Option<&str>) -> SessionTokens 
         subagent_tokens: 0,
         agents: 0,
         by_model: "-".to_string(),
-        source: source_spelling(&path),
+        source: source_spelling(path),
     };
     let subdir = path.with_extension("").join("subagents");
     let mut files: Vec<PathBuf> = std::fs::read_dir(&subdir)
