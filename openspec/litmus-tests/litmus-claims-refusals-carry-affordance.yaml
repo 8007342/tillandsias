@@ -5,7 +5,7 @@ phase: pre-build
 size: instant
 severity: medium
 description: >
-  Every refusal of scripts/check-claims-across-branches.sh (run before every
+  Every refusal of scripts/lua/check-claims-across-branches.lua (run before every
   claim) says WHY it refused and WHAT would make it not a refusal, as labelled
   "  why:" / "  remedy:" stderr lines beside its unchanged stdout verdict: the
   first 1247-amcu slice. For blocked:no-plan-binary and blocked:fetch-failed the
@@ -13,7 +13,7 @@ description: >
   arm fails any refusal site added later without an affordance.
 
 preconditions:
-  - workspace contains scripts/check-claims-across-branches.sh
+  - workspace contains scripts/lua/check-claims-across-branches.lua
   - workspace contains scripts/lua/test-claims-affordance.lua
 
 critical_path:
@@ -31,5 +31,5 @@ observability:
     test: "claims-refusals-carry-affordance"
 
 failure_modes:
-  - "a new refusal in check-claims-across-branches.sh ships without why/remedy"
+  - "a new refusal in check-claims-across-branches.lua ships without why/remedy"
   - "a stated remedy no longer clears its refusal"

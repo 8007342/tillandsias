@@ -6,7 +6,6 @@ scripts/check-arrival-routing.sh
 scripts/check-build-cache-sweep.sh
 scripts/check-capability-row.sh
 scripts/check-carry-forward.sh
-scripts/check-claims-across-branches.sh
 scripts/check-containers-conf-proxy-env.sh
 scripts/check-credential-channel.sh
 scripts/check-daily-maintenance.sh
