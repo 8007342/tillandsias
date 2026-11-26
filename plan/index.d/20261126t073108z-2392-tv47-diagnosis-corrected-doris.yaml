@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: windows-runner-job-object-kills-a-lua-deciders-shell-child-before-its-cleanup-trap-runs
+    event:
+      type: note
+      ts: "2026-11-26T07:31:08Z"
+      host: doris
+      summary: >-
+        CORRECTION by the row's author: the cause filed here (KILL_ON_JOB_CLOSE) is WRONG, measured on doris
+        (msys) 2026-11-26. (1) Red first: test-claims-across-branches 11b, live=1 left=1 rc=143. (2) Removing
+        KILL_ON_JOB_CLOSE (Drop calling TerminateJobObject instead) left 11b exactly as red. (3) A minimal probe
+        (a Lua script whose proc.run child bash sets an EXIT trap and a TERM trap, then sleeps 15 s; the test
+        then runs `kill -TERM <runner's $!>` from Git Bash) behaves IDENTICALLY on the stock runner and the
+        changed one: the RUNNER SURVIVES (it goes on to print refused:no-verdict and exits 143), while the
+        CHILD BASH IS GONE within 1 s and its EXIT trap never ran (no marker). So the trap is skipped
+        not by the job closing but by how an MSYS `kill` of a native process reaches that process's MSYS
+        descendants: the child is hard-terminated, so its trap cannot run on any runner design. Ignoring
+        SIGPIPE in the fold shell changed nothing either. Both changes were reverted; nothing landed.
+        Open question for the ruling: on native Windows, is "TERM to the runner" (as arm 11b sends it from
+        Git Bash) a real-world event at all? The gate and the preflight door end a Lua decider through the
+        runner's own deadline (terminate()), not a Git Bash kill. Options: (a) a next-run sweep of
+        xbranch.* extracts older than any live run (bounded; satisfies 1423-ydy3's leak concern);
+        (b) arm 11b on msys kills the way a Windows caller does (a deadline) and asserts no extract after;
+        (c) leave 11b red on msys as a known platform limit, with this evidence.

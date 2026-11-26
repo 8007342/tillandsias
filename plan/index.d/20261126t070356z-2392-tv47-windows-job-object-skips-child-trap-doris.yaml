@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by doris-windows 2026-11-26 porting check-claims-across-branches (2392-9zcp). Ruled by macuahuitl: file against the runner.
+packets:
+  - packet_id: windows-runner-job-object-kills-a-lua-deciders-shell-child-before-its-cleanup-trap-runs
+    order: 2392-tv47
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [lua-runner, windows, msys, cleanup, exec]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-exec/src/lib.rs
+    title: |
+      On Windows, tillandsias-exec's job object (KILL_ON_JOB_CLOSE) ends a Lua decider's shell child when the runner is killed, so the child's EXIT/TERM trap never runs and its scratch is left behind
+    context: |
+      scripts/lua/check-claims-across-branches.lua extracts each sibling's plan/ (~19 MB) inside
+      one shell child that removes it in its own trap (1423-ydy3). On Unix a TERM to the runner
+      leaves the child orphaned; it finishes and its trap cleans up. On Windows every proc.run child
+      is in a job object created with KILL_ON_JOB_CLOSE, so the runner's death TerminateProcess-es
+      the child and the trap is skipped. test-claims-across-branches.lua arm 11b measures it:
+      live=1 left=1 rc=143 on doris (msys), 2026-11-26. Any Lua decider that relies on a child's
+      trap for cleanup has the same gap on Windows.
+      Options, not a decision: (1) a next-run sweep of the decider's extract scratch, the bounded
+      fix (a kill leaks until the next run); (2) a runner-level Windows teardown hook that the job
+      close cannot skip; (3) extracts named by runner pid, swept when that pid is dead.
+    verifiable_closure: |
+      tillandsias-plan script run scripts/lua/test-claims-across-branches.lua arm 11b passes on an
+      msys host. PRE-FIX RESULT: FAILS on doris (live=1 left=1 rc=143).
+    unscoreable: "the closure is arm 11b of the existing fixture, run on msys; no separate litmus pin"
+    next_action: >
+      Choose among the options above with the coordinator, then implement and re-run arm 11b on msys.
+    notes: |
+      size: S

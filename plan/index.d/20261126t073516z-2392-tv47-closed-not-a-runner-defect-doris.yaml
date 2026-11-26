@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: windows-runner-job-object-kills-a-lua-deciders-shell-child-before-its-cleanup-trap-runs
+    field: status
+    value: obsoleted
+    ts: "2026-11-26T07:35:16Z"
+    host: doris
+  - packet_id: port-check-claims-across-branches-sh-to-lua
+    field: status
+    value: implemented
+    ts: "2026-11-26T07:35:16Z"
+    host: doris
+events:
+  - packet_id: windows-runner-job-object-kills-a-lua-deciders-shell-child-before-its-cleanup-trap-runs
+    event:
+      type: obsoleted
+      ts: "2026-11-26T07:35:16Z"
+      host: doris
+      summary: >-
+        CLOSED: NOT A RUNNER DEFECT (ruled by macuahuitl 2026-11-26). The closing reason, measured on doris
+        (msys): an MSYS (Git Bash) kill of a native Windows process hard-terminates that process's MSYS
+        descendants, so no trap of theirs can run, and the runner survives. No runner design changes that:
+        removing KILL_ON_JOB_CLOSE left it identical, and nothing was changed in tillandsias-exec. A Git Bash
+        TERM to a native runner is also not how anything on Windows ends a decider. The gate and the preflight
+        door use the runner's own deadline, and on that path the fold's trap DOES run (residue=0, measured).
+        Bound for every abrupt stop on any platform, implemented in #1610: each run of
+        check-claims-across-branches sweeps the extracts whose owner is gone (xbranch.<pid>.*, pid dead; a
+        pid-less name over 60 minutes old).
+  - packet_id: port-check-claims-across-branches-sh-to-lua
+    event:
+      type: note
+      ts: "2026-11-26T07:35:16Z"
+      host: doris
+      summary: >-
+        Supersedes this row's msys note: 11b is GREEN on msys, no longer "red, packet 2392-tv47". On msys arm 11
+        drives the real Windows path (a caller deadline cuts a live fold, and the next run leaves no extract).
+        The Git Bash TERM arm stays on Unix, where it is real. New arm 18 pins the stale-extract sweep: a dead
+        owner and a pid-less extract over 60 minutes old are swept; CONTROLS keep a live owner's extract and
+        a fresh one. Measured on doris: ok:claims-across-branches:25 arms, ok:claims-affordance:12 arms.
