@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed and fixed by doris-windows 2026-11-26 at macuahuitl's request.
+packets:
+  - packet_id: wsl2-forward-hands-the-guest-an-absolute-msys-path-when-pwd-is-spelled-c-colon
+    order: 2415-gntr
+    status: implemented
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, wsl2, build-sh, paths]
+    estimated_hours: 1
+    owned_files:
+      - scripts/with-wsl2-builder.sh
+    related: [2413-39uv, 2413-4e9a]
+    title: |
+      with-wsl2-builder.sh computes _W2_SESSION and SCRIPT_REL with realpath --relative-to between a C:/ pwd and a /c/ path, gets an absolute /c/... path, and the guest exits 127
+    context: |
+      Measured on doris (bash -x): pwd was C:/Users/bullo/tillandsias while the script's own directory was
+      /c/Users/bullo/tillandsias. realpath --relative-to cannot relate the two spellings, so it returned
+      the absolute /c/.../wsl-guest-session.sh, which the guest cannot open: "bash:
+      /c/Users/bullo/tillandsias/scripts/wsl-guest-session.sh: No such file or directory", rc=127.
+      SCRIPT_REL then failed the same way (".//c/Users/.../build.sh"). Every build.sh forward was broken.
+      Both sides are now normalised with cygpath -u before realpath. The file is only sourced on Windows,
+      so Linux is unchanged. This is not 2413-39uv slice 2: that is the --gate-steps argument, not the
+      forward's own paths.
+    verifiable_closure: |
+      On doris: before, ./build.sh --gate-steps C:/no/such/root gave rc=127 at wsl-guest-session.sh.
+      After, the guest runs build.sh (router sidecar staged under /mnt/c, then the 2413-39uv cd failure,
+      which #1664 turns into a refusal).
+    unscoreable: "needs a WSL2 builder distro; no fixture host runs one yet"
+    next_action: >
+      Implemented.
+status:
+  - packet_id: wsl2-forward-hands-the-guest-an-absolute-msys-path-when-pwd-is-spelled-c-colon
+    field: status
+    value: implemented
+    ts: "2026-11-26T20:51:28Z"
+    host: doris

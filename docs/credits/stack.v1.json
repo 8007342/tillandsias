@@ -10734,6 +10734,24 @@
       "from": "image:inference",
       "kind": "package",
       "optional": false,
+      "to": "pkg:fedora:lua"
+    },
+    {
+      "from": "image:inference",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:fedora:lua-filesystem"
+    },
+    {
+      "from": "image:inference",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:fedora:lua-lpeg"
+    },
+    {
+      "from": "image:inference",
+      "kind": "package",
+      "optional": false,
       "to": "pkg:fedora:mesa-vulkan-drivers"
     },
     {
@@ -10788,6 +10806,24 @@
       "from": "image:proxy",
       "kind": "package",
       "optional": false,
+      "to": "pkg:alpine:lua5.4"
+    },
+    {
+      "from": "image:proxy",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-filesystem"
+    },
+    {
+      "from": "image:proxy",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-lpeg"
+    },
+    {
+      "from": "image:proxy",
+      "kind": "package",
+      "optional": false,
       "to": "pkg:alpine:openssl"
     },
     {
@@ -10819,6 +10855,24 @@
       "kind": "package",
       "optional": false,
       "to": "pkg:alpine:libcap"
+    },
+    {
+      "from": "image:router",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4"
+    },
+    {
+      "from": "image:router",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-filesystem"
+    },
+    {
+      "from": "image:router",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-lpeg"
     },
     {
       "from": "image:router",
@@ -18108,6 +18162,24 @@
       "from": "image:vault",
       "kind": "package",
       "optional": false,
+      "to": "pkg:alpine:lua5.4"
+    },
+    {
+      "from": "image:vault",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-filesystem"
+    },
+    {
+      "from": "image:vault",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-lpeg"
+    },
+    {
+      "from": "image:vault",
+      "kind": "package",
+      "optional": false,
       "to": "pkg:alpine:socat"
     },
     {
@@ -18127,6 +18199,24 @@
       "kind": "package",
       "optional": false,
       "to": "pkg:alpine:busybox-extras"
+    },
+    {
+      "from": "image:web",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4"
+    },
+    {
+      "from": "image:web",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-filesystem"
+    },
+    {
+      "from": "image:web",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-lpeg"
     },
     {
       "from": "image:web-wrangler",
@@ -57655,18 +57745,18 @@
       "homepage": "https://pkgs.alpinelinux.org/packages?name=busybox-extras",
       "homepage_kind": "package-index",
       "id": "pkg:alpine:busybox-extras",
-      "license": "unknown",
-      "license_family": "unknown",
-      "license_source": "none",
+      "license": "GPL-2.0-only",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apk; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "busybox-extras",
       "optional": false,
       "pulled_by": [
         "image:web"
       ],
       "source": "images/web/Containerfile",
-      "version": "unknown"
+      "version": "1.36.1-r31"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=ca-certificates",
@@ -57819,7 +57909,11 @@
       "name": "lua5.4",
       "optional": false,
       "pulled_by": [
-        "image:git"
+        "image:git",
+        "image:proxy",
+        "image:router",
+        "image:vault",
+        "image:web"
       ],
       "source": "images/git/Containerfile",
       "version": "5.4.6-r1"
@@ -57836,7 +57930,11 @@
       "name": "lua5.4-filesystem",
       "optional": false,
       "pulled_by": [
-        "image:git"
+        "image:git",
+        "image:proxy",
+        "image:router",
+        "image:vault",
+        "image:web"
       ],
       "source": "images/git/Containerfile",
       "version": "1.8.0-r4"
@@ -57853,7 +57951,11 @@
       "name": "lua5.4-lpeg",
       "optional": false,
       "pulled_by": [
-        "image:git"
+        "image:git",
+        "image:proxy",
+        "image:router",
+        "image:vault",
+        "image:web"
       ],
       "source": "images/git/Containerfile",
       "version": "1.0.2-r3"
@@ -59384,52 +59486,55 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/lua/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:lua",
-      "license": "unknown",
-      "license_family": "unknown",
-      "license_source": "none",
+      "license": "MIT",
+      "license_family": "permissive",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "lua",
       "optional": false,
       "pulled_by": [
-        "image:default-base"
+        "image:default-base",
+        "image:inference"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "5.4.8-5.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/lua-filesystem/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:lua-filesystem",
-      "license": "unknown",
-      "license_family": "unknown",
-      "license_source": "none",
+      "license": "MIT",
+      "license_family": "permissive",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "lua-filesystem",
       "optional": false,
       "pulled_by": [
-        "image:default-base"
+        "image:default-base",
+        "image:inference"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "1.8.0-16.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/lua-lpeg/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:lua-lpeg",
-      "license": "unknown",
-      "license_family": "unknown",
-      "license_source": "none",
+      "license": "MIT",
+      "license_family": "permissive",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "lua-lpeg",
       "optional": false,
       "pulled_by": [
-        "image:default-base"
+        "image:default-base",
+        "image:inference"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "1.1.0-7.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/make/",
@@ -61060,13 +61165,13 @@
   "schema": "tillandsias-stack/v1",
   "summary": {
     "components": 57,
-    "edges": 3116,
+    "edges": 3131,
     "license_families": {
       "model": 7,
-      "permissive": 1715,
+      "permissive": 1718,
       "service": 15,
-      "strong-copyleft": 25,
-      "unknown": 162,
+      "strong-copyleft": 26,
+      "unknown": 158,
       "weak-copyleft": 20
     },
     "nodes": 1944

@@ -310,7 +310,8 @@ mod term_guard {
 /// quotes an argument only for a space, a tab or an empty string, so an
 /// argument holding a newline went out bare, and an MSYS child (Git's printf)
 /// split it at the newline: measured on yolanda 2026-10-08, "a\nb" arrived as
-/// two entries. So on Windows an argument containing CR or LF goes out through
+/// two entries. So on Windows an argument containing CR, LF or a glob character
+/// (`*`, `?`, `[`, which an MSYS child expands: 2415-fbyd) goes out through
 /// `raw_arg` with quotes FORCED by the CommandLineToArgvW / MSVC CRT rules (see
 /// `win_quote`), and every other argument takes std's unchanged path, so no
 /// argv that works today changes (pinned against std by
@@ -337,10 +338,19 @@ mod win_quote {
     const BACKSLASH: u16 = b'\\' as u16;
     const QUOTE: u16 = b'"' as u16;
 
+    /// CR/LF (1553-q3wi), and the glob characters `*`, `?` and `[` (2415-fbyd):
+    /// an MSYS child globs every UNQUOTED argument against its own cwd, and std
+    /// leaves `*.rs` bare, so `find -name *.rs` beside a decoy.rs received
+    /// `-name decoy.rs`. A quoted argument is never globbed, and a native child
+    /// parses the forced quotes back to the identical bytes.
     pub(crate) fn needs_forced_quotes_units(units: &[u16]) -> bool {
-        units
-            .iter()
-            .any(|&u| u == u16::from(b'\n') || u == u16::from(b'\r'))
+        units.iter().any(|&u| {
+            u == u16::from(b'\n')
+                || u == u16::from(b'\r')
+                || u == u16::from(b'*')
+                || u == u16::from(b'?')
+                || u == u16::from(b'[')
+        })
     }
 
     pub(crate) fn quote_units(units: &[u16]) -> Vec<u16> {
@@ -410,11 +420,12 @@ mod win_quote {
             }
         }
 
-        /// Only CR or LF force the raw path; everything else stays on std's.
+        /// Only CR, LF or a glob character (2415-fbyd) force the raw path;
+        /// everything else stays on std's.
         #[test]
-        fn only_cr_or_lf_forces_quotes() {
+        fn only_cr_lf_or_glob_forces_quotes() {
             let units = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
-            for s in ["a\nb", "a\rb", "\r\n"] {
+            for s in ["a\nb", "a\rb", "\r\n", "*.rs", "?x", "[ab]"] {
                 assert!(needs_forced_quotes_units(&units(s)), "{s:?}");
             }
             for s in ["plain", "", "two words", "tab\there", "q\"x", "back\\"] {

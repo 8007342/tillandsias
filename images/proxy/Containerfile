@@ -46,7 +46,12 @@ LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 # No separate squid-openssl package exists on Alpine 3.20.
 # DISTRO: apk add --no-cache (Alpine), NOT microdnf/dnf (Fedora)
 # DISTRO: adduser -D (Alpine), NOT useradd (Fedora)
-RUN apk add --no-cache squid openssl bash ca-certificates socat \
+# Order 2413-2wnc: lua5.4 + lua5.4-filesystem + lua5.4-lpeg are this image's Lua
+# runtime (operator ruling 2026-11-26: Lua, then Rust, then Go in every container),
+# and /usr/bin/lua names it as in the forge. This is the distro Lua chosen for
+# images/git (2413-thcz), not the static tillandsias-plan. Runtime only.
+RUN apk add --no-cache squid openssl bash ca-certificates socat lua5.4 lua5.4-filesystem lua5.4-lpeg \
+    && ln -sf lua5.4 /usr/bin/lua \
     && adduser -D -u 1000 -s /sbin/nologin proxy \
     && mkdir -p /var/spool/squid /var/log/squid /var/run/squid \
     && mkdir -p /var/lib/squid /etc/squid/certs \

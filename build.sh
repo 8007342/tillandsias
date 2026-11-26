@@ -582,18 +582,39 @@ _now_ms() {
     printf '%s' "$t"
 }
 
+# ORDER 839-veey: the CPU time (user + sys, ms) of every child this shell has waited for, into
+# _CPU_NOW, or -1 when it cannot be read. `times` is a builtin that reports THIS shell's
+# children, so it must run in this shell: inside $(...) it would report the subshell's (zero).
+# Hence a file, under the gitignored target/ (never /tmp: 2408-rkvd).
+_cpu_children_now() {
+    local f="${_PHASE_CPU_FILE:-$SCRIPT_DIR/target/.gate-phase-cpu}"
+    _CPU_NOW=-1
+    { times >"$f"; } 2>/dev/null || return 0
+    _CPU_NOW="$(awk 'NR == 2 { s = 0
+            for (i = 1; i <= 2; i++) { t = $i; m = t; sub(/m.*/, "", m); sec = t; sub(/^[0-9]+m/, "", sec); sub(/s$/, "", sec); s += m * 60000 + sec * 1000 }
+            printf "%d", s }' "$f" 2>/dev/null)" || _CPU_NOW=-1
+    [[ "$_CPU_NOW" =~ ^[0-9]+$ ]] || _CPU_NOW=-1
+}
+
 _phase_close() {
     [[ -n "$_PHASE_NAME" ]] || return 0
-    local now elapsed work
+    local now elapsed work cpu
     now="$(_now_ms)"
     elapsed=$(( now - _PHASE_T0 ))
     [[ "$elapsed" -ge 0 ]] || elapsed=0
     work="$_PHASE_WORK_MS"
     [[ "$work" -ge 0 ]] || work=0
-    # span<TAB>work<TAB>name — `work` is -1 when the phase measured no `_run`,
-    # so a consumer can tell "measured zero work" from "nothing to measure".
+    # span<TAB>work<TAB>name<TAB>cpu — `work` is -1 when the phase measured no `_run`,
+    # so a consumer can tell "measured zero work" from "nothing to measure". `cpu` (839-veey)
+    # is the CPU its children used, -1 when it could not be read.
     [[ "$_PHASE_RAN_WORK" == 1 ]] || work=-1
-    _PHASE_LOG="${_PHASE_LOG}${elapsed}	${work}	${_PHASE_NAME}
+    _cpu_children_now
+    cpu=-1
+    if [[ "${_PHASE_CPU0:--1}" -ge 0 && "$_CPU_NOW" -ge 0 ]]; then
+        cpu=$(( _CPU_NOW - _PHASE_CPU0 ))
+        [[ "$cpu" -ge 0 ]] || cpu=-1
+    fi
+    _PHASE_LOG="${_PHASE_LOG}${elapsed}	${work}	${_PHASE_NAME}	${cpu}
 "
     _PHASE_NAME=""
 }
@@ -1447,6 +1468,8 @@ _step()  {
     _PHASE_T0="$(_now_ms)"
     _PHASE_WORK_MS=0
     _PHASE_RAN_WORK=0
+    _cpu_children_now
+    _PHASE_CPU0="$_CPU_NOW"
     [[ "${FLAG_GRAPHS:-false}" == true ]] || echo -e "${CYAN}[build]${NC} $*"
 }
 
@@ -1464,12 +1487,16 @@ _phase_report() {
     if [[ "${TILLANDSIAS_GATE_PROFILE:-0}" == "1" ]]; then
         printf '%s' "$_PHASE_LOG" | sort -rn | awk -F'\t' \
             '{ gap = ($2 >= 0 && $1 - $2 > 250) ? sprintf("   (+%.1fs unattributed)", ($1-$2)/1000) : ""
-               printf "  %6.1fs  %s%s\n", $1/1000, $3, gap }' >&2
+               cpu = ($4 != "" && $4 >= 0) ? sprintf("   cpu %.1fs", $4/1000) : ""
+               waited = ($4 != "" && $4 >= 0 && $1 - $4 > 1000 && $1 >= 2 * $4) ? "   (waited: most of this wall clock is not this step using CPU; the host was busy or the step blocked. 839-veey)" : ""
+               printf "  %6.1fs  %s%s%s%s\n", $1/1000, $3, cpu, gap, waited }' >&2
     else
         printf '%s' "$_PHASE_LOG" | sort -rn \
             | awk -F'\t' -v lim="$slow_ms" \
             '$1 > lim { gap = ($2 >= 0 && $1 - $2 > 250) ? sprintf("   (+%.1fs unattributed)", ($1-$2)/1000) : ""
-                        printf "  %6.1fs  %s%s\n", $1/1000, $3, gap }' >&2
+                        cpu = ($4 != "" && $4 >= 0) ? sprintf("   cpu %.1fs", $4/1000) : ""
+                        waited = ($4 != "" && $4 >= 0 && $1 - $4 > 1000 && $1 >= 2 * $4) ? "   (waited: most of this wall clock is not this step using CPU; the host was busy or the step blocked. 839-veey)" : ""
+                        printf "  %6.1fs  %s%s%s%s\n", $1/1000, $3, cpu, gap, waited }' >&2
     fi
     _info "Gate phases totalled $(( total / 1000 ))s (set TILLANDSIAS_GATE_PROFILE=1 for every phase)"
 }
@@ -1488,7 +1515,7 @@ _phase_emit_timing() {
     {
         printf '%s' "$_PHASE_LOG" | awk -F'\t' \
             -v host="${TILLANDSIAS_HOST_ID:-$(hostname 2>/dev/null || echo unknown)}" '
-            NF == 3 {
+            NF >= 3 {
                 name = tolower($3)
                 gsub(/[^a-z0-9]+/, "-", name)
                 gsub(/^-+|-+$/, "", name)
@@ -3654,8 +3681,16 @@ _gs_lanes() {
 }
 
 if [ -n "$GATE_STEPS_ROOT" ]; then
+    # ORDER 2413-39uv: a root this shell cannot enter used to become "" here, match no
+    # step file and exit 0, so a gate that ran nothing read as green. Refuse instead.
+    if ! _gs_root_abs="$(cd "$GATE_STEPS_ROOT" 2>/dev/null && pwd)" || [ -z "$_gs_root_abs" ]; then
+        echo "refused:gate-steps:root-unreadable:$GATE_STEPS_ROOT"
+        _afford "--gate-steps was given a root this shell cannot cd into, so no step could run and none was counted" \
+            "pass an existing directory that holds scripts/gate-steps.d/ (on Windows, one the shell running build.sh can read)"
+        exit 2
+    fi
     if [ -n "$GATE_STEP_ONLY" ]; then
-        _gs_root="$(cd "$GATE_STEPS_ROOT" && pwd)"
+        _gs_root="$_gs_root_abs"
         _gs_sel=()
         for _gs_f in "$_gs_root"/scripts/gate-steps.d/"$GATE_STEP_ONLY"-*.step; do
             [ -e "$_gs_f" ] && _gs_sel+=("$_gs_f")
@@ -3673,7 +3708,7 @@ if [ -n "$GATE_STEPS_ROOT" ]; then
         exit $?
     fi
     _kg_arm
-    _run_gate_steps "$(cd "$GATE_STEPS_ROOT" && pwd)" || builtin exit $?
+    _run_gate_steps "$_gs_root_abs" || builtin exit $?
     _kg_summary || builtin exit 1  # ORDER 2253-iher
     builtin exit 0
 fi
@@ -6664,6 +6699,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Litmus id uniqueness gate passed"
+
+    # ORDER 814-75yf — --check runs the workspace suite on Linux on every host, so a test
+    # that reads /proc is green here and red natively on Windows and macOS.
+    _step "Checking no ungated test reads a Linux-only host path (814-75yf)..."
+    if ! _run_lua_decider "scripts/lua/check-test-host-paths.lua" 2>&1; then
+        _error "a test reads /proc, /sys or /dev (or builds MetricsSampler::new()) outside cfg(target_os); it can only pass on Linux (814-75yf; the REFUSED lines are above)"
+        exit 1
+    fi
+    _info "Test host-path gate passed"
 
     # ORDER 1594-mtc3 — relay-preflight's phase 5 does not select a test-*.sh
     # the diff deletes (every shell->lua port deletes one) as a touched fixture.
