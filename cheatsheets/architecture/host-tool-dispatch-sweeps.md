@@ -7,7 +7,7 @@ sources:
   - plan/archive/packets-2026-08.yaml order:799-tb7q
   - plan/index.yaml order:914-ahsy
   - scripts/lib/tool-dispatch.sh
-  - scripts/test-tool-dispatch-lib.sh
+  - scripts/lua/test-tool-dispatch-lib.lua
 authority: high
 status: current
 tier: bundled
