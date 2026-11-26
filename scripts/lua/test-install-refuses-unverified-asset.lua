@@ -45,10 +45,19 @@ local function toolbin(name, with_sha256sum, with_shasum)
     fs.mkdir(dir)
     local tools = { "curl", "grep", "awk", "cat", "basename", "dirname", "env", "mkdir", "rm", "printf", "tr", "sed", "head" }
     if with_sha256sum then tools[#tools + 1] = "sha256sum" end
-    if with_shasum then tools[#tools + 1] = "shasum"; tools[#tools + 1] = "perl" end
+    -- A Linux host often has no shasum (it ships with perl on macOS). There the
+    -- arm still needs one, so a stand-in drops "-a 256" and runs sha256sum.
+    local real_shasum = fixture.which("shasum")
+    if with_shasum and real_shasum then tools[#tools + 1] = "shasum"; tools[#tools + 1] = "perl" end
     for _, t in ipairs(tools) do
         local p = fixture.which(t)
         if p then T:must{ "ln", "-s", p, W.abs .. "/bin-" .. name .. "/" .. t } end
+    end
+    if with_shasum and not real_shasum then
+        local s256 = fixture.which("sha256sum")
+        if not s256 then T:refuse("tools", "this host has neither shasum nor sha256sum") end
+        fs.write(dir .. "/shasum", "#!" .. SH_ABS .. "\n[ \"$1\" = -a ] && shift 2\nexec " .. s256 .. " \"$@\"\n")
+        T:must{ "chmod", "+x", W.abs .. "/bin-" .. name .. "/shasum" }
     end
     return W.abs .. "/bin-" .. name
 end
