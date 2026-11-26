@@ -25,6 +25,7 @@ packets:
   - 'relay-preflight never runs a fixture that starts the macOS VM unless the operator opts in for that run; it names the skip.'
   - 'A fixture that drives the VM declares it in a marker the preflight reads, and the preflight refuses to run it by default.'
   verifiable_closure: 'A Lua fixture over a scratch preflight root: a VM-driving fixture marked so is named-skipped by default and run only under the opt-in.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the future scripts/lua/test-relay-preflight-vm-fixture-opt-in.lua is the deliverable, written with the fix.'
   next_action: 'Find the selection in scripts/relay-preflight.sh (the "selected 0" fixture loop) and add the marker and opt-in.'
   provenance: 'tlatoanis-macbook-air 2026-11-26; relay-preflight of work/2387-lrg2 @ 104f990a0.'
   related: [2387-lrg2, 830-xsk2]
