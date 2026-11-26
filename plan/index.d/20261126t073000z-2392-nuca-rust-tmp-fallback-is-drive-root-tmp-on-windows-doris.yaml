@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by doris-windows 2026-11-26 fixing 2387-x65b (#1608).
+packets:
+  - packet_id: rust-metrics-fallback-tmp-is-the-drive-root-tmp-on-native-windows-not-msys-tmp
+    order: 2392-nuca
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [metrics, windows, msys, fallback]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+    title: |
+      On native Windows the Rust metrics fallback PathBuf::from("/tmp") opens <drive>:\tmp, while msys's /tmp is Git's own tmp mount, so outside a checkout the writer and the shell reader name different directories
+    context: |
+      metrics_default_log() falls back to PathBuf::from("/tmp").join(basename) when no
+      checkout is above the binary (an installed binary, a forge-less Windows call).
+      On native Windows that path is relative to the current drive: <drive>:\tmp\<name>.
+      Under msys Git Bash, /tmp is a mount (normally the user's %TEMP%). Since 2387-x65b
+      the printed answers agree as strings ("/tmp/<name>"), but they name two different
+      directories, so the strings agreeing hides the split.
+      Consumers that would see the mismatch:
+        - log_cli_usage (Rust writer of forge-expert-usage.jsonl) vs the shell readers
+          of /tmp/forge-expert-usage.jsonl: scripts/cycle-metrics.sh and
+          scripts/check-mcp-expert-health.sh / check-mcp-surface.sh;
+        - the cycle-metrics.sh 1096-p3tn split guard, which checks /tmp/tillandsias-timing.jsonl;
+        - scripts/lua/test-metrics-log-path-agreement.lua arm 1d, which compares strings
+          only and so passes while the directories differ.
+      Not yet measured: whether any Windows caller actually hits the fallback today. The
+      in-checkout path (the common case) is unaffected.
+    verifiable_closure: |
+      On an msys host, an installed copy of the binary outside any checkout writes its
+      usage record to the file the shell's /tmp/forge-expert-usage.jsonl names. Add a
+      fixture arm that checks the FILE, not the string. PRE-FIX: expected to fail on doris.
+    unscoreable: "the closure is a new arm in scripts/lua/test-metrics-log-path-agreement.lua, which does not exist yet"
+    next_action: >
+      Decide the Windows fallback (std::env::temp_dir(), which matches msys's default /tmp
+      mount, or the TILLANDSIAS_METRICS_FALLBACK_DIR rule), print it in shell spelling,
+      and add the file-level arm.
+    notes: |
+      size: S
