@@ -25,7 +25,7 @@ local ROOT = fixture.repo_root()
 local RUNNER = ROOT .. "/scripts/run-litmus-test.sh"
 local READER = fixture.plan_binary()
 if READER == "" then T:skip("no-runnable-reader") end
-if READER:sub(1, 1) ~= "/" then READER = ROOT .. "/" .. READER:gsub("^%./", "") end
+if READER:sub(1, 1) ~= "/" and not READER:match("^%a:[/\\]") then READER = ROOT .. "/" .. READER:gsub("^%./", "") end
 
 local W = T:scratch()
 local BAD, GOOD = W.abs .. "/bad.yaml", W.abs .. "/good.yaml"

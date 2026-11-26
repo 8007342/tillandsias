@@ -41,7 +41,7 @@ if not r.ok or REAL == "" then
     log.raw("FAIL: no runnable plan binary")
     verdict.emit("violation:groundtruth-regime-fails-closed:no-plan-binary", 1)
 end
-if REAL:sub(1, 1) ~= "/" then REAL = root .. "/" .. REAL:gsub("^%./", "") end
+if REAL:sub(1, 1) ~= "/" and not REAL:match("^%a:[/\\]") then REAL = root .. "/" .. REAL:gsub("^%./", "") end
 
 local pass, fail = 0, 0
 local function ok(m) out.line("ok:   " .. m); pass = pass + 1 end
