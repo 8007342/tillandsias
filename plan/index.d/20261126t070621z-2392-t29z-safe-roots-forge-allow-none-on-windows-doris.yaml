@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by doris-windows 2026-11-26 running the crate tests for #1610. Priority p1 per macuahuitl: a security answer.
+packets:
+  - packet_id: safe-roots-hook-allow-gives-no-answer-for-a-forge-on-windows
+    order: 2392-t29z
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [security, forge-detection, safe-roots, windows, test]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/safe_roots.rs
+    title: |
+      safe_roots::tests::only_a_forge_answers_allow fails on native Windows: hook_allow(HostKind::Forge, "rm -rf .dart_tool", ...) answers None, not allow
+    context: |
+      The question this test pins is a security answer: "is this a forge, so this rm under a safe
+      root may be allowed without asking?". Measured on doris (native Windows, cargo test --release
+      -p tillandsias-plan --lib) 2026-11-26, on origin/linux-next with no local change to safe_roots.rs.
+      The test (crates/tillandsias-plan/src/safe_roots.rs:400-401):
+          let a = hook_allow(HostKind::Forge, "rm -rf .dart_tool", &proj, &r).unwrap();
+          assert_eq!(a["hookSpecificOutput"]["permissionDecision"], "allow");
+      Actual: panicked at safe_roots.rs:400:77, "called `Option::unwrap()` on a `None` value", so
+      hook_allow gave NO answer for a forge on Windows. It fails CLOSED (no allow, so the
+      normal permission prompt applies), which is the safe direction, but the test is red and
+      Windows never exercises the allow path. The negative arms (BareMetal, Ci, "rm -rf lib")
+      were not reached.
+      Related open question: 2354-5biy (a forge queue job's audit record says bare-metal), which
+      is about how a host kind is detected and recorded. This row touches the same answer.
+      DO NOT CHANGE THE LOGIC until the operator rules on 2354-5biy (macuahuitl, 2026-11-26).
+    verifiable_closure: |
+      cargo test -p tillandsias-plan --lib safe_roots::tests::only_a_forge_answers_allow passes on
+      native Windows, and its three negative arms still pass. PRE-FIX: FAILS on doris (None at 400:77).
+    unscoreable: "the closure is the existing Rust unit test run on a Windows host; no litmus pin"
+    next_action: >
+      Read-only first: find which part of hook_allow returns None on Windows (likely the
+      fixture's path spelling against the safe-root match). Report it under 2354-5biy and wait
+      for the operator's ruling before changing anything.
+    related: [2354-5biy]
+    notes: |
+      size: S
