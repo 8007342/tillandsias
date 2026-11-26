@@ -62,15 +62,10 @@ scripts/test-codex-oauth-restore.sh
 scripts/test-concurrent-forge-shared-stack.sh
 scripts/test-e2e-preflight-live-runtime.sh
 scripts/test-enclave-network-internal-discovery.sh
-scripts/test-enclave-proxy-lib.sh
 scripts/test-exec-bits-guard-end-to-end.sh
-scripts/test-expire-claims-write-is-opt-in.sh
-scripts/test-fake-cloudflare.sh
 scripts/test-fleet-heartbeat-sees-a-ledger-filed-blocker.sh
-scripts/test-fleet-msg-same-host.sh
 scripts/test-forge-findings-persisted.sh
 scripts/test-forge-localization-staged.sh
-scripts/test-forge-project-trust-seeds.sh
 scripts/test-forge-src-budget-report.sh
 scripts/test-forge-swap-service.sh
 scripts/test-fragment-batch-never-collapses-verdicts.sh
@@ -85,7 +80,6 @@ scripts/test-groundtruth-corpus-declaration.sh
 scripts/test-guest-binaries-nix-lane.sh
 scripts/test-guest-crashloop-detection.sh
 scripts/test-guest-staging-refuses-a-wireless-binary.sh
-scripts/test-harness-byte-cheap.sh
 scripts/test-harness-rollback.sh
 scripts/test-headless-env-lock-is-single.sh
 scripts/test-headless-sidecar-target-gate.sh
@@ -162,7 +156,6 @@ scripts/test-spec-index-endpoint-classification.sh
 scripts/test-stranded-plan-writes.sh
 scripts/test-timing-clock-resolution.sh
 scripts/test-token-instrument.sh
-scripts/test-tool-dispatch-lib.sh
 scripts/test-tool-materialize-litmus-surfaces-arm.sh
 scripts/test-tool-materialize.sh
 scripts/test-tray-surface-parity-gate.sh
