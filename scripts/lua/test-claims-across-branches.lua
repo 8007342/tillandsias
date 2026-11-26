@@ -10,7 +10,7 @@
 --   4 NC another host's label, 5 NC an unattributable one: refused
 --   6 the parser takes the greatest ts, 7 and resets per fragment   8 no plan binary: blocked
 --   9 a verdict line on every run    10 a packet nobody knows is unknown
---   11 TERM mid-fold leaves no extract, 12 nor does a normal run
+--   11 a run killed mid-fold: the next run sweeps the extract it left (Unix and msys alike), 12 a normal run leaves none
 --   13 an ancestor sibling holds nothing, 14 in batch too           15 a diverged one does
 --   16 an override that fixes its own --index does not blind the fold
 --   17 the selector's exit contract: --batch exits 1 held, 0 clean, 2 blind (select-work-batch.sh)
@@ -141,14 +141,21 @@ live="$(left)"
 kill -TERM "$c" 2>/dev/null
 [ ! -s "$W/block/started" ] || kill -TERM "$(cat "$W/block/started")" 2>/dev/null
 wait "$c" 2>/dev/null; rc=$?
-# The extract belongs to the fold's own shell child, whose trap runs as the blocked stub dies;
-# allow the few seconds that takes, never longer.
-i=0; while [ "$(left)" != 0 ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
+# 2392-9zcp: the fold shell leads its OWN process group (tillandsias-exec process_group(0)), so a TERM
+# to the runner never reaches it and its trap is no guarantee. The bound is the next run's sweep, as on
+# msys: end the orphaned fold group abruptly (no trap), wait for its owner pid to die.
+for d in "$W"/xtmp/xbranch.*; do
+    [ -e "$d" ] || continue
+    p="${d##*/xbranch.}"; p="${p%%.*}"
+    kill -KILL -- "-$p" 2>/dev/null || kill -KILL "$p" 2>/dev/null
+    i=0; while kill -0 "$p" 2>/dev/null && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
+done
 echo "live=$live left=$(left) rc=$rc"
 ]==] }
 got = text.trim(r.stdout or "")
-T:arm("11a PREMISE the kill reached a live fold", (tonumber(got:match("live=(%d+)")) or 0) > 0, got .. (r.stderr or ""))
-T:arm("11b a run killed mid-fold leaves no extract", got:match("left=(%d+)") == "0" and got:match("rc=(%d+)") ~= "0", got)
+T:arm("11a PREMISE the kill reached a live fold", (tonumber(got:match("live=(%d+)")) or 0) > 0 and got:match("rc=(%d+)") ~= "0", got .. (r.stderr or ""))
+local after = check(FREE, "export TMPDIR='" .. w.abs .. "/xtmp'\n")
+T:arm("11b the next run sweeps the extract a killed run left", xleft() == 0 and says(after, 0, "ok:cross-branch-claims:"), xleft() .. " left (" .. got .. "); " .. after.why)
 end
 x = check(FREE, "export TMPDIR='" .. w.abs .. "/xtmp'\n")
 local n = 0
