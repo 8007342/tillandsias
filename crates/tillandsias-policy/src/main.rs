@@ -5321,7 +5321,11 @@ fn plan_orders_fold_fragments(
     // on the same order still collides, as it must.
     let mut seen: std::collections::BTreeSet<String> = steps
         .iter()
-        .filter_map(|s| s.get("packet_id").and_then(|v| v.as_str()).map(str::to_string))
+        .filter_map(|s| {
+            s.get("packet_id")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        })
         .collect();
     for packet in folded {
         match packet.get("packet_id").and_then(|v| v.as_str()) {
@@ -5931,7 +5935,11 @@ trailing"#;
             plan_orders_fold_fragments(&dir.join("index.yaml"), &mut y).unwrap();
             plan_orders_check(&y)
         };
-        assert!(fold(&dir).is_ok(), "same-id re-declaration: {:?}", fold(&dir));
+        assert!(
+            fold(&dir).is_ok(),
+            "same-id re-declaration: {:?}",
+            fold(&dir)
+        );
         fs::write(
             dir.join("index.d/c-collide.yaml"),
             "packets:\n  - packet_id: q\n    order: 900-aaaa\n    status: ready\n",
