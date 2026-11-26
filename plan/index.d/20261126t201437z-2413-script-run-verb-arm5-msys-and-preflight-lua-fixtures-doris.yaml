@@ -1,0 +1,110 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by doris-windows 2026-11-26 from macuahuitl's msys queue (script-run-verb arm 5) and the #1633 preflight.
+packets:
+  - packet_id: script-run-verb-arm-5-cannot-run-build-sh-gate-steps-on-msys-and-is-skipped-by-name
+    order: 2413-4e9a
+    status: implemented
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, msys, fixture, build-sh, wsl2]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-script-run-verb.lua
+    related: [2410-3j3t, 2413-39uv]
+    title: |
+      script-run-verb arm 5 spawns ./build.sh natively on msys (os error 193); through bash it forwards to the WSL2 builder, which cannot read the C:/ scratch root
+    context: |
+      Measured on doris. A native spawn of ./build.sh fails with os error 193. Spawned through Git Bash,
+      build.sh re-execs in the tillandsias-build WSL2 distro (scripts/with-wsl2-builder.sh), passing
+      --gate-steps C:/... unchanged; the guest cannot cd there and all three roots exit 0
+      ("./build.sh: line 3676: cd: C:/Use..."). Run bare with TILLANDSIAS_SKIP_WSL2=1, build.sh stops at
+      "Missing host build tools: gcc pkg-config" before the step loop. Neither is the loop the arm tests.
+      So on msys arm 5 prints a named skip and is not counted; Unix runs it unchanged. The build.sh root
+      handling is 2413-39uv.
+    verifiable_closure: |
+      On doris: before, violation:script-run-verb:1-failed (arm 5 rc=nil, os error 193). After,
+      "skip: ARM 5 ... (2413-4e9a)" and ok:script-run-verb:6 arms. On Unix the arm body is byte-identical.
+    unscoreable: "the closure is the fixture itself, run by its gate step; no separate litmus pin"
+    next_action: >
+      Implemented. Un-skip on msys once 2413-39uv lets build.sh --gate-steps reach a Windows-side root.
+  - packet_id: build-sh-gate-steps-accepts-a-root-it-cannot-cd-into-and-exits-0-and-never-maps-a-windows-root-for-wsl2
+    order: 2413-39uv
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, wsl2, build-sh, gate-steps, fail-closed]
+    estimated_hours: 2
+    owned_files:
+      - build.sh
+      - scripts/with-wsl2-builder.sh
+    related: [2413-4e9a]
+    title: |
+      build.sh --gate-steps <root> exits 0 when it cannot cd into <root>, and the WSL2 forward hands the guest a C:/ root it cannot read
+    context: |
+      build.sh runs `_run_gate_steps "$(cd "$GATE_STEPS_ROOT" && pwd)"`, so a root that cannot be entered
+      becomes an empty argument rather than a refusal. On doris, through the WSL2 forward, a valid,
+      a missing-.lua and a both-named root all exited 0 after "cd: C:/Use...: No such file or directory".
+      A gate that runs no steps and says 0 cannot be told from green. Separately, with-wsl2-builder.sh
+      forwards argv verbatim, so a Windows-side --gate-steps root never resolves in the guest.
+      Not yet measured on Linux: whether a missing root there also exits 0.
+    exit_criteria:
+      - RED FIRST, a fixture shows build.sh --gate-steps <nonexistent> exiting 0.
+      - It then refuses (non-zero, refused:gate-steps:root-unreadable:<root>) on every platform.
+      - On Windows the forward maps a drive-letter --gate-steps root to its /mnt/<d>/ form.
+      - Valid roots are unchanged on Linux.
+    verifiable_closure: |
+      build.sh --gate-steps /no/such/dir is non-zero with a refused: line on Linux and msys, and
+      test-script-run-verb arm 5 runs (not skipped) on msys.
+    unscoreable: "no litmus or fixture scores this yet; the red-first fixture its exit_criteria require becomes the pin"
+    next_action: >
+      Red fixture for the nonexistent root first (Linux can run it); then the WSL2 path mapping on Windows.
+  - packet_id: relay-preflight-selects-only-shell-fixtures-so-a-lua-only-diff-reports-fixtures-0-as-ok
+    order: 2413-3dap
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [relay, preflight, lua, fixtures, gate-integrity]
+    estimated_hours: 2
+    owned_files:
+      - scripts/relay-preflight.sh
+    related: [1437-664a, 1522-ey4h]
+    title: |
+      relay-preflight phase 5 selects only scripts/test-*.sh, so a diff that touches only Lua fixtures runs none and still prints ok ... fixtures=0
+    context: |
+      Seen on #1633 (doris, msys): relay-preflight HEAD --base origin/linux-next printed
+      ok:relay-preflight:...:fixtures=0 although the diff touches 15 scripts/lua/test-*.lua, six of them red.
+      The cause is not msys: `_all_fixtures="$(git ls-files 'scripts/test-*.sh' ...)"` (relay-preflight.sh
+      ~line 548) and the diff set are both shell-only. Since the shell-to-Lua migration most fixtures are
+      scripts/lua/test-*.lua, so on every host a Lua-only change gets an ok that ran no fixture.
+    exit_criteria:
+      - RED FIRST, a fixture shows a diff touching one red scripts/lua/test-*.lua yields ok with fixtures=0.
+      - Phase 5 then also selects touched scripts/lua/test-*.lua, plus Lua fixtures that name a touched file, and runs them with tillandsias-plan script run.
+      - A selection that runs nothing prints not-run:relay-preflight:fixtures (or names the count), never a bare ok over zero.
+    verifiable_closure: |
+      relay-preflight on a ref that turns one Lua fixture red is non-zero and names that fixture; on #1633's
+      tree it reports fixtures=15 (or more), not 0.
+    unscoreable: "no litmus or fixture scores this yet; the red-first fixture its exit_criteria require becomes the pin"
+    next_action: >
+      Write the red fixture, then extend _set_a/_set_b to scripts/lua/test-*.lua.
+status:
+  - packet_id: script-run-verb-arm-5-cannot-run-build-sh-gate-steps-on-msys-and-is-skipped-by-name
+    field: status
+    value: implemented
+    ts: "2026-11-26T20:14:37Z"
+    host: doris
+  - packet_id: build-sh-gate-steps-accepts-a-root-it-cannot-cd-into-and-exits-0-and-never-maps-a-windows-root-for-wsl2
+    field: status
+    value: ready
+    ts: "2026-11-26T20:14:37Z"
+    host: doris
+  - packet_id: relay-preflight-selects-only-shell-fixtures-so-a-lua-only-diff-reports-fixtures-0-as-ok
+    field: status
+    value: ready
+    ts: "2026-11-26T20:14:37Z"
+    host: doris

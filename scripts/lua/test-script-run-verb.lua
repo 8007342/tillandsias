@@ -75,6 +75,13 @@ for _, l in ipairs(text.lines(o)) do if l:sub(1, 3) == "ok:" then any_ok = true 
 T:arm("ARM 4: a script outliving --timeout 300ms exits 124 printing status=timed_out, and never ok",
     rc == 124 and has_line(o, "status=timed_out") and not any_ok, "rc=" .. tostring(rc) .. " out='" .. o .. "'")
 
+-- 2413-4e9a: on Windows build.sh forwards itself into the WSL2 builder, which is handed this
+-- fixture's C:/ scratch root and cannot read it; run bare (TILLANDSIAS_SKIP_WSL2=1) it stops at the
+-- host-tool check (gcc, pkg-config). Neither is the loop under test, so on msys the arm is named
+-- and skipped, never counted green. Unix runs it exactly as before.
+if fixture.posix_shell() ~= "bash" then
+    out.line("skip: ARM 5 build.sh --gate-steps forwards to the WSL2 builder, which cannot read a C:/ scratch root (2413-4e9a)")
+else
 -- ARM 5: build.sh's own loop over scratch roots.
 local function mkroot(leaf)
     fs.mkdir(W.rel .. "/" .. leaf .. "/scripts/gate-steps.d"); fs.mkdir(W.rel .. "/" .. leaf .. "/scripts/lua")
@@ -110,6 +117,7 @@ T:arm("ARM 5: build.sh's loop runs a STEP_LUA-only step and shows its verdict; a
         and r5b ~= 0 and text.contains(o5b, "names both STEP_SCRIPT and STEP_LUA"),
     "ok-root rc=" .. tostring(r5) .. w5 .. " missing rc=" .. tostring(r5m) .. w5m .. " both rc=" .. tostring(r5b) .. w5b
         .. "; ok-root tail: " .. table.concat(tail, "|"))
+end
 
 -- ARM 6: timing goes where it is told, and never to /tmp (outside the repo: no fs.*).
 local SHARED = "/tmp/tillandsias-timing.jsonl"
