@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: forge-flutter-shim-to-lua
+    order: "2394-4iwp"
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge]
+    estimated_hours: 2
+    title: "Forge flutter shim to Lua: the last bash command in images/default/cli/"
+    context: |
+      After 2389-8rmy and 2392-kww7, images/default/cli/flutter is the only bash command left in cli/. It becomes a stock Lua 5.4
+      command in place, same name, stderr lines and exit codes (lane client code passthrough, cached-SDK fallback, typed refusal 69).
+      ports: images/default/cli/flutter
+    exit_criteria:
+      - "same text and exit codes as the shell version on the same stubbed inputs, in a container; test-flutter-shim-fallback.lua green"
+    unscoreable: "unpinnable-until-the-guard-exists: output parity is the deliverable."
+    next_action: "port, verify in a container, PR."
+    provenance: filed by lenovinha; cli/ range assigned by macuahuitl 2026-11-26.
+    related: [2389-8rmy, 2392-kww7]
+    events:
+      - {type: filed, ts: '2026-11-26T07:02:00Z', host: lenovinha, summary: last bash command in forge cli}
