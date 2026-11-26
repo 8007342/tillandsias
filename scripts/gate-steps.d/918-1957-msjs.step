@@ -17,4 +17,4 @@ STEP_LANES="podman"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="crates/tillandsias-headless/src/main.rs crates/tillandsias-headless/src/provider_limit_relay.rs images/default/lib-provider-limit.sh scripts/check-fleet-membership.sh scripts/lua/test-provider-limit-relay.lua scripts/provider-limit-relay.sh"
+STEP_READS="crates/tillandsias-headless/src/main.rs crates/tillandsias-headless/src/provider_limit_relay.rs images/default/lib-provider-limit.sh scripts/lua/check-fleet-membership.lua scripts/lua/test-provider-limit-relay.lua scripts/provider-limit-relay.sh"
