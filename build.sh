@@ -5222,7 +5222,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # on two hosts an hour apart as `in_progress=1` with zero rows. The arm that
     # matters is the fresh-unclaimed one; it fails against the pre-fix binary.
     _step "Checking expire-claims --list-live names what it counts (905-wjfj)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-expire-claims-list-live-rows.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-expire-claims-list-live-rows.lua"; then
         _error "--list-live is counting in_progress packets it will not name — the sibling-overlap step built on it is blind again"
         exit 1
     fi
@@ -7225,13 +7225,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Requirement-id check passed"
 
     _step "Verifying the requirement-id generator stays idempotent (976-suab)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-requirement-ids.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-requirement-ids.lua" 2>&1; then
         _error "the requirement-id generator/validator fixture regressed (976-suab) — see the failing case above"
         exit 1
     fi
     _info "Requirement-id fixture passed"
 
-    # ORDER 2118-9kqp: test-credential-verdict-script.sh (995-srbf) runs ONCE, in
+    # ORDER 2118-9kqp: test-credential-verdict-script.lua (995-srbf) runs ONCE, in
     # gate step 350-1903-djsq, under the sentinel session bus.
 
     _step "Checking the freshness budget is regime-named and still catches a regression (1038-d7vw)..."
@@ -7294,8 +7294,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     # test-guest-unit-hardening moved to gate step 924-2262-bke7 (Lua).
     _step "Checking test-release-freeze-audit (1255-s4im)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-release-freeze-audit.sh" 2>&1; then
-        _error "scripts/test-release-freeze-audit.sh failed — the server-visible freeze audit may no longer name a breach, or the release preflight may no longer refuse one (1255-s4im); read the fixture output above"
+    if ! _run_lua_decider "scripts/lua/test-release-freeze-audit.lua" 2>&1; then
+        _error "scripts/lua/test-release-freeze-audit.lua failed — the server-visible freeze audit may no longer name a breach, or the release preflight may no longer refuse one (1255-s4im); read the fixture output above"
         exit 1
     fi
     _step "Checking test-litmus-steps-can-fail (1063-nraf; 38ms)..."
@@ -7334,8 +7334,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _step "Checking test-subdomain-routing (1063-nraf; 14ms)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-subdomain-routing.sh" 2>&1; then
-        _error "scripts/test-subdomain-routing.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+    if ! _run_lua_decider "scripts/lua/test-subdomain-routing.lua" 2>&1; then
+        _error "scripts/lua/test-subdomain-routing.lua failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
         exit 1
     fi
     _info "Ten formerly-orphaned fixtures passed (1063-nraf)"

@@ -4,7 +4,7 @@
 # this repository keeps paying for, and scripts/test-*.sh is NOT globbed by
 # build.sh. A fixture reaches the gate by EITHER of two routes: an explicit
 # `_run bash` line in build.sh (how test-cycle-lock-attested-release.lua runs) or
-# a binding here (how test-cycle-checkout-lock.sh runs — it appears in build.sh
+# a binding here (how test-cycle-checkout-lock.lua runs — it appears in build.sh
 # not at all). Neither is automatic; a fixture with NEITHER is a file.
 #
 # This one deliberately has BOTH, because the first draft of this comment said

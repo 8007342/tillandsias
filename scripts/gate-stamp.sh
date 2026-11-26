@@ -258,7 +258,7 @@ GATE_STAMP_EMIT_MANIFEST=""
 # C-sorted — the exec bit compute() folds in and movers compares.
 #
 # TRACKED paths: the INDEX mode, exactly as before (887-bz88, 889-8tcb, and the
-# pins in test-mode-only-regression-887-bz88.sh): what a commit carries is the
+# pins in test-mode-only-regression-887-bz88.lua): what a commit carries is the
 # index, a staged or `update-index --chmod` mode change moves the stamp, and an
 # unstaged chmod does not (the worktree arm of check-script-exec-bits.sh refuses
 # that one at gate time).
