@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: workspace-tests-leak-tmp-dirs-and-exhaust-tmpfs-inodes-plan-crate
+    field: status
+    value: implemented
+    ts: "2026-11-26T12:37:38Z"
+    host: yoga
+events:
+  - packet_id: workspace-tests-leak-tmp-dirs-and-exhaust-tmpfs-inodes-plan-crate
+    event: {type: implemented, ts: "2026-11-26T12:37:38Z", host: yoga, summary: "implemented on work/2407-aq7x: tillandsias_plan::test_scratch (a copy of the core helper; the plan crate does not depend on core); all 29 tilland-*/ag5u temp-dir sites in src/ and both integration tests use it; cargo test -p tillandsias-plan under a private TMPDIR leaves 29 before, 0 after; clippy clean"}
