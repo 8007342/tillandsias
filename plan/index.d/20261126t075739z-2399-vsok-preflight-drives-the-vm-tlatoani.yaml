@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-26, from the 2387-lrg2 relay preflight.
+packets:
+- packet_id: relay-preflight-must-not-drive-the-macos-vm
+  order: 2399-vsok
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [macos, relay-preflight, fixtures, vm-safety]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 2
+  title: 'relay-preflight runs test-macos-vsock-inference-closure.sh unattended, and it drives the operator''s VM'
+  context: >-
+    On 2026-11-26 the relay preflight of work/2387-lrg2 selected scripts/test-macos-vsock-inference-closure.sh
+    (item "selected 0", not from the diff). The fixture tried to install a guest oneshot through the INSTALLED tray,
+    which on this Mac is a stale dev build (tillandsias-tray 56.11.4.1, git 02ef48aea-dirty). It spent about 300 s and
+    failed with violation:macos-vsock-inference-closure:cannot-install-guest-oneshot-rc-1. Its own header says it
+    is a ~10-minute smoke-family fixture that must not be wired into --check. Every preflight on a Mac now tries
+    to start the operator's VM, against the standing rule that a dev bundle never drives the guest, and the
+    preflight refuses an unrelated diff. It was not rerun.
+  exit_criteria:
+  - 'relay-preflight never runs a fixture that starts the macOS VM unless the operator opts in for that run; it names the skip.'
+  - 'A fixture that drives the VM declares it in a marker the preflight reads, and the preflight refuses to run it by default.'
+  verifiable_closure: 'A Lua fixture over a scratch preflight root: a VM-driving fixture marked so is named-skipped by default and run only under the opt-in.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the future scripts/lua/test-relay-preflight-vm-fixture-opt-in.lua is the deliverable, written with the fix.'
+  next_action: 'Find the selection in scripts/relay-preflight.sh (the "selected 0" fixture loop) and add the marker and opt-in.'
+  provenance: 'tlatoanis-macbook-air 2026-11-26; relay-preflight of work/2387-lrg2 @ 104f990a0.'
+  related: [2387-lrg2, 830-xsk2]
+  events:
+  - {type: filed, ts: '2026-11-26T07:57:39Z', host: tlatoanis-macbook-air, summary: 'filed: preflight drove the VM through a stale dev tray'}
