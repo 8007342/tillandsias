@@ -4,7 +4,7 @@
 # record-ci-phase-result.sh — append ONE check-log record for a CI phase that
 # ran OUTSIDE scripts/local-ci.sh.
 #
-# WHY THIS EXISTS (1185-9qx6). check-release-tier-freshness.sh answers "when was
+# WHY THIS EXISTS (1185-9qx6). check-release-tier-freshness.lua answers "when was
 # the RELEASE tier last exercised here" by reading the convergence check log
 # (resolved by scripts/convergence-log-path.sh; it lived under target/ until
 # 888-vgs8 moved it out of `cargo clean`'s way), and 1174-6r4k correctly narrowed it to
