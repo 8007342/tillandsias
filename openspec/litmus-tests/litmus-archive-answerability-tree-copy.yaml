@@ -20,12 +20,12 @@ critical_path:
   - step: "an ignored dangling result symlink is pruned from the cp and the tar copy; a tracked link is kept; removing the prune loop copies it again"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-archive-answerability-tree-copy.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "ok:archive-answerability-tree-copy:4 arms"
+    expected_behavior: "ok:archive-answerability-tree-copy:7 arms"
 
 observability:
   traces:
     - "@trace spec:ci-release"
-  expected_log: "four arms: premise, cp, tar, mutant"
+  expected_log: "seven arms: premise, cp, tar, mutant, and (2390-kivc) a loose-objects premise and its cp and tar arms"
   log_fields:
     spec: "ci-release"
     test: "archive-answerability-tree-copy"
