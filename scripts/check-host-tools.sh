@@ -150,9 +150,9 @@ derived_probed_tools() {
 # own header warns about.
 #
 # THIS IS 876-irn7 AGAIN, AND IT IS THE FIFTH SITE. The registry is
-# scripts/lib-cargo-sites.sh, which asks that the next site be ADDED there rather
+# lib/lua/common/cargosites.lua, which asks that the next site be ADDED there rather
 # than discovered on a floor host; this file is now listed in it, together with
-# the reason it resolves through its own list instead of calling cargo_resolve
+# the reason it resolves through its own list instead of calling its resolver
 # (it must cover /opt/homebrew/bin too, and its fixture has to be able to
 # construct absence for an absolute prefix). check-cheatsheet-tiers.sh:57, named
 # in this packet as an open third site, was ALREADY FIXED by 1005-m6rz before
