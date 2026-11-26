@@ -61081,10 +61081,10 @@
   "schema": "tillandsias-stack/v1",
   "summary": {
     "components": 57,
-    "edges": 3116,
+    "edges": 3119,
     "license_families": {
       "model": 7,
-      "permissive": 1715,
+      "permissive": 1718,
       "service": 15,
       "strong-copyleft": 25,
       "unknown": 159,
