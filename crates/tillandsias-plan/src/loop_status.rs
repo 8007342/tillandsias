@@ -936,7 +936,7 @@ mod tests {
         // ORDER 626-bnn5: the committed plan/loop_status.d/README.md must not be
         // parsed as a fragment or reported malformed, while a genuinely
         // malformed cycle-status file still surfaces.
-        let dir = std::env::temp_dir().join(format!("tilland-ls-readme-{}", std::process::id()));
+        let dir = crate::test_scratch::path(format!("tilland-ls-readme-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let base = dir.join("loop_status.md");
         std::fs::create_dir_all(dir.join("loop_status.d")).unwrap();

@@ -5492,7 +5492,7 @@ mod tests {
     /// whether the host's real ~/src happens to be empty.
     fn with_known_demo_project<T>(f: impl FnOnce() -> T) -> T {
         let _guard = crate::test_support::env_lock();
-        let dir = std::env::temp_dir().join(format!(
+        let dir = tillandsias_core::test_scratch::path(format!(
             "tillandsias-known-demo-project-{}",
             std::process::id()
         ));
@@ -5521,7 +5521,7 @@ mod tests {
     /// The same fixture with NOTHING known, for the arm that must be denied.
     fn with_no_known_projects<T>(f: impl FnOnce() -> T) -> T {
         let _guard = crate::test_support::env_lock();
-        let dir = std::env::temp_dir().join(format!(
+        let dir = tillandsias_core::test_scratch::path(format!(
             "tillandsias-no-known-projects-{}",
             std::process::id()
         ));

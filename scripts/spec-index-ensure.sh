@@ -80,7 +80,7 @@
 # refusal is typed and this would not be. The dev/runtime model split those
 # variables encode is already settled (lib-dev-env.sh, checked by
 # check-dev-embed-model-agreement.sh); the ROOT/serving-dir resolution is kept
-# in step by check-spec-index-resolution-agreement.sh for the same reason.
+# in step by check-spec-index-resolution-agreement.lua for the same reason.
 #
 # ORDER ALIGNMENT IS THE CORRECTNESS PROPERTY. vectors.jsonl line N must be the
 # embedding of chunks.jsonl line N; spec-retrieve pairs them by position and
@@ -141,7 +141,7 @@ fi
 #     is silently ABSENT rather than loudly missing, which is how the embedding
 #     step stayed unwritten on every host for weeks. Agreement is proven
 #     BEHAVIOURALLY — the block is extracted from each file and executed under
-#     one env — by scripts/check-spec-index-resolution-agreement.sh. Edit all
+#     one env — by scripts/lua/check-spec-index-resolution-agreement.lua. Edit all
 #     three together or that guard goes red.
 #
 #     Precedence, highest first:

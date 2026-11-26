@@ -12932,7 +12932,8 @@ mod tests {
     #[test]
     fn a_status_entry_is_a_lease_whatever_the_reason_text_says() {
         // Same temp-dir idiom the sibling fold tests use; no dev-dependency.
-        let dir = std::env::temp_dir().join(format!("tilland-lease-{}", std::process::id()));
+        let dir =
+            tillandsias_plan::test_scratch::path(format!("tilland-lease-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("tempdir");
         let index = dir.join("index.yaml");
@@ -13320,7 +13321,8 @@ mod tests {
     /// actually fires, which is what this pins.
     #[test]
     fn a_failing_envelope_is_downgraded_to_unsupported_naming_the_violations() {
-        let dir = std::env::temp_dir().join(format!("tilland-523-sv-{}", std::process::id()));
+        let dir =
+            tillandsias_plan::test_scratch::path(format!("tilland-523-sv-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("mk root");
         let fresh = Freshness::new("deadbeef".to_string(), "2026-07-29T00:00:00Z".to_string());
@@ -13397,7 +13399,8 @@ mod tests {
 
     #[test]
     fn citation_root_is_carried_and_derivable() {
-        let dir = std::env::temp_dir().join(format!("tilland-523-cr-{}", std::process::id()));
+        let dir =
+            tillandsias_plan::test_scratch::path(format!("tilland-523-cr-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("plan")).expect("mk plan dir");
         std::fs::write(
