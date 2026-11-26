@@ -1,0 +1,13 @@
+# Gate step 2400-hwnk — data, not code (order 1072-b7eq).
+#
+# The fixture for the de-slop sweep's ritual detector (829-dkuc), ported to Lua
+# with its decider. The .sh carried these arms as --self-test, and no gate ran it.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking the de-slop sweep's ritual detector (2400-hwnk)"
+STEP_LUA="scripts/lua/test-deslop-sweep-health.lua"
+STEP_ERROR="the de-slop ritual detector mis-scores a ledger (2400-hwnk) — see the FAIL lines above"
+STEP_OK="De-slop ritual detector verdicts pinned"
+STEP_SECOND_REGIME="doris 2026-11-26 msys ok:deslop-sweep-health:13 arms"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY.
+STEP_READS="scripts/lua/check-deslop-sweep-health.lua scripts/lua/test-deslop-sweep-health.lua"

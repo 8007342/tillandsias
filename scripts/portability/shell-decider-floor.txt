@@ -13,7 +13,6 @@ scripts/check-credential-channel.sh
 scripts/check-daily-maintenance.sh
 scripts/check-dead-env-branches.sh
 scripts/check-deslop-due.sh
-scripts/check-deslop-sweep-health.sh
 scripts/check-enclave-ca-consistency.sh
 scripts/check-enclave-network-internal.sh
 scripts/check-enclave-service-health.sh
@@ -89,7 +88,6 @@ scripts/test-host-tools.sh
 scripts/test-if-not-pipeline-guard.sh
 scripts/test-image-build-convergence.sh
 scripts/test-image-usability-check.sh
-scripts/test-land-queue.sh
 scripts/test-macos-vsock-inference-closure.sh
 scripts/test-mo-full-attest.sh
 scripts/test-nix-cache-service.sh

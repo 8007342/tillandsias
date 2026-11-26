@@ -78,7 +78,7 @@ cat > "$W/runner" <<EOF
 [ "\$1" = capabilities ] && { echo script; exit 0; }
 case "\$*" in *local-ci-landed-guards.lua*) exec "$RBIN" "\$@" ;; esac
 echo "lua-guard \$*"
-case "\$*" in *dead-inputs*) exit 1 ;; esac
+case "\$*" in *dead-inputs*|*deslop*) exit 1 ;; esac
 exit 0
 EOF
 chmod +x "$W/runner"
@@ -93,7 +93,7 @@ fi
     mkdir -p "$W/$(dirname "$p")"
     case "$p" in
         *.lua) printf 'fake\n' > "$W/$p" ;;
-        *) printf 'echo "bash-guard %s"\ncase "%s" in %s|*deslop*) exit 1 ;; esac\nexit 0\n' "$p" "$p" "$gate" > "$W/$p" ;;
+        *) printf 'echo "bash-guard %s"\ncase "%s" in %s) exit 1 ;; esac\nexit 0\n' "$p" "$p" "$gate" > "$W/$p" ;;
     esac
 done
 [ "$sc" = missing ] && rm -f "$W/$gate"

@@ -3143,8 +3143,40 @@ pub fn metrics_default_log(basename: &str, repo_root: Option<&Path>) -> PathBuf 
     // ORDER 1966-ubsw: a gate's private fallback, as the shell rule honours it.
     match std::env::var_os("TILLANDSIAS_METRICS_FALLBACK_DIR") {
         Some(d) if !d.is_empty() => PathBuf::from(d).join(basename),
-        _ => PathBuf::from("/tmp").join(basename),
+        _ => fallback_tmp().join(basename),
     }
+}
+
+/// ORDER 2392-nuca. The directory the shell rule's `/tmp` names. Off Windows it is
+/// `/tmp`. On native Windows `PathBuf::from("/tmp")` is `<current drive>:\tmp`, while
+/// Git for Windows mounts its `/tmp` on the user temp dir (`usertemp`, i.e. `%TEMP%`,
+/// which is `std::env::temp_dir()`), so the writer and the shell reader named two
+/// different directories whose strings agreed. The printed answer maps this back to
+/// `/tmp` under msys (`metrics-log-path`), so the strings still agree.
+fn fallback_tmp() -> PathBuf {
+    if cfg!(windows) {
+        std::env::temp_dir()
+    } else {
+        PathBuf::from("/tmp")
+    }
+}
+
+/// The printed spelling of a resolved metrics path: under msys, a path inside the
+/// Windows temp dir is spelled through Git Bash's `/tmp` mount, as the shell rule
+/// prints it (2392-nuca); everything else goes through `shell_spelling`.
+fn printed_metrics_path(resolved: &Path, windows: bool, msys: bool, tmp: &Path) -> String {
+    if windows
+        && msys
+        && let Ok(rest) = resolved.strip_prefix(tmp)
+    {
+        let rest = shell_spelling(&rest.to_string_lossy(), true, false);
+        return if rest.is_empty() {
+            "/tmp".to_string()
+        } else {
+            format!("/tmp/{rest}")
+        };
+    }
+    shell_spelling(&resolved.to_string_lossy(), windows, msys)
 }
 
 /// ORDER 2387-x65b. The spelling the shell rule prints for the same path, so the
@@ -6082,10 +6114,11 @@ fn main() {
         let root = args.get(2).map(PathBuf::from);
         let resolved = metrics_default_log(base, root.as_deref());
         let msys = cfg!(windows) && std::env::var_os("MSYSTEM").is_some_and(|v| !v.is_empty());
-        emit(&shell_spelling(
-            &resolved.to_string_lossy(),
+        emit(&printed_metrics_path(
+            &resolved,
             cfg!(windows),
             msys,
+            &fallback_tmp(),
         ));
         return;
     }
@@ -13931,5 +13964,42 @@ mod shell_spelling_tests_2387_x65b {
         );
         assert_eq!(shell_spelling(r"/tmp\x.jsonl", true, true), "/tmp/x.jsonl");
         assert_eq!(shell_spelling("D:", true, true), "/d/");
+    }
+}
+
+#[cfg(test)]
+mod printed_metrics_path_tests_2392_nuca {
+    use super::printed_metrics_path;
+    use std::path::Path;
+
+    #[test]
+    fn msys_spells_the_temp_dir_through_the_tmp_mount() {
+        let tmp = Path::new(r"C:\Users\u\AppData\Local\Temp");
+        assert_eq!(
+            printed_metrics_path(&tmp.join("x.jsonl"), true, true, tmp),
+            "/tmp/x.jsonl"
+        );
+    }
+
+    #[test]
+    fn native_windows_prints_the_real_dir_and_unix_is_unchanged() {
+        let tmp = Path::new(r"C:\Users\u\AppData\Local\Temp");
+        assert_eq!(
+            printed_metrics_path(&tmp.join("x.jsonl"), true, false, tmp),
+            "C:/Users/u/AppData/Local/Temp/x.jsonl"
+        );
+        assert_eq!(
+            printed_metrics_path(Path::new("/tmp/x.jsonl"), false, false, Path::new("/tmp")),
+            "/tmp/x.jsonl"
+        );
+    }
+
+    #[test]
+    fn a_checkout_path_is_not_mistaken_for_temp() {
+        let tmp = Path::new(r"C:\Users\u\AppData\Local\Temp");
+        assert_eq!(
+            printed_metrics_path(Path::new(r"C:/r\.cache\metrics\x.jsonl"), true, true, tmp),
+            "/c/r/.cache/metrics/x.jsonl"
+        );
     }
 }
