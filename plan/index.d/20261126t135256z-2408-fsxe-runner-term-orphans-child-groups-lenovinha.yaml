@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-term-or-int-to-the-plan-runner-orphans-its-process-group-children-unbounded
+    order: "2408-fsxe"
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [runner, process-lifecycle]
+    estimated_hours: 3
+    owned_paths: [crates/tillandsias-exec/src/lib.rs]
+    title: "tillandsias-exec: TERM/INT to the runner exits 143 and leaves its process-group children orphaned and unbounded"
+    context: |
+      A grouped child is spawned as its own group leader (lib.rs process_group(0)). Only the runner's deadline killpg or the
+      leader-exit reap ends that group, and the runner has no TERM/INT handler, so kill -TERM <runner> exits 143 without
+      signalling the group: the child is reparented and keeps running, and the deadline timer that bounded it died with
+      the runner. Seen as #1610 arm 11b in land run 94 ("live=1 left=1 rc=143"). Cause read from code by doris; red-first
+      on Linux is part of this row. Windows is unaffected (the job object ends with the runner).
+      Red-first: a decider whose proc.run child sh records $$, sets an EXIT trap removing a marker, and blocks on a fifo;
+      kill -TERM the runner; ps -o pid,pgid,ppid,cmd -p <child> shows it alive, pgid==pid, reparented, marker present.
+    exit_criteria:
+      - "on TERM/INT the runner killpg's each live child group (TERM, short grace, KILL) and exits with the signal's status; red-first arm shows the child gone and its trap run within the grace (Linux and darwin)"
+      - "with no signal, behaviour unchanged (control arm); Windows unchanged"
+    unscoreable: "unpinnable-until-the-guard-exists: the red-first fixture is this row's deliverable."
+    next_action: "red-first fixture, then the handler."
+    provenance: filed by lenovinha from doris's 2408-fsxe fragment (unpushed on work/2392-9zcp, host offline); doris drops its copy. Queued by macuahuitl 2026-11-26.
+    related: [2392-9zcp, 2392-tv47, 1443-8pur, 1423-ydy3]
+    events:
+      - {type: filed, ts: '2026-11-26T13:52:56Z', host: lenovinha, summary: runner TERM orphans child groups (from doris)}

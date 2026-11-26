@@ -28,7 +28,11 @@ critical_path:
     timeout_ms: 5000
 
   - step: "compile check: cargo check confirms PodmanError is sound"
-    command: "cargo check -p tillandsias-podman 2>&1 | grep -v '^warning' | head -20"
+    # ORDER 2403-4ibs. Was `cargo check … | grep -v '^warning' | head -20`, judged by exit code:
+    # head exits after 20 lines and grep dies of SIGPIPE under pipefail (rc=141) whenever cargo
+    # prints more, which a cold check does (218 lines, measured). Capture, then print the first
+    # 20 non-warning lines with one awk, and exit with cargo's own status.
+    command: "out=$(cargo check -p tillandsias-podman 2>&1); rc=$?; awk '!/^warning/ && n++ < 20' <<<\"$out\"; exit $rc"
     timeout_ms: 120000
 
 observability:

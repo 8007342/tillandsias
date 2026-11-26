@@ -25,19 +25,19 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-pre-push-honours-a-live-freeze.sh
+  - workspace contains scripts/lua/test-pre-push-honours-a-live-freeze.lua
   - workspace contains scripts/release-freeze.sh and scripts/hooks/pre-push-local-gate.sh
 
 critical_path:
   - step: "the freeze tool and the fixture parse and carry their exec bits"
-    command: "bash -n scripts/release-freeze.sh && bash -n scripts/test-pre-push-honours-a-live-freeze.sh && test -x scripts/release-freeze.sh && test -x scripts/test-pre-push-honours-a-live-freeze.sh && echo 'ok: release-freeze-parses'"
+    command: "bash -n scripts/release-freeze.sh && test -x scripts/release-freeze.sh && test -f scripts/lua/test-pre-push-honours-a-live-freeze.lua && echo 'ok: release-freeze-parses'"
     timeout_ms: 5000
     expected_behavior: "ok: release-freeze-parses"
 
   - step: "a live freeze holds a code push to the branch it names, admits plan-only pushes by both routes, admits a code push elsewhere, warns rather than blocks when the remote is unreachable, and the mutant proves the check bites"
-    command: "bash scripts/test-pre-push-honours-a-live-freeze.sh | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-pre-push-honours-a-live-freeze.lua 2>&1"
     timeout_ms: 300000
-    expected_behavior: "PASS: pre-push-honours-a-live-freeze"
+    expected_behavior: "ok:pre-push-honours-a-live-freeze:23 arms"
 
   - step: "the marker namespace is exempt from the hook, or a freeze could not be declared from the host declaring it (the freeze tool's own push would need the gate it exists to protect)"
     command: "printf 'refs/tillandsias/freeze/x/h/1 %s refs/tillandsias/freeze/x/h/1 %s\\n' $(git rev-parse HEAD) $(git rev-parse HEAD) | bash scripts/hooks/pre-push-local-gate.sh origin . 2>&1 | grep -c 'coordination marker ref'"

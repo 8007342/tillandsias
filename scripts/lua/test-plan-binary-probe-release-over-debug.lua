@@ -1,4 +1,4 @@
--- @trace order:1508-7s4w, order:1680-yf9z
+-- @trace order:1508-7s4w, order:1680-yf9z, order:2404-7yv4
 --
 -- On MSYS (Git Bash) an extensionless candidate whose .exe sibling exists IS
 -- that .exe (exe magic). resolve_plan_binary used to try
@@ -39,14 +39,16 @@ end
 
 -- The resolver answers absolute, in the shell's own spelling of W.
 -- 1680-yf9z: the "//" is macOS's TMPDIR spelling, so every host exercises it.
-local function answer(probe)
+local function answer(probe, path_dir)
     local r = shell([=[
 unset CARGO_TARGET_DIR TILLANDSIAS_PLAN_BIN
+# The arms own PATH's answer: none, or the stub dir an arm names (2404-7yv4).
+PATH="${3:+$3:}/usr/bin:/bin"
 . "$1" || exit 97
 cd "$2//" && cd "$PWD" || exit 98
 got="$(resolve_plan_binary 2>/dev/null)" || got=""
 printf '%s' "${got#"$PWD"/}"
-]=], { probe, W.abs })
+]=], { probe, W.abs, path_dir or "" })
     return text.trim(r.stdout or "")
 end
 
@@ -82,6 +84,32 @@ else
     local got = answer(PROBE)
     T:arm("the order is unchanged: release extensionless answers",
         got == "target/release/tillandsias-plan", "answered [" .. got .. "]")
+    -- ORDER 2404-7yv4: a DEBUG build in ./target must not shadow a release binary
+    -- on PATH. Seen on lenovinha 2026-11-26: a work-ref worktree with no
+    -- release build kept the target/debug binary its crate tests had built
+    -- hours earlier; the probe answered it ahead of the current release in
+    -- ~/.local/bin, and three ci-release litmus tests went red on that
+    -- worktree only (two door deadlines, and a selector feature the old debug
+    -- build lacked). The control is the probe as it was: it answers debug.
+    fs.write(REL, "")
+    T:must{ "rm", "-f", W.abs .. "/target/release/tillandsias-plan" }
+    fs.mkdir(W.rel .. "/bin")
+    fs.write(W.rel .. "/bin/tillandsias-plan", "#!/bin/sh\nexit 0\n")
+    T:must{ "chmod", "+x", W.abs .. "/bin/tillandsias-plan" }
+    got = answer(PROBE, W.abs .. "/bin")
+    T:arm("a debug build in ./target does not shadow a release on PATH (2404-7yv4)",
+        got == "bin/tillandsias-plan", "answered [" .. got .. "]")
+    local before = proc.run{ argv = { "git", "show", "origin/linux-next~0:" .. PROBE }, cwd = ROOT, timeout_ms = 30000 }
+    local old = (before.stdout or ""):gsub("\r\n", "\n")
+    local DBG_FIRST = '        ./target/debug/tillandsias-plan \\\n        ./target/release/tillandsias-plan.exe \\'
+    if old:find('./target/release/tillandsias-plan \\\n        ./target/debug/tillandsias-plan \\', 1, true) then
+        fs.write(W.rel .. "/probe-before.sh", old)
+        got = answer(W.abs .. "/probe-before.sh", W.abs .. "/bin")
+        T:arm("control: the probe as it was answers the DEBUG build ahead of PATH",
+            got == "target/debug/tillandsias-plan", "answered [" .. got .. "]")
+    else
+        out.line("skip: control — origin/linux-next already carries the fix")
+    end
     out.line("skip: the MSYS arms need an MSYS kernel (they run on Windows Git Bash)")
 end
 
