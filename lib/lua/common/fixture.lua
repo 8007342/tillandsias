@@ -195,6 +195,38 @@ end
 -- CARGO_TARGET_DIR, and a gate exports both. A fixture whose subject reads one
 -- drops it: env_unset = { "TILLANDSIAS_*", "CARGO_TARGET_DIR" } (the call's own
 -- env still wins).
+--
+-- ORDER 2384-svqx — A CHILD THAT RE-ENTERS BUILD.SH MUST KEEP WHAT LETS IT INHERIT.
+-- env_unset { "TILLANDSIAS_*" } also strips the variables a nested build.sh uses to
+-- see that its parent already holds a lock or a sandbox, and the child then
+-- re-acquires it. #1578 was evicted twice for exactly this, on Linux only:
+--   - TOOLBOX_PATH, container, TILLANDSIAS_SKIP_TOOLBOX: without them build.sh
+--     re-execs into a fresh toolbox and dies ("TOOLBOX_PATH not set").
+--   - TILLANDSIAS_SHARED_TARGET_HELD (with TILLANDSIAS_SHARED_TARGET, CARGO_TARGET_DIR):
+--     without it the child waits on its own parent's shared-target flock until
+--     its timeout.
+-- macOS has neither the toolbox nor flock, so a darwin run can never show it.
+-- A fixture that strips TILLANDSIAS_* and runs build.sh (or anything that sources
+-- with-tillandsias-builder.sh or shared-target.sh) passes env = M.gate_inherit(env).
+M.GATE_INHERIT = { "TOOLBOX_PATH", "container", "TILLANDSIAS_SKIP_TOOLBOX",
+    "TILLANDSIAS_SHARED_TARGET_HELD", "TILLANDSIAS_SHARED_TARGET", "CARGO_TARGET_DIR" }
+-- The caller declares all of M.GATE_INHERIT in its -- @env header (env.get refuses an
+-- undeclared name). A missing declaration is an error naming it, never a silent skip:
+-- a skipped name is the very bug this helper exists to prevent.
+function M.gate_inherit(e)
+    e = e or {}
+    local missing = {}
+    for _, k in ipairs(M.GATE_INHERIT) do
+        local ok, v = pcall(env.get, k)
+        if not ok then missing[#missing + 1] = k
+        elseif v and v ~= "" and e[k] == nil then e[k] = v end
+    end
+    if #missing > 0 then
+        error("fixture.gate_inherit: add to the -- @env header: " .. table.concat(missing, " ") .. " (2384-svqx)", 2)
+    end
+    return e
+end
+
 function T:run(spec)
     local argv = {}
     for i, a in ipairs(spec) do argv[i] = a end

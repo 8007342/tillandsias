@@ -36,20 +36,9 @@ local W = T:scratch()
 local TLOG = W.abs .. "/timing.jsonl"
 local ENV = { TILLANDSIAS_TIMING_LOG = TLOG }
 local UNSET = { "TILLANDSIAS_*" }
--- The builder-toolbox guards (scripts/with-tillandsias-builder.sh) read TOOLBOX_PATH,
--- container and TILLANDSIAS_SKIP_TOOLBOX. The .sh's build.sh child inherited them; the
--- runner's base env drops the first two and env_unset strips the third, so inside a
--- gate's toolbox arm 5's build.sh re-exec'd into a fresh toolbox and died ("TOOLBOX_PATH
--- not set", land run 79). Carry whichever the caller has.
--- Land run 82 (diagnosed by the status line below): inside the gate each build.sh child ran past
--- 300 s. The outer gate holds the shared-target flock and exports TILLANDSIAS_SHARED_TARGET_HELD
--- (scripts/shared-target.sh: "fixtures calling build.sh" inherit the lock through it); env_unset
--- stripped it, so the nested build.sh waited on its own parent's lock (flock -w 1800). macOS has
--- no flock, so the shared target is off there and the Mac never showed it.
-for _, k in ipairs{ "TOOLBOX_PATH", "container", "TILLANDSIAS_SKIP_TOOLBOX", "TILLANDSIAS_SHARED_TARGET_HELD", "TILLANDSIAS_SHARED_TARGET", "CARGO_TARGET_DIR" } do
-    local v = env.get(k)
-    if v and v ~= "" then ENV[k] = v end
-end
+-- Arm 5's build.sh child must keep what lets it inherit the outer gate's toolbox and
+-- shared-target lock (land runs 79 and 82); the kit's list is the one place they live.
+fixture.gate_inherit(ENV)
 
 local function lua(name, body) fs.write(W.rel .. "/" .. name .. ".lua", body .. "\n") end
 local function run(name, ...)
