@@ -23,6 +23,7 @@ packets:
       arm 8 passes (refusal, nonzero exit) and arm 8b passes (the mutation still
       accepts). Measured on doris: a no-rule copy exits rc=2 in ~5 s. PRE-FIX
       RESULT: the copy ran past the refusal until a 120 s timeout.
+    unscoreable: "the closure is the fixture scripts/lua/test-metrics-log-path-agreement.lua, run by gate step 279-1455-d7hc; no separate litmus pin"
     next_action: >
       Implemented on work/2387-rca8: each default resolves at top level through
       _default_log_into, which exits 2 when the resolver fails.

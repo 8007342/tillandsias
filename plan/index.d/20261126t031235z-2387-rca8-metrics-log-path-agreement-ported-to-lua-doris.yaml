@@ -25,6 +25,7 @@ packets:
       prints ok:metrics-log-path-agreement:<n> on Linux. On msys it is
       violation:metrics-log-path-agreement:3-failed (1b, 1d, W): red on msys,
       packet 2387-x65b, not skips.
+    unscoreable: "the closure is the fixture itself, run by gate step 279-1455-d7hc; no separate litmus pin"
 status:
   - packet_id: port-scripts-test-metrics-log-path-agreement-sh-to-lua
     field: status

@@ -28,6 +28,7 @@ packets:
       tillandsias-plan script run scripts/lua/test-metrics-log-path-agreement.lua
       prints ok:metrics-log-path-agreement:<n> on an msys host. PRE-FIX RESULT:
       FAILS — violation:metrics-log-path-agreement:3-failed on doris (1b, 1d, W).
+    unscoreable: "the closure is the fixture scripts/lua/test-metrics-log-path-agreement.lua, run by gate step 279-1455-d7hc; no separate litmus pin"
     next_action: >
       Make metrics-log-path print one canonical spelling: forward slashes always,
       and under msys the form the shell rule prints for the same root (or have both
