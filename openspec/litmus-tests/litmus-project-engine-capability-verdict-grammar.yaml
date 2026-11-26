@@ -121,13 +121,33 @@ critical_path:
     expected_behavior: "ok: verdict-absent"
 
   - step: "the state vocabulary is CLOSED — exactly four values can ever be assigned, each with advice written for it"
-    # An open-ended verdict is an unfalsifiable state. The assignment count is
-    # asserted EXACTLY so a fifth state cannot be added without the advice
-    # function growing an action for it (the advice case labels are checked by
-    # name for the three non-default states).
-    command: "n=$(grep -c 'TILLANDSIAS_PROJECT_ENGINE_STATE=\"' images/default/lib-project-engine-capability.sh) && test \"$n\" = 4 && for v in absent stale-engine skewed; do grep -q \"TILLANDSIAS_PROJECT_ENGINE_STATE=\\\"$v\\\"\" images/default/lib-project-engine-capability.sh || exit 1; grep -q \"^        $v)\" images/default/lib-project-engine-capability.sh || exit 1; done; echo \"ok: closed-state-vocabulary n=$n\""
+    # An open-ended verdict is an unfalsifiable state. The DISTINCT values the
+    # helper assigns are asserted EXACTLY so a fifth state cannot be added
+    # without the advice function growing an action for it (the advice case
+    # labels are checked by name for the non-default states, including the
+    # shim's `unknown` when the probe cannot run).
+    # ORDER 2393-j27x: the vocabulary moved with the body into
+    # lua/project-engine-capability.lua (forge-lua-helpers D3.6). This step was
+    # also UNFALSIFIABLE until then: `... done; echo ok` printed its ok whatever
+    # the count was (the `;` after `done` ended the && chain), so a count of 99
+    # passed. Every check is now one && chain.
+    command: "L=images/default/lua/project-engine-capability.lua S=images/default/lib-project-engine-capability.sh; n=$(grep -o 'state = \"[a-z-]*\"' \"$L\" | sort -u | wc -l | tr -d ' ') && test \"$n\" = 4 && for v in absent stale-engine ready skewed; do grep -q \"state = \\\"$v\\\"\" \"$L\" || exit 1; done && for v in absent stale-engine skewed unknown; do grep -q \"^        $v)\" \"$S\" || exit 1; done && echo \"ok: closed-state-vocabulary n=$n\""
     timeout_ms: 10000
     expected_behavior: "ok: closed-state-vocabulary"
+
+  - step: "D3.6 PIPELINE-FREE: with only bash, cat and the plan binary on PATH, a matching engine and checkout still read state=ready"
+    # ORDER 2393-j27x. The awk | sort, sed | sed and tr | sed pipelines are the
+    # helper's now; the shell body could not run them on this PATH and read
+    # stale-engine (red before the port, measured). The fixture-visible half of
+    # the execve drop measured in the forge image.
+    command: "B=/tmp/.litmus-669e/bare; rm -rf \"$B\" && mkdir -p \"$B\" && P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" && case \"$P\" in /*) ;; *) P=\"$PWD/${P#./}\" ;; esac && for t in bash cat; do ln -s \"$(command -v $t)\" \"$B/$t\" || exit 1; done && ln -s \"$P\" \"$B/tillandsias-plan\" && L=$(env -i PATH=\"$B\" /bin/sh images/default/lib-project-engine-capability.sh /tmp/.litmus-669e/engine/project-info.sh \"$PWD\" | head -1) && printf '%s\\n' \"$L\" | grep -qE '^project_engine: state=ready baked=engine-contract-v[0-9]+ expected=engine-contract-v[0-9]+ missing_in_engine=- engine_only=-$' && echo \"ok: pipeline-free-ready\""
+    timeout_ms: 30000
+    expected_behavior: "ok: pipeline-free-ready"
+
+  - step: "D3.6 NO-RUNNER: without the helper's runner the state is unknown with probe=no-plan-binary, never a verdict, and the advice says so"
+    command: "B=/tmp/.litmus-669e/bare-norun; rm -rf \"$B\" && mkdir -p \"$B\" && for t in bash cat; do ln -s \"$(command -v $t)\" \"$B/$t\" || exit 1; done && O=$(env -i PATH=\"$B\" /bin/sh images/default/lib-project-engine-capability.sh /tmp/.litmus-669e/engine/project-info.sh \"$PWD\") && printf '%s\\n' \"$O\" | head -1 | grep -qxF 'project_engine: state=unknown baked=- expected=- missing_in_engine=- engine_only=- probe=no-plan-binary' && printf '%s\\n' \"$O\" | grep -q 'UNKNOWN ENGINE STATE' && echo \"ok: no-runner-unknown\""
+    timeout_ms: 30000
+    expected_behavior: "ok: no-runner-unknown"
 
   - step: "forge discovery NAMES a missing probe and renders the machine line — never a silent no-skew"
     # lib-common.sh cannot be sourced on a host, so the rendering is pinned
