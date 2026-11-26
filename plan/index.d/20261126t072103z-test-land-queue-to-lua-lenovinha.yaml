@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: test-land-queue-to-lua-in-three-fixtures
+    order: "2398-zvug"
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 12
+    title: "scripts/test-land-queue.sh (2,420 lines) to three Lua fixtures split by arm group, with the full mutant set"
+    context: |
+      The largest remaining shell fixture; it guards the land queue. macbookair held it back for its own PR and released it to lenovinha
+      (2026-11-26, nothing started). Split: arms 1-13 (landing, ordering, drafts, freeze, carried obligations), arms 14-35 (eviction,
+      retry, conflict drafting, preflight door, flaky, rc=255, cfg-gated lint, refused push, capture limits, priority, red-twice, lanes),
+      arms 40-63 (dep-info keys, trains, proofs, daily-full, bundles, status, red-script). Children that re-enter build.sh use
+      fixture.gate_inherit; argv uses fixture.posix_shell(). Callers: gate steps 286-1461-5rm6, 762/764-2267-6ss8, the host-door litmus.
+      ports: scripts/test-land-queue.sh
+    exit_criteria:
+      - "each arm of the .sh has a named counterpart in one of the three .lua fixtures, with the same verdict on trunk and the same red under the .sh's mutants"
+      - "every caller runs the .lua fixtures; the .sh is deleted; the gate steps carry darwin/msys second-regime records"
+    unscoreable: "unpinnable-until-the-guard-exists: the mutant parity is the deliverable."
+    next_action: "port group 1, then 2, then 3; relay-preflight; PR."
+    provenance: filed by lenovinha; assigned by macuahuitl 2026-11-26.
+    events:
+      - {type: filed, ts: '2026-11-26T07:21:03Z', host: lenovinha, summary: test-land-queue to lua}
