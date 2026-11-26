@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: check-batch-4-release-tier-freshness-to-lua
+    order: "2409-qbgu"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, gate]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/check-release-tier-freshness.lua
+    title: "check-* batch 4: check-release-tier-freshness ported to Lua"
+    context: |
+      Coordinator order after batches 2 and 3. Open drafts #1197 (work/2118-jtky) and #1170 (work/2111-dd2m) touch it;
+      both have had no commits since 2026-11-21, so the stale-draft rule applies: fold in their still-applying lines,
+      list them in the PR, tombstone after the land.
+    exit_criteria:
+      - "The .lua gives the .sh's verdict on one tree, its main assertions are mutated, callers run the .lua, and the .sh is deleted."
+    unscoreable: "fixture-scored: the release-tier-freshness fixtures and their gate steps"
+    provenance: "coordinator 2026-11-26 (check-* batch 4), yolanda"
+    related: [2390-byz6, 2391-d389]
+    events:
+      - {type: claimed, ts: "2026-11-26T15:57:40Z", host: yolanda, summary: "claimed; work ref work/2409-qbgu"}
