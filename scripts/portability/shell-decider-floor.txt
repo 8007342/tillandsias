@@ -168,7 +168,6 @@ scripts/test-smoke-forge-lane-cold-host-outcome.sh
 scripts/test-smoke-verifies-a-signature.sh
 scripts/test-spawn-failure-names-program.sh
 scripts/test-spec-index-endpoint-classification.sh
-scripts/test-stranded-plan-writes.sh
 scripts/test-timing-clock-resolution.sh
 scripts/test-token-instrument.sh
 scripts/test-tool-dispatch-lib.sh
