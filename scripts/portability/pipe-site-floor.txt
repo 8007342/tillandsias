@@ -512,7 +512,6 @@ scripts scripts/test-git-mirror-vault-agent-auto-auth.sh 18
 scripts scripts/test-github-token-auto-rotation.sh 1
 scripts scripts/test-groundtruth-corpus-declaration.sh 8
 scripts scripts/test-guest-binaries-nix-lane.sh 9
-scripts scripts/test-harness-rollback.sh 6
 scripts scripts/test-headless-sidecar-target-gate.sh 1
 scripts scripts/test-hook-mover-enumeration-is-batched.sh 1
 scripts scripts/test-host-tools.sh 30
@@ -525,7 +524,6 @@ scripts scripts/test-opencode-vault-auth-content.sh 3
 scripts scripts/test-order-citations-resolve.sh 7
 scripts scripts/test-pending-capability-row-does-not-wedge.sh 1
 scripts scripts/test-plan-binary-copy-refresh.sh 1
-scripts scripts/test-plan-binary-probe-usage-determinism.sh 2
 scripts scripts/test-plan-binary-runnability-precondition.sh 10
 scripts scripts/test-plan-field-get.sh 2
 scripts scripts/test-plan-only-lane-structural.sh 8
@@ -567,7 +565,6 @@ scripts scripts/test-token-instrument.sh 2
 scripts scripts/test-tool-materialize-litmus-surfaces-arm.sh 3
 scripts scripts/test-tool-materialize.sh 5
 scripts scripts/test-tray-surface-parity-gate.sh 1
-scripts scripts/test-unrunnable-platform-arms.sh 9
 scripts scripts/test-vault-shutdown-forwards-sigterm.sh 2
 scripts scripts/tillandsias-cycle-driver.sh 2
 scripts scripts/tillandsias-host-push-cert.sh 2
