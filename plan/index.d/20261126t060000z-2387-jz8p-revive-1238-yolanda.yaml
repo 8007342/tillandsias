@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: revive-1238-three-check-deciders
+    order: "2387-jz8p"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, gate]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/check-purge-clears-vault-credentials.lua
+      - scripts/lua/check-stranded-plan-writes.lua
+      - scripts/lua/check-decider-retirement.lua
+    title: "land yoga's stale draft #1238 (2150-n8te): three check-* deciders to Lua, with msys fixes"
+    context: |
+      Coordinator 2026-11-26: a finished port in a stale draft should land, not be redone. #1238 (work/2150-n8te,
+      yoga) is rebuilt as one commit on linux-next. Its Lua is carried with three Windows fixes it had never been run
+      against: a drive path read as relative (purge guard), tar handed a C:/ archive path, and bare "bash" argvs.
+      Two of its .sh fixtures had since been ported to Lua on trunk and are repointed by hand.
+    exit_criteria:
+      - "The three Lua deciders land on linux-next with their callers repointed and the .sh files deleted; #1238 is closed naming the new PR."
+    unscoreable: "fixture-scored: test-purge-guard-soft-arm, test-stranded-plan-writes, test-decider-retirement, test-grep-exit-two-fails-closed"
+    provenance: "coordinator 2026-11-26 (revive #1191 and #1238), yolanda"
+    related: [2150-n8te, 1559-2uw3]
+    events:
+      - {type: claimed, ts: "2026-11-26T03:22:24Z", host: yolanda, summary: "claimed; work ref work/2387-jz8p"}
