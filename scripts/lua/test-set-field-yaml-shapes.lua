@@ -24,7 +24,7 @@ local T = fixture.new("set-field-yaml-shapes")
 local ROOT = fixture.repo_root()
 local PLAN = fixture.plan_binary()
 if PLAN == "" then T:refuse("no-plan-binary", "build one: cargo build --release -p tillandsias-plan") end
-if PLAN:sub(1, 1) ~= "/" then PLAN = ROOT .. "/" .. PLAN:gsub("^%./", "") end
+if not fixture.is_abs(PLAN) then PLAN = ROOT .. "/" .. PLAN:gsub("^%./", "") end
 
 local W = T:scratch()
 local SEED = [[

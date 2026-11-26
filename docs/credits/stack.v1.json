@@ -10344,6 +10344,24 @@
       "from": "image:git",
       "kind": "package",
       "optional": false,
+      "to": "pkg:alpine:lua5.4"
+    },
+    {
+      "from": "image:git",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-filesystem"
+    },
+    {
+      "from": "image:git",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-lpeg"
+    },
+    {
+      "from": "image:git",
+      "kind": "package",
+      "optional": false,
       "to": "pkg:alpine:openssh-client"
     },
     {
@@ -57790,6 +57808,57 @@
       "version": "2.78-r0"
     },
     {
+      "homepage": "https://pkgs.alpinelinux.org/packages?name=lua5.4",
+      "homepage_kind": "package-index",
+      "id": "pkg:alpine:lua5.4",
+      "license": "MIT",
+      "license_family": "permissive",
+      "license_source": "package-manager",
+      "link": "container-image",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
+      "name": "lua5.4",
+      "optional": false,
+      "pulled_by": [
+        "image:git"
+      ],
+      "source": "images/git/Containerfile",
+      "version": "5.4.6-r1"
+    },
+    {
+      "homepage": "https://pkgs.alpinelinux.org/packages?name=lua5.4-filesystem",
+      "homepage_kind": "package-index",
+      "id": "pkg:alpine:lua5.4-filesystem",
+      "license": "MIT",
+      "license_family": "permissive",
+      "license_source": "package-manager",
+      "link": "container-image",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
+      "name": "lua5.4-filesystem",
+      "optional": false,
+      "pulled_by": [
+        "image:git"
+      ],
+      "source": "images/git/Containerfile",
+      "version": "1.8.0-r4"
+    },
+    {
+      "homepage": "https://pkgs.alpinelinux.org/packages?name=lua5.4-lpeg",
+      "homepage_kind": "package-index",
+      "id": "pkg:alpine:lua5.4-lpeg",
+      "license": "MIT",
+      "license_family": "permissive",
+      "license_source": "package-manager",
+      "link": "container-image",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
+      "name": "lua5.4-lpeg",
+      "optional": false,
+      "pulled_by": [
+        "image:git"
+      ],
+      "source": "images/git/Containerfile",
+      "version": "1.0.2-r3"
+    },
+    {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=nss-tools",
       "homepage_kind": "package-index",
       "id": "pkg:alpine:nss-tools",
@@ -60991,15 +61060,15 @@
   "schema": "tillandsias-stack/v1",
   "summary": {
     "components": 57,
-    "edges": 3113,
+    "edges": 3116,
     "license_families": {
       "model": 7,
-      "permissive": 1712,
+      "permissive": 1715,
       "service": 15,
       "strong-copyleft": 25,
       "unknown": 162,
       "weak-copyleft": 20
     },
-    "nodes": 1941
+    "nodes": 1944
   }
 }
