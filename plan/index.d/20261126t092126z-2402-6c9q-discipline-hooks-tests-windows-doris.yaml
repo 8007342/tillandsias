@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed and fixed by doris-windows 2026-11-26 (two of three Windows lib-red packets, ruled by macuahuitl).
+packets:
+  - packet_id: discipline-hooks-global-hooks-path-tests-fail-on-windows-path-spelling
+    order: 2402-6c9q
+    status: implemented
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, rust-test, hooks, path-spelling]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-plan/src/discipline_hooks.rs
+    title: |
+      discipline_hooks's two global-hooksPath tests fail on native Windows: a raw backslash path in a hand-written git config, then verbatim-vs-drive path comparisons
+    context: |
+      Measured on doris (native Windows) 2026-11-26, origin/linux-next, cargo test --release -p tillandsias-plan --lib:
+        a_global_hooks_path_gets_a_local_one_beside_it_and_the_global_dir_stays_empty and
+        a_local_hooks_path_is_honoured_and_not_announced both panicked at discipline_hooks.rs:451,
+        `assert!(st.success())` on `git init`. Actual: git refused the scratch global config,
+        "fatal: bad config line 2", because the test wrote `hooksPath = C:\Users\...` and git reads a
+        backslash in a config value as an escape.
+      Fixing that exposed two more Windows-only spellings in the first test: starts_with(repo.canonicalize())
+      compared the verbatim \\?\C:\ form against git's C:/ form (panicked at :480), and the note was
+      searched for the backslash spelling of a value git reports with forward slashes (:495).
+      Production is not affected: it sets core.hooksPath through `git config`, which escapes correctly.
+    verifiable_closure: |
+      cargo test -p tillandsias-plan --lib discipline_hooks::tests passes on native Windows (2/2 on
+      doris) and on Linux, where every change is the identity.
+    unscoreable: "the closure is the existing Rust unit tests, run on both platforms; no litmus pin"
+    next_action: >
+      Implemented, test-only: the scratch config writes forward slashes; the prefix check compares both
+      paths canonicalized; the note check looks for the value as it was written.
+status:
+  - packet_id: discipline-hooks-global-hooks-path-tests-fail-on-windows-path-spelling
+    field: status
+    value: implemented
+    ts: "2026-11-26T09:21:26Z"
+    host: doris
