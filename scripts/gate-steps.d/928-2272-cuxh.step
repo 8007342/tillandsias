@@ -9,6 +9,6 @@ STEP_DESC="Checking the preflight front door's own fixture (1305-udgs, daily-ful
 STEP_LUA="scripts/lua/test-preflight-front-door.lua"
 STEP_ERROR="the preflight front door's fixture is red — see the FAIL lines above"
 STEP_OK="preflight front-door fixture passed, or named not-run"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:preflight-front-door:20/20 at e49301129 (live, budget judged 142s <= 200s; a normal gate prints not-run)"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-26 darwin ok:preflight-front-door:22 arms at 0fbb910b6 (live, taskpolicy -b; budget judged door=3 297s <= 450s darwin-background, benched=123; a normal gate prints not-run)"
 STEP_SERIAL="runs the preflight door several times; a busy pool skews its deadlines and its wall-clock arm"
 STEP_READS="build.sh scripts/** lib/lua/common/preflight_judge.lua"
