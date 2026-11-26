@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed and fixed by doris-windows 2026-11-26, msys queue item smoke-skill-reset-env.
+packets:
+  - packet_id: smoke-skill-reset-env-arm-2-spawns-a-sh-stub-natively-on-msys
+    order: 2418-q7rv
+    status: implemented
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, msys, fixture, policy]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-smoke-skill-reset-env-matches-policy.lua
+    related: [2410-3j3t, 2402-isab]
+    title: |
+      test-smoke-skill-reset-env arm 2 fails on msys: the run door spawns its #!/bin/sh tillandsias stub natively (os error 193)
+    context: |
+      Measured on doris: the policy half was already right (consent_source=env, and an unregistered skill
+      got rule soft-reset), but plan run --json gave status spawn_failed, "%1 is not a valid Win32
+      application (os error 193)", for the shell-script stub. CreateProcess tries <path>.exe for an
+      extensionless path, so on msys the fixture places Git's /usr/bin/true.exe beside the stub as
+      bin/tillandsias.exe. The argv the policy judges is unchanged, and Unix never looks for the .exe.
+      (Its earlier premise refusal on this host went away with 2410-3j3t and 2402-isab.)
+    verifiable_closure: |
+      On doris: before, violation:smoke-skill-reset-env:2-failed (arm 2, spawn_failed os error 193);
+      after, ok:smoke-skill-reset-env:9 arms.
+    unscoreable: "the closure is the fixture itself; no separate litmus pin"
+    next_action: >
+      Implemented.
+status:
+  - packet_id: smoke-skill-reset-env-arm-2-spawns-a-sh-stub-natively-on-msys
+    field: status
+    value: implemented
+    ts: "2026-11-26T22:45:15Z"
+    host: doris
