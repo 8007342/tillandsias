@@ -128,9 +128,17 @@ for _, cmd in ipairs{ "podman system reset --force", "tillandsias --reset-state"
         "rc=" .. tostring(rc) .. " [" .. out .. "]")
 end
 -- Scratch: paths BENEATH /tmp and $TMPDIR need no consent; the ROOTS themselves still ask.
+-- On native Windows the policy does not count the msys temp spellings as a scratch root
+-- (yolanda, #1627: rc 4 workspace-destroy). A port does not widen a security boundary; the
+-- three beneath-a-scratch-root cases are a named skip there, and 2403-wtmp asks the question.
+-- posix_shell() with no default answers "bash" everywhere but native Windows.
+local NATIVE_WIN = fixture.posix_shell() ~= "bash"
+local function scratch_root_skip(what) out.line("skip:arm-4-" .. what .. ":native-windows-temp-root-is-not-scratch-2403-wtmp") end
 for _, t in ipairs{ "/tmp/pretooluse-scratch-x", TMPD .. "/pretooluse-scratch-y" } do
+    if NATIVE_WIN then scratch_root_skip("beneath-scratch-root") else
     local rc, out = classify("rm -rf " .. t, { "--cwd", ROOT })
     T:arm("arm 4: rm -rf " .. t .. " (beneath a scratch root) needs no consent", rc == 0, "rc=" .. tostring(rc) .. " [" .. out .. "]")
+    end
 end
 for _, t in ipairs{ "/tmp", "/private/tmp", TMPD } do
     local rc, out = classify("rm -rf " .. t, { "--cwd", ROOT })
@@ -145,8 +153,10 @@ expect_deny("arm 4: an rm target with an unset variable is refused with a remedy
     "unresolvable-rm-target", 'rm -rf "$PRETOOLUSE_UNSET_X/y"', "literal path")
 expect_deny("arm 4: the operator's shape (a mktemp dir deleted through its variable) is refused, not asked",
     "unresolvable-rm-target", 'd=$(mktemp -d); ls "$d"; rm -rf $d', "literal path")
+if NATIVE_WIN then scratch_root_skip("tmpdir-expansion") else
 local rct, outt = classify('rm -rf "${TMPDIR:-/tmp}/pretooluse-z"', { "--cwd", ROOT })
 T:arm('arm 4: rm -rf "${TMPDIR:-/tmp}/…" expands and needs no consent', rct == 0, "rc=" .. tostring(rct) .. " [" .. outt .. "]")
+end
 
 -- 5
 expect_deny("arm 5: wsl.exe … bash -lc with a pipe is refused", "string-crosses-a-boundary", 'wsl.exe -d x -- bash -lc "a | b"')

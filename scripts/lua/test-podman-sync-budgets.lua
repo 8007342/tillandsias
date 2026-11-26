@@ -13,6 +13,7 @@
 --       | skip:podman-sync-budgets:no-validator
 
 local fixture = require "common.fixture"
+local OUT = out  -- the output module; `out` is reused below for a run's stdout
 local T = fixture.new("podman-sync-budgets")
 local ROOT = fixture.repo_root()
 local LUA_REL = "scripts/lua/check-podman-sync-budgets.lua"
@@ -144,11 +145,18 @@ rc, out = gate{ PODMAN_SYNC_SEARCH_ROOT = EXT .. "/scan alias" }
 T:arm("case 10: an absolute starting symlink is followed", rc ~= 0 and out == "violation:direct-command:1",
     "rc=" .. tostring(rc) .. " out='" .. out .. "'")
 
--- case 11: a broken external start cannot become a green empty scan
+-- case 11: a broken external start cannot become a green empty scan.
+-- msys ln cannot make a DANGLING symlink without the symlink privilege (yolanda, #1627),
+-- so on native Windows the case cannot be set up; it is a named skip there, not a red.
+-- posix_shell() with no default answers "bash" everywhere but native Windows.
+if fixture.posix_shell() ~= "bash" then
+    OUT.line("skip:case-11:native-windows-ln-cannot-make-a-dangling-symlink")
+else
 T:must{ "ln", "-s", EXT .. "/missing", EXT .. "/broken scan" }
 rc, out = gate{ PODMAN_SYNC_SEARCH_ROOT = EXT .. "/broken scan" }
 T:arm("case 11: a broken external root blocks, never reports green",
     rc == 2 and has_prefix(out, "blocked:podman-sync-bounded:search-root-unreadable:"),
     "rc=" .. tostring(rc) .. " out='" .. out .. "'")
+end
 
 T:finish()

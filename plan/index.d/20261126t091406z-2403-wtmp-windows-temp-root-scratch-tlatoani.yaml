@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-26, on macuahuitl-fedora's direction after yolanda's msys run of #1627.
+packets:
+- packet_id: command-policy-windows-temp-root
+  order: 2403-wtmp
+  status: ready
+  kind: question
+  priority: p3
+  desired_release: v0.5
+  pickup_role: windows
+  capability_tags: [windows, command-policy, security-boundary]
+  size: S
+  implementer_tier: opus
+  estimated_hours: 2
+  title: 'Should the bash command policy count the native-Windows temp root as a scratch root?'
+  context: >-
+    On msys (yolanda, #1627 at b944baf05), pretooluse-command-policy arm 4's three scratch cases gave rc 4
+    consent:bash-policy:workspace-destroy: `rm -rf /tmp/x`, `rm -rf $TMPDIR/y` and `rm -rf "${TMPDIR:-/tmp}/z"`.
+    On Linux and macOS a path beneath /tmp or $TMPDIR needs no consent. The policy does not recognise the msys temp
+    spellings (/tmp under msys, C:/Users/<u>/AppData/Local/Temp, /c/Users/...), so on Windows every scratch delete
+    asks. A port must not widen a security boundary, so #1627 makes those three cases a named skip on native Windows
+    (skip:arm-4-…:native-windows-temp-root-is-not-scratch-2403-wtmp). This row asks the policy owner whether the
+    Windows temp root should be a scratch root, and if so which spellings. The roots themselves must still ask.
+  exit_criteria:
+  - 'A recorded decision: recognise the Windows temp root (and which spellings), or keep asking on Windows.'
+  - 'If recognised: arm 4''s skip is removed and the three cases run on msys; the root-itself NEGATIVE arms still ask.'
+  unscoreable: 'decision-row: the answer is a policy ruling; the measurement is pretooluse-command-policy arm 4 on msys once decided.'
+  next_action: 'Policy owner to rule; until then arm 4 skips by name on native Windows.'
+  provenance: 'tlatoanis-macbook-air 2026-11-26; measured by yolanda on msys.'
+  related: [2400-prg4, 2402-isab]
+  events:
+  - {type: filed, ts: '2026-11-26T09:14:06Z', host: tlatoanis-macbook-air, summary: 'filed: Windows temp root is not a scratch root in the command policy'}
