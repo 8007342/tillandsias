@@ -182,6 +182,7 @@ function L:run_queue(S, opts, ...)
         { "TILLANDSIAS_LAND_QUEUE_LOGDIR", o("LOGDIR", T .. "/logs") },
         { "TILLANDSIAS_TRUNK_BRANCH", "linux-next" },
     }
+    if opts.HEAVY_PROBE == "" then opts.HEAVY_PROBE = nil end  -- the .sh: ${ARM_HEAVY_PROBE:+...}, empty is unset
     if opts.HEAVY_PROBE then kv[#kv + 1] = { "TILLANDSIAS_LAND_QUEUE_HEAVY_PROBE", opts.HEAVY_PROBE } end
     for k, v in pairs(opts.extra or {}) do kv[#kv + 1] = { k, v } end
     local parts = { "cd " .. q(S.WORK) .. " && env -u TILLANDSIAS_LAND_QUEUE_BUNDLE_LOG" }
@@ -190,8 +191,11 @@ function L:run_queue(S, opts, ...)
     for _, p in ipairs(kv) do parts[#parts + 1] = p[1] .. "=" .. q(p[2]) end
     parts[#parts + 1] = "bash " .. q(self.QUEUE)
     for _, a in ipairs({ ... }) do parts[#parts + 1] = q(a) end
-    local out, rc = self:sh((opts.prefix or "") .. table.concat(parts, " ") .. " 2>&1" .. (opts.stdin or " </dev/null"),
-        { env = opts.env, env_unset = opts.env_unset, timeout_ms = opts.timeout_ms })
+    local cmd = table.concat(parts, " ") .. " 2>&1" .. (opts.stdin or " </dev/null")
+    -- opts.wrap(cmd) -> a whole script, for the arms whose subject needs a process
+    -- this runtime cannot hold: a live lock holder, a watcher running beside the queue.
+    local script = opts.wrap and opts.wrap(cmd) or ((opts.prefix or "") .. cmd)
+    local out, rc = self:sh(script, { env = opts.env, env_unset = opts.env_unset, timeout_ms = opts.timeout_ms })
     return out, rc
 end
 

@@ -66,7 +66,6 @@ scripts/test-headless-env-lock-is-single.sh 1
 scripts/test-hook-mover-enumeration-is-batched.sh 2
 scripts/test-host-slug-resolution.sh 2
 scripts/test-image-build-convergence.sh 1
-scripts/test-land-queue.sh 1
 scripts/test-litmus-budget-tally.sh 1
 scripts/test-metrics-log-path-agreement.sh 1
 scripts/test-no-competing-gate.sh 1

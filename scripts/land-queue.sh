@@ -57,7 +57,7 @@
 # at which point git stops catching it and this does.
 #
 # It is invisible to any fixture whose scaffold target never moves, which is why
-# scripts/test-land-queue.sh moves it from inside the stub gate rather than
+# the land-queue fixtures (scripts/lua/test-land-queue-*.lua) move it from inside the stub gate rather than
 # before the run.
 #
 # ═══ WHAT COUNTS AS EVIDENCE THAT SOMETHING LANDED ═══
@@ -564,7 +564,7 @@ GH_LIST_LIMIT="${TILLANDSIAS_LAND_QUEUE_GH_LIST_LIMIT:-500}"
 #   - every skipped step is named on the land's not-run: line.
 # ORDER 2174-dail (coordinator 2026-11-22): A GATE NEVER SEES THE QUEUE'S KNOBS. The
 # host's TILLANDSIAS_LAND_QUEUE_* settings (BATCH_K=4 on macuahuitl) reached the
-# gate, then test-land-queue.sh, then its inner queues, and redded run 26's train;
+# gate, then the land-queue fixture, then its inner queues, and redded run 26's train;
 # ARM 22's stamp leak was the same class. Called first in every gate subshell, so
 # the queue keeps its settings and the gate (and its fixtures) inherits none.
 # 2215-trad: nor GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE — a caller inside a git hook exports them, and a

@@ -1,0 +1,19 @@
+# Gate step 2398-zvug — the land queue's arms 14-35 (stale heads, repeat
+# conflicts, the preflight door, flaky, aborted gates, native lint, refused
+# pushes, paging, priority, re-rolled reds, lanes), split out of scripts/test-
+# land-queue.sh alongside steps 286 and 291/293.
+# About 15-60 s, gh stubbed, real bare remotes in scratch, no network.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the land queue, arms 14-35 (2398-zvug)"
+STEP_LUA="scripts/lua/test-land-queue-eviction.lua"
+STEP_ERROR="the land queue fixture (arms 14-35) failed — see the FAIL lines above"
+STEP_OK="land queue arms 14-35 behave"
+STEP_SECOND_REGIME="@PENDING-DARWIN@"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="timing"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="crates/tillandsias-macos-tray/** crates/tillandsias-macos-tray/src/** methodology/convergence.yaml plan/index.d/** scripts/land-queue.sh lib/lua/common/land_queue_fixture.lua scripts/lua/test-land-queue-eviction.lua"
