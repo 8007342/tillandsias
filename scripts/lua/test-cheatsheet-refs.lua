@@ -59,6 +59,8 @@ end
 local function scratch(name) -- three cheatsheets citing each other
     local rel = REL .. "/" .. name
     for _, sub in ipairs({ "", "/cheatsheets", "/cheatsheets/runtime", "/cheatsheets/agents" }) do fs.mkdir(rel .. sub) end
+    -- 2417-jzhh: require resolves lib/lua from TILLANDSIAS_REPO_ROOT, so a re-rooted tree carries the checker's module
+    fs.mkdir(rel .. "/lib/lua/common"); fs.write(rel .. "/lib/lua/common/listed_read.lua", fs.read("lib/lua/common/listed_read.lua"))
     fs.write(rel .. "/cheatsheets/runtime/a.md", table.concat({
         "# a", "", "@cheatsheet runtime/b.md, agents/c.md", "", "## See also", "",
         "- runtime/b.md — bare", "- `agents/c.md` — backticked", "", "## Next", "",

@@ -53,11 +53,13 @@ local list_family
 for i = 1, #arg do if arg[i] == "--list" then list_family = arg[i + 1] end end
 
 local files = fs.walk("openspec/litmus-tests", { suffix = ".yaml" })
+-- 2417-jzhh: every listed file is read, or the census blocks naming it
+local SRC = require("common.listed_read").read_all("litmus-pipe-census", files)
 local counts, piped, three_plus, total = {}, 0, 0, 0
 for _, f in ipairs(ORDER) do counts[f] = 0 end
 for _, f in ipairs(files) do
-    local okr, body = pcall(fs.read, f)
-    if okr then
+    local body = SRC[f]
+    if body then
         for ln, l in ipairs(lines(body)) do
             local c = l:match('^%s*%-?%s*command:%s*"(.*)"%s*$') or l:match("^%s*%-?%s*command:%s*'(.*)'%s*$")
             if c then

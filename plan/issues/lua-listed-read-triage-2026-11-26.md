@@ -14,6 +14,8 @@ A checker that wraps each read of a LISTED file in `pcall(fs.read)` and drops th
 
 **Method**: a script found each site, its enclosing `for … do` loop, and whether the next six lines report the failure. Every in-loop site was then read by hand. The overrides are the eight rows whose reasons differ from the defaults.
 
+Batch 1 is done: scripts/lua/test-listed-read-blocks-batch1.lua (gate step 962), red 8/8 first. check-centicolon-ratchet:71 and check-cheatsheet-source-anchors:72 moved to A while it was built (they fail safe).
+
 ## Batches (8–10 checkers per PR, each red first on a planted unreadable listed file)
 
 - batch 1:
@@ -21,7 +23,6 @@ A checker that wraps each read of a LISTED file in `pcall(fs.read)` and drops th
   - `scripts/lua/check-all-fragments-intact.lua`
   - `scripts/lua/check-backgrounded-jobs-redirect-stderr.lua`
   - `scripts/lua/check-ca-path-literals.lua`
-  - `scripts/lua/check-centicolon-ratchet.lua`
   - `scripts/lua/check-cheatsheet-frontmatter.lua`
   - `scripts/lua/check-cheatsheet-refs.lua`
   - `scripts/lua/check-cheatsheet-source-anchors.lua`
@@ -102,13 +103,13 @@ A checker that wraps each read of a LISTED file in `pcall(fs.read)` and drops th
 | `scripts/lua/check-carried-obligations.lua:382` | A | single read outside a listing loop: an optional or probed file; outside this sweep |
 | `scripts/lua/check-carried-obligations.lua:529` | A | single read outside a listing loop: an optional or probed file; outside this sweep |
 | `scripts/lua/check-centicolon-ratchet.lua:44` | A | single read outside a listing loop: an optional or probed file; outside this sweep |
-| `scripts/lua/check-centicolon-ratchet.lua:71` | B | a file from a listing whose read failure is dropped, so the check can pass over a file it never read |
+| `scripts/lua/check-centicolon-ratchet.lua:71` | A | fails safe: an unread file counts as not containing the needle, so the row is reported as vanished (a warning), never ok; advisory checker |
 | `scripts/lua/check-centicolon-ratchet.lua:80` | A | single read outside a listing loop: an optional or probed file; outside this sweep |
 | `scripts/lua/check-centicolon-ratchet.lua:94` | A | single read outside a listing loop: an optional or probed file; outside this sweep |
 | `scripts/lua/check-cheatsheet-frontmatter.lua:95` | B | a file from a listing whose read failure is dropped, so the check can pass over a file it never read |
 | `scripts/lua/check-cheatsheet-refs.lua:70` | B | a file from a listing whose read failure is dropped, so the check can pass over a file it never read |
 | `scripts/lua/check-cheatsheet-refs.lua:90` | B | a file from a listing whose read failure is dropped, so the check can pass over a file it never read |
-| `scripts/lua/check-cheatsheet-source-anchors.lua:72` | B | a file from a listing whose read failure is dropped, so the check can pass over a file it never read |
+| `scripts/lua/check-cheatsheet-source-anchors.lua:72` | A | fails safe: an unread candidate means the order is reported declared nowhere (a violation), never ok |
 | `scripts/lua/check-cheatsheet-source-anchors.lua:86` | B | a file from a listing whose read failure is dropped, so the check can pass over a file it never read |
 | `scripts/lua/check-cheatsheet-source-anchors.lua:91` | A | an unreadable anchor file is reported as a violation |
 | `scripts/lua/check-cheatsheet-sources.lua:46` | A | single read outside a listing loop: an optional or probed file; outside this sweep |
