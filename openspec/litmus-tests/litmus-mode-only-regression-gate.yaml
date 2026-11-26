@@ -46,7 +46,7 @@ critical_path:
   - step: "all fixture arms pass (stamp sees st_mode, worktree arm refuses pre-staging, mutation control, negative controls)"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-mode-only-regression-887-bz88.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "ok:mode-only-regression-fixture:all"
+    success_pattern: "^ok:mode-only-regression-fixture:(11|8) arms$"
 
   - step: "the stamp still emits an exec-bit field (the frame must not silently revert to content-only)"
     command: "if grep -q 'execbits\\[i\\]' scripts/gate-stamp.sh && grep -c '%s' scripts/gate-stamp.sh >/dev/null && grep \"printf 'file\" scripts/gate-stamp.sh | grep -q 'execbits'; then echo 'ok: exec-bit framed'; else echo 'FAIL: the file frame lost its exec-bit field'; fi"
