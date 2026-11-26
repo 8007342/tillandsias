@@ -1,0 +1,10 @@
+# Gate step 2416-pscn — data, not code (order 1072-b7eq).
+#
+# check-podman-sync-budgets must refuse when its listing names a file it cannot
+# read, never count it as zero matches.
+STEP_DESC="Checking podman-sync-budgets blocks on an unreadable listed file (2416-pscn)"
+STEP_LUA="scripts/lua/test-podman-sync-unreadable-blocks.lua"
+STEP_ERROR="check-podman-sync-budgets read ok over a file it could not read (2416-pscn) — see the FAIL lines above"
+STEP_OK="podman-sync unreadable-file refusal passed"
+STEP_SECOND_REGIME="doris 2026-11-26 msys ok:podman-sync-unreadable-blocks:2 arms"
+STEP_READS="scripts/lua/check-podman-sync-budgets.lua scripts/lua/test-podman-sync-unreadable-blocks.lua"
