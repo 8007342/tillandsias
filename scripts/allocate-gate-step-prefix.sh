@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # allocate-gate-step-prefix.sh — move a NEW gate step whose numeric prefix is
 # already taken to a free slot, AFTER the integrate and BEFORE the gate
-# (order 1162-qbrx). Called by scripts/land-on-platform-branch.sh in the only
+# (order 1162-qbrx). Called by scripts/land-on-platform-branch.sh and, per
+# merged candidate and train member, by scripts/land-queue.sh (2416-57a6), in the only
 # window that cannot race; runnable by hand for a hand-rolled push.
 #
 # WHY. scripts/gate-steps.d/NNN-<order>.step files are ordered by a scarce
