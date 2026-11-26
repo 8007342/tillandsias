@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-26, on macuahuitl's queue.
+packets:
+- packet_id: land-queue-arm60-b-order-red-on-darwin
+  order: 2401-mrdx
+  status: implemented
+  next_action: >-
+    Implemented, and the hypothesis is confirmed by measurement: BSD nice with no utility prints usage to stderr and exits
+    1, so the shadow stub's nice read was empty. The fixture's own read (L:sh, stdout and stderr together) parsed the
+    usage text as nil, then 0. Both now run nice, else ps -o nice= -p PID. ARM 60 was red on trunk and is green
+    here (22 arms). A stub reporting nice=0 turns it red again. Step 293's darwin record is re-measured.
+  events:
+  - {type: implemented, ts: '2026-11-26T13:34:03Z', host: tlatoanis-macbook-air, summary: 'BSD nice prints usage; read via ps fallback; ARM 60 green, mutant red'}
