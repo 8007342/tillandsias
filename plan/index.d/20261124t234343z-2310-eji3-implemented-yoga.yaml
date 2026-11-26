@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: litmus-steps-cannot-depend-on-a-tillandsias-plan-that-happens-to-be-on-path
+    field: status
+    value: implemented
+    ts: "2026-11-24T23:43:43Z"
+    host: yoga
+events:
+  - packet_id: litmus-steps-cannot-depend-on-a-tillandsias-plan-that-happens-to-be-on-path
+    event: {type: implemented, ts: "2026-11-24T23:43:43Z", host: yoga, summary: "on work/2310-eji3: the runner shims it; carried ports: test-litmus-mutation-arm-guard"}

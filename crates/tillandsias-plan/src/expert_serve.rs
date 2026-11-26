@@ -913,7 +913,7 @@ mod tests {
     }
 
     fn fixture_entry(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("tilland-serve-{tag}-{}", std::process::id()));
+        let dir = crate::test_scratch::path(format!("tilland-serve-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("entry dir");
         let chunk = serde_json::json!({

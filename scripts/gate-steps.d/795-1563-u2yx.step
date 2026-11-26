@@ -10,7 +10,7 @@
 #
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking a same-file capture of wsl.exe keeps every refused:preflight line (1563-u2yx)"
-STEP_SCRIPT="scripts/test-preflight-refused-name-lines-whole.sh"
+STEP_LUA="scripts/lua/test-preflight-refused-name-lines-whole.lua"
 STEP_ERROR="a Windows '> log 2>&1' capture of the builder hop can again overwrite refusal lines, or the hop lost exec/exit-code/signal behaviour (1563-u2yx); see which arm failed above"
 STEP_OK="the builder hop keeps every refusal line in a same-file capture, and still execs for terminals and pipes"
 STEP_SECOND_REGIME="yolanda-windows 2026-10-09 msys ok:wsl-capture-fixture:7/7"
@@ -20,4 +20,4 @@ STEP_LANES="checkout"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/lib-wsl-capture.sh scripts/test-preflight-refused-name-lines-whole.sh scripts/with-wsl2-builder.sh"
+STEP_READS="scripts/lib-wsl-capture.sh scripts/lua/test-preflight-refused-name-lines-whole.lua scripts/with-wsl2-builder.sh"

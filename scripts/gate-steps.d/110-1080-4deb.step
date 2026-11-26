@@ -17,12 +17,12 @@
 #
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking every packet that carries a claim or landed fix is visible to the reader (1080-4deb)"
-STEP_SCRIPT="scripts/test-ledger-write-reaches-its-reader.sh"
+STEP_LUA="scripts/lua/test-ledger-write-reaches-its-reader.lua"
 STEP_ERROR="a write still lands where no reader consults it — see the verdict line above (1080-4deb)"
 STEP_OK="Ledger-write-reaches-its-reader check passed"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:ledger-write-reaches-its-reader:20"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-26 darwin ok:ledger-write-reaches-its-reader:20 arms (work/2387-lrg2 @ 4e3a2a540)"
 
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="plan/index.d/** plan/index.yaml scripts/plan-binary-probe.sh scripts/test-ledger-write-reaches-its-reader.sh scripts/test-scorable-obligation-gate.sh"
+STEP_READS="plan/index.d/** plan/index.yaml scripts/plan-binary-probe.sh scripts/lua/test-ledger-write-reaches-its-reader.lua scripts/lua/test-scorable-obligation-gate.lua"

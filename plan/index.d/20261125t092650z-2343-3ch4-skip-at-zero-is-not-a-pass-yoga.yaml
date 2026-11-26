@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-gate-step-whose-last-verdict-is-a-skip-is-not-printed-as-passed
+    order: "2343-3ch4"
+    status: in_progress
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, lua, fixtures]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-plan/src/script_run.rs
+      - scripts/lua/test-gate-step-skip-is-not-a-pass.lua
+    title: "a gate step that prints skip: and exits 0 is reported with its STEP_OK line, as if it had passed"
+    context: |
+      verdict.skip in the Lua kit exits 0, and script_run::classify answers Ok for exit 0 before it looks for a skip line, so the
+      gate loop prints STEP_OK for a check that did not run. A static survey on 2026-11-25 finds 54 of 287 gate steps with a skip
+      that exits 0, one of them with a STEP_SKIP_EXIT. Found by the coordinator on 1537 (step 345).
+    exit_criteria:
+      - "A step that skips at exit 0 does not print STEP_OK through build.sh --gate-steps. Pre-fix result: FAILS, STEP_OK printed."
+      - "NEGATIVE CONTROL: a real pass, one that names a skipped arm before its ok line included, still prints STEP_OK."
+      - "The survey names each such step and whether it declares STEP_SKIP_EXIT."
+    unscoreable: "fixture-scored: the fixture drives build.sh --gate-steps"
+    provenance: "coordinator macuahuitl-fedora 2026-11-25, from yoga's #1537"
+    related: [1087-h2z9, 1384-bqhy, 1183-j9dk, 2332-rxkr]
+    events:
+      - {type: claimed, ts: "2026-11-25T09:26:50Z", host: yoga, summary: "claimed; work ref work/2343-3ch4"}

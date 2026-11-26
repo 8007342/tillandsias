@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: nine-e-to-t-shell-fixtures-ported-to-lua
+    field: status
+    value: implemented
+    ts: "2026-11-26T03:44:02Z"
+    host: yoga
+events:
+  - packet_id: nine-e-to-t-shell-fixtures-ported-to-lua
+    event: {type: implemented, ts: "2026-11-26T03:44:02Z", host: yoga, summary: "implemented on work/2387-b6v2: seven ported. Two stay shell: host-kind-evidence-not-from-workspace (arm 2 mints a consent token, which the agent door refuses by operator ruling 3, 1443-9f5w) and gate-stamp-memoization (arm 14 edits a tracked file in the live checkout and 11-14 borrow its gate stamp, which check-checkout-writers 1611-imnj refuses for Lua)"}

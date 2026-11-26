@@ -2005,7 +2005,7 @@ distributed_work:
         host leaves the batch untouched — never idle. Bare-metal hosts never
         enter the branch: a host that runs many harnesses proves nothing
         about any one of them.
-      pinned_by: "litmus:harness-affinity-selection-shape (fixture-proven; scripts/test-harness-affinity-selection.sh)"
+      pinned_by: "litmus:harness-affinity-selection-shape (fixture-proven; scripts/lua/test-harness-affinity-selection.lua)"
       live_signal_gap: >
         Order 570: the tray launch spec does not yet export TILLANDSIAS_AGENT
         into live forges, so until it lands the affinity branch fires only in
@@ -2244,7 +2244,7 @@ distributed_work:
       ^refused:agent-identity:empty-(explicit-id|platform|workstation|backend|timestamp)$
       and a non-zero exit — BEFORE any append-event. A refused identity is a
       blocked claim, never an improvised one.
-    fixture: scripts/test-agent-identity.sh
+    fixture: scripts/lua/test-agent-identity.lua
     pinned_by: litmus:agent-identity-canonical-source-shape
     consumers:
       - "skills/advance-work-from-plan/SKILL.md §1.4 (Create Agent ID) and §3 (claim events)"

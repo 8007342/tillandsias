@@ -54,18 +54,18 @@
 # compile rather than after; it is placed in the ordinary lane here only because
 # moving it is a separate change to a different file.
 #
-# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# STEP_LUA is a LITERAL path on purpose: a binding assembled from a
 # variable is invisible to every name-based scan, including the
 # bound-or-retired guard (1063-nraf). Keep it a plain string.
 STEP_DESC="Checking a litmus critical_path item cannot merge into its predecessor (1252-znbn)"
-STEP_SCRIPT="scripts/test-litmus-item-opener-refused.sh"
+STEP_LUA="scripts/lua/test-litmus-item-opener-refused.lua"
 STEP_ERROR="a critical_path item opened by a key other than 'step:' merges backwards into the previous step and the file silently loses a step (1252-znbn) — read which arm failed above; arm 3 failing means the guard itself is no longer exercised"
 STEP_OK="Litmus critical_path items cannot merge silently"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:litmus-item-opener-refused:4/4"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:litmus-item-opener-refused:4 arms (2324-xme7 @f13433492, Lua port)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="runs the litmus runner (it wipes its runtime dirs)"
 STEP_LANES="litmus"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/run-litmus-test.sh scripts/test-litmus-item-opener-refused.sh"
+STEP_READS="scripts/run-litmus-test.sh scripts/lua/test-litmus-item-opener-refused.lua"

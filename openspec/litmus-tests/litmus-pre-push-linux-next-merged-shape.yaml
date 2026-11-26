@@ -27,19 +27,19 @@ size: instant
 
 preconditions:
   - workspace contains scripts/hooks/pre-push-linux-next-merged.sh
-  - workspace contains scripts/test-pre-push-linux-next-merged.sh
+  - workspace contains scripts/lua/test-pre-push-linux-next-merged.lua
   - git and bash are available in PATH
 
 critical_path:
   - step: "guard and fixture parse and are executable"
-    command: "bash -n scripts/hooks/pre-push-linux-next-merged.sh && bash -n scripts/test-pre-push-linux-next-merged.sh && test -x scripts/hooks/pre-push-linux-next-merged.sh && test -x scripts/test-pre-push-linux-next-merged.sh && echo 'ok: parses'"
+    command: "bash -n scripts/hooks/pre-push-linux-next-merged.sh && test -f scripts/lua/test-pre-push-linux-next-merged.lua && test -x scripts/hooks/pre-push-linux-next-merged.sh && echo 'ok: parses'"
     timeout_ms: 5000
     expected_behavior: "ok: parses"
 
   - step: "all fixture scenarios pass (refusal, allow twin, scope, deletion, no-ref, mutation control, skill pins)"
-    command: "bash scripts/test-pre-push-linux-next-merged.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-pre-push-linux-next-merged.lua"
     timeout_ms: 60000
-    expected_behavior: "ok:pre-push-linux-next-merged-fixture:17"
+    expected_behavior: "ok:pre-push-linux-next-merged-fixture:17 arms"
 
   - step: "the installed-hook composition includes the merge gate (installer generates a versioned hook with the merge gate composed)"
     # The property is COMPOSITION — the installer's generated hook
@@ -53,5 +53,5 @@ critical_path:
     expected_behavior: "ok: composed"
 
 evidence:
-  artifact: "scripts/hooks/pre-push-linux-next-merged.sh + scripts/test-pre-push-linux-next-merged.sh"
+  artifact: "scripts/hooks/pre-push-linux-next-merged.sh + scripts/lua/test-pre-push-linux-next-merged.lua"
   measured_on: "macOS Darwin 25.6.0 2026-08-22 — 12/12 fixture checks green, mutation control red->green verified"

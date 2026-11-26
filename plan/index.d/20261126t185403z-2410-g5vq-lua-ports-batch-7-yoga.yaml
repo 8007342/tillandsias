@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: shell-fixtures-ported-to-lua-batch-7
+    order: "2410-g5vq"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 6
+    owned_files:
+      - scripts/lua/test-build-image-network-isolation.lua
+      - scripts/lua/test-forge-localization-staged.lua
+      - scripts/lua/test-claude-forge-remote-control-args.lua
+      - scripts/lua/test-guest-crashloop-detection.lua
+      - scripts/lua/test-headless-env-lock-is-single.lua
+      - scripts/lua/test-spawn-failure-names-program.lua
+      - scripts/lua/test-forge-src-budget-report.lua
+    title: "shell fixtures ported to Lua (batch 7: network-isolation, localization, remote-control, crashloop, env-lock, spawn-failure, src-budget)"
+    context: |
+      Coordinator-approved 2026-11-26 (macuahuitl): real ports, callers repointed, each .sh deleted.
+      Credential fixtures (codex-oauth, github-token, git-credential-helper) left out as operator territory.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its main assertions are mutated; callers run the .lua; the .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by gate steps and litmus tests"
+    provenance: "coordinator queue 2026-11-26, yoga"
+    related: [2372-snfs]
+    events:
+      - {type: claimed, ts: "2026-11-26T18:54:03Z", host: yoga, summary: "claimed; work ref work/2410-g5vq"}

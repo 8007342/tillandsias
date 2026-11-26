@@ -857,8 +857,8 @@ impl Envelope {
             self.answer = format!(
                 "{head_line}\nSTALE LEDGER: this answer comes from {} ({}), which is missing {} \
                  plan commit(s) that {} has ({}, {}). Rows shown may already be claimed or \
-                 closed; fetch and read trunk, and run scripts/check-claims-across-branches.sh \
-                 before claiming.\n{}",
+                 closed; fetch and read trunk, and run tillandsias-plan script run \
+                 scripts/lua/check-claims-across-branches.lua -- <id> before claiming.\n{}",
                 short(&s.head_commit),
                 s.head_date.as_deref().unwrap_or("date unknown"),
                 s.plan_commits_missing,
@@ -2790,7 +2790,7 @@ events:
     /// the ref it names lives in the shared common directory.
     #[test]
     fn head_sha_resolves_through_a_worktree_commondir_layout() {
-        let d = std::env::temp_dir().join(format!("tilland-commondir-{}", std::process::id()));
+        let d = crate::test_scratch::path(format!("tilland-commondir-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         let sha = "1234567890abcdef1234567890abcdef12345678";
         std::fs::create_dir_all(d.join("main/.git/refs/heads")).expect("mkdir");
@@ -2871,7 +2871,7 @@ events:
     /// answer had no citations and downgraded to unsupported.
     #[test]
     fn plan_next_falls_through_past_uncitable_top_rows() {
-        let d = std::env::temp_dir().join(format!("tilland-69mn-{}", std::process::id()));
+        let d = crate::test_scratch::path(format!("tilland-69mn-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("plan/index.d")).unwrap();
         std::fs::write(

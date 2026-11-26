@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: timing-record-carries-reproduced-to-lua
+    order: 2330-qwpk
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [shell-to-lua, gate]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-timing-record-carries-reproduced.lua
+    title: "Port test-timing-record-carries-reproduced.sh to Lua"
+    context: |
+      The shell-to-lua item carried by 2328-a2x2 (evicted carried-silent in land run 61). On common.fixture, at its
+      existing caller (litmus timing-telemetry-implausible-guard-shape).
+    exit_criteria:
+      - "10/10 on Linux under the same verdict line"
+      - "mutants red: invalid coerced to no, yes|no never written, no dropped, field order moved, timing_emit drops or defaults its fifth argument, batch takes any status, drops pass, drops failed_step"
+    unscoreable: "fixture-scored: the port is the pin"
+    provenance: "eviction of #1526, macuahuitl-fedora 2026-11-25"
+    ports: [test-timing-record-carries-reproduced.sh]
+    related: [1242-4x53, 2328-a2x2]
+    events:
+      - {type: claimed, ts: '2026-11-25T03:47:10Z', host: calmecacpilli, summary: one shell fixture to Lua}

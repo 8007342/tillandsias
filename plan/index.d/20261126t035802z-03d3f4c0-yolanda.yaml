@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: revive-1191-two-check-deciders
+    field: status
+    value: completed
+    ts: "2026-11-26T03:58:02Z"
+    host: yolanda
+
+events:
+  - packet_id: revive-1191-two-check-deciders
+    event:
+      type: completed
+      ts: "2026-11-26T03:58:02Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: PR #1596 merged to linux-next as 9217bf1794c4b76ce269d584f52583b822e3dfd0 (land run 88)
+  - packet_id: revive-1191-two-check-deciders
+    event:
+      type: note
+      ts: "2026-11-26T03:58:02Z"
+      host: yolanda
+      summary: |-
+        landed; #1191's two Lua ports carried byte-identical, relay-preflight ok on macuahuitl

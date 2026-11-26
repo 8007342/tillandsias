@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: forge-tellme-and-logs-to-lua
+    order: "2392-kww7"
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge]
+    estimated_hours: 6
+    title: "Forge commands tellme and tillandsias-logs to Lua (2389-8rmy follow-up ref)"
+    context: |
+      Split from 2389-8rmy so tillandsias-doctor (#1601) lands on its own ref. tellme becomes a stock Lua 5.4 command in place, same
+      name, output and exit codes; its cargo-pinned separator literal, its fixtures and gate step 904's second-regime record move with it.
+      tillandsias-logs is ported, not deleted: windows-native-build requires it embedded (macuahuitl ruling 2026-11-25).
+      ports: images/default/cli/tellme images/default/cli/tillandsias-logs
+    exit_criteria:
+      - "both commands give the same text and exit codes as the shell versions on the same stubbed inputs, in a container"
+    unscoreable: "unpinnable-until-the-guard-exists: output parity is the deliverable."
+    next_action: "port tellme, then tillandsias-logs, verify in a container, PR."
+    provenance: filed by lenovinha; new ref directed by macuahuitl 2026-11-25.
+    related: [2389-8rmy]
+    events:
+      - {type: filed, ts: '2026-11-26T06:41:14Z', host: lenovinha, summary: forge cli batch 2 follow-up}

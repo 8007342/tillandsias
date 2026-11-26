@@ -6,14 +6,14 @@
 #
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking session-tokens measures main_ctx from the transcript (1437-3pj7)"
-STEP_SCRIPT="scripts/test-session-tokens.sh"
+STEP_LUA="scripts/lua/test-session-tokens.lua"
 STEP_ERROR="session-tokens stopped measuring main_ctx from the transcript, double-counted repeated message lines, or reported a guess where it should say absent (1437-3pj7) — see the verdict line above"
 STEP_OK="Session-tokens instrument passed"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-27 darwin ok:session-tokens:5/5"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:session-tokens:5 arms"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="builds with cargo into the shared target"
 STEP_LANES="cargo"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/cycle-metrics.sh scripts/plan-binary-probe.sh scripts/session-tokens.sh scripts/test-session-tokens.sh"
+STEP_READS="scripts/cycle-metrics.sh scripts/plan-binary-probe.sh scripts/session-tokens.sh scripts/lua/test-session-tokens.lua"

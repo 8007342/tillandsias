@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-plan-binary-probe-release-over-debug-fixture-to-lua
+    order: "2315-yjjc"
+    status: in_progress
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [windows, lua-first, shell-to-lua]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-plan-binary-probe-release-over-debug.lua
+    title: "One whole-file shell-to-Lua port: test-plan-binary-probe-release-over-debug runs from scripts/lua, with its MSYS control executed"
+    context: |
+      ports: test-plan-binary-probe-release-over-debug
+      Handed over from the p-s range because its main arm runs only on MSYS. The shell fixture never ran the pre-fix
+      probe; the port runs a copy without the .exe-sibling guard and wants the debug build, which is the defect.
+    exit_criteria:
+      - "msys: the probe answers the release .exe, and the copy without the guard answers the debug one. Linux: the extensionless order arm is green."
+      - "Gate step 710 runs the .lua; the .sh and its portability floor lines are gone."
+    unscoreable: "unpinnable-until-the-guard-exists: the control arm is the deliverable"
+    next_action: "Land the PR."
+    provenance: "coordinator macuahuitl-fedora 2026-11-24, offered from the p-s range"
+    related: [1508-7s4w, 2301-eny9]
+    events:
+      - {type: filed, ts: '2026-11-24T18:44:54Z', host: yolanda, summary: filed and claimed by yolanda; the msys arms pass}

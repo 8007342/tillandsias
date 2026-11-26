@@ -18,13 +18,13 @@ description: >
 
 preconditions:
   - workspace contains scripts/push-plan-fragments-to-trunk.sh
-  - workspace contains scripts/test-plan-fragments-lane-affordance.sh
+  - workspace contains scripts/lua/test-plan-fragments-lane-affordance.lua
 
 critical_path:
   - step: "lane refusals carry why and remedy, the stale-binary push names its real cause, two executed remedies clear, and no refusal site lacks an affordance"
-    command: "bash scripts/test-plan-fragments-lane-affordance.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-plan-fragments-lane-affordance.lua"
     timeout_ms: 180000
-    expected_behavior: "ok:plan-fragments-lane-affordance:5"
+    expected_behavior: "ok:plan-fragments-lane-affordance:5 arms"
 
 observability:
   traces:

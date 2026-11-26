@@ -7,7 +7,8 @@ description: >
   held image dies as "The boot loader is invalid" — a string that describes a
   corrupt EFI store and sends the reader at --reset-guest, which DESTROYS the
   guest disk and the in-VM vault to repair what one `kill` clears. This binds
-  scripts/test-macos-vz-orphan-diagnosis.sh, which asserts the enriched text
+  scripts/lua/test-macos-vz-orphan-diagnosis.lua (ported from the .sh by
+  2293-vzod), which asserts the enriched text
   names the holding pid and steers away from --reset-guest, and that a
   SIGKILLed tray leaves no helper behind.
 severity: critical
@@ -27,14 +28,14 @@ caveats:
   - leaves_no_residue: "The fixture kills the guest it started, and any holder it finds, on every exit path"
 
 critical_path:
-  - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-macos-vz-orphan-diagnosis.sh && test -x scripts/test-macos-vz-orphan-diagnosis.sh && echo PARSE-OK"
+  - step: "the fixture is present (the runner parses it in the next step, and a parse error fails it)"
+    command: "test -f scripts/lua/test-macos-vz-orphan-diagnosis.lua && echo PARSE-OK"
     timeout_ms: 10000
     success_pattern: "PARSE-OK"
     failure_pattern: "syntax error|No such file"
 
   - step: "the diagnosis names the holder, refuses --reset-guest, and the mutation arm reds"
-    command: "scripts/test-macos-vz-orphan-diagnosis.sh 2>&1 | grep -E '^(ok|violation|unsupported|skip|refused):macos-vz-orphan-diagnosis:'"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-macos-vz-orphan-diagnosis.lua 2>&1"
     timeout_ms: 600000
     # ASSERT THE OUTPUT, not the source: the fixture's arms carry the meaning,
     # and re-implementing them here would pass the moment one was weakened.

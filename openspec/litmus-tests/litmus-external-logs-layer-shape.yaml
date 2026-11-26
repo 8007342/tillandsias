@@ -13,12 +13,14 @@ critical_path:
   - step: "verify the external logs root helper is stable"
     command: "cargo test -p tillandsias-core config::tests::external_logs_dir_points_to_state_sibling -- --exact"
     timeout_ms: 30000
-    expected_behavior: "external_logs_dir_points_to_state_sibling"
+    assert_exit: 0
+    assert_output_matches: "^test .*::external_logs_dir_points_to_state_sibling [.]{3} ok$"
 
   - step: "verify the role-specific helper appends the role directory"
     command: "cargo test -p tillandsias-core config::tests::external_logs_role_dir_appends_role -- --exact"
     timeout_ms: 30000
-    expected_behavior: "external_logs_role_dir_appends_role"
+    assert_exit: 0
+    assert_output_matches: "^test .*::external_logs_role_dir_appends_role [.]{3} ok$"
 
 observability:
   traces:

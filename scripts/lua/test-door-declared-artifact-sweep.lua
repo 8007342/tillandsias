@@ -6,8 +6,8 @@
 -- declared checkout writer, or a guard that names one, it removes the
 -- writer's declared in-checkout artifacts (`artifacts=<basename-glob>` in
 -- scripts/portability/checkout-writers.txt). Without that, a writer killed at
--- the deadline leaves copies in scripts/ (the .mutant-lcnum-* copies of
--- test-awk-float-lc-numeric.sh), and check-bare-mktemp refuses the tree on them.
+-- the deadline leaves copies in scripts/ (as the .mutant-lcnum-* copies of
+-- test-awk-float-lc-numeric.sh did until 2278-x4tw), and check-bare-mktemp refuses the tree on them.
 --
 -- build.sh's _pf_run_guard and its sweep helpers are EXTRACTED at run time,
 -- not copied, and run with SCRIPT_DIR pointed at a scratch git repository

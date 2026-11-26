@@ -141,6 +141,29 @@ requirement by design (it runs before any binary exists).
 - **THEN** `--check` prints one `warn:shell-ratchet:new-shell-fixture:` line naming the Lua fixture pattern and exits 0
 - **AND** the warn names the open native macOS / Windows managed-process rows as the reason the arm is advisory, not an unlanded `proc.spawn`
 
+### Requirement: Shell-to-Lua fixture ports land in batches of eight to ten
+<!-- req-id: 3aa5a108 -->
+
+A change that ports `scripts/test-*.sh` fixtures to `scripts/lua/` SHOULD carry
+8-10 ports. It runs mutants against each fixture's main assertions only, 2-3
+per fixture, and names every surviving mutant in its description. A change
+that ports a library, hook, tool or gate-decider script SHOULD carry 3-4 ports
+with the full mutant set, because other scripts depend on those. A test that
+never runs (no phase a run selects, or calling a probe, example or helper
+that does not exist) SHOULD be retired with its reason in the file rather
+than ported. Shell under `images/` is ported on its own track and verified
+in a container on a podman host, never inside a fixture batch. Canonical
+detail: `methodology/convergence.yaml` -> `carried_obligations.backlogs`
+(`shell-to-lua`) -> `batching`. Provenance: operator 2026-11-25, approving
+the coordinator's recommendation after the daily `.sh` drop plateaued near 60
+while the land queue sat idle.
+
+#### Scenario: A fixture batch names its survivors
+
+- **WHEN** a host opens a PR porting ten `scripts/test-*.sh` fixtures
+- **THEN** the PR deletes the ten `.sh` files, lowers the floors through `--dump-floors`, and lists each surviving mutant by fixture and assertion
+- **AND** the land queue gates it as one member of a train like any other PR
+
 ### Requirement: The actions-budget gate reads cloud.usage
 <!-- req-id: 34961e27 -->
 

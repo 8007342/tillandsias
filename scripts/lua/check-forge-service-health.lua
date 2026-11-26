@@ -10,7 +10,7 @@
 -- Exit 0 on ok/skip, 1 on down. The .sh printed `failed:` for down; the runner
 -- admits no `failed:` kind, so scripts/forge-validate.sh reads both spellings.
 --
--- FORGE_SERVICE_HEALTH_CHECK_DIR is the fixture seam (scripts/test-forge-validate.sh):
+-- FORGE_SERVICE_HEALTH_CHECK_DIR is the fixture seam (scripts/lua/test-forge-validate.lua):
 -- it holds `services`, `vault` and `outbound` stubs in place of the real
 -- commands. proc.run children start from a scrubbed environment, so the proxy,
 -- Vault and CA variables those commands read are forwarded explicitly.

@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: checkout-writers-door-arms-hold-on-native-windows
+    order: "2290-xbx8"
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, fixtures, gate]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-checkout-writers.lua
+    title: "the checkout-writers door arms hold on native Windows, and a hold that never happened is a setup refusal, not a red arm"
+    context: |
+      Measured on yolanda 2026-11-24, native msys, trunk 86a8786ce. Arms 10 and 11 answer held=no left=none. door() hands
+      door.sh ROOT/REL/shim, which is C:/... natively, and door.sh prepends it to a colon-separated PATH, which splits it at
+      the drive colon. The timeout shim is never found, so nothing is held and the arms judge nothing, yet they read as red.
+      A scratch copy with the shim in /c/... form answers ok:checkout-writers-fixture:21 arms.
+      In a one-commit tree (fleet-run) git show PRE_REV answers 128 and reds 10/11, where arms 12 and 17 print not run.
+    exit_criteria:
+      - "On native msys in a checkout with history the fixture answers ok:checkout-writers-fixture:21 arms."
+      - "A shim that is never found refuses as setup-failed, shown by a control that hands door.sh a shim path that does not exist."
+      - "A tree without PRE_REV prints not run for 10/11; a tree that has it and whose guard cannot be pinned still fails."
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture is the deliverable"
+    next_action: "Convert the shim path only when ROOT matches a drive letter."
+    provenance: "yolanda's msys run of step 461, 2026-11-24; yoga asked yolanda to take it"
+    related: [1611-imnj, 2287-mg7v]
+    events:
+      - {type: filed, ts: "2026-11-24T09:20:14Z", host: yolanda, summary: "filed and taken by yolanda at yoga's request"}

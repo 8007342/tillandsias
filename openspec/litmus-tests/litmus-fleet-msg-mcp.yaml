@@ -33,7 +33,7 @@ size: instant
 # server started before the binary existed answers ": command not found".
 
 preconditions:
-  - workspace contains scripts/test-fleet-msg-mcp.sh
+  - workspace contains scripts/lua/test-fleet-msg-mcp.lua
   - workspace contains images/default/config-overlay/mcp/forge-plan.sh
   - workspace contains images/default/entrypoint-forge-codex.sh
   - workspace contains images/default/entrypoint-forge-opencode.sh
@@ -41,15 +41,10 @@ preconditions:
   - jq is available in PATH
 
 critical_path:
-  - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-fleet-msg-mcp.sh && test -x scripts/test-fleet-msg-mcp.sh && echo 'ok: fleet-msg-mcp-fixture-parses'"
-    timeout_ms: 3000
-    expected_behavior: "ok: fleet-msg-mcp-fixture-parses"
-
-  - step: "eight arms: surface (with the no-msg_ack negative control), round-trip, secret (negative control), degraded, argv, codex entrypoint, opencode entrypoint, protocol error"
-    command: "out=$(bash scripts/test-fleet-msg-mcp.sh 2>&1); rc=$?; case \"$out\" in (*'ok:fleet-msg-mcp:9/9'*) [ \"$rc\" = 0 ] && echo 'ok: fleet-msg-mcp 9/9' ;; (*) printf '%s\\n' \"$out\" | grep -E '^(FAIL|fail:)' | head -12; exit 1 ;; esac"
+  - step: "nine arms: surface (with the no-msg_ack negative control), round-trip, secret (negative control), degraded, argv, codex entrypoint, opencode entrypoint, protocol error, late binary"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-fleet-msg-mcp.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "ok: fleet-msg-mcp 9/9"
+    expected_behavior: "ok:fleet-msg-mcp:9/9"
 
 observability:
   traces:
@@ -63,8 +58,8 @@ observability:
 
 rollback:
   on_failure: >
-    A named arm failed. Re-run `bash scripts/test-fleet-msg-mcp.sh` and read
+    A named arm failed. Re-run `scripts/lua/test-fleet-msg-mcp.lua` and read
     its FAIL lines. Do not add a msg_ack tool, let a body reach argv, skip the
     capability_gap probe on an old binary, or have the entrypoints' dry-run
     seam move anything out of inbox/new to make it pass.
-  command: "bash scripts/test-fleet-msg-mcp.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-fleet-msg-mcp.lua 2>&1"

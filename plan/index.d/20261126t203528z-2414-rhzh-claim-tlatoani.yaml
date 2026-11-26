@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: images-warp-build-refuses-vendor-version-drift
+    field: status
+    value: in_progress
+    ts: "2026-11-26T20:35:28Z"
+    host: tlatoanis-macbook-air
+events:
+  - packet_id: images-warp-build-refuses-vendor-version-drift
+    event: {type: claimed, ts: "2026-11-26T20:35:28Z", host: tlatoanis-macbook-air, summary: "claimed at macuahuitl's request; work/2414-rhzh bumps WARP_VERSION to 2026.8.2115.0 after reading the changelog and diffing both debs (no licence/terms change). Image build not run here: darwin podman machine is stopped; needs a Linux host"}

@@ -34,7 +34,7 @@
 -- passes exactly as a correct one does. (Restored from the deleted
 -- check-requirement-ids.sh header, a9a61de58^, at the coordinator's request.)
 --
--- TILLANDSIAS_SPEC_ROOT is a TEST SEAM (scripts/test-requirement-ids.sh points
+-- TILLANDSIAS_SPEC_ROOT is a TEST SEAM (scripts/lua/test-requirement-ids.lua points
 -- it at a fake openspec tree, outside the repo, exactly like
 -- scripts/lua/check-spec-registry-status.lua's TILLANDSIAS_SPEC_ROOT); -- @read-env
 -- widens fs.read/fs.walk under it. Production never sets it.

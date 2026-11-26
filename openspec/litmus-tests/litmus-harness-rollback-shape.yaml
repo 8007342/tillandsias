@@ -20,9 +20,9 @@ preconditions:
 
 critical_path:
   - step: "rollback fixtures pass (broken @latest reverts, no-last-good is loud, healthy records)"
-    command: "scripts/test-harness-rollback.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-harness-rollback.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "PASS: harness rollback fixtures"
+    expected_behavior: "ok:harness-rollback:7 arms"
 
   - step: "updater probes fresh installs and has a rollback branch"
     command: "grep -Fq 'harness_record_last_good' images/default/lib-common.sh && grep -Fq 'rolling back to last-good' images/default/lib-common.sh && echo 'ok: rollback-wired'"
@@ -56,4 +56,4 @@ rollback:
     expanded-at-set npm_lock trap — without them one broken upstream
     publish downs every forge lane (order 284) and one leaked lock
     disables harness updates permanently.
-  command: "scripts/test-harness-rollback.sh; grep -n 'npm_lock' images/default/lib-common.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-harness-rollback.lua; grep -n 'npm_lock' images/default/lib-common.sh"

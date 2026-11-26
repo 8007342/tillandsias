@@ -81,6 +81,8 @@ pub mod lua_std;
 pub mod methodology;
 pub mod safe_roots;
 pub mod sibling_claims;
+#[doc(hidden)]
+pub mod test_scratch;
 /// ORDER 1506-nvqt — the fleet message bus's pure checks (body budget, secret
 /// shapes, TTL bounds), shared by `msg send` and the mover. Lives in the
 /// `tillandsias-msg` crate since 1506-q7ab so the mover can link it.
@@ -2086,7 +2088,7 @@ plan_index:
     /// total confidence. Folds, not greps.
     #[test]
     fn a_packet_fragment_changes_the_rendered_release_count() {
-        let d = std::env::temp_dir().join(format!("tilland-count-{}", std::process::id()));
+        let d = crate::test_scratch::path(format!("tilland-count-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         let index = d.join("plan/index.yaml");
         std::fs::create_dir_all(d.join("plan/index.d")).expect("mkdir");

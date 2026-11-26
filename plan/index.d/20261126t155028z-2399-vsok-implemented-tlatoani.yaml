@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: relay-preflight-must-not-drive-the-macos-vm
+    field: status
+    value: implemented
+    ts: "2026-11-26T15:50:28Z"
+    host: tlatoanis-macbook-air
+events:
+  - packet_id: relay-preflight-must-not-drive-the-macos-vm
+    event: {type: implemented, ts: "2026-11-26T15:50:28Z", host: tlatoanis-macbook-air, summary: "drives-vm marker + opt-in; fixture red-first 6/6, test-relay-preflight.sh 14/14"}

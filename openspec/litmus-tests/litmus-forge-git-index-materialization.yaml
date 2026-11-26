@@ -21,13 +21,13 @@ description: >
 
 preconditions:
   - workspace contains images/default/lib-common.sh
-  - workspace contains scripts/test-forge-git-index-materialization.sh
+  - workspace contains scripts/lua/test-forge-git-index-materialization.lua
 
 critical_path:
   - step: "absent index is materialised, and the mass-deletion commit is prevented"
-    command: "scripts/test-forge-git-index-materialization.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-git-index-materialization.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "PASS: forge git index materialization fixture (order 425)"
+    expected_behavior: "ok:forge-git-index-materialization:5 arms"
 
   - step: "the guard runs on every lane via configure_git_identity"
     command: "grep -Fq 'ensure_forge_git_index' images/default/lib-common.sh && sed -n '/^configure_git_identity()/,/^}/p' images/default/lib-common.sh | grep -Fq 'ensure_forge_git_index' && echo 'ok: wired for every lane'"

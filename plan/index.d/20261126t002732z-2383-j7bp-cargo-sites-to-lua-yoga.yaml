@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-cargo-site-registry-is-a-lua-module
+    order: "2383-j7bp"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 6
+    owned_files:
+      - lib/lua/common/cargosites.lua
+    title: "the cargo-site registry is a Lua module, and lib-cargo-sites.sh is deleted"
+    context: |
+      Claimed by yoga before the work. The registry (1005-m6rz) and the resolver had no shell caller: the only reader was a Lua fixture, and
+      check-cheatsheet-tiers.lua carried its own copy of the loop. First of the lib/with track (coordinator ruling 2026-11-26: option A,
+      bootstrap-path libraries stay shell).
+    exit_criteria:
+      - "the registry and resolver live in lib/lua/common/cargosites.lua; check-cheatsheet-tiers.lua uses it; the fixture reads it; the .sh is deleted; full mutants."
+    unscoreable: "fixture-scored: test-cycle-preflight-cargo-resolution.lua is the deliverable's test"
+    provenance: "coordinator 2026-11-26 (lib/with track), yoga"
+    related: [2382-ubmc]
+    events:
+      - {type: claimed, ts: "2026-11-26T00:27:32Z", host: yoga, summary: "claimed; work ref work/2383-j7bp"}

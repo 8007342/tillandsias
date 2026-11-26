@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: land-queue-caps-heavy-members-per-train
+    order: 2281-xx62
+    status: in_progress
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [land-queue]
+    estimated_hours: 2
+    owned_files:
+      - scripts/land-queue.sh
+      - scripts/test-land-queue.sh
+    title: "A train takes at most TILLANDSIAS_BUNDLE_HEAVY_MAX (default 2) members gate-changed does not answer light for; the rest go one at a time"
+    context: |
+      Bundle landing phase 2, stacked on 2276-fnhy's heavy_probe (no second path list). Each accepted member prints train:accept:#n tier=heavy|light|unknown. A member over the cap is put back like a conflicting one and the next candidate may still join. An unanswered probe counts toward the cap. land:#n tier=full is the gate tier and is unchanged. Not done: merging heavy members last and suspecting them first.
+    exit_criteria:
+      - "scripts/test-land-queue.sh ARM 58 green; a no-cap mutant and an unknown-is-free mutant red it"
+    unscoreable: "fixture-scored: scripts/test-land-queue.sh ARM 58 is the pin; no litmus covers the land queue"
+    provenance: "coordinator macuahuitl-fedora queue 2026-11-23, taken over from yoga"
+    related: [2276-fnhy, 2277-7trt]
+    events:
+      - {type: claimed, ts: '2026-11-23T23:26:08Z', host: calmecacpilli, summary: heavy cap taken over from yoga}

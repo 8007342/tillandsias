@@ -11,9 +11,9 @@
 # code; arm 3 pins that the event fallback for a base-born in_progress is
 # DELIBERATE and survives the fix.
 #
-# STEP_SCRIPT is a LITERAL path (1063-nraf).
+# STEP_LUA is a LITERAL path (1063-nraf).
 STEP_DESC="Checking the claim-expiry sweep ages and attributes from the status write, not the newest event (1198-7q95)"
-STEP_SCRIPT="scripts/test-expire-claims-reads-the-status-write.sh"
+STEP_LUA="scripts/lua/test-expire-claims-reads-the-status-write.lua"
 STEP_ERROR="the claim-expiry sweep is reading the event channel again — it would return live claims to ready and name the wrong host (1198-7q95)"
 STEP_OK="claim-expiry sweep reads the status write"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:expire-claims-reads-the-status-write"
@@ -23,4 +23,4 @@ STEP_LANES="cargo"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="crates/tillandsias-plan/src/main.rs plan/index.d/** plan/index.yaml scripts/plan-binary-probe.sh scripts/test-expire-claims-reads-the-status-write.sh"
+STEP_READS="crates/tillandsias-plan/src/main.rs plan/index.d/** plan/index.yaml scripts/plan-binary-probe.sh scripts/lua/test-expire-claims-reads-the-status-write.lua"

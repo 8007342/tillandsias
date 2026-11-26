@@ -36,6 +36,13 @@ LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 #     with writable state confined to the /tmp tmpfs and the /srv/git volume —
 #     proven by litmus:mirror-sshd-posture-shape, never relaxed to make it start.
 #   - github-cli (gh): for authenticated GitHub operations (TRUSTED container only)
+#   - lua5.4 + lua5.4-filesystem + lua5.4-lpeg: the image's Lua runtime (order
+#     2413-thcz; operator ruling 2026-11-26: Lua, then Rust, then Go in every
+#     container). The distro Lua, not the static tillandsias-plan: a few hundred
+#     KB against 10.9 MB, and no second build destination for the plan binary.
+#     The same two libraries as the forge base (images/default/Containerfile.base),
+#     and /usr/bin/lua names it as it does there. Runtime only: porting this
+#     image's scripts to it is later work.
 #
 # Step 2: Create unprivileged 'git' user (UID 1000, matches host --userns=keep-id)
 #
@@ -59,6 +66,10 @@ RUN apk add --no-cache \
         jq \
         ruby \
         openssl \
+        lua5.4 \
+        lua5.4-filesystem \
+        lua5.4-lpeg \
+    && ln -sf lua5.4 /usr/bin/lua \
     && adduser -D -u 1000 -s /bin/bash git \
     && mkdir -p /srv/git /var/log/git-service /strategic \
     && chown -R git:git /srv/git /var/log/git-service /strategic

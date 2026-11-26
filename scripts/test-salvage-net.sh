@@ -223,13 +223,13 @@ if want sweep; then
 
     line_merged="$(grep -F "$ref_merged" "$ledger_file" 2>/dev/null)"
     line_orphan="$(grep -F "$ref_orphan" "$ledger_file" 2>/dev/null)"
-    printf '%s\n' "$line_merged" | grep -qF '| on:linux-next |' \
+    grep -qF <<<"$line_merged" '| on:linux-next |' \
         && ok "the ref merged into linux-next gets ancestry verdict on:linux-next" \
         || bad "merged ref ancestry line wrong: $line_merged"
-    printf '%s\n' "$line_orphan" | grep -qF '| none |' \
+    grep -qF <<<"$line_orphan" '| none |' \
         && ok "the ref on no branch gets ancestry verdict none" \
         || bad "orphan ref ancestry line wrong: $line_orphan"
-    printf '%s\n' "$line_merged" | grep -qE '^\| [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z \| [^|]+ \| [0-9a-f]{40} \| on:linux-next \| [0-9-]+ \|$' \
+    grep -qE <<<"$line_merged" '^\| [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z \| [^|]+ \| [0-9a-f]{40} \| on:linux-next \| [0-9-]+ \|$' \
         && ok "the ledger line matches the five-field grammar" \
         || bad "ledger line does not match the documented grammar: $line_merged"
 

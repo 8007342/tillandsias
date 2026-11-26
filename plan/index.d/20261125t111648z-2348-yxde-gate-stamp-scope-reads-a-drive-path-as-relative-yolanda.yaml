@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: gate-stamp-scope-fixture-reads-a-windows-drive-path-as-relative
+    order: "2348-yxde"
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [windows, portability, fixtures]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-gate-stamp-scope.sh
+    title: "test-gate-stamp-scope case 7 reds when TILLANDSIAS_PLAN_BIN is a C:/ path: it is joined to the root as if relative"
+    context: |
+      Measured on yolanda (msys) 2026-11-25. TILLANDSIAS_PLAN_BIN unset, or /c/...: PASS 17/17. C:/...: case 7 fails, the
+      lane saying neither yq nor target/release/tillandsias-plan is available, because the case statement at line 40 takes
+      only /* as absolute. Adding [A-Za-z]:* to that arm in a scratch copy: PASS 17/17 with C:/.... Same class as 2332-5r8v.
+      fixture.plan_binary() is Lua, so it fixes this only with a port; it already treats a drive path as absolute.
+    exit_criteria:
+      - "The fixture passes on msys with TILLANDSIAS_PLAN_BIN unset, /c/... and C:/...; pre-fix result: case 7 red for the last."
+    unscoreable: "fixture-scored: the fixture is the deliverable"
+    next_action: "Accept a drive path as absolute, or port to Lua and use fixture.plan_binary()."
+    provenance: "coordinator macuahuitl-fedora 2026-11-25, asked for a row after #1547"
+    related: [2332-5r8v, 2253-j2at, 2347-fqm2]
+    events:
+      - {type: filed, ts: "2026-11-25T11:16:48Z", host: yolanda, summary: "filed on the request of the coordinator"}

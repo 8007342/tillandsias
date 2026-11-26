@@ -25,9 +25,9 @@ critical_path:
   # repairs. The fixture carries a shipped-file case so the trap cannot quietly
   # revert to EXIT-only, and a sweep case so a NEW unguarded mutator fails here.
   - step: "a killed convergence run cannot leave the tracked VERSION poisoned"
-    command: "bash scripts/test-litmus-tracked-file-kill-safety.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-tracked-file-kill-safety.lua"
     timeout_ms: 120000
-    expected_behavior: "PASS: litmus tracked-file kill safety (4/4)"
+    expected_behavior: "ok:litmus-tracked-file-kill-safety:4 arms"
 
   - step: "top-level wrappers do not invoke Toolbox or placeholder branches"
     command: "! grep -RInE 'toolbox|ImageBuilder trait not yet integrated' build-*.sh crates/tillandsias-core/src/bin/build-image.rs && echo 'ok: no placeholder wrapper path'"

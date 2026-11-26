@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: fake-backend-under-remote-podman-and-gate-memory-wsl2-guest-fixtures-become-lua
+    field: status
+    value: obsoleted
+    ts: "2026-11-25T20:23:27Z"
+    host: lenovinha
+
+events:
+  - packet_id: fake-backend-under-remote-podman-and-gate-memory-wsl2-guest-fixtures-become-lua
+    event:
+      type: note
+      ts: "2026-11-25T20:23:27Z"
+      host: lenovinha
+      summary: |-
+        its two ports moved to 2375-ch7i (353c6e06d); #1335 closed, ref deleted (head 067ef9c9e): a commit on it raised a pipe floor

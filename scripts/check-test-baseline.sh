@@ -74,7 +74,7 @@
 # INPUT IS A FILE, NOT A CARGO RUN.
 #
 # `--from <cargo-test-output>` on purpose: the gate is then a pure function of
-# a transcript, so its own fixture (scripts/test-check-test-baseline.sh) runs
+# a transcript, so its own fixture (scripts/lua/test-check-test-baseline.lua) runs
 # in milliseconds and can drive cases that would take minutes to provoke for
 # real. Callers own the cargo invocation and the transcript capture; see the
 # two call sites in build.sh — BOTH now wrap the whole workspace suite.

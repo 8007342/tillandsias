@@ -13,17 +13,20 @@ critical_path:
   - step: "verify the scanner can discover normal projects"
     command: "cargo test -p tillandsias-scanner detect::tests::scan_project_full -- --exact"
     timeout_ms: 30000
-    expected_behavior: "scan_project_full"
+    assert_exit: 0
+    assert_output_matches: "^test .*::scan_project_full [.]{3} ok$"
 
   - step: "verify watcher startup finds projects"
     command: "cargo test -p tillandsias-scanner watcher::tests::initial_scan_finds_projects -- --exact"
     timeout_ms: 30000
-    expected_behavior: "initial_scan_finds_projects"
+    assert_exit: 0
+    assert_output_matches: "^test .*::initial_scan_finds_projects [.]{3} ok$"
 
   - step: "verify missing watch paths are skipped cleanly"
     command: "cargo test -p tillandsias-scanner watcher::tests::watch_survives_nonexistent_watch_path -- --exact"
     timeout_ms: 30000
-    expected_behavior: "watch_survives_nonexistent_watch_path"
+    assert_exit: 0
+    assert_output_matches: "^test .*::watch_survives_nonexistent_watch_path [.]{3} ok$"
 
 observability:
   traces:

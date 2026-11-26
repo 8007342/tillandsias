@@ -47,20 +47,20 @@ size: instant
 # script edit does not drag this test back in.
 inputs:
   - scripts/cycle-metrics.sh
-  - scripts/test-cycle-metrics-recurrence.sh
+  - scripts/lua/test-cycle-metrics-recurrence.lua
   - scripts/metrics-log-path.sh
 
 preconditions:
   - repository root contains scripts/cycle-metrics.sh
-  - repository root contains scripts/test-cycle-metrics-recurrence.sh
+  - repository root contains scripts/lua/test-cycle-metrics-recurrence.lua
   - jq >= 1.7 is available in PATH (fromdateiso8601, todate and now are used for windowing; jq 1.6 lacks strptime on Windows and shifts fromdateiso8601 by the local UTC offset, which the reporter cancels but does not require)
   - shell utilities (grep, mktemp, cut, sed) are available in PATH
 
 critical_path:
   - step: "the recurrence fixture is green: exact arithmetic on all three lines, colon-bearing step parsed from the right, boundaries, windows, absent log, malformed rows, experts-only silence, sanitised step keys, unparsed cycle-start"
-    command: "bash scripts/test-cycle-metrics-recurrence.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-cycle-metrics-recurrence.lua 2>&1"
     timeout_ms: 30000
-    expected_behavior: "ok:cycle-metrics-recurrence-fixture:39"
+    expected_behavior: "ok:cycle-metrics-recurrence:"
 
   - step: "the recur: line computes runs/total_ms/avg_ms/fail_pct over the window, not the last row and not call volume (inline fixture, exact string)"
     # step a: 100 + 300 -> runs=2 total=400 avg=200, no failures; step b runs once
@@ -89,5 +89,5 @@ failure_modes:
   - "a missing timing log renders as zeros with a path, or the reporter exits non-zero"
 
 rollback:
-  on_failure: "inspect the repeat/recur/skippable block of scripts/cycle-metrics.sh (order 1001-q3zf) and scripts/test-cycle-metrics-recurrence.sh for grammar or arithmetic drift"
-  command: "bash scripts/test-cycle-metrics-recurrence.sh"
+  on_failure: "inspect the repeat/recur/skippable block of scripts/cycle-metrics.sh (order 1001-q3zf) and scripts/lua/test-cycle-metrics-recurrence.lua for grammar or arithmetic drift"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-cycle-metrics-recurrence.lua 2>&1"

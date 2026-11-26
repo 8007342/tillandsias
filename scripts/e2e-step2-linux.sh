@@ -35,7 +35,7 @@ test -z "$CONTAINERS"; test -z "$VOLUMES"; test -z "$IMAGES"
 
 # Record the resulting credential state in the findings, the way the Windows leg
 # records its hashes (900-z3kv criterion 2). Metadata only — never the secret.
-"$SCRIPT_DIR/probe-credential-cold-state.sh" 2>&1 | tee "$LOG_DIR/02-credential-state.txt" || true
+( cd "$SCRIPT_DIR/.." && "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" script run scripts/lua/probe-credential-cold-state.lua ) 2>&1 | tee "$LOG_DIR/02-credential-state.txt" || true
 # Order 386: the full stack teardown above must leave zero straggling host
 # processes — no tray-parented zombies, no orphaned terminal launchers. The
 # probe exits nonzero on any straggler and fails the lane loud.

@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: two-litmus-files-declare-one-id-and-one-never-runs
+    order: 2402-mw57
+    status: in_progress
+    kind: fix
+    title: "two files declare litmus:litmus-stdlib-portability-shape; the runner loads one and the other's steps never run, and nothing refuses a duplicate id"
+    capability_tags: [linux, tooling]
+    owned_files:
+      - scripts/lua/check-litmus-id-unique.lua
+      - openspec/litmus-tests/litmus-litmus-stdlib-portability-shape.yaml
+      - openspec/litmus-tests/litmus-stdlib-portability-shape.yaml
+      - scripts/portability/pipe-site-floor.txt
+    depends_on: []
+    context: |
+      Found while wiring 2400-az2b (coordinator 2026-11-26: fix it, add a check, red first, one small PR).
+      openspec/litmus-tests/litmus-litmus-stdlib-portability-shape.yaml (17 steps) and litmus-stdlib-portability-shape.yaml
+      (4 steps) both declare name litmus:litmus-stdlib-portability-shape. The runner resolves litmus:<x> to litmus-<x>.yaml,
+      so the 4-step file never runs; three of its four steps are covered by the 17-step file, the fourth (the
+      LITMUS_STDLIB_LOADED double-source guard) by nothing. MEASURED: one duplicate id and one name/file mismatch across
+      649 litmus files; a third file (litmus-no-dangling-removed-component-refs.yaml) declares no name at all and is a
+      different schema, reported as a note and not in this row.
+    exit_criteria:
+      - "check-litmus-id-unique.lua is red on today's tree (the duplicate and the mismatch) and green after."
+      - "The orphan's uncovered step moves into the file the id resolves to; the orphan is deleted; a gate runs the check."
+    verifiable_closure: |
+      tillandsias-plan script run scripts/lua/check-litmus-id-unique.lua
+    unscoreable: "decider-scored: scripts/lua/check-litmus-id-unique.lua"
+    provenance: "coordinator 2026-11-26, yoga"
+    events:
+      - {type: claimed, ts: "2026-11-26T09:37:11Z", host: yoga, summary: "claimed; work ref work/2402-mw57"}

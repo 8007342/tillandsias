@@ -142,7 +142,7 @@ local function case_dir(lg, fresh_stamp)
         fs.write(rel .. "/rel/opencode/last-good", lg .. "\n")
         fs.write(rel .. "/rel/opencode/checked", "")
         if not fresh_stamp then
-            proc.run({ argv = { "touch", "-d", "2020-01-01", ROOT .. "/" .. rel .. "/rel/opencode/checked" } })
+            proc.run({ argv = { "touch", "-t", "202001010000", ROOT .. "/" .. rel .. "/rel/opencode/checked" } }) -- POSIX -t: BSD refuses -d 2020-01-01 (2376-dcir)
         end
     end
     return ROOT .. "/" .. rel

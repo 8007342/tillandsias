@@ -1,4 +1,4 @@
--- @trace spec:local-web-preview, order:1874-pn3s
+-- @trace spec:local-web-preview, order:1874-pn3s, order:2394-4iwp
 -- @env PATH
 --
 -- test-flutter-shim-fallback.lua — when the host cannot run Flutter, the forge's
@@ -22,6 +22,7 @@
 -- Usage: tillandsias-plan script run scripts/lua/test-flutter-shim-fallback.lua
 
 local SHIM = "images/default/cli/flutter"
+local SH = require("common.fixture").posix_shell()
 if not fs.exists(SHIM) then
     verdict.emit("violation:flutter-shim-fallback:no-subject", 1, SHIM .. " does not exist")
 end
@@ -79,8 +80,32 @@ local function run(sock, cache, client)
         TILLANDSIAS_FLUTTER_SRC_DIR = DIR .. "/src",
     }
     if sock then envt.TILLANDSIAS_CONTROL_SOCKET = sock end
-    local r = proc.run({ argv = { "bash", ROOT .. "/" .. SHIM, "build", "web" }, env = envt, timeout_ms = 30000 })
-    return r.code, r.stdout or "", r.stderr or ""
+    -- The shim is stock Lua (2394-4iwp): it is loaded here, with io.popen and
+    -- os.execute backed by proc.run of the shell (the runtime refuses `sh -c <string>`).
+    local so, se, stop = {}, {}, {}
+    local function sink(t) return { write = function(self, ...) for _, v in ipairs({ ... }) do t[#t + 1] = v end return self end,
+        flush = function(self) return self end } end
+    local function shell(c)
+        return proc.run({ argv = { SH, "-s" }, stdin = c .. "\n", env = envt, timeout_ms = 30000 })
+    end
+    local world = { string = string, table = table, ipairs = ipairs, tostring = tostring, type = type,
+        arg = { [0] = SHIM, "build", "web" },
+        io = { stdout = sink(so), stderr = sink(se), popen = function(c)
+            local r = shell(c)
+            local x = r.stdout or ""
+            return { read = function() local y = x; x = ""; return y end, close = function() return r.code == 0 or nil, "exit", r.code end }
+        end },
+        os = { getenv = function(n) return envt[n] end, exit = function(c) stop.code = c; error(stop) end,
+            execute = function(c)
+                local r = shell(c)
+                so[#so + 1] = r.stdout or ""; se[#se + 1] = r.stderr or ""
+                return r.code == 0 or nil, "exit", r.code
+            end } }
+    local f, why = load((fs.read(SHIM):gsub("^#![^\n]*", "")), "=flutter", "t", world)
+    if not f then return "load", "", tostring(why) end
+    local ok, got = pcall(f)
+    if not ok and got ~= stop then se[#se + 1] = tostring(got) end
+    return stop.code or 0, table.concat(so), table.concat(se)
 end
 
 local c, o, e = run(DIR .. "/d.s", DIR .. "/empty")

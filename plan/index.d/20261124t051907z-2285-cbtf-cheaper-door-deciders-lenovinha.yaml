@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: deciders-the-preflight-door-cannot-finish-are-cheap-enough-to-run
+    order: 2285-cbtf
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [preflight, performance]
+    estimated_hours: 4
+    title: |
+      Three deciders that judge the tree outlive the preflight door's 5 s deadline on every host, so the door never answers them: check-append-vs-origin-fold (159 s), check-fragment-events-land (11.8 s), check-mo-full-attestations (5.8 s).
+    context: |
+      Solo, idle, lenovinha (16 cores), pinned trunk 76ad8066a. Fixtures are left out on purpose: they test the tools, these test the tree. check-archiver-ready-set is 266 s on a miss and 0.2 s memoised, and its work is ledger-bound, so it is not one of the three. The append check asks the plan binary twice per (packet, field) over the whole corpus; the attestation check spawns four greps per marker; the events check is one compact --dry-run.
+    exit_criteria:
+      - "each of the three finishes inside 5 s on lenovinha, idle, with the same verdict as before on the tree and on planted violations"
+      - "the append check's narrowed scope is shown sound: a planted drop in any differing plan file is still refused, and a changed base file falls back to the whole corpus"
+    unscoreable: "unpinnable-until-the-guard-exists: the before/after timings and planted violations are the deliverable."
+    next_action: "Append scope and attestation regexes first; profile compact --dry-run."
+    provenance: coordinator queue item 1 (macuahuitl-fedora, 2026-11-24); filed by lenovinha.
+    related: [2280-vzsr, 1310-7apk]
+    events:
+      - {type: filed, ts: '2026-11-24T05:19:07Z', host: lenovinha, summary: three door deciders to make cheap}

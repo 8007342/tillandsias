@@ -1,6 +1,4 @@
 // @trace spec:runtime-logging
-/// Order 998-qrwu — the enclave CA bundle directory, declared once and shared
-/// by every crate that binds it.
 pub mod approval_sentences;
 pub mod ca_path;
 pub mod cache_root;
@@ -24,6 +22,10 @@ pub mod reset_state;
 pub mod secrets;
 pub mod singleton;
 pub mod state;
+/// Order 998-qrwu — the enclave CA bundle directory, declared once and shared
+/// by every crate that binds it.
+#[doc(hidden)]
+pub mod test_scratch;
 pub mod tools;
 pub mod tray_icon_state_machine;
 pub mod version_guard;

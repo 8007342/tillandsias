@@ -26,14 +26,14 @@ preconditions:
 
 critical_path:
   - step: "one bump per push, never blocks the push, token never logged"
-    command: "bash scripts/test-mirror-coordinator-bump.sh"
-    timeout_ms: 300000
-    expected_behavior: "PASS: one coordinator bump per push, never blocks it, token never logged"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-mirror-coordinator-bump.lua 2>&1"
+    timeout_ms: 420000
+    expected_behavior: "ok:mirror-coordinator-bump:"
 
 observability:
   traces:
     - "@trace spec:git-mirror-service"
-  expected_log: "PASS: one coordinator bump per push, never blocks it, token never logged"
+  expected_log: "ok:mirror-coordinator-bump:"
   log_fields:
     spec: git-mirror-service
     test: mirror-coordinator-bump

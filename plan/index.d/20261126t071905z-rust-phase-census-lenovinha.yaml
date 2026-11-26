@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: rust-phase-census-of-stays-shell-scripts
+    order: "2397-s4j7"
+    status: ready
+    kind: decision
+    priority: p2
+    desired_release: v0.5
+    pickup_role: operator
+    capability_tags: [build-speed]
+    estimated_hours: 1
+    title: "Rust-phase plan: decide the home of the scripts stock Lua cannot carry (census in plan/issues/rust-phase-census-2026-11-26.md)"
+    context: |
+      Census of every script recorded as staying shell for runtime reasons: PID-1 supervisors (proxy squid-supervisor, inference supervise/serve/
+      watchdog), the flutter-lane socket client, the WSL builder kill fixture, and the Windows job-object trap gap (2392-tv47).
+      Proposes a new tillandsias-supervise crate. Read-only; nothing ported. Report: plan/issues/rust-phase-census-2026-11-26.md.
+    exit_criteria:
+      - "the operator rules on the four decisions at the end of the report; each yes becomes a scoped row"
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is a ruling."
+    next_action: "operator reads the report and rules."
+    provenance: filed by lenovinha at macuahuitl's request 2026-11-26.
+    related: [2374-wy4f, 2395-3zw7, 2392-tv47]
+    events:
+      - {type: filed, ts: '2026-11-26T07:19:05Z', host: lenovinha, summary: rust-phase census}

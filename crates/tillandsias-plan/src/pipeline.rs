@@ -1505,8 +1505,8 @@ mod tests {
         let tellme = include_str!("../../../images/default/cli/tellme");
         let sep = crate::context_pack::PACK_SEPARATOR.replace('\n', "\\n");
         assert!(
-            tellme.contains(&format!("printf '{sep}'")),
-            "tellme_context_pack must print the separator {sep:?}"
+            tellme.contains(&format!("local PACK_SEPARATOR = \"{sep}\"")),
+            "tellme_context_pack must append the separator {sep:?}"
         );
     }
 
@@ -1587,7 +1587,7 @@ mod tests {
 
     fn fixture_root(tag: &str) -> PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("tilland-grounded-{tag}-{}", std::process::id()));
+            crate::test_scratch::path(format!("tilland-grounded-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("fixture root");
         dir

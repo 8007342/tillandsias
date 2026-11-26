@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 699-usxc).
+#
+# port-plan-field-get-and-resolve-open-pr-fixtures-to-lua.status was ALREADY 'blocked', so no field changed — but the caller
+# supplied a note, and discarding it silently is what this packet is about.
+events:
+  - packet_id: port-plan-field-get-and-resolve-open-pr-fixtures-to-lua
+    event:
+      type: note
+      ts: "2026-11-24T09:49:31Z"
+      host: lenovinha
+      summary: |-
+        PARKED on the operator (Family D, #1149-#1157 and #1175; coordinator 2026-11-24). Whoever lands these ports should carry: (1) test-plan-field-get: use scratch ledgers; the .sh asks the live ledger for 1261-bn7v, so it goes red when that row is archived, and arm 4 says its two trees disagree but compares trunk with origin, which usually agree; the port gives A a fragment value and B a base value, and arm 1 expects the fragment, with five binary mutants red. (2) test-resolve-open-pr: arm 5 feeds a trailing newline, which the command substitution already strips, so removing the tr leaves it green; feed space 81 CR LF. The stub gh should also check its argv (wrong --base is red). (3) #1152 deletes test-plan-field-get.sh as unreferenced, but trunk litmus unreferenced-slow-and-regime-fixtures-run runs it: that step must move or the litmus goes red. resolve-open-pr port: work/2292-62a5 f41675646, no PR.

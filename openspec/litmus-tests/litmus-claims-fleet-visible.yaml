@@ -55,6 +55,6 @@ critical_path:
     # plan_next, which keeps offering the packet (eight rows, 2026-09-16). The
     # check folds each candidate fragment into a scratch copy of trunk's
     # ledger, so an old claim trunk has since completed reads `superseded`.
-    command: "bash scripts/test-stranded-plan-writes.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-stranded-plan-writes.lua 2>&1 | tail -1"
     success_pattern: "^ok:stranded-plan-writes-fixture:[0-9]+ arms$"
     timeout_ms: 60000

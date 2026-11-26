@@ -4,7 +4,7 @@
 -- `git worktree prune` or `git gc` against the operator's checkout.
 --
 -- WHY. Two fixtures' teardown traps ran `git -C "$ROOT" worktree prune` on the
--- REAL checkout (test-pre-push-trailer-states-what-it-saw.sh,
+-- REAL checkout (test-pre-push-trailer-states-what-it-saw,
 -- test-fragment-ts-skew.sh). Inside the WSL guest that prune deletes every
 -- Windows worktree whose C:/ path the guest cannot see, because to the guest
 -- those worktrees look missing. Each fixture already removed its OWN worktree

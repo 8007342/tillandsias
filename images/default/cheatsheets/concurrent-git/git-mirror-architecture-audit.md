@@ -59,7 +59,7 @@ forge container ──git:// (9418) / http (8080)──► tillandsias-git conta
 | Stage | Behavior | Provenance |
 |---|---|---|
 | pre-receive | validates ledger YAML, then relays the complete proposed ref set upstream with `git push --atomic` | pre-receive-hook.sh + relay-refs.sh |
-| relay failure | pre-receive exits non-zero; neither the local nor upstream ref transaction partially updates | scripts/test-git-mirror-relay-verified-ack.sh |
+| relay failure | pre-receive exits non-zero; neither the local nor upstream ref transaction partially updates | scripts/lua/test-git-mirror-relay-verified-ack.lua |
 | local accept | occurs only after configured-upstream acceptance; no-origin projects are explicitly durable local-only | pre-receive-hook.sh + post-receive-hook.sh |
 | post-receive | bookkeeping only; never establishes relay success | post-receive-hook.sh |
 | startup retry | synthesizes receive records and reuses the Vault-backed atomic relay helper | entrypoint.sh |
@@ -74,7 +74,7 @@ the already-decided local transaction.
 
 **Finding B (fixed and pinned):** order 316 removed the lost pipeline state;
 the current POSIX loop writes a failure marker that the parent checks before
-relay, so the final `exit 1` is effective. `scripts/test-pre-receive-yaml-gate.sh`
+relay, so the final `exit 1` is effective. `scripts/lua/test-pre-receive-yaml-gate.lua`
 proves an invalid update is rejected, a valid update is accepted, and a mixed
 multi-ref push is rejected. Order 336 made the fixture use the production Rust
 `tillandsias-policy` parser, removing the divergent PyYAML wrapper.

@@ -96,9 +96,9 @@ critical_path:
     # work), that a same-cycle-id row on another host is untouched, and — order
     # 801-tpxd — that omitting cycle= MINTS `<host>-<utc>` rather than writing
     # the sentinel `"cycle":"-"`, which no path may reach any more.
-    command: "scripts/test-cycle-flow-emit-idempotency.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-cycle-flow-emit-idempotency.lua 2>&1 | tail -1"
     timeout_ms: 30000
-    expected_behavior: "ok:cycle-flow-emit-idempotency:8"
+    expected_behavior: "ok:cycle-flow-emit-idempotency:8 arms"
 
   # ── STALENESS (943-7dn5) ────────────────────────────────────────────────
   # THE ARMS ABOVE CANNOT FAIL FOR THE REASON THE LOG IS DEAD. They invoke

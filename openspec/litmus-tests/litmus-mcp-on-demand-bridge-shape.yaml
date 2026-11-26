@@ -62,12 +62,13 @@ critical_path:
   - step: "≥3 mcp servers declared (Req 2 — multiple MCPs coexist independently)"
     # Spec § "Multiple MCP servers coexist" — each MUST be started
     # independently on-demand. Today: host-browser + git-tools +
-    # project-info + dependency-resolver + agent-profile. A
+    # project-info + agent-profile (dependency-resolver was never registered and
+    # is retired, 2399-vzkf). A
     # regression that consolidates them would silently break
     # independence — pin ≥3 distinct entries.
     # Drop `\\{` from the regex — it doesn't survive YAML→shell
     # un-escape and the entry-name is unique enough on its own.
-    command: "grep -cE '\"(host-browser|git-tools|project-info|dependency-resolver|agent-profile)\"' images/default/config-overlay/opencode/config.json | awk '{ if ($1+0 >= 3) print \"ok:\", $1, \"mcp entries\"; else { print \"FAIL: only\", $1, \"of >=3\"; exit 1 } }'"
+    command: "grep -cE '\"(host-browser|git-tools|project-info|agent-profile)\"' images/default/config-overlay/opencode/config.json | awk '{ if ($1+0 >= 3) print \"ok:\", $1, \"mcp entries\"; else { print \"FAIL: only\", $1, \"of >=3\"; exit 1 } }'"
     timeout_ms: 3000
     expected_behavior: "ok:"
 

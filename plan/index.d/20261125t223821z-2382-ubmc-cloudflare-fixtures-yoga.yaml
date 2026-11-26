@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: three-cloudflare-fixtures-ported-to-lua
+    order: "2382-ubmc"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 6
+    owned_files:
+      - scripts/lua/test-cloudflare-login.lua
+      - scripts/lua/test-cloudflare-oauth-core.lua
+      - scripts/lua/test-cloudflare-token-rotation.lua
+    title: "three cloudflare fixtures ported to Lua"
+    context: |
+      ports: cloudflare-login cloudflare-oauth-core cloudflare-token-rotation. Claimed by yoga before the work. The fake server on loopback only: no real account, token or network.
+      Their names in crates/tillandsias-headless comments and messages change with them.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its main assertions are mutated; callers run the .lua; the three .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by litmus tests"
+    provenance: "coordinator 2026-11-25 (cloudflare last), yoga"
+    related: [2381-wpqb]
+    events:
+      - {type: claimed, ts: "2026-11-25T22:38:21Z", host: yoga, summary: "claimed; work ref work/2382-ubmc"}

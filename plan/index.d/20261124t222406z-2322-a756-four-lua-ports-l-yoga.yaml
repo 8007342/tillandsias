@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: litmus-runner-and-ledger-ts-fixtures-ported-to-lua
+    order: "2322-a756"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures, litmus]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/test-litmus-stdin-does-not-eat-the-spec-list.lua
+      - scripts/lua/test-litmus-retired-phase-skip.lua
+      - scripts/lua/test-litmus-test-selector.lua
+      - scripts/lua/test-ledger-ts-guard.lua
+    title: "four shell fixtures ported to Lua: litmus stdin, retired phase, test selector, ledger timestamp guard"
+    context: |
+      ports: test-litmus-stdin-does-not-eat-the-spec-list, test-litmus-retired-phase-skip, test-litmus-test-selector, test-ledger-ts-guard.
+      Claimed by yoga before the work, in the coordinator's test-[i-o]* range.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its subject is mutated; callers run the .lua; the four .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by build.sh and their litmus"
+    provenance: "coordinator queue 2026-11-24 (test-[i-o]* range), yoga"
+    related: [956-llei, 1465-ijv3, 719-kgr5]
+    events:
+      - {type: claimed, ts: "2026-11-24T22:24:06Z", host: yoga, summary: "claimed; work ref work/2322-a756"}

@@ -63,13 +63,12 @@ expect_base("images/web/Containerfile", { "docker.io/library/alpine:3.20" })
 expect_base("images/router/Containerfile", { "docker.io/library/caddy:2-alpine" })
 
 -- test-running-image-freshness.sh is excluded: that fixture must name the
--- freshest local build. The three mirror-identity fixtures (749-54pv/2fqj/6uby)
--- are excluded for the same reason: each rebuilds and probes the CURRENT
+-- freshest local build. common/gitimage.lua (749-54pv/2fqj/6uby) is excluded for the same reason: it
+-- rebuilds and runs the CURRENT
 -- local git image. Excluded by basename anywhere, as grep --exclude did.
 local EXCLUDE = {
     "check-container-bases.sh", "check-container-bases.lua", "build-image.sh",
-    "test-running-image-freshness.sh", "test-mirror-host-cert-and-sshd.sh",
-    "test-mirror-receive-wrapper.sh", "test-mirror-sshd-posture.sh", "test-ssh-lane-sidecar.sh",
+    "test-running-image-freshness.sh", "gitimage.lua",
 }
 local argv = { "git", "grep", "--untracked", "-I", "-n", "-E",
     "tillandsias-[a-z0-9_-]+:latest|docker\\.io/library/[a-z0-9_-]+:latest|alpine:latest|nixos/nix:latest",

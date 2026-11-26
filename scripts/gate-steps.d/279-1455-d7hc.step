@@ -7,10 +7,10 @@
 #
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking the metrics writer and reader resolve one log (1455-d7hc)"
-STEP_SCRIPT="scripts/test-metrics-log-path-agreement.sh"
+STEP_LUA="scripts/lua/test-metrics-log-path-agreement.lua"
 STEP_ERROR="the Rust metrics writer and the shell reader resolve different logs, or the outside-a-checkout fallback broke (1455-d7hc) — see the FAIL lines above"
 STEP_OK="Metrics log path agreement passed"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:metrics-log-path-agreement:18"
+STEP_SECOND_REGIME="doris 2026-11-26 msys ok:metrics-log-path-agreement:21 arms"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
 # 2192-excl: EXCLUSIVE, not just the timing lane. It writes the fixed
@@ -22,4 +22,4 @@ STEP_LANES="timing exclusive"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="plan/index.yaml scripts/check-mcp-expert-health.sh scripts/check-mcp-surface.sh scripts/cycle-metrics.sh scripts/metrics-log-path.sh scripts/plan-binary-probe.sh scripts/test-metrics-log-path-agreement.sh"
+STEP_READS="plan/index.yaml scripts/check-mcp-expert-health.sh scripts/check-mcp-surface.sh scripts/cycle-metrics.sh scripts/metrics-log-path.sh scripts/plan-binary-probe.sh scripts/lua/test-metrics-log-path-agreement.lua"

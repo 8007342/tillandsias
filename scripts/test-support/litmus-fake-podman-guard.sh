@@ -50,7 +50,8 @@ if [[ "${LITMUS_PODMAN_MODE:-real}" == "fake" ]]; then
 #!/usr/bin/env bash
 set -euo pipefail
 calls_file="\${LITMUS_PODMAN_CALLS_FILE:-$_lfpg_bin/calls.log}"
-mkdir -p "\$(dirname "\$calls_file")"
+case "\$calls_file" in /*/*) _dir="\${calls_file%/*}" ;; *) _dir="\$(dirname "\$calls_file")" ;; esac
+[ -d "\$_dir" ] || mkdir -p "\$_dir"
 {
     printf '%s\tpodman' "\$(date -u +%FT%TZ)"
     for _a in "\$@"; do printf ' %q' "\$_a"; done

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: runner-fixtures-take-the-plan-binary-raw-from-the-environment
+    field: status
+    value: in_progress
+    ts: "2026-11-25T08:39:43Z"
+    host: yolanda
+
+events:
+  - packet_id: runner-fixtures-take-the-plan-binary-raw-from-the-environment
+    event:
+      type: progress
+      ts: "2026-11-25T08:39:43Z"
+      host: yolanda
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: work/2332-5r8v
+  - packet_id: runner-fixtures-take-the-plan-binary-raw-from-the-environment
+    event:
+      type: note
+      ts: "2026-11-25T08:39:43Z"
+      host: yolanda
+      summary: |-
+        claimed by yolanda

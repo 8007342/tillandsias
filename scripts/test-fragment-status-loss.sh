@@ -82,7 +82,7 @@ assert() {
         fail=1
         return
     fi
-    if [ -n "$_a_want" ] && ! printf '%s' "$_a_out" | grep -qF "$_a_want"; then
+    if [ -n "$_a_want" ] && ! grep -qF <<<"$_a_out" "$_a_want"; then
         echo "FAIL: $_a_name — output missing '$_a_want'; out=$_a_out" >&2
         fail=1
         return
@@ -98,7 +98,7 @@ assert() {
 # red on real fragments (masked in the release gate until the plan-binary path
 # stopped being relative).
 run_guard() {
-    env -u TILLANDSIAS_REPO_ROOT -u PROJECT_ROOT -u TILLANDSIAS_PLAN_BIN \
+    env -u TILLANDSIAS_REPO_ROOT -u TILLANDSIAS_PLAN_BIN \
         "$REAL_PLAN" script run "$GUARD" -- --plan "$PWD/target/release/tillandsias-plan"
 }
 
@@ -221,7 +221,7 @@ F
 out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "file boundary isolated: only the real closure is flagged" 1 \
     "alpha-packet: has a 'completed' EVENT but folds as 'ready'" "$rc" "$out"
-if printf '%s' "$out" | grep -qF 'beta-packet'; then
+if grep -qF <<<"$out" 'beta-packet'; then
     echo "FAIL: file boundary crossed — beta-packet inherited the next file's closure" >&2
     fail=1
 else
@@ -285,7 +285,7 @@ F
 out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "FAIL-SAFE unusable batch falls back and still refuses" 1 \
     "alpha-packet: declared 'completed' in a fragment, folds as 'ready'" "$rc" "$out"
-if printf '%s' "$out" | grep -qF 'batched fold unavailable'; then
+if grep -qF <<<"$out" 'batched fold unavailable'; then
     echo "ok: the fallback announces itself"
 else
     echo "FAIL: fallback taken silently — no note on stderr" >&2
@@ -304,7 +304,7 @@ packets:
     title: "real binary, batch path expected"
 F
 out="$(cd "$S" && run_guard 2>&1)"; rc=$?
-if printf '%s' "$out" | grep -qF 'batched fold unavailable'; then
+if grep -qF <<<"$out" 'batched fold unavailable'; then
     echo "FAIL: real binary fell back to per-packet lookups; the speedup is not live" >&2
     fail=1
 else
@@ -355,7 +355,7 @@ F
 out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "events-only fragment whose transition landed passes" 0 \
     "ok:no-fragment-status-loss:" "$rc" "$out"
-if printf '%s' "$out" | grep -qE '^ok:no-fragment-status-loss:0 checked$'; then
+if grep -qE <<<"$out" '^ok:no-fragment-status-loss:0 checked$'; then
     echo "FAIL: events-only pass reported 0 checked — the event pass did not run" >&2
     fail=1
 else
@@ -437,7 +437,7 @@ F
 out="$(cd "$S" && run_guard 2>&1)"; rc=$?
 assert "the parseable twin is read and judged on its merits" 1 \
     "alpha-packet" "$rc" "$out"
-if printf '%s' "$out" | grep -qF 'UNPARSEABLE'; then
+if grep -qF <<<"$out" 'UNPARSEABLE'; then
     echo "FAIL: a valid fragment was reported unparseable; out=$out" >&2
     fail=1
 else

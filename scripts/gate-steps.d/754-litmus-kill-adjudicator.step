@@ -1,0 +1,18 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 3, 2266: the slowest blocks first,
+# measured one at a time on lenovinha). As a .step it is no build.sh edit, so it
+# never makes intake HEAVY; it runs SERIAL on its lane, beside the other lanes.
+#
+# 956-llei: the kill-time adjudicator must diff THIS cgroup's cpu.pressure
+# stall counter across the step's own window and say CONTENDED / NOT
+# contended / UNCLASSIFIED — never the retired host-wide load1-vs-ncpus
+# rule, which judged forge steps by the host's runqueue. Three arms, run
+# through the real runner in a temp root with injected counters.
+STEP_DESC="Checking the kill-time adjudicator diffs cpu.pressure (956-llei)"
+STEP_LUA="scripts/lua/test-litmus-kill-adjudicator.lua"
+STEP_ERROR="the litmus kill-time adjudicator does not classify by cpu.pressure diff (956-llei) — see the verdict line above"
+STEP_OK="Litmus kill-time adjudicator check passed"
+STEP_SERIAL="runs the real litmus runner"
+STEP_LANES="litmus"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-26 darwin ok:litmus-kill-adjudicator:7 arms (work/2387-lrg2 @ 4e3a2a540)"
+STEP_READS="scripts/lua/test-litmus-kill-adjudicator.lua"

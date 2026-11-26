@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: preflight-door-with-no-plan-binary-judges-nothing-and-exits-zero
+    order: 2279-jbsd
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [preflight]
+    estimated_hours: 2
+    title: |
+      ./build.sh --preflight in a tree with no plan binary classifies no guard result, prints partial: and exits 0, so a tree it never judged reads like the usual partial.
+    context: |
+      Measured by macbookair (2026-11-23) inside the front-door fixture's scratch worktree: ran=108 could-not-run=217 refused=0 of 335, every one of the 217 no-classifier, rc 0, and two planted refusing guards passed. On lenovinha a fresh tree resolves only ~/.local/bin/tillandsias-plan (an unrelated install); with that off PATH it resolves nothing. The door already refuses a stale plan binary (refused:preflight:stale-plan-binary). Coordinator ruling 2026-11-23: refuse here too; 1353-ryhq's partial/exit-0 stays for ordinary deadline skips. After #1443 and 2275-fcpy.
+    exit_criteria:
+      - "with no resolvable plan binary the door prints could-not-run:preflight:no-classifier with the build remedy on the same line and exits 3, before starting any guard"
+      - "1353-ryhq is unchanged: a door with a plan binary and deadline skips still prints partial: and exits 0"
+      - "a fixture arm: a fresh tree with the plan binary off PATH exits 3; on today's door the same arm sees 0"
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture arm is the deliverable."
+    next_action: "Find every caller of --preflight that reads its exit code (hooks, relay-preflight, skills) before adding a third code."
+    provenance: coordinator ruling (macuahuitl-fedora, 2026-11-23); measured by macbookair; filed by lenovinha.
+    related: [2272-cuxh, 2275-fcpy, 1353-ryhq, 1943-fdsb, 1401-x76w]
+    events:
+      - {type: filed, ts: '2026-11-23T22:37:47Z', host: lenovinha, summary: door with no plan binary exits zero filed}

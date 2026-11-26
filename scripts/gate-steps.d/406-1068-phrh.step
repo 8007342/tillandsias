@@ -1,0 +1,14 @@
+# Gate step 1068-phrh — data, not code.
+#
+# scripts/install.sh never installs a binary it could not check against the
+# release's SHA256SUMS. The BEGIN/END-ASSET-VERIFY block is cut and run against
+# a file:// release in scratch: healthy, mismatch, absent, unlisted, shasum-only,
+# no tool, and the TILLANDSIAS_INSTALL_UNVERIFIED=1 override.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking install.sh refuses an asset it could not verify (1068-phrh)"
+STEP_LUA="scripts/lua/test-install-refuses-unverified-asset.lua"
+STEP_ERROR="install.sh would again install a binary it could not check (1068-phrh) — see the FAIL lines above"
+STEP_OK="install.sh verifies or refuses, in end-user words"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-26 darwin ok:install-refuses-unverified-asset:9 arms at 8697ffe50 (red 6/9 on the trunk logic first; shasum-branch mutant red)"
+STEP_READS="scripts/lua/test-install-refuses-unverified-asset.lua scripts/install.sh"

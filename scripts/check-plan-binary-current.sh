@@ -32,7 +32,7 @@
 # and a negative is `unmeasured:`, never a refusal.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; cd "$ROOT"
-FIXTURE="scripts/test-expire-claims-write-is-opt-in.sh"
+FIXTURE="scripts/lua/test-expire-claims-write-is-opt-in.lua"
 [ -f "$FIXTURE" ] || { echo "blocked:plan-binary-current:no-fixture:$FIXTURE"; exit 1; }
 
 # THE PRECONDITION, REPORTED AND NEVER INFERRED (macneo). Neither this check
@@ -212,7 +212,7 @@ fi
 # The real ledger must be untouched whatever happens. The fixture seeds its own
 # tree, but assert it rather than trusting the comment.
 _repo_before="$(ls plan/index.d 2>/dev/null | wc -l | tr -d ' ')"
-_out="$(TILLANDSIAS_PLAN_BINARY="$BIN" bash "$FIXTURE" 2>&1)"
+_out="$(TILLANDSIAS_PLAN_BINARY="$BIN" "$BIN" script run "$FIXTURE" 2>&1)"
 _repo_after="$(ls plan/index.d 2>/dev/null | wc -l | tr -d ' ')"
 if [ "$_repo_before" != "$_repo_after" ]; then
     echo "blocked:plan-binary-current:probe-had-side-effects plan/index.d $_repo_before -> $_repo_after"
