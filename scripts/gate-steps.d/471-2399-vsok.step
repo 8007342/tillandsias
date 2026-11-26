@@ -1,0 +1,13 @@
+# Gate step 2399-vsok — data, not code.
+#
+# The relay preflight never runs a fixture that drives the macOS VM unless the
+# run opts in (TILLANDSIAS_RELAY_DRIVE_VM=1). The decider is extracted and run
+# against scratch fixtures; nothing here runs relay-preflight.sh or the VM.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the relay preflight skips VM-driving fixtures unless opted in (2399-vsok)"
+STEP_LUA="scripts/lua/test-relay-preflight-vm-fixture-opt-in.lua"
+STEP_ERROR="the relay preflight would again run a fixture that drives the macOS VM unasked (2399-vsok) — see the FAIL lines above"
+STEP_OK="relay preflight names VM-driving fixtures skipped by default"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-26 darwin ok:relay-preflight-vm-fixture-opt-in:6 arms at 5b24d4681 (red 6/6 on trunk first)"
+STEP_READS="scripts/lua/test-relay-preflight-vm-fixture-opt-in.lua scripts/relay-preflight.sh scripts/test-*.sh"

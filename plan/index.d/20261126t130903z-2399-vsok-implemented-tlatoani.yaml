@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-26, on macuahuitl's queue.
+packets:
+- packet_id: relay-preflight-must-not-drive-the-macos-vm
+  order: 2399-vsok
+  status: implemented
+  verifiable_closure: 'Gate step 470 runs scripts/lua/test-relay-preflight-vm-fixture-opt-in.lua (6 arms; red 6/6 on trunk first).'
+  next_action: 'Implemented: relay-preflight.sh skips a fixture whose header declares "# drives-vm: <why>" unless TILLANDSIAS_RELAY_DRIVE_VM=1, and names the skip. test-macos-vsock-inference-closure.sh declares it. A census arm requires the marker on every test-*.sh that names the installed tray bundle or --exec-guest.'
+  events:
+  - {type: implemented, ts: '2026-11-26T13:09:03Z', host: tlatoanis-macbook-air, summary: 'drives-vm marker + opt-in; fixture red-first 6/6, test-relay-preflight.sh 14/14'}
