@@ -1,0 +1,17 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-26.
+packets:
+- packet_id: the-default-install-path-skips-verification-three-ways-and-never-consumes-the-published-signature
+  order: 1068-phrh
+  status: implemented
+  verifiable_closure: 'Gate step 406 runs scripts/lua/test-install-refuses-unverified-asset.lua (9 arms; 6 red on the trunk logic first).'
+  next_action: >-
+    Implemented criteria 1-4. install.sh refuses when SHA256SUMS is absent, when the asset is unlisted, and when
+    neither sha256sum nor shasum exists. It verifies through shasum where sha256sum is missing, and a healthy install
+    proceeds unchanged. TILLANDSIAS_INSTALL_UNVERIFIED=1 is the one override, documented in the script.
+    DEVIATION: criterion 1 asked the refusal to name the override. Operator ruling 2026-10-08 (enforced by
+    check-installer-end-user-output) forbids power-user text in installer output, and printing the variable raised
+    that check's count from 9 to 11. The refusal says, in plain words, that nothing was installed and to try again.
+    Criterion 5 (consuming the cosign bundle) is owned by 2080-8mc8, which names this row as its predecessor.
+  events:
+  - {type: implemented, ts: '2026-11-26T14:12:39Z', host: tlatoanis-macbook-air, summary: 'three checksum skips are refusals; shasum fallback; fixture red-first; cosign carried by 2080-8mc8'}
