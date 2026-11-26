@@ -15,7 +15,7 @@
 # keeps paying for — four scripts independently writing the same plan-binary
 # probe (704-zcgi), two hardware-fingerprint implementations (805-r98w). A
 # second copy is where the fix does not go. So the clearing is a function, and
-# scripts/check-purge-clears-vault-credentials.sh refuses a third copy that
+# scripts/lua/check-purge-clears-vault-credentials.lua refuses a third copy that
 # unregisters the distro without calling it.
 #
 # WHAT IS DELIBERATELY NOT CLEARED: `tillandsias-vm-uuid`. It anchors the

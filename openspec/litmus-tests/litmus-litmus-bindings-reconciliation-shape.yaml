@@ -20,7 +20,7 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/lua/check-litmus-bindings.lua and scripts/test-litmus-bindings.sh
+  - workspace contains scripts/lua/check-litmus-bindings.lua and scripts/lua/test-litmus-bindings.lua
   - workspace contains openspec/litmus-tests/unbound-grandfathered.txt
 
 critical_path:
@@ -53,9 +53,9 @@ critical_path:
     # The total is NOT pinned (1357-trtz): a literal "5/5" went red the day
     # 1356-vv5m grew the fixture to 9 cases, while every case passed. What
     # must hold is passed == total, with total > 0.
-    command: "bash scripts/test-litmus-bindings.sh 2>&1 | tail -1 | awk -F'[(/)]' '/^PASS: litmus bindings reconciliation [(]/ && $2 == $3 && $2 > 0 { print \"ok: fixture \" $2 \"/\" $3; ok = 1 } END { exit !ok }'"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-bindings.lua"
     timeout_ms: 30000
-    expected_behavior: "ok: fixture"
+    expected_behavior: "ok:litmus-bindings-fixture:"
 
   - step: "the build gate runs the reconciliation"
     command: "grep -q '_run_lua_decider \"scripts/lua/check-litmus-bindings.lua\"' build.sh && echo 'ok: gate wired'"
@@ -83,4 +83,4 @@ rollback:
     violation:unbound-litmus:<csv> / violation:dangling-binding:<csv>; retired
     files exempt; grandfathered list is deletions-only), its build.sh wiring
     next to check-litmus-pin-claims, and the five fixture cases.
-  command: "tillandsias-plan script run scripts/lua/check-litmus-bindings.lua; bash scripts/test-litmus-bindings.sh 2>&1 | tail -2"
+  command: "tillandsias-plan script run scripts/lua/check-litmus-bindings.lua; tillandsias-plan script run scripts/lua/test-litmus-bindings.lua"

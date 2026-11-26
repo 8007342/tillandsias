@@ -64,6 +64,9 @@ local SURFACES = {
     -- orphan while bound this way (2026-09-06).
     "scripts/gate-steps.d",
     "scripts/local-ci.sh",
+    -- 2231-zmzd: local-ci.sh's "Recently Landed Guards" are rows of this
+    -- roster, and local-ci.sh runs every row; the names left local-ci.sh.
+    "scripts/lua/local-ci-landed-guards.lua",
     "scripts/run-litmus-test.sh",
     "scripts/mo-full-attest.sh",
     "openspec/litmus-tests",
@@ -87,7 +90,10 @@ local SURFACES = {
     -- 1261-bn7v: a guard run from the pre-push hook's plan-only lane, the only
     -- surface that sees a plan-only push and has already fetched origin.
     "scripts/hooks/pre-push-local-gate.sh",
-    -- 861-n7f5: check-engine-cpu-dispatch.sh via a $(dirname)-relative path.
+    -- 2167-gmfl: build.sh calls the memory-floor BOOTSTRAP at gate start (it
+    -- must run before a plan binary exists), which execs the Lua decider.
+    "scripts/check-gate-memory-floor.sh",
+    -- 861-n7f5: check-engine-cpu-dispatch (the .lua since 2199-luab) via a $(dirname)-relative path.
     "scripts/bench-inference-floor.sh",
     -- 1129-xm5z: check-host-tools.sh's SPEC table names each <prover>, which
     -- test-host-tools.sh then runs from a variable (invisible to a name scan).
@@ -96,8 +102,8 @@ local SURFACES = {
     -- bound as gate steps, one hop further than the list reached; reported as
     -- orphans for a day while actively guarding (and "fixing" that by wiring
     -- them again would have double-run them).
-    "scripts/test-jq-multiline-capture.sh",
-    "scripts/test-wt-reparse-scan.sh",
+    "scripts/lua/test-jq-multiline-capture.lua",
+    "scripts/lua/test-wt-reparse-scan.lua",
     -- 2031-zq68: lua/verify-image-usable.lua is run by build-image.sh and
     -- with-nix-builder.sh at runtime, and in the gate by this fixture (bound
     -- as gate step 105-1073-dqtx); the .sh it replaced was outside the

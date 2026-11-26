@@ -7,7 +7,11 @@
 #
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking one Lua script is one byte stream: ordered encode/pairs, no next, no os.setlocale (1384-bp6t)"
-STEP_SCRIPT="scripts/test-lua-determinism.sh"
+STEP_LUA="scripts/lua/test-lua-determinism.lua"
 STEP_ERROR="Lua output varies across processes or a script can change the number locale (1384-bp6t)"
 STEP_OK="Lua output is deterministic and locale-independent"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:lua-determinism:6 arms (skipped=0)"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/fixtures/** scripts/fixtures/determinism.lua scripts/lua/test-lua-determinism.lua"

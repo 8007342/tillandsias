@@ -126,7 +126,7 @@ SRC="$TDIR/$TARGET/release/tillandsias-plan"
 case "$mode" in
     cargo | zigbuild)
         if command -v rustup >/dev/null 2>&1; then
-            rustup target list --installed | grep -qx "$TARGET" || rustup target add "$TARGET" # sigpipe-ok: safe pipeline
+            rustup target list --installed | grep -qx "$TARGET" || rustup target add "$TARGET"
         fi
         sub=build
         [ "$mode" = zigbuild ] && sub=zigbuild
@@ -173,7 +173,7 @@ case "$desc" in
     ELF*) ;;
     *) echo "[build-forge-plan-bin] ERROR: not a Linux ELF, not staged: $desc" >&2; exit 4 ;;
 esac
-if [ -n "$want_arch" ] && ! printf '%s' "$desc" | grep -qi -- "$want_arch"; then # sigpipe-ok: safe pipeline
+if [ -n "$want_arch" ] && ! grep -qi <<<"$desc" -- "$want_arch"; then
     echo "[build-forge-plan-bin] ERROR: '$desc' is not ${TARGET}: wrong-arch artifact, not staged" >&2
     exit 4
 fi

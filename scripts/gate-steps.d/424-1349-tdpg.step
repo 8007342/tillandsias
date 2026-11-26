@@ -28,9 +28,9 @@
 # that same night and the warn was pushed past, because on a work ref a fatal
 # decider and an advisory one print the same shape (1352-qbrd).
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking the admitted-missing-evidence census counts admissions, not words (1349-tdpg)"
-STEP_SCRIPT="scripts/test-census-admitted-missing-evidence.sh"
+STEP_LUA="scripts/lua/test-census-admitted-missing-evidence.lua"
 STEP_ERROR="the evidence-debt census no longer discriminates (1349-tdpg) — read which arm failed above; arm 1 (the decoy must NOT be counted) and arm 5 (a second admission must move the count) are the load-bearing ones, and arm 4 pins that it stays a report rather than a gate"
 STEP_OK="The evidence-debt census counts admissions and its count is shown to move"
 #
@@ -38,4 +38,8 @@ STEP_OK="The evidence-debt census counts admissions and its count is shown to mo
 # tool and no network: it plants a two-file scratch repo, commits with a pinned
 # author date, and reads ages back through git blame. Nothing in it is
 # platform-conditional, which is why its number is identical on both regimes.
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:census-admitted-missing-evidence-fixture:8"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:census-admitted-missing-evidence:8 arms (2320-b5vv @f03fae8d7, Lua port)"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/census-admitted-missing-evidence.sh scripts/lua/test-census-admitted-missing-evidence.lua"

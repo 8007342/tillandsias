@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: build-speed queue item (2), assigned by macuahuitl-fedora 2026-11-20.
+packets:
+  - packet_id: gate-tree-hygiene-psi-and-untracked-scratch
+    order: "2150-qd38"
+    status: implemented
+    kind: infrastructure
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [gate, build, performance, build-speed]
+    estimated_hours: 2
+    owned_files:
+      - scripts/gate-tree-hygiene.sh
+      - scripts/lua/test-gate-tree-hygiene.lua
+      - scripts/gate-steps.d/935-2150-qd38.step
+      - build.sh
+    title: "The gate logs host PSI at start and end, and warns (or with opt-in refuses) on >1 GB of untracked scratch in the checkout"
+    context: |
+      Operator ruling 2026-11-20: lands must take minutes, not an hour. A slow gate could not say whether the HOST
+      (memory/io pressure) or the TREE (scratch bloat) was the cause. build.sh --check now prints psi:gate-start and
+      psi:gate-end lines (cpu/memory/io avg10/avg60) and an ok|warn|refused:tree-scratch line; target/debug size is
+      reported with its prune remedy but is a build cache, not scratch. ~0.1 s per gate on the floor host.
+    exit_criteria:
+      - "scripts/lua/test-gate-tree-hygiene.lua passes 7 arms; at trunk the probe does not exist and every arm fails."
+      - "a ./build.sh --check log on a Linux host shows psi:gate-start, psi:gate-end and a tree-scratch verdict line."
+    unscoreable: "decider-not-litmus: scored by the gate step 935-2150-qd38, not a litmus binding."
+    next_action: "Land; then a darwin/msys host records STEP_SECOND_REGIME for step 935 (the psi:unavailable arm is their path)."
+    provenance: "macuahuitl-fedora build-speed queue, 2026-11-20, item (2)."
+    events:
+      - type: filed
+        ts: "2026-11-21T06:43:04Z"
+        host: calmecacpilli
+        summary: "filed and implemented on work/2150-qd38 (build-speed item 2)"

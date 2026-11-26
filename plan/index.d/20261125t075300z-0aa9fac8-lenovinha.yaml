@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: scripts-that-grep-git-prose-force-the-c-locale
+    event:
+      type: progress
+      ts: "2026-11-25T07:53:00Z"
+      agent_id: linux-lenovinha-claude-20261125t075300z
+      host: lenovinha
+      summary: |
+        m5-container measured on lenovinha (linux-immutable, rootless podman, no sudo, no toolbox) at trunk 89cb87fa4: scripts/test-mirror-receive-wrapper.sh m5-container, exit 0, stdout line ok:receive-fixture:m5-wrong-path-lands-in-fixed-repo. The git image build was fully cached (image b926f16983d4, the smoke's). Host locale is English, so this says nothing about a French host.

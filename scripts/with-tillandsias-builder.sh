@@ -182,7 +182,7 @@ fi
 # THIS DELIBERATELY DOES NOT WIDEN THE RULING. The refusal below is what an
 # owned Linux fleet gets, and a bare-metal Linux builder without toolbox still
 # fails exactly as hard — pinned by the negative control in
-# scripts/test-toolbox-refusal-wsl-exception.sh, not by review. What changes is
+# scripts/lua/test-toolbox-refusal-wsl-exception.lua, not by review. What changes is
 # only that a WSL2 distro stops being mistaken for one: it is not a host
 # escaping its container, it is the container the Windows lane sanctions, and
 # scripts/with-wsl2-builder.sh is the thing that put us inside it.
@@ -270,6 +270,29 @@ _toolbox_initialized() {
 # forward is the environment, so the shim re-exports the project's control
 # namespaces explicitly — the same boundary lesson the re-exec below already
 # records for toolbox run.
+# ORDER 2262-iyyu: shims are installed during init, and init runs only when a TOOL is
+# missing, so an edit to the shim below never reached an initialised toolbox. The
+# stamp is the digest of the shim text last installed in THIS toolbox; a different
+# or absent one re-installs the shims alone, never the dnf init. It is written
+# only after every install succeeded.
+SHIM_STAMP="$HOME/.cache/tillandsias/host-escape-shim.$TOOLBOX_NAME.stamp"
+_host_escape_shim_digest() {
+    local d
+    d="$(sed -n "/<<'SHIM'\$/,/^SHIM\$/p" "${BASH_SOURCE[0]}" | sha256sum)" || return 1
+    printf '%s' "${d%% *}"
+}
+_ensure_host_escape_shims() {
+    local want
+    want="$(_host_escape_shim_digest)" || return 0
+    [[ "$(cat "$SHIM_STAMP" 2>/dev/null)" == "$want" ]] && return 0
+    echo "[tillandsias-builder] Installing the host-escape shims in '$TOOLBOX_NAME' (new or changed)..."
+    if _install_host_escape_shims; then
+        printf '%s\n' "$want" > "$SHIM_STAMP"
+    else
+        echo "  [shims] warn: the host-escape shims could not be installed; the previous ones stay and the next run tries again" >&2
+    fi
+    return 0
+}
 _install_host_escape_shims() {
     local shim_src="$HOME/.cache/tillandsias/host-escape-shim.sh"
     mkdir -p "$(dirname "$shim_src")"
@@ -278,23 +301,106 @@ _install_host_escape_shims() {
 # Host-escape shim (934-7jd4): TOOL_NAME does not exist in this toolbox; run
 # the HOST's binary via flatpak-spawn, which forwards stdio/cwd/exit code
 # exactly. Env does not cross by default — forward the control namespaces.
+# ORDER 2227-shu8: flatpak-spawn (glib) refuses a non-UTF-8 --env value with
+# "Invalid byte sequence in conversion input", naming neither the variable nor
+# this shim, and TOOL_NAME never runs. Forwarding is best-effort, so such a
+# value is SKIPPED, by name, on stderr. In C.UTF-8, `.` does not match an
+# invalid byte, so ^.*$ fails exactly on a non-UTF-8 value.
+_is_utf8() { local LC_ALL=C.UTF-8; [[ $1 =~ ^.*$ ]]; }
 _fs_args=()
 for _v in $(compgen -e); do
     case "$_v" in
         TILLANDSIAS_*|LITMUS_*|FORGE_*|NIX_*|CONTAINER_HOST|DOCKER_HOST)
-            _fs_args+=("--env=$_v=${!_v}") ;;
+            if _is_utf8 "${!_v}"; then
+                _fs_args+=("--env=$_v=${!_v}")
+            else
+                echo "note:host-escape-shim:TOOL_NAME:skipped-non-utf8-env:$_v — flatpak-spawn refuses a value that is not UTF-8; $_v is not forwarded to the host TOOL_NAME (2227-shu8)" >&2
+            fi ;;
     esac
 done
 exec flatpak-spawn --host "${_fs_args[@]}" TOOL_NAME "$@"
 SHIM
-    local tool
+    local tool rc=0
     for tool in podman nix; do
         sed "s/TOOL_NAME/$tool/g" "$shim_src" > "$shim_src.$tool"
         toolbox run --container "$TOOLBOX_NAME" \
-            sudo install -m 0755 "$shim_src.$tool" "/usr/local/bin/$tool"
+            sudo install -m 0755 "$shim_src.$tool" "/usr/local/bin/$tool" || rc=1
         rm -f "$shim_src.$tool"
     done
     rm -f "$shim_src"
+    return "$rc"
+}
+
+# ── Helper: cargo-nextest for the gate (order 2243-urcy) ──────────────────
+# The gate's test runner when present (build.sh prints a `test-runner:` line).
+# A PINNED prebuilt release asset verified by sha256, never `cargo install` (a
+# compile) or binstall (the rate-limited GitHub API); Fedora does not package
+# it. ~/.cargo/bin is the toolbox's $HOME, shared with the host, so the extract
+# lands where rustup's tools do. It is NOT part of _toolbox_initialized: a
+# failed download must never make every wrapper call re-run the whole dnf init.
+# Instead an absent binary is ensured here, at most once a day after a failure
+# (the stamp), and the gate then says test-runner:cargo-test:nextest-absent and
+# runs cargo test exactly as before.
+#
+# ORDER 2262-iyyu: "present" is not "the pin". An early return on any executable meant a
+# pin bump never reached a host that had one. NEXTEST_STAMP holds the sha of the
+# asset WE installed: a copy we installed follows the pin. An unstamped copy is
+# adopted when it answers the pinned version, and otherwise left alone and named:
+# ~/.cargo/bin is the user's, and it may be their own. A failed refresh keeps the
+# working copy. The failure stamp names the sha, so a new pin is tried at once.
+NEXTEST_STAMP="$HOME/.cache/tillandsias/cargo-nextest.installed"
+NEXTEST_FAIL_STAMP="$HOME/.cache/tillandsias/cargo-nextest-ensure-failed"
+_ensure_nextest() {
+    local _nx_ver _nx_arch _nx_sha _nx_tgz _nx_got _nx_bin _nx_tmp _nx_has
+    _nx_bin="$HOME/.cargo/bin/cargo-nextest"
+    _nx_ver=0.9.152
+    case "$(uname -m)" in
+        x86_64)  _nx_arch=x86_64;  _nx_sha=d039b43c3e0958441b6ad0a39c8884d018b3d2e8fb9928f209074b1100b5e17a ;;
+        aarch64) _nx_arch=aarch64; _nx_sha=ca1f81a5b86533eb45ab97e0064aa88e925e53aab9a698ca6331a7cad1f85f07 ;;
+        *)       return 0 ;;
+    esac
+    if [[ -x "$_nx_bin" ]]; then
+        _nx_has="$(cat "$NEXTEST_STAMP" 2>/dev/null)" || _nx_has=""
+        [[ "$_nx_has" == "$_nx_sha" ]] && return 0
+        if [[ -z "$_nx_has" ]]; then
+            _nx_has="$("$_nx_bin" --version 2>/dev/null)" || _nx_has=""
+            if [[ "$_nx_has" == "cargo-nextest $_nx_ver"* ]]; then
+                mkdir -p "${NEXTEST_STAMP%/*}" && printf '%s\n' "$_nx_sha" > "$NEXTEST_STAMP"
+            else
+                _nx_has="${_nx_has%%$'\n'*}"
+                echo "  [nextest] note: $_nx_bin was not installed by this wrapper (${_nx_has:-no version}; the pin is $_nx_ver); left as it is — remove it to get the pin" >&2
+            fi
+            return 0
+        fi
+    fi
+    if [[ -n "$(find "$NEXTEST_FAIL_STAMP" -mmin -1440 2>/dev/null)" ]] \
+       && [[ "$(cat "$NEXTEST_FAIL_STAMP" 2>/dev/null)" == "$_nx_sha" ]]; then
+        return 0
+    fi
+    _nx_tgz="$HOME/.cache/tillandsias/cargo-nextest-$_nx_ver-$_nx_arch.tar.gz"
+    mkdir -p "${_nx_tgz%/*}" "$HOME/.cargo/bin"
+    if [[ ! -f "$_nx_tgz" ]]; then
+        curl --proto '=https' --tlsv1.2 -fsSL -o "$_nx_tgz.part" \
+            "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-$_nx_ver/cargo-nextest-$_nx_ver-$_nx_arch-unknown-linux-gnu.tar.gz" \
+            && mv -f "$_nx_tgz.part" "$_nx_tgz"
+    fi
+    _nx_got="$(sha256sum "$_nx_tgz" 2>/dev/null)" || _nx_got=""
+    _nx_tmp="$_nx_bin.new-$$"
+    if [[ "${_nx_got%% *}" == "$_nx_sha" ]] \
+       && tar -xzOf "$_nx_tgz" cargo-nextest > "$_nx_tmp" && chmod 0755 "$_nx_tmp" && mv -f "$_nx_tmp" "$_nx_bin"; then
+        printf '%s\n' "$_nx_sha" > "$NEXTEST_STAMP"
+        rm -f "$NEXTEST_FAIL_STAMP"
+        echo "  [nextest] cargo-nextest $_nx_ver installed (sha256 verified)"
+    else
+        rm -f "$_nx_tgz" "$_nx_tgz.part" "$_nx_tmp"
+        printf '%s\n' "$_nx_sha" > "$NEXTEST_FAIL_STAMP" 2>/dev/null || true
+        if [[ -x "$_nx_bin" ]]; then
+            echo "  [nextest] refused: cargo-nextest $_nx_ver asset sha256 mismatch or download failed; the copy already installed stays" >&2
+        else
+            echo "  [nextest] refused: cargo-nextest $_nx_ver asset sha256 mismatch or download failed; the gate will run cargo test (test-runner:cargo-test:nextest-absent)" >&2
+        fi
+    fi
+    return 0
 }
 
 # ── Ensure toolbox exists and is initialized ──────────────────────────────
@@ -366,13 +472,16 @@ if ! _toolbox_initialized; then
         bash -l -c "rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl x86_64-pc-windows-gnu" \
         2>&1 | while IFS= read -r line; do printf '  [rustup] %s\n' "$line"; done
 
-    _install_host_escape_shims
+    rm -f "$SHIM_STAMP"   # a (re)initialised toolbox has none of them
+    _ensure_host_escape_shims
 
     toolbox run --container "$TOOLBOX_NAME" \
         bash -c "mkdir -p '$(dirname "$MARKER_FILE")' && touch '$MARKER_FILE'"
 
     echo "[tillandsias-builder] Initialization complete."
 fi
+_ensure_host_escape_shims
+_ensure_nextest
 
 # ── Re-exec inside the toolbox ────────────────────────────────────────────
 # At this point we are on the host (not in toolbox). Re-exec the current
@@ -416,7 +525,7 @@ PWD_QUOTED="$(printf '%q' "$(pwd)")"
 # live child still writing a test transcript. SIGTERM to the STRAY did nothing
 # 8s later; SIGKILL to it and its child reaped it. pirria saw one still running
 # 12 minutes after its launcher was "stopped", with
-# test-archiver-ruby-could-not-run.sh as its live child, concurrent with a
+# test-archiver-ruby-could-not-run.lua as its live child, concurrent with a
 # second gate — which is how a gate refuses on this host and passes on the
 # relaunch with nothing changed (1132-r4mt arm 4's race). The same defect is
 # the env-forwarding lesson one axis over: that boundary did not carry FLAGS

@@ -8,7 +8,7 @@ size: instant
 inputs:
   - images/git/pre-receive-hook.sh
   - images/default/lib-common.sh
-  - scripts/test-mirror-refuses-when-broken.sh
+  - scripts/lua/test-mirror-refuses-when-broken.lua
 
 # Order 1310-rec6 steps 3+4 (coordinator ruling 2026-09-30, on the row). This
 # is the litmus the row's unscoreable text named in advance. The pre-receive
@@ -29,9 +29,9 @@ preconditions:
 
 critical_path:
   - step: "a broken mirror refuses by layer and pusher, keeps reads open, gates the forge by lane, and one ok tick restores"
-    command: "bash scripts/test-mirror-refuses-when-broken.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-mirror-refuses-when-broken.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "PASS: mirror-refuses-when-broken (1310-rec6)"
+    expected_behavior: "ok:mirror-refuses-when-broken:11 arms"
 
 observability:
   traces:

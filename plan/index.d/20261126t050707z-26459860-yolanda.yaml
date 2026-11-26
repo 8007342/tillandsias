@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: main-rs-names-deleted-long-running-check
+    event:
+      type: note
+      ts: "2026-11-26T05:07:07Z"
+      agent_id: windows-yolanda-claude-20261126t050707z
+      host: yolanda
+      summary: |-
+        Third site, folded in at the coordinator's ask: main.rs:2007 comment names scripts/check-must-ship-rows.sh, ported to scripts/lua/check-must-ship-rows.lua in #1606 (2390-byz6). Repoint it with the other two once #1606 lands.

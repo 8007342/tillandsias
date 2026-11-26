@@ -537,6 +537,17 @@ export TILLANDSIAS_PLAN_BIN="$PLAN_BIN"
     # gap: after the sweep, does the crate's own suite still pass? Delegated
     # rather than inlined because the answer requires a full tree copy and a
     # cargo run — see the script's header for why it is a tree and not a plan/.
+    # ORDER 2159-n9sa (priority:build-speed): a FIXTURE that asks only whether
+    # a backend lane runs (test-archiver-ruby-could-not-run's positive control)
+    # sets TILLANDSIAS_ARCHIVER_SKIP_ANSWERABILITY=1 on a scratch ledger, so it
+    # does not pay the answerability harness's cargo test (~26 s). The skip is
+    # NAMED and the closing line says the check is partial; no gate sets it.
+    if [ "${TILLANDSIAS_ARCHIVER_SKIP_ANSWERABILITY:-}" = 1 ]; then
+        echo "skip:archiver:answerability:fixture-knob (TILLANDSIAS_ARCHIVER_SKIP_ANSWERABILITY=1)"
+        _ap_total
+        echo "Check passed WITHOUT answerability: ready set unchanged, no new orphaned events, idempotent; answerability not judged."
+        exit 0
+    fi
     echo "Checking the sweep does not break what the expert system can answer..."
     _ap_phase pre-answerability
     if ! _answerability="$("$DIR/check-archive-answerability.sh")"; then

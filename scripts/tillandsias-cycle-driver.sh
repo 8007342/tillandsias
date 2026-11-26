@@ -26,7 +26,7 @@
 # Verdict grammar (exactly one line on stdout, last):
 #   ^(ok:cycle-fired:rc=0|skip:overlap-lock-held|fail:cycle-driver:rc=[0-9]+)$
 #
-# Seams (all optional, fixture use — see scripts/test-cycle-driver.sh):
+# Seams (all optional, fixture use — see scripts/lua/test-cycle-driver.lua):
 #   TILLANDSIAS_CYCLE_ROOT       checkout root (default: this script's repo)
 #   TILLANDSIAS_CYCLE_CMD        command to run instead of ./repeat (fixture)
 #   TILLANDSIAS_CYCLE_PROMPT     cycle prompt (default: the skill bootstrap)

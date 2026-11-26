@@ -100,6 +100,19 @@ mkproc "$r" 102 tok-r "bash /repo/./build.sh --check" TILLANDSIAS_WRAPPER_TOKEN
 out="$(run_check "$r")"; rc=$?
 check "a healthy gate carrying only the retired marker name is not a competitor" 0 "ok:no-competing-gate" "$rc" "$out"
 
+# 2c. ORDER 2260-qw67: a measurement harness with no live wrapper, running
+#     gate-changed.sh, is not a gate (a pin: this was already so; the
+#     could-not-run that was read as a match came from an argless call). The
+#     same group WITH a build.sh worker is still reported.
+r="$(newroot harness)"
+mkproc "$r" 102 tok-a "bash /repo/scripts/gate-changed.sh --run --intake"
+mkproc "$r" 103 tok-a "tillandsias-plan script run scripts/lua/replay-intake-on-evictions.lua"
+out="$(run_check "$r")"; rc=$?
+check "a gate-changed measurement harness is not a competing gate" 0 "^ok:no-competing-gate" "$rc" "$out"
+mkproc "$r" 104 tok-a "bash /repo/./build.sh --check"
+out="$(run_check "$r")"; rc=$?
+check "a harness group that holds a build.sh is still reported" 0 "competing-gate: a build.sh" "$rc" "$out"
+
 # 3. THE idle CLASS, and the arm that stops this refusing on an idle host. A
 #    finished exec session leaves a conmon behind carrying the token; seven such
 #    groups existed on yoga at the time this was written, on a host doing

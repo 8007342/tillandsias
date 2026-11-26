@@ -15,23 +15,23 @@ severity: high
 size: quick
 
 preconditions:
-  - workspace contains scripts/test-pre-push-trailer-states-what-it-saw.sh
+  - workspace contains scripts/lua/test-pre-push-trailer-states-what-it-saw.lua
 
 critical_path:
-  - step: "fixture parses and is executable"
-    command: "bash -n scripts/test-pre-push-trailer-states-what-it-saw.sh && test -x scripts/test-pre-push-trailer-states-what-it-saw.sh && echo 'ok: parse'"
+  - step: "the Lua fixture exists and its shell predecessor is gone"
+    command: "test -f scripts/lua/test-pre-push-trailer-states-what-it-saw.lua && ! test -e scripts/test-pre-push-trailer-states-what-it-saw.sh && echo 'ok: parse'"
     timeout_ms: 2000
     expected_behavior: "ok: parse"
 
   - step: "on a staled tree the trailer reports warnings and the stamp verdict gate-stamp.sh prints; the green claim only for no warnings + ok:gate-fresh"
-    command: "bash scripts/test-pre-push-trailer-states-what-it-saw.sh 2>&1 | tail -n 1"
+    command: "PB=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; \"$PB\" script run scripts/lua/test-pre-push-trailer-states-what-it-saw.lua 2>&1 | grep '^ok:pre-push-trailer\\|^violation:\\|^refused:\\|^FAIL:'"
     timeout_ms: 600000
-    expected_behavior: "PASS: pre-push-trailer-states-what-it-saw"
+    expected_behavior: "ok:pre-push-trailer-states-what-it-saw:3 arms"
 
 observability:
   traces:
     - "@trace spec:ci-release"
-  expected_log: "PASS: pre-push-trailer-states-what-it-saw"
+  expected_log: "ok:pre-push-trailer-states-what-it-saw:3 arms"
   log_fields:
     spec: "ci-release"
     test: "pre-push-trailer-states-what-it-saw"
@@ -41,4 +41,4 @@ rollback:
   on_failure: >
     A push log whose last line claims a current gate the hook did not see is the
     defect: restore the counted refuse() and the conditional trailer.
-  command: "bash scripts/test-pre-push-trailer-states-what-it-saw.sh"
+  command: "tillandsias-plan script run scripts/lua/test-pre-push-trailer-states-what-it-saw.lua"

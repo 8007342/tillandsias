@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: forge-lua-helpers-d36-expert-capability-core
+    order: 2396-x2x9
+    status: in_progress
+    kind: feature
+    title: "forge-lua-helpers D3.6 task 1.7: lib-expert-capability's core (manifests, skew, build-in-flight, currency) to a Lua helper; the spec-index half stays shell"
+    capability_tags: [linux, podman, tooling]
+    owned_files:
+      - images/default/lib-expert-capability.sh
+      - images/default/lua/expert-capability.lua
+      - openspec/changes/forge-lua-helpers/design.md
+      - openspec/changes/forge-lua-helpers/tasks.md
+    depends_on: []
+    context: |
+      D3.6 task 1.7 (coordinator 2026-11-26: split lib-expert-capability in two). MEASURED in the forge image (strace -f,
+      no network): tillandsias_expert_capability spawns 21 (5 sed, 5 tr, 2 awk, 2 sort, 2 head, cat, timeout, 3 plan
+      binary); of those the spec-index + embed half is 3 (cat, sed, tr) and the core is 18. The split: the core moves to
+      lua/expert-capability.lua; _tillandsias_spec_index_paths stays shell because it is the deliberate twin of
+      spec-index-ensure.sh's resolution block, held in lockstep by the 801-a2by agreement check, and the embed probe is
+      one curl (fails the D3.6 admission test, as lib-embed-endpoint did).
+    exit_criteria:
+      - "The core's fixture arms are red against the shell body first, then green; litmus:expert-capability-skew-honesty and test-expert-capability-behaviour-skew stay green."
+      - "Post-port execve in the forge image is lower than 21."
+    verifiable_closure: |
+      litmus:expert-capability-skew-honesty
+    provenance: "coordinator 2026-11-26 (D3.6 1.7), yoga"
+    events:
+      - {type: claimed, ts: "2026-11-26T07:12:58Z", host: yoga, summary: "claimed; work ref work/2396-x2x9"}

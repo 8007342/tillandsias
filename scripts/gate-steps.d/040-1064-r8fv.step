@@ -1,10 +1,14 @@
 # Gate step 1064-r8fv — data, not code (order 1072-b7eq).
 #
-# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# STEP_LUA is a LITERAL path on purpose: a binding assembled from a
 # variable is invisible to every name-based scan, including the
 # bound-or-retired guard (1063-nraf). Keep it a plain string.
 STEP_DESC="Checking the landing tool merges trunk and refuses honestly (1064-r8fv)"
-STEP_SCRIPT="scripts/test-land-merges-trunk.sh"
+STEP_LUA="scripts/lua/test-land-merges-trunk.lua"
 STEP_ERROR="land-on-platform-branch.sh does not merge trunk on a platform branch, or retries a server-side refusal (1064-r8fv) — see the verdict line above"
 STEP_OK="Landing tool trunk-merge check passed"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:land-merges-trunk:8"
+STEP_SECOND_REGIME="yolanda 2026-11-25 msys ok:land-merges-trunk:6 arms"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/hooks/pre-push-linux-next-merged.sh scripts/land-on-platform-branch.sh scripts/lua/test-land-merges-trunk.lua"

@@ -1,0 +1,42 @@
+# @trace spec:ci-release
+name: litmus:runner-scratch-skips-sidecar-shape
+spec: ci-release
+phase: pre-build
+description: >
+  Order 2118-ywk7 (priority:build-speed). A litmus-runner start in a scratch
+  project (a copy of scripts/, no crates/) under target/plan-scratch does not
+  stage the router sidecar, and build-sidecar.sh refuses by name in a tree with
+  no sidecar crate. Before, cargo walked up to the enclosing checkout and one
+  runner start cost ~20 s there (0.5 s under /tmp).
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains scripts/lua/test-runner-scratch-skips-sidecar.lua
+  - workspace contains scripts/lua/test-litmus-bare-plan-binary.lua
+
+critical_path:
+  - step: "a scratch runner start skips sidecar staging; build-sidecar.sh refuses without its crate; negative control: the staging condition still holds in this checkout"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-runner-scratch-skips-sidecar.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:runner-scratch-skips-sidecar:3/3"
+
+  - step: "order 2310-eji3: a step that calls a bare tillandsias-plan gets the binary the runner resolved; control: a step with its own PATH finds none"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-bare-plan-binary.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:litmus-bare-plan-binary:5 arms"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "ok:runner-scratch-skips-sidecar:"
+  log_fields:
+    spec: "ci-release"
+    test: "runner-scratch-skips-sidecar-shape"
+    artifact: "scripts/run-litmus-test.sh sidecar staging + scripts/build-sidecar.sh root bound"
+
+rollback:
+  on_failure: >
+    Restore the crate check in run-litmus-test.sh's sidecar staging and the
+    no-sidecar-crate refusal at the top of build-sidecar.sh.
+  command: "tillandsias-plan script run scripts/lua/test-runner-scratch-skips-sidecar.lua"

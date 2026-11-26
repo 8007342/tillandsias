@@ -13,3 +13,10 @@ STEP_LUA="scripts/lua/check-enclave-expect-none-is-fixture-only.lua"
 STEP_ERROR="an enclave expect-none escaped its fixture (1087-h2z9)"
 STEP_OK="Enclave expect-none fixture scope passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:expect-none-fixture-only:1"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="drives podman"
+STEP_LANES="podman"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/check-enclave-service-health.sh scripts/lua/check-enclave-expect-none-is-fixture-only.lua scripts/lua/test-enclave-service-health.lua"

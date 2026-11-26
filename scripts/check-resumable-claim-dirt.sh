@@ -16,7 +16,7 @@
 # double-invisible (641-e2qa), and expire-claims eventually launders the CLAIM
 # away while doing nothing about the DIFF — so the next host reimplements it
 # (814-iyu7 by a second route). Order 540 once answered this shape for
-# launch-generated opsx dirt by committing it (check-opsx-generated-dirt.sh;
+# launch-generated opsx dirt by committing it (lua/check-opsx-generated-dirt.lua;
 # since 1440-w8g8 that dirt is refused instead); this is the detector for
 # claim dirt, which a cycle may review and land.
 #

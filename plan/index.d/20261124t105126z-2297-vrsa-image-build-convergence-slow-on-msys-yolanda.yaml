@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: image-build-convergence-step1-is-slow-not-hung-on-msys
+    order: "2297-vrsa"
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, litmus, performance]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-image-build-convergence.sh
+      - openspec/litmus-tests/litmus-image-build-convergence-shape.yaml
+    title: "image-build-convergence-shape step 1 takes 34 to 36 s on native msys against a 30 s budget, so it is killed twice and reads as red"
+    context: |
+      Measured on yolanda 2026-11-24. In the init-command litmus run, trunk 9232eb4f7 and work/2296-9jg3 alike time out at 30 s,
+      rerun once, time out again (61.1 s). SLOW, NOT HUNG. Run uncapped by hand at cc29d6afc it exits 0, in 35 s and 36 s (plain)
+      and 33.7 s (bash -x). The log grew at every 5 s sample, 0, 390, 541, 780, 1082, 1233, 1509 bytes. All the time is in seven
+      build-image.sh calls of 3.4 to 6.3 s each, with nothing else over 1 s. user 13.8 s and sys 14.7 s.
+      What inside build-image.sh costs it is not measured. msys process spawns are the likely cause, unproven.
+      The runner's line says "timed out after 30s with no output", while the log by hand held 390 bytes by 10 s. Not examined.
+      The same fixture mutates tracked VERSION and a Containerfile, so a kill at budget also leans on its restore trap.
+    exit_criteria:
+      - "The seven build-image.sh calls are profiled on msys and the cost is attributed to named commands, with counts."
+      - "Step 1 finishes inside its budget on msys in three consecutive runs, from less work or from a budget derived from the measurement, and the row says which."
+      - "The runner's no-output wording is either shown correct for this step or corrected."
+      - "NEGATIVE CONTROL: a build-image.sh stubbed to sleep past the budget is still killed and still red."
+    unscoreable: "unpinnable-until-the-guard-exists: the profile decides which fix applies"
+    next_action: "Run build-image.sh proxy under the fake podman with EPOCHREALTIME PS4 and rank the spawns."
+    provenance: "coordinator macuahuitl-fedora 2026-11-24, from yolanda's 2296-9jg3 litmus run"
+    related: [677-33be, 820-c8q8, 2296-9jg3]
+    events:
+      - {type: filed, ts: "2026-11-24T10:51:26Z", host: yolanda, summary: "filed on the coordinator's request; unclaimed, yolanda takes it when a slot frees"}

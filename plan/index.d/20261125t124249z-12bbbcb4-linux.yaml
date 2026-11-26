@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: port-host-identity-fragment-callsite-ref-convergence-discipline-hooks-fixtures-to-lua
+    event:
+      type: note
+      ts: "2026-11-25T12:42:49Z"
+      agent_id: linux-lenovinha-claude-20261125t124247z
+      host: linux
+      summary: |-
+        darwin, bash 3.2, macbookair relayed by macuahuitl 2026-11-25, at 139ecc0fa: ok:derive-host-identity:18 (with the stubbed Darwin case) and ok:fragment-events-land-callsite:13 arms. Both are build.sh blocks, so there is no STEP_SECOND_REGIME to hold it.

@@ -16,10 +16,12 @@
 -- BOOKKEEPING. Nothing is corrupted, nothing fails, the file is even preserved
 -- — and the record is invisible.
 --
--- REUSES THE FOLD'S OWN JOIN rather than recomputing it. `compact --dry-run`
--- already resolves every event's packet_id against the merged fold and reports
--- what it could not place. This asserts on that output and writes nothing
--- (--dry-run is REQUIRED: a gate that mutates what it inspects is not one).
+-- REUSES THE FOLD'S OWN JOIN rather than recomputing it. `check` resolves every
+-- event's packet_id against the merged fold (overlay_coverage_gaps, over the
+-- per-fragment function `compact` consumes too) and prints what it could not
+-- place as a dropped-entry. It asked `compact --dry-run` until 2285-cbtf: that
+-- also re-renders and re-parses the base, 12 s on lenovinha, so no preflight
+-- door ever waited for it. `check` is read-only and takes about 2 s.
 --
 -- FRESHNESS IS THE CALLER'S, NOT THIS SCRIPT'S. Ported from
 -- scripts/check-fragment-events-land.sh (the shell-to-lua carry paid by
@@ -34,7 +36,7 @@
 --   ok:fragment-events-land:<n> fragment(s) checked                       exit 0
 --   blocked:fragment-events-land:<n> event(s) attached to no packet       exit 1
 --   could-not-run:fragment-events-land:no-plan-binary                     exit 2
---   could-not-run:fragment-events-land:compact-did-not-run                exit 2
+--   could-not-run:fragment-events-land:check-did-not-answer               exit 2
 --
 -- Usage: tillandsias-plan script run scripts/lua/check-fragment-events-land.lua
 
@@ -55,17 +57,22 @@ for _, f in ipairs(fs.list(ROOT .. "/plan/index.d")) do
 end
 if n == 0 then verdict.emit("ok:fragment-events-land:0 fragment(s) checked", 0) end
 
-local r = proc.run({ argv = { PLAN, "compact", "--dry-run" }, cwd = ROOT, timeout_ms = 600000 })
-if r.status ~= "exited" then
-    verdict.emit("could-not-run:fragment-events-land:compact-did-not-run", 2,
-        PLAN .. " compact --dry-run did not exit (" .. tostring(r.status) .. ")")
-end
+local r = proc.run({ argv = { PLAN, "check" }, cwd = ROOT, timeout_ms = 600000 })
 local lines = text.lines((r.stdout or "") .. "\n" .. (r.stderr or ""))
+-- `check` names its own outcome; without one it stopped before the join, and a
+-- silent run is not a clean one.
+local answered = false
+for _, l in ipairs(lines) do
+    if l:match("^ok: %d+ packets") or l:match("^incomplete: %d+ packets") then answered = true end
+end
+if r.status ~= "exited" or not answered then
+    verdict.emit("could-not-run:fragment-events-land:check-did-not-answer", 2,
+        PLAN .. " check gave no ok:/incomplete: line (" .. tostring(r.status) .. " rc=" .. tostring(r.code) .. ")")
+end
 local orphans = 0
-for i, l in ipairs(lines) do
+for _, l in ipairs(lines) do
     if l:find("NO SUCH PACKET", 1, true) then
         orphans = orphans + 1
-        if i > 1 then log.raw(lines[i - 1]) end
         log.raw(l)
     end
 end

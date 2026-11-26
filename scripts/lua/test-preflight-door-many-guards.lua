@@ -68,13 +68,38 @@ for i = 1, N do
 end
 fs.write(REL .. "/roster", table.concat(roster, "\n") .. "\n")
 local r = proc.run({ argv = { "/bin/bash", "./build.sh", "--preflight" }, cwd = ROOT, timeout_ms = 600000,
-    env = { TILLANDSIAS_PREFLIGHT_ROSTER_FILE = ROOT .. "/" .. REL .. "/roster" } })
+    -- ORDER 2176-dort (priority:build-speed): the nested door's logs go into
+    -- this run's own scratch dir, never the checkout's .cache/metrics, so the
+    -- step holds no timing lane and runs in the gate pool. The replaced roster
+    -- also skips the door's origin fetch (build.sh), its one .git write.
+    env = { TILLANDSIAS_PREFLIGHT_BENCH = "off", TILLANDSIAS_PREFLIGHT_ROSTER_FILE = ROOT .. "/" .. REL .. "/roster",
+            TILLANDSIAS_TIMING_LOG = ROOT .. "/" .. REL .. "/tillandsias-timing.jsonl",
+            TILLANDSIAS_EXPERT_USAGE_LOG = ROOT .. "/" .. REL .. "/forge-expert-usage.jsonl",
+            LITMUS_STEP_TIMING_LOG = ROOT .. "/" .. REL .. "/litmus-step-timing.jsonl" } })
 local outp = (r.stdout or "") .. "\n" .. (r.stderr or "")
 local v = outp:match("(ok:preflight:ran=%d+[^\n]*)") or outp:match("((%a+):preflight:ran=[^\n]*)") or "(no verdict)"
+-- ORDER 1753-p925 follow-up: a door that stops before its verdict says why in
+-- its own refused:/error: line. Report that line, not just "(no verdict)",
+-- so a failure on another host can be diagnosed from the gate log alone.
+-- A STALE PLAN BINARY is host state, not a door defect (yoga 2026-11-21: the
+-- door refused before any guard ran and this read as a content red). Say so
+-- as could-not-run, the 2160-mhsm class, naming the rebuild that clears it.
+local stale = outp:match("(refused:preflight:stale%-plan%-binary[^\n]*)")
+if stale then
+    proc.run({ argv = { "rm", "-rf", ROOT .. "/" .. REL }, timeout_ms = 30000 })
+    verdict.could_not_run("preflight-door-many-guards",
+        "the nested door refused a stale plan binary before running any guard (" .. stale:sub(1, 200)
+        .. "); rebuild with cargo build --release -p tillandsias-plan and re-run")
+end
+if v == "(no verdict)" then
+    local why = outp:match("(refused:[^\n]*)") or outp:match("(error[^\n]*)") or outp:match("(violation:[^\n]*)")
+        or outp:match("([^\n]+)%s*$")
+    if why then v = v .. " door said: " .. why end
+end
 arm("1 MANY the real door over " .. N .. " trivial guards exits 0 under /bin/bash",
     r.status == "exited" and r.code == 0 and v:find("^ok:preflight:ran=" .. N .. " ") ~= nil
     and v:find(" sum=" .. N .. " ", 1, true) ~= nil,
-    "status=" .. tostring(r.status) .. " rc=" .. tostring(r.code) .. " " .. v:sub(1, 120))
+    "status=" .. tostring(r.status) .. " rc=" .. tostring(r.code) .. " " .. v:sub(1, 400))
 proc.run({ argv = { "rm", "-rf", ROOT .. "/" .. REL }, timeout_ms = 30000 })
 
 if #failed > 0 then

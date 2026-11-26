@@ -20,13 +20,13 @@ description: >
   16:17Z and folded 19:00Z) and requiring a declaration would turn every relay
   fold into a refusal or a ritual.
 preconditions:
-  - workspace contains scripts/check-fragment-ts-skew.sh
+  - workspace contains scripts/lua/check-fragment-ts-skew.lua (the Lua port of the retired check-fragment-ts-skew.sh, 2124-mwzr)
   - workspace contains scripts/lua/test-fragment-ts-skew.lua (the Lua port of
     the retired scripts/test-fragment-ts-skew.sh, 1581-d9ig)
 
 critical_path:
   - step: "a future ts is refused, a past ts is accepted and printed, and the check is diff-scoped"
-    command: ". scripts/plan-binary-probe.sh; P=$(resolve_plan_binary) && \"$P\" script run scripts/lua/test-fragment-ts-skew.lua"
+    command: ". scripts/plan-binary-probe.sh; P=$(resolve_plan_binary) && TILLANDSIAS_PLAN_BIN=\"$P\" \"$P\" script run scripts/lua/test-fragment-ts-skew.lua"
     timeout_ms: 60000
     expected_behavior: "ok:fragment-ts-skew-fixture"
     # Nine arms. The load-bearing one is the PAST arm: a fixture that proved only
@@ -39,6 +39,6 @@ critical_path:
     expected_behavior: "ok:both-consumers"
 
   - step: "the refusal names the remedy as reading the clock, never as composing a time"
-    command: "if grep -q 'date -u +%Y-%m-%dT%H:%M:%SZ' scripts/check-fragment-ts-skew.sh; then echo ok:remedy-is-read-the-clock; else echo FAIL:no-clock-remedy; fi"
+    command: "if grep -q 'date -u +%Y-%m-%dT%H:%M:%SZ' scripts/lua/check-fragment-ts-skew.lua; then echo ok:remedy-is-read-the-clock; else echo FAIL:no-clock-remedy; fi"
     timeout_ms: 5000
     expected_behavior: "ok:remedy-is-read-the-clock"

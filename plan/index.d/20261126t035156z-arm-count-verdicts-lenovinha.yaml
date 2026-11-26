@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: daily-and-mode-only-fixtures-report-arm-counts
+    order: "2388-bvnd"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixtures]
+    estimated_hours: 1
+    title: "daily-maintenance-day-boundary and mode-only-regression fixtures report arm counts, not :all"
+    context: |
+      Follow-up to 2375-ch7i and 2380-ds8v (both landed). The two ports kept the shell verdict ":all" so callers did not move;
+      they now use the kit's default ok:<name>:<n> arms. mode-only skips arms 3 and 5 where core.fileMode=false (msys), so its
+      litmus pins both counts with a success_pattern, (11|8).
+    exit_criteria:
+      - "both fixtures print ok:<name>:11 arms here; both litmus pass; a wrong count pinned in the litmus reds it"
+    unscoreable: "unpinnable-until-the-guard-exists: the litmus pin is the deliverable."
+    next_action: "PR."
+    provenance: filed by lenovinha; asked by macuahuitl 2026-11-25.
+    related: [2375-ch7i, 2380-ds8v]
+    events:
+      - {type: filed, ts: '2026-11-26T03:51:56Z', host: lenovinha, summary: arm-count follow-up}

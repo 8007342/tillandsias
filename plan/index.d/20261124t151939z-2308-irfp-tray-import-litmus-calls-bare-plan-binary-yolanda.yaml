@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: tray-import-surface-litmus-resolves-the-plan-binary
+    order: "2308-irfp"
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, windows]
+    estimated_hours: 1
+    owned_files:
+      - openspec/litmus-tests/litmus-tray-import-surface-os-only.yaml
+    title: "litmus:tray-import-surface-os-only resolves the plan binary instead of calling a bare tillandsias-plan"
+    context: |
+      On yolanda 2026-11-24 step 1 is red with rc 127, "tillandsias-plan: command not found", as no copy is on PATH.
+      Seven commands in the file call it bare (six steps and the rollback). Others in the corpus use plan-binary-probe.sh.
+    exit_criteria:
+      - "Every step resolves the binary through plan-binary-probe.sh and the litmus passes on a host with none on PATH. Pre-fix result: FAILS, rc 127."
+      - "NEGATIVE CONTROL: a checker that accepts a redistributable DLL is still red."
+    unscoreable: "unpinnable-until-the-guard-exists: the litmus is the guard"
+    next_action: "Replace the bare calls; grep the corpus for other bare calls while there."
+    provenance: "coordinator macuahuitl-fedora 2026-11-24, from yolanda's 2306-3hr6 run"
+    related: [2306-3hr6]
+    events:
+      - {type: filed, ts: '2026-11-24T15:19:39Z', host: yolanda, summary: filed on the request of the coordinator}

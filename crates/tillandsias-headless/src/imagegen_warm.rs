@@ -367,11 +367,36 @@ fn start(
         // Verbose: the placement verdict reads the per-block buffer lines.
         "--verbose".into(),
     ]);
-    let out = crate::podman_command()
-        .args(&a)
-        .stdin(std::process::Stdio::null())
-        .output_bounded(Duration::from_secs(120))
-        .map_err(|e| format!("engine_failed: resident engine did not start: {e}"))?;
+    let run = |argv: &[String]| {
+        crate::podman_command()
+            .args(argv)
+            .stdin(std::process::Stdio::null())
+            .output_bounded(Duration::from_secs(120))
+            .map_err(|e| format!("engine_failed: resident engine did not start: {e}"))
+    };
+    let mut out = run(&a)?;
+    // 2284-p6is: detached, so a failing `run` never started the engine.
+    if crate::gpu_fallback::never_started(out.status.code()) && crate::gpu_fallback::carries_cdi(&a)
+    {
+        use crate::gpu_fallback as gf;
+        let cause = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        gf::notice(
+            "the image engine",
+            &cause,
+            "retrying without the NVIDIA card",
+        );
+        stop(&name);
+        out = run(&gf::without_cdi(&a, gf::engine_second_device()))?;
+        if !out.status.success() {
+            return Err(gf::both(
+                format!(
+                    "engine_failed: resident engine did not start: {}",
+                    String::from_utf8_lossy(&out.stderr).trim()
+                ),
+                &cause,
+            ));
+        }
+    }
     if !out.status.success() {
         return Err(format!(
             "engine_failed: resident engine did not start: {}",

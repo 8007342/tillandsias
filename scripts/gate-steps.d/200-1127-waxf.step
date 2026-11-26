@@ -17,7 +17,14 @@
 #
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking the gate memo cannot skip the guards that read the plan ledger (1127-waxf)"
-STEP_SCRIPT="scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh"
+STEP_LUA="scripts/lua/test-gate-stamp-does-not-memoize-guard-owned-paths.lua"
 STEP_ERROR="a plan-only change can memoize away the fragment guards again, or the partial-memo verdict lost its wiring (1127-waxf) — see the arm above"
 STEP_OK="Gate-memo plan-ledger coverage check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   arm5b: the partial-memo arm also runs the issue guard, whose subject joined the lane"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="timing"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="plan/index.d/** plan/index.yaml plan/issues/** plan/issues/research/** plan/loop_status.d/** plan/mo-full-attestations.d/** scripts/gate-stamp.sh scripts/lua/test-gate-stamp-does-not-memoize-guard-owned-paths.lua"

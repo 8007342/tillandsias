@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: runner-fixtures-take-the-plan-binary-raw-from-the-environment
+    order: "2332-5r8v"
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [windows, portability, fixtures]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-litmus-timeout-retry.lua
+      - scripts/lua/test-runner-scratch-skips-sidecar.lua
+    title: "test-litmus-timeout-retry and test-runner-scratch-skips-sidecar red on msys when TILLANDSIAS_PLAN_BIN is unset or relative"
+    context: |
+      Measured on yolanda (msys) 2026-11-25 at bd40d3dae. Unset, or target/release/tillandsias-plan.exe: 5-of-5-failed and
+      1-failed, with the runner saying no RUNNABLE tillandsias-plan resolved. An absolute path, /c/... or C:/...: 5/5 and
+      3/3. The 2026-11-25T00:54Z reds at 5a1943f57 carried the same message. Both fixtures hand
+      TILLANDSIAS_PLAN_BIN to a runner whose cwd is a scratch project instead of using fixture.plan_binary(); the gate sets
+      TILLANDSIAS_SCRIPT_RUNNER_BIN, which hides it. Linux and darwin were not measured.
+    exit_criteria:
+      - "Both fixtures pass on msys with TILLANDSIAS_PLAN_BIN unset, relative and absolute; pre-fix result: red for the first two."
+      - "No runnable plan binary is a refusal that names it, not failed arms."
+    unscoreable: "fixture-scored: the fixtures are the deliverable"
+    next_action: "Take the binary from common.fixture.plan_binary(); rerun with the variable unset and relative."
+    provenance: "coordinator macuahuitl-fedora 2026-11-25, asked for a row"
+    related: [2150-3j97, 2118-ywk7, 2246-fkea]
+    events:
+      - {type: filed, ts: "2026-11-25T08:09:02Z", host: yolanda, summary: "filed on the request of the coordinator"}

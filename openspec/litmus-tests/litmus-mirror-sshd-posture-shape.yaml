@@ -11,7 +11,7 @@ inputs:
   - images/git/**
   - scripts/build-image.sh
   - scripts/common.sh
-  - scripts/test-mirror-sshd-posture.sh
+  - scripts/lua/test-mirror-sshd-posture.lua
 severity: critical
 description: >
   Order 749-wv4d (design T3 — plan/issues/ssh-ca-forge-mirror-push-design-2026-07-31.md,
@@ -32,7 +32,7 @@ description: >
 
 preconditions:
   - workspace contains images/git/Containerfile
-  - workspace contains scripts/test-mirror-sshd-posture.sh
+  - workspace contains scripts/lua/test-mirror-sshd-posture.lua
   - podman is available on the host
 
 critical_path:
@@ -41,15 +41,10 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: openssh-server in the image package set"
 
-  - step: "sshd accepts a connection under --read-only --cap-drop=ALL as uid 1000 on 2222 (demonstrated in the real container)"
-    command: "bash scripts/test-mirror-sshd-posture.sh positive 2>&1 | tail -1"
-    timeout_ms: 300000
-    expected_behavior: "ok:sshd-under-posture:banner-accepted"
-
-  - step: "NEGATIVE CONTROL: removing the writable paths (--read-only-tmpfs=false, no tmpfs) makes the probe FAIL with the named cause 'Read-only file system' — the posture is proven, not vacuous"
-    command: "bash scripts/test-mirror-sshd-posture.sh negative 2>&1 | tail -1"
-    timeout_ms: 300000
-    expected_behavior: "ok:sshd-negative-control:read-only-blocks-writable-state"
+  - step: "sshd accepts a connection under the posture in the real container, and the read-only NEGATIVE CONTROL fails for its named cause"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-mirror-sshd-posture.lua 2>&1"
+    timeout_ms: 420000
+    expected_behavior: "ok:mirror-sshd-posture:"
 
 observability:
   traces:

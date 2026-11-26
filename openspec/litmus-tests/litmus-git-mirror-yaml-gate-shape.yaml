@@ -24,87 +24,104 @@ critical_path:
   - step: "pre-receive hook exists and is executable"
     command: "test -x images/git/pre-receive-hook.sh && echo 'OK: pre-receive-hook.sh is executable' || { echo 'FAIL: pre-receive-hook.sh missing or not executable'; exit 1; }"
     timeout_ms: 5000
-    expected_behavior: "OK"
+    assert_exit: 0
+    assert_output_matches: "^OK: "
 
   - step: "pre-receive hook validates plan/ YAML"
     command: "grep -qE 'plan/.*\\.yaml' images/git/pre-receive-hook.sh && echo 'OK: hook checks plan/ YAML' || { echo 'FAIL: hook does not check plan/ YAML'; exit 1; }"
     timeout_ms: 5000
-    expected_behavior: "OK"
+    assert_exit: 0
+    assert_output_matches: "^OK: "
 
   - step: "pre-receive hook validates openspec/ YAML"
     command: "grep -qE 'openspec/.*\\.yaml' images/git/pre-receive-hook.sh && echo 'OK: hook checks openspec/ YAML' || { echo 'FAIL: hook does not check openspec/ YAML'; exit 1; }"
     timeout_ms: 5000
-    expected_behavior: "OK"
+    assert_exit: 0
+    assert_output_matches: "^OK: "
 
   - step: "pre-receive hook has tillandsias-policy validator"
     command: "grep -q 'tillandsias-policy' images/git/pre-receive-hook.sh && echo 'OK: hook uses tillandsias-policy' || { echo 'FAIL: hook missing tillandsias-policy'; exit 1; }"
     timeout_ms: 5000
-    expected_behavior: "OK"
+    assert_exit: 0
+    assert_output_matches: "^OK: "
 
   - step: "pre-receive hook has ruby fallback validator"
     command: "grep -q 'ruby' images/git/pre-receive-hook.sh && echo 'OK: hook has ruby fallback' || { echo 'FAIL: hook missing ruby fallback'; exit 1; }"
     timeout_ms: 5000
-    expected_behavior: "OK"
+    assert_exit: 0
+    assert_output_matches: "^OK: "
 
   - step: "pre-receive hook exits 0 on success, 1 on failure"
     command: "grep -q 'exit 0' images/git/pre-receive-hook.sh && grep -q 'exit 1' images/git/pre-receive-hook.sh && echo 'OK: hook has both exit codes' || { echo 'FAIL: hook missing exit codes'; exit 1; }"
     timeout_ms: 5000
-    expected_behavior: "OK"
+    assert_exit: 0
+    assert_output_matches: "^OK: "
 
   - step: "Containerfile includes ruby for YAML validation"
     command: "grep -q 'ruby' images/git/Containerfile && echo 'OK: Containerfile has ruby' || { echo 'FAIL: Containerfile missing ruby'; exit 1; }"
     timeout_ms: 5000
-    expected_behavior: "OK"
+    assert_exit: 0
+    assert_output_matches: "^OK: "
 
   - step: "Containerfile copies pre-receive hook"
     command: "grep -q 'pre-receive-hook.sh' images/git/Containerfile && echo 'OK: Containerfile copies pre-receive hook' || { echo 'FAIL: Containerfile missing pre-receive hook'; exit 1; }"
     timeout_ms: 5000
-    expected_behavior: "OK"
+    assert_exit: 0
+    assert_output_matches: "^OK: "
 
   - step: "entrypoint installs pre-receive hook"
     command: "grep -q 'pre-receive' images/git/entrypoint.sh && echo 'OK: entrypoint installs pre-receive hook' || { echo 'FAIL: entrypoint missing pre-receive hook'; exit 1; }"
     timeout_ms: 5000
-    expected_behavior: "OK"
+    assert_exit: 0
+    assert_output_matches: "^OK: "
 
   - step: "pre-receive hook uses temp directory for validation"
     command: "grep -q 'mktemp' images/git/pre-receive-hook.sh && grep -q 'trap.*rm' images/git/pre-receive-hook.sh && echo 'OK: hook uses temp directory with cleanup' || { echo 'FAIL: hook missing temp directory pattern'; exit 1; }"
     timeout_ms: 5000
-    expected_behavior: "OK"
+    assert_exit: 0
+    assert_output_matches: "^OK: "
 
   - step: "pre-receive hook finds diff base for new branches"
     command: "grep -q 'find_diff_base' images/git/pre-receive-hook.sh && grep -q 'merge-base' images/git/pre-receive-hook.sh && echo 'OK: hook has diff-base logic for new branches' || { echo 'FAIL: hook missing diff-base logic'; exit 1; }"
     timeout_ms: 5000
-    expected_behavior: "OK"
+    assert_exit: 0
+    assert_output_matches: "^OK: "
 
   - step: "pre-receive hook exempts legacy archive from validation"
     command: "grep -q 'is_legacy_archive' images/git/pre-receive-hook.sh && grep -qF 'openspec/changes/archive' images/git/pre-receive-hook.sh && echo 'OK: hook exempts legacy archive' || { echo 'FAIL: hook missing legacy archive exemption'; exit 1; }"
     timeout_ms: 5000
-    expected_behavior: "OK"
+    assert_exit: 0
+    assert_output_matches: "^OK: "
 
   - step: "rung-2 grammar warning is config-driven and warn-only"
     command: "grep -q 'warn_if_outside_branch_grammar' images/git/pre-receive-hook.sh && grep -q 'TILLANDSIAS_BRANCH_CREATION_REGEX' images/git/pre-receive-hook.sh && grep -q 'TILLANDSIAS_BRANCH_CREATION_REGEX' images/git/entrypoint.sh && grep -q 'warn-only' images/git/pre-receive-hook.sh && echo 'OK: warn-only grammar path present; regex reaches the pre-receive script via env with the default in the entrypoint' || { echo 'FAIL: warn-only grammar env wiring missing'; exit 1; }"
     timeout_ms: 5000
-    expected_behavior: "OK"
+    assert_exit: 0
+    assert_output_matches: "^OK: "
 
   - step: "hook code stays convention-neutral (order-462 leak class)"
     command: "if grep -qF 'refs/heads/(main' images/git/pre-receive-hook.sh; then echo 'FAIL: creation-policy regex inlined in the pre-receive script'; exit 1; elif sed 's/#.*//' images/git/pre-receive-hook.sh | grep -q 'salvage'; then echo 'FAIL: salvage namespace hard-coded in pre-receive logic'; exit 1; else echo 'OK: pre-receive code embeds no branch-name conventions; patterns arrive via config'; fi"
     timeout_ms: 5000
-    expected_behavior: "OK"
+    assert_exit: 0
+    assert_output_matches: "^OK: "
 
   - step: "salvage YAML-gate exemption routes via a config-supplied exempt pattern"
     command: "grep -q 'ref_is_gate_exempt' images/git/pre-receive-hook.sh && grep -q 'TILLANDSIAS_YAML_GATE_EXEMPT_REFS' images/git/pre-receive-hook.sh && grep -qF 'refs/heads/salvage/*' images/git/entrypoint.sh && echo 'OK: gate exemption is config-routed with the salvage default in the entrypoint' || { echo 'FAIL: config-supplied salvage gate exemption missing'; exit 1; }"
     timeout_ms: 5000
-    expected_behavior: "OK"
+    assert_exit: 0
+    assert_output_matches: "^OK: "
 
   - step: "relay failure path prints protected-branch salvage advice (B3: never pre-reject main)"
     command: "grep -q 'GH006' images/git/relay-refs.sh && grep -q 'protected branch' images/git/relay-refs.sh && grep -qF 'salvage/<host>/' images/git/relay-refs.sh && grep -q 'git push origin HEAD:refs/heads/salvage' images/git/relay-refs.sh && echo 'OK: relay prints the literal salvage push command on the protection-rejection path' || { echo 'FAIL: protected-branch salvage advice missing from relay failure path'; exit 1; }"
     timeout_ms: 5000
-    expected_behavior: "OK"
+    assert_exit: 0
+    assert_output_matches: "^OK: "
 
-  - step: "functional gate tests pin warn-only grammar and salvage routing (tests 5-6)"
-    command: "grep -q 'Test 5' scripts/test-pre-receive-yaml-gate.sh && grep -q 'Test 6' scripts/test-pre-receive-yaml-gate.sh && grep -q 'refs/heads/salvage/' scripts/test-pre-receive-yaml-gate.sh && echo 'OK: functional suite covers rung-2 warn and salvage exemption routing' || { echo 'FAIL: functional rung-2 coverage missing'; exit 1; }"
-    timeout_ms: 5000
-    expected_behavior: "OK"
+  - step: "the functional gate fixture passes: warn-only grammar and salvage routing among its arms"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-pre-receive-yaml-gate.lua 2>&1"
+    timeout_ms: 300000
+    assert_exit: 0
+    assert_output_contains: "ok:pre-receive-yaml-gate:"
 
 observability:
   traces:

@@ -1,0 +1,34 @@
+# @trace spec:ci-release
+# @trace order:2223-bzsn
+#
+# local-ci.sh to Lua, slice 3: the check catalog (check_weight,
+# check_spec_ref, failed_reason_for_check) is one table in
+# scripts/lua/local-ci-check-catalog.lua. Red with a mutant that changes a
+# catalog weight (arm 2) or drops the id from the default reason (arm 3).
+name: litmus:local-ci-check-catalog
+spec: ci-release
+phase: pre-build
+description: local-ci's check catalog prints one row per check plus a default row, and local-ci.sh's lookups answer from it for known and unknown ids
+severity: medium
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary); bash; no network, no podman
+
+critical_path:
+  - step: "row shape; a known id through local-ci.sh; an unknown id; positive weights and unique ids"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-local-ci-check-catalog.lua 2>&1"
+    timeout_ms: 60000
+    expected_behavior: "ok:local-ci-check-catalog:4 arms"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "four arms"
+  log_fields:
+    spec: "ci-release"
+    test: "local-ci-check-catalog"
+
+rollback:
+  on_failure: "read the FAIL lines; the catalog is scripts/lua/local-ci-check-catalog.lua and its lookups are load_check_catalog and the three functions after it in scripts/local-ci.sh"
+  command: "grep -n '2223-bzsn' scripts/local-ci.sh scripts/lua/local-ci-check-catalog.lua"

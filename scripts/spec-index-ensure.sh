@@ -710,9 +710,40 @@ if [ "$n_todo" -gt 0 ]; then
         _afford "split could not cut the texts to embed into batches of TILLANDSIAS_SPEC_INDEX_BATCH lines" "check free space in the staging directory and that the batch size is a positive integer, then re-run"; echo "blocked:spec-index:split-failed"; exit 1; }
 fi
 
+# ORDER 2286-5agy. A HOOK-STARTED REBUILD YIELDS. On lenovinha a cold CPU build
+# held ~8 cores for over an hour beside gates and preflights, and cost a judged
+# door (contention foreign:55 %). The load is the embedder's, in its container,
+# so a nice on this script cannot reach it: the build waits BETWEEN batches while
+# a build.sh gate or preflight runs on this host. Opt-in (the hook sets
+# TILLANDSIAS_SPEC_INDEX_YIELD=1): a forge launch that needs the index never
+# waits. Bounded: after TILLANDSIAS_SPEC_INDEX_YIELD_MAX seconds in all it stops
+# yielding, so a host that always gates still gets an index.
+_gate_running() {
+    # argv position, not a substring: a shell whose TEXT names build.sh (an
+    # agent's command, an editor) is not a gate. Reads every line; never `exit`s
+    # early on a pipe from ps (SIGPIPE).
+    ps -eo args= 2>/dev/null | awk '
+        { s = ($1 ~ /(^|\/)(ba)?sh$/) ? 2 : 1
+          if ($s ~ /(^|\/)build\.sh$/) for (i = s + 1; i <= NF; i++) if ($i ~ /^--(preflight|check|test|ci-full|ci|install)$/) hit = 1
+          if ($s ~ /(^|\/)land-queue\.sh$/) hit = 1 }
+        END { exit !hit }'
+}
+_yielded=0
+_yield_to_gates() {
+    local _max="${TILLANDSIAS_SPEC_INDEX_YIELD_MAX:-7200}"
+    [ "${TILLANDSIAS_SPEC_INDEX_YIELD:-0}" = 1 ] || return 0
+    case "$_max" in ''|*[!0-9]*) _max=7200 ;; esac
+    while [ "$_yielded" -lt "$_max" ] && _gate_running; do
+        [ "$_yielded" -gt 0 ] || echo "note:spec-index:yielding — a gate or preflight is running; the rebuild continues after it (at most ${_max}s in all)" >&2
+        sleep 15; _yielded=$((_yielded + 15))
+    done
+    return 0
+}
+
 : > "$work/new-vecs.jsonl"
 for part in "$work"/b/part-*; do
     [ -e "$part" ] || break
+    _yield_to_gates
     want="$(wc -l < "$part" | tr -d '[:space:]')"
     # DOCUMENT PREFIX (864-p2rk). Several embedders are trained with an
     # asymmetric query/passage convention and are documented as REQUIRING it —

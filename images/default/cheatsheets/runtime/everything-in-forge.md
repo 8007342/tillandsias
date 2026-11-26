@@ -34,12 +34,13 @@ launcher seam.
 
 ## Forge-Resident Binaries
 
-Baked into `tillandsias-forge:v<VERSION>` (`images/default/Containerfile`):
+`bash` is baked into `tillandsias-forge:v<VERSION>`; each agent is installed by its
+lane's entrypoint at launch, on the persistent tool cache (`lib-common.sh`):
 
 | Binary     | Source                                            | Entrypoint                                          | Launch mode                |
 |------------|---------------------------------------------------|-----------------------------------------------------|----------------------------|
-| `claude`   | `npm i -g @anthropic-ai/claude-code` (line 29)    | `/usr/local/bin/entrypoint-forge-claude.sh`         | `ForgeAgentMode::Claude`   |
-| `codex`    | baked agent CLI                                   | `/usr/local/bin/entrypoint-forge-codex.sh`          | `ForgeAgentMode::Codex`    |
+| `claude`   | vendor curl installer at launch, npm fallback (order 459) | `/usr/local/bin/entrypoint-forge-claude.sh`         | `ForgeAgentMode::Claude`   |
+| `codex`    | npm `@openai/codex` at launch (`_require_harness`) | `/usr/local/bin/entrypoint-forge-codex.sh`          | `ForgeAgentMode::Codex`    |
 | `opencode` | latest `anomalyco/opencode` release tarball, verified against its published sha256, last-good rollback (2027-e2cf) | `/usr/local/bin/entrypoint-forge-opencode.sh`       | `ForgeAgentMode::OpenCode` |
 | `opencode serve` | same package, web mode                      | `/usr/local/bin/entrypoint-forge-opencode-web.sh`   | `run_opencode_web_mode`    |
 | `bash`     | Fedora minimal base                               | `/usr/local/bin/entrypoint-terminal.sh`             | `ForgeAgentMode::Maintenance` |
@@ -48,16 +49,16 @@ Verify from outside the forge:
 
 ```bash
 podman run --rm --entrypoint /bin/sh tillandsias-forge:v<VERSION> \
-    -c 'command -v claude codex opencode bash'
-# expect 4 absolute paths
+    -c 'command -v bash; grep -c "^require_codex()" /usr/local/lib/tillandsias/lib-common.sh'
+# expect one path and 1; ask each name alone (command -v a b is green on either)
 ```
 
 ## Adding a New Agent — PR Checklist
 
-1. **Bake it in the image.** Edit `images/default/Containerfile`. If it ships
-   as a Node package, extend the `npm install -g` line. Otherwise add a new
-   `RUN` that installs the binary into `/usr/local/bin` and a `COPY` for the
-   entrypoint script.
+1. **Install it at launch.** Add `require_<agent>` to `images/default/lib-common.sh`:
+   a release asset, vendor installer or npm package onto the persistent tool
+   cache, blocking for its lane. Only the entrypoint script goes in the image
+   (`COPY` in `images/default/Containerfile`).
 2. **Add an entrypoint.** Drop `entrypoint-forge-<agent>.sh` next to the
    existing ones. Source `lib-common.sh`, populate hot paths, set up the CA,
    `cd` to the project, banner, then `exec <agent> "$@"`.
@@ -68,10 +69,9 @@ podman run --rm --entrypoint /bin/sh tillandsias-forge:v<VERSION> \
    `crates/tillandsias-headless/src/` or `crates/tillandsias-podman/src/`.
    The agent is reached *only* through `launch_forge_agent` (or
    `run_opencode_web_mode` if it serves over HTTP).
-5. **Extend the litmus.** Add the new binary name to the
-   `command -v` check in
-   `openspec/litmus-tests/litmus-forge-as-only-runtime.yaml` so future
-   image regressions fail loudly.
+5. **Extend the litmus.** Add the new agent to the lane list in
+   `scripts/lua/test-forge-image-agents.lua`
+   (`litmus:forge-as-only-runtime`) so a missing lane fails loudly.
 6. **Update this cheatsheet.** Add a row to the table above and a note in
    the spec's `Sources of Truth` block.
 
@@ -192,7 +192,7 @@ window.
   `detect_host_terminal`
 - Launcher (web): `crates/tillandsias-headless/src/main.rs` →
   `run_opencode_web_mode`
-- Image: `images/default/Containerfile` (line 29 bakes the agent set)
+- Image: `images/default/Containerfile` (bash); agents: `images/default/lib-common.sh`
 - Idiomatic podman layer: `crates/tillandsias-podman/src/client.rs`,
   `crates/tillandsias-podman/src/container_spec.rs`
 - Sibling cheatsheets: `runtime/forge-container.md` (overall forge model),

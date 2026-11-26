@@ -137,21 +137,23 @@ fi
 #           The skip branch must require an EXACT match against the nominated
 #           code and a non-empty nomination, and the refusal branch must remain
 #           reachable for every other non-zero exit.
-loop="$(sed -n '/for _step_file in .*gate-steps\.d/,/^    done$/p' build.sh)"
+# ORDER 2155-gpar: the loop body is now the function _gs_one (the serial loop and the
+# worker pool both call it), so the pinned span is that function.
+loop="$(sed -n '/^_gs_one() {$/,/^}$/p' build.sh)"
 if [ -z "$loop" ]; then
     bad "could not locate the gate-step loop in build.sh — this fixture has drifted from the code it pins"
 else
-    if printf '%s' "$loop" | grep -q '\[ "\$_step_rc" -eq "\$STEP_SKIP_EXIT" \]'; then
+    if grep -q <<<"$loop" '\[ "\$_step_rc" -eq "\$STEP_SKIP_EXIT" \]'; then
         ok "the skip branch tests an EXACT equality against the nominated code"
     else
         bad "the skip branch does not test exact equality against STEP_SKIP_EXIT"
     fi
-    if printf '%s' "$loop" | grep -q '\[ -n "\$STEP_SKIP_EXIT" \]'; then
+    if grep -q <<<"$loop" '\[ -n "\$STEP_SKIP_EXIT" \]'; then
         ok "the skip branch requires a non-empty nomination, so an unset field cannot open it"
     else
         bad "the skip branch does not require STEP_SKIP_EXIT to be non-empty — an unset field could open it"
     fi
-    if printf '%s' "$loop" | grep -q 'STEP_SKIP_EXIT=""; STEP_SKIP_DESC=""'; then
+    if grep -q <<<"$loop" 'STEP_SKIP_EXIT=""; STEP_SKIP_DESC=""'; then
         ok "both skip fields are reset per step, so one step's nomination cannot leak into the next"
     else
         bad "STEP_SKIP_EXIT is not reset between steps — a nomination would leak to every later step"

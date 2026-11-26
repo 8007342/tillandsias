@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: port-env-forward-discipline-derive-harness-supervisor-clone-wait-fixtures-to-lua
+    field: status
+    value: in_progress
+    ts: "2026-11-24T16:53:04Z"
+    host: lenovinha
+
+events:
+  - packet_id: port-env-forward-discipline-derive-harness-supervisor-clone-wait-fixtures-to-lua
+    event:
+      type: note
+      ts: "2026-11-24T16:53:04Z"
+      host: lenovinha
+      summary: |-
+        claiming: four d-h ports plus arm 4, work/2312-d2gf

@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-20: RC attempt 2 blocker 3 root cause (coordinator).
+packets:
+  - packet_id: the-litmus-podman-shims-mode-selector-crosses-the-lua-door-so-fake-mode-never-reaches-the-real-delegate
+    order: 2147-amid
+    status: in_progress
+    kind: bug
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [litmus, lua-door, podman, release-blocker]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/child_env.rs
+    title: "The litmus podman shim's mode selector crosses the Lua door, so fake mode never reaches the real podman delegate"
+    context: |
+      RC attempt 2: image-build-convergence-shape step 1 failed with empty output. Captured by #1229's kept stderr on yoga:
+      scripts/lua/verify-image-usable.lua (called by build-image.sh through `script run`) printed "podman image inspect
+      exit 101" whose body was a cargo build of the podman delegate. The Lua door passes the `podman` env profile only,
+      which carries no LITMUS_PODMAN_* name, so the runner's shim (target/litmus-runtime/bin/podman) sees no
+      LITMUS_PODMAN_MODE, defaults to real, and delegates to the real podman path, compiling it on first use in a fresh
+      tree. Run directly it passed: the fixture's own shim (mode-blind) came first on PATH.
+    exit_criteria:
+      - "In a fresh worktree with no built tillandsias-podman-cli, scripts/run-litmus-test.sh on the spec runs image-build-convergence-shape step 1 green in under 5 s; at trunk it FAILS (podman image inspect exit 101)."
+      - "LITMUS_PODMAN_MODE, LITMUS_PODMAN_STATE_DIR and LITMUS_PODMAN_CALLS_FILE are podman-profile entries with a why and this order; child_env unit tests pass."
+    unscoreable: "the fresh-worktree litmus run is the measure"
+    provenance: "RC attempt 2 2026-11-20; yoga capture via #1229; coordinator asked for the isolation fix."
+    events:
+      - type: filed
+        ts: "2026-11-20T20:51:38Z"
+        host: yoga
+        summary: "filed and claimed (release blocker 3)"

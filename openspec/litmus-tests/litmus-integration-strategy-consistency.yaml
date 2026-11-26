@@ -1,7 +1,7 @@
 # @trace spec:methodology-accountability
 name: litmus:integration-strategy-consistency
 spec: methodology-accountability
-phase: source-analysis
+phase: pre-build
 description: >
   Verifies that methodology and skills documentation do not instruct agents to use
   'rebase' for cross-branch (sibling or main) integration, which destroys commit hashes.

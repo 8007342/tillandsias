@@ -589,7 +589,7 @@ multi_host_development:
     stranded_plan_write_triage: >
       ASK THE FOLD, NEVER REASON FROM TIMESTAMPS (order 1232-av4p). A plan
       fragment that exists only on a salvage/* or work/* ref is triaged with
-      scripts/check-stranded-plan-writes.sh, which folds it into a scratch copy
+      scripts/lua/check-stranded-plan-writes.lua, which folds it into a scratch copy
       of trunk's ledger with the plan binary and says would-change or
       superseded. The status fold is RANK-AWARE, not (ts, host) LWW:
       status_entry_wins (crates/tillandsias-plan/src/fragments.rs) treats
@@ -634,7 +634,7 @@ multi_host_development:
         --reason "claimed by <agent_id>"`, commit ONLY that fragment, push it:
         `git push origin HEAD:linux-next` (the plan-only lane admits a
         fragment-only commit with no gate stamp). Then
-        `bash scripts/check-claim-confirmed.sh <order>` MUST print a win; a
+        `tillandsias-plan script run scripts/lua/check-claim-confirmed.lua -- <order> --host <host>` MUST print a win; a
         `refused:claim-lost:` means another agent holds it — append a note
         that you yielded and pick another packet.
       3_work: >
@@ -921,7 +921,7 @@ multi_host_development:
         (643-64bx, methodology/versioning.yaml monotonic_build_bump). Two guards enforce this: the pre-push VERSION
         guard treats a platform VERSION == origin/linux-next as a legitimate
         integration-branch CATCH-UP (643-64bx), and
-        scripts/check-version-bump-isolation.sh (wired into ./build.sh --check,
+        scripts/lua/check-version-bump-isolation.lua (wired into ./build.sh --check,
         702-eusw criterion 3) refuses any non-merge commit that changes VERSION
         alongside non-companion files, so a bump cannot be swept in by git add -A.
 
@@ -1393,7 +1393,7 @@ multi_host_development:
     measured_costs:
       one_time_bootstrap: "~5 min (rootfs import 15s + dnf toolchain ~3min + rustup ~2min); persists across e2e runs"
       per_invocation_overhead: "~1-2s (re-exec + stdin marker probe)"
-      shell_or_git_fixture_test: "~3s wall (e.g. test-git-mirror-relay-verified-ack.sh, 3 cases)"
+      shell_or_git_fixture_test: "~3s wall (e.g. test-git-mirror-relay-verified-ack, 3 cases)"
       targeted_warm_cargo_test: "~8s wall (38-test crate)"
       full_workspace_check_warm: "~35s (fmt + check + clippy strict x2); first cold run ~10 min"
     do_locally_via_wsl2:
@@ -1418,6 +1418,21 @@ multi_host_development:
       wrapped gate locally (35s) AND leave the packet's live criteria to the
       owning host — partial local evidence plus an honest residual note
       beats both silence and false completion.
+
+  # ── OPERATOR RULINGS 2026-11-20: the landing queue (order 2143-z5uj) ────────
+  landing_queue:
+    provenance: "operator 2026-11-20, relayed by the coordinator (macuahuitl-fedora); the operator called one-PR-per-full-gate in strict number order an unacceptable bottleneck"
+    rulings:
+      - "A batch or class train gates the LANDED UNION TREE once; a scoped batch follows the 2026-09-20 scoped-tier conditions (scoped stamps only, a full run under 24 h old or the selector refuses, main always full). Implementation: the P7 batch-train packet."
+      - "--floor replaces the worker-side --preflight requirement for work/* refs. Until build.sh --floor exists, the worker-side door stays ./build.sh --preflight."
+      - "A plan-ledger-only PR (every merge-delta path classifies plan-ledger) lands through the plan-lane checks (tillandsias-plan check: fragment parse and ledger validation) with NO build-check. scripts/land-queue.sh: TILLANDSIAS_LAND_QUEUE_PLAN_ONLY_LANE, default 1."
+    mechanics:
+      reread: "scripts/land-queue.sh re-reads gh pr list before EVERY candidate, so a label or close made mid-run takes effect at the next candidate."
+      order: "label land:priority first, then PR number."
+      hold: "label land:hold keeps a PR out of the queue and is named every run; it replaces draft-as-hold (a draft is still skipped, never landed)."
+      host_state: "a host-state failure (could-not-run:host:<reason>, e.g. plan-binary-stale) skips that candidate and the run continues; nothing is evicted for it."
+      flaky_rerun: "a gate red whose failing lines name only tests the candidate's diff does not touch is re-run ONCE on the identical tree: green prints flaky:<test> and lands, red prints evicted:<test>. A red naming no test, or a touched test, is judged on the first run."
+    vocabulary: "one stdout line per candidate or batch, <class>:<scope>:<detail>; precedence could-not-run:host:<reason> > hold:<trunk-red|native-lint>:... > evicted:<test> > flaky:<test>; cleared:stale-head:host resets stale-head. Agreed fleet-wide 2026-11-20 (yoga, lenovinha, coordinator). evicted is the ONLY class that removes a PR."
 
 # ── OPERATOR DIRECTIVE 2026-08-31: loop cadence and stagger ────────────────────
 loop_cadence:

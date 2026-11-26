@@ -32,7 +32,7 @@
 # and a negative is `unmeasured:`, never a refusal.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; cd "$ROOT"
-FIXTURE="scripts/test-expire-claims-write-is-opt-in.sh"
+FIXTURE="scripts/lua/test-expire-claims-write-is-opt-in.lua"
 [ -f "$FIXTURE" ] || { echo "blocked:plan-binary-current:no-fixture:$FIXTURE"; exit 1; }
 
 # THE PRECONDITION, REPORTED AND NEVER INFERRED (macneo). Neither this check
@@ -167,9 +167,22 @@ _vs_surface_hash() {
 # reported content-verified, minted NOTHING, and the fixture's arms C and D lost
 # the stamp they are built on. Identical shape to the lane's own first draft, and
 # identical direction — a binary that cannot answer was treated as current.
-_vs_answer="$("$BIN" validator-surface-hash --check 2>/dev/null)"
+# ORDER 2068-9789. BOTH STREAMS, AND A STALE ANSWER IS A VERDICT. The binary
+# prints `stale:validator-surface ...` on STDERR and exits 3; reading stdout
+# alone heard nothing, classed the answer as "cannot answer", and the arms
+# below then printed ok: — so on yolanda this script said ok twice over a
+# binary the lane refused, while its remedy text claimed it had rebuilt it.
+# It does not rebuild (a check is not a builder); it now says so and refuses.
+_vs_answer="$("$BIN" validator-surface-hash --check 2>&1)"
 case "$_vs_answer" in
     ok:validator-surface:*) _vs_content_ok=1 ;;
+    *stale:validator-surface*)
+        echo "stale:plan-binary-validator-surface:$BIN copies=$_copies — ${_vs_answer%%$'\n'*}"
+        echo "  why: this binary was built from different validate-yaml/fragment-checker bytes than this checkout, so the plan-only lane refuses it" >&2
+        echo "  remedy: rebuild the copy the lane resolves, then re-run this check:" >&2
+        echo "    cargo build --release -p tillandsias-plan   (writes \${CARGO_TARGET_DIR:-./target}/release; on WSL2: bash scripts/with-wsl2-builder.sh cargo build --release -p tillandsias-plan)" >&2
+        echo "  this script does NOT rebuild; it only measures (2068-9789)" >&2
+        exit 1 ;;
     *)                      _vs_content_ok=0 ;;
 esac
 # MINT ANYWAY WHEN THE MTIME PREDICATE ALLOWS IT. The stamp is no longer this
@@ -199,7 +212,7 @@ fi
 # The real ledger must be untouched whatever happens. The fixture seeds its own
 # tree, but assert it rather than trusting the comment.
 _repo_before="$(ls plan/index.d 2>/dev/null | wc -l | tr -d ' ')"
-_out="$(TILLANDSIAS_PLAN_BINARY="$BIN" bash "$FIXTURE" 2>&1)"
+_out="$(TILLANDSIAS_PLAN_BINARY="$BIN" "$BIN" script run "$FIXTURE" 2>&1)"
 _repo_after="$(ls plan/index.d 2>/dev/null | wc -l | tr -d ' ')"
 if [ "$_repo_before" != "$_repo_after" ]; then
     echo "blocked:plan-binary-current:probe-had-side-effects plan/index.d $_repo_before -> $_repo_after"

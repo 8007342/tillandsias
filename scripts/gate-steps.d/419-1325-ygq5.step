@@ -62,7 +62,11 @@
 # is invisible to every name-based scan, including the bound-or-retired guard
 # (1063-nraf). Keep it a plain string.
 STEP_DESC="Checking an added test is referenced by something that runs on its own (1325-ygq5)"
-STEP_SCRIPT="scripts/test-added-test-is-referenced.sh"
+STEP_LUA="scripts/lua/test-added-test-is-referenced.lua"
 STEP_ERROR="the guard that names an unreferenced added test no longer refuses (1325-ygq5) — read which arm failed above; the ENFORCE=1, missing-manifest and grandfather arms are the load-bearing ones, and a failure in the clean-pass arm alone is the least of them"
 STEP_OK="An added test that nothing can fail because of is named at push time"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:added-test-guard-proven:10"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:added-test-is-referenced:10 arms (2306-y8sg Lua port)"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="openspec/litmus-bindings.yaml openspec/litmus-tests/** openspec/litmus-tests/unbound-grandfathered.txt scripts/check-added-test-is-referenced.sh scripts/check-litmus-pin-claims.sh scripts/gate-steps.d/** scripts/hooks/** scripts/local-ci.sh scripts/lua/test-added-test-is-referenced.lua scripts/test-reference-surfaces.manifest scripts/unreferenced-grandfathered.txt"

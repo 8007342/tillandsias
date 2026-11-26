@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: retire-unreachable-dependency-resolver-and-its-dead-caller
+    order: 2399-vzkf
+    status: in_progress
+    kind: cleanup
+    title: "retire images/default/config-overlay/mcp/dependency-resolver.sh and headless run_dependency_check: nothing reaches either"
+    capability_tags: [linux, tooling]
+    owned_files:
+      - images/default/config-overlay/mcp/dependency-resolver.sh
+      - crates/tillandsias-headless/src/main.rs
+      - openspec/litmus-tests/litmus-mcp-on-demand-bridge-shape.yaml
+    depends_on: []
+    context: |
+      Found classifying images/default group C (2396-x2x9 follow-up; coordinator ruling 2026-11-26 to retire).
+      The script's only caller is crates/tillandsias-headless/src/main.rs run_dependency_check, which carries
+      #[allow(dead_code)] and whose single call site is commented out; it looks for /opt/cheatsheets/dependency-resolver.sh,
+      a path the image never writes (the Containerfile copies config-overlay/mcp/ to /home/forge/.config-overlay/mcp/ and
+      only cheatsheets to /opt/cheatsheets*). No MCP configuration registers the script (opencode, claude, codex,
+      copilot, antigravity). The only test text naming it is litmus-mcp-on-demand-bridge-shape's server-count regex,
+      where it is one alternative of five and never matches. Archived plan files and calibration tsv rows naming it are
+      history and stay.
+    exit_criteria:
+      - "Before the change, a recorded search shows no test, gate step or harness config names the script or run_dependency_check."
+      - "The script, the function and its commented call are removed; the litmus regex drops the name; the headless crate builds and its tests pass."
+    verifiable_closure: |
+      litmus:mcp-on-demand-bridge-shape
+    provenance: "coordinator 2026-11-26, yoga"
+    events:
+      - {type: claimed, ts: "2026-11-26T07:27:53Z", host: yoga, summary: "claimed; work ref work/2399-vzkf"}

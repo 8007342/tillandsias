@@ -16,10 +16,14 @@
 #
 # STEP_SCRIPT is a LITERAL path (1063-nraf).
 STEP_DESC="Checking the SIGPIPE verdict guard sees absolute paths and continued pipelines (1084-nzqc)"
-STEP_SCRIPT="scripts/test-sigpipe-guard-sees-paths-and-continuations.sh"
+STEP_LUA="scripts/lua/test-sigpipe-guard-sees-paths-and-continuations.lua"
 STEP_ERROR="the SIGPIPE verdict guard regressed (1084-nzqc) — either an absolute-path producer or a pipeline split across line continuations is escaping it again (the 1069-c9w6 fingerprint), or the widened matcher has started refusing correct code; see the verdict line above"
 STEP_OK="SIGPIPE verdict guard path/continuation check passed"
 # Exit 3 means the guard itself is absent — nothing was examined.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="scripts/check-sigpipe-verdict-pipelines-added.sh is absent, so neither escape could be exercised"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   C2 (negative control): a pipeline with no branch on its status is NOT flagged — the guard tests for a ve"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:sigpipe-guard-sees-paths-and-continuations:15 arms (work/2385-psbb @ 10fa474d9)"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="openspec/specs/** scripts/check-sigpipe-verdict-pipelines-added.sh scripts/lua/test-sigpipe-guard-sees-paths-and-continuations.lua"

@@ -1,0 +1,11 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 5: the next slowest movable blocks,
+# lenovinha timing log 2026-11-24).
+#
+# PORTED to Lua (1527-v7cy): scripts/lua/check-all-fragments-intact.lua.
+STEP_DESC="Checking every ledger fragment is intact (whole overlay)"
+STEP_LUA="scripts/lua/check-all-fragments-intact.lua"
+STEP_ERROR="a ledger fragment is damaged — append-only files are restored, not merged"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin ok:all-fragments-intact:8039 checked at e1e44ec8b (direct)"
+STEP_OK="All fragments intact"
+STEP_READS="scripts/lua/check-all-fragments-intact.lua"

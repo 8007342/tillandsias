@@ -1,7 +1,7 @@
 # Gate step 1587-qqzs — a TERM cleans up test-awk-float-lc-numeric's mutants
 # before the preflight door's KILL. The door signals only the guard pid (no
 # setsid on darwin): TERM, a 1 s grace, then KILL. The script writes three
-# .mutant-lcnum-* copies BESIDE the producers, and pre-fix its EXIT trap was
+# mutant copies (BESIDE the producers until 2278-x4tw), and pre-fix its EXIT trap was
 # deferred behind a producer running in $(...), so a deadline kill leaked them
 # into the checkout. The fixture TERMs the real script while a sed shim holds
 # its first producer, and has a constructed pre-fix-shape control that must
@@ -13,3 +13,10 @@ STEP_LUA="scripts/lua/test-awk-float-lc-numeric-signal.lua"
 STEP_ERROR="test-awk-float-lc-numeric.sh no longer cleans its mutants on TERM, or the control stopped leaking (1587-qqzs) — see the FAIL lines above"
 STEP_OK="The lc-numeric fixture cleans its mutants on TERM"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-11 darwin ok:awk-float-lc-numeric-signal:3 arms"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="times a 1 s TERM grace"
+STEP_LANES="checkout"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lua/test-awk-float-lc-numeric-signal.lua scripts/test-awk-float-lc-numeric.sh"

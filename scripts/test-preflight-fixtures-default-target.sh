@@ -19,11 +19,27 @@
 #        masked regimes. A decider refusing everything would pass arms 1-2.
 # ARM 4  A fixture that SKIPS when it cannot find the binary is refused too:
 #        a skip is as blind as a failure.
-# ARM 5  A fixture red in the caller's own regime is NOT this class: noted,
-#        never refused.
+# ARM 5  A fixture red in the caller's own regime is NOT this class. (2262-5kk6)
+#        a: one no gate runs is refused as ungated-red, with its own last line.
+#        PRE-FIX RESULT: FAILS, it was a note and the guard answered ok.
+#        b: one a .step runs is a note naming that step;  c: so is one build.sh
+#        runs inline;  d: a commented-out or `|| true` call is not a gate, nor is
+#        a step that merely MENTIONS it;  e: could-not-run (exit 3) is a note.
+#        f: one red only from the guard's scratch cwd is a note, not a red.
 # ARM 6  With no arguments the population is the added fixtures (untracked
 #        against the base), and the count is the fixtures examined.
 # ARM 7  No timeout command: a NAMED skip, never an unbounded run.
+# ARM 8  (2206-js5t) A scripts/lua/test-*.lua fixture is examined too: one
+#        whose child resolves the plan binary after `cd /` passes while a plan
+#        binary is on PATH and is REFUSED by name. PRE-FIX RESULT: FAILS, the
+#        decider counted no .lua (`0 checked`).
+# ARM 9  NEGATIVE CONTROL for 8: the absolutising Lua fixture is admitted
+#        and counted. Arms 8-9 need a REAL runner (a stub cannot run Lua), so
+#        they copy the caller's plan binary and skip by name without one.
+# ARM 11 (2305-zm8j) A Lua fixture whose subject reads an exported gate variable
+#        is refused as gate-env.  PRE-FIX RESULT: FAILS, it was admitted.
+# ARM 12 NEGATIVE CONTROL for 11: the same subject with env_unset is admitted.
+#        Skips by name on a plan binary with no env_unset.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEC="$ROOT/scripts/preflight-fixtures-default-target.sh"
@@ -121,11 +137,53 @@ else
 fi
 
 o5="$(by_ctd scripts/test-red.sh)"; rc5=$?
-if [ "$rc5" -eq 0 ] && [[ "$o5" == *"note:fixture-default-target:red-in-both-or-normal-regime:scripts/test-red.sh"* ]] && [[ "$o5" != *refused:* ]]; then
-    ok "ARM 5 a fixture red in the caller's regime is noted, not refused"
+if [ "$rc5" -eq 1 ] && [[ "$o5" == *"refused:fixture-default-target:ungated-red:scripts/test-red.sh"* ]] \
+   && [[ "$o5" == *"broken regardless"* ]] && [[ "$o5" == *"why:"* ]]; then
+    ok "ARM 5a a red fixture no gate runs is refused, in its own words"
 else
-    bad "ARM 5 the always-red fixture was mis-classed (rc=$rc5): $(printf '%s' "$o5" | tail -2 | tr '\n' ';')"
+    bad "ARM 5a expected ungated-red (rc=$rc5): $(printf '%s' "$o5" | tail -2 | tr '\n' ';')"
 fi
+# d first: none of these gates it.
+mkdir -p "$R/scripts/gate-steps.d"
+printf 'STEP_SCRIPT="scripts/test-other.sh"\nSTEP_READS="scripts/test-red.sh"\n# STEP_SCRIPT="scripts/test-red.sh"\n' > "$R/scripts/gate-steps.d/010-mention.step"
+printf '    # _run bash "$SCRIPT_DIR/scripts/test-red.sh" 2>&1\n    _run bash "$SCRIPT_DIR/scripts/test-red.sh" 2>&1 || true\n' > "$R/build.sh"
+o5="$(by_ctd scripts/test-red.sh)"; rc5=$?
+if [ "$rc5" -eq 1 ] && [[ "$o5" == *"ungated-red:scripts/test-red.sh"* ]]; then
+    ok "ARM 5d a mention, a comment and an advisory call are not gates"
+else
+    bad "ARM 5d a non-gate was taken for one (rc=$rc5): $(printf '%s' "$o5" | tail -2 | tr '\n' ';')"
+fi
+printf '    if ! _run bash "$SCRIPT_DIR/scripts/test-red.sh" 2>&1; then\n' > "$R/build.sh"
+o5="$(by_ctd scripts/test-red.sh)"; rc5=$?
+if [ "$rc5" -eq 0 ] && [[ "$o5" == *"scripts/test-red.sh:rc=1 gated-by: build.sh inline step — broken regardless"* ]] && [[ "$o5" != *refused:* ]]; then
+    ok "ARM 5c one build.sh runs inline is a note that says so"
+else
+    bad "ARM 5c (rc=$rc5): $(printf '%s' "$o5" | tail -2 | tr '\n' ';')"
+fi
+rm -f "$R/build.sh"
+printf 'STEP_SCRIPT="scripts/test-red.sh"\n' > "$R/scripts/gate-steps.d/020-red.step"
+o5="$(by_ctd scripts/test-red.sh)"; rc5=$?
+if [ "$rc5" -eq 0 ] && [[ "$o5" == *"scripts/test-red.sh:rc=1 gated-by: step 020-red.step — broken regardless"* ]] && [[ "$o5" != *refused:* ]]; then
+    ok "ARM 5b one a step runs is a note naming the step"
+else
+    bad "ARM 5b (rc=$rc5): $(printf '%s' "$o5" | tail -2 | tr '\n' ';')"
+fi
+rm -rf "$R/scripts/gate-steps.d"
+printf '#!/usr/bin/env bash\necho "could-not-run:x:no-tool"; exit 3\n' > "$R/scripts/test-cnr.sh"
+o5="$(by_ctd scripts/test-cnr.sh)"; rc5=$?
+if [ "$rc5" -eq 0 ] && [[ "$o5" == *"note:fixture-default-target:could-not-run:scripts/test-cnr.sh — could-not-run:x:no-tool"* ]]; then
+    ok "ARM 5e could-not-run is a note, not a red"
+else
+    bad "ARM 5e (rc=$rc5): $(printf '%s' "$o5" | tail -2 | tr '\n' ';')"
+fi
+printf '#!/usr/bin/env bash\n[ -d scripts ] || { echo "not in the checkout"; exit 1; }\necho ok:cwd\n' > "$R/scripts/test-cnr.sh"
+o5="$(by_ctd scripts/test-cnr.sh)"; rc5=$?
+if [ "$rc5" -eq 0 ] && [[ "$o5" == *"note:fixture-default-target:red-only-from-scratch-cwd:scripts/test-cnr.sh:rc=1 — not in the checkout"* ]]; then
+    ok "ARM 5f one red only from the scratch cwd is a note that says so"
+else
+    bad "ARM 5f (rc=$rc5): $(printf '%s' "$o5" | tail -2 | tr '\n' ';')"
+fi
+rm -f "$R/scripts/test-cnr.sh"
 
 # ARM 7: no timeout command (a stock macOS without coreutils) is a NAMED
 # skip, never an unbounded run of a fixture that might hang the gate.
@@ -136,6 +194,75 @@ else
     bad "ARM 7 expected skip:fixture-default-target:no-timeout-command (rc=$rc7): $(printf '%s' "$o7" | tail -2 | tr '\n' ';')"
 fi
 
+# ARMS 8-9: Lua fixtures, run by a real runner copied to the default target
+# of a second scratch repo and to a PATH directory (the mask).
+REALP="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || REALP=""
+case "$REALP" in ""|/*) ;; *) REALP="$ROOT/${REALP#./}" ;; esac
+caps=""; [ -n "$REALP" ] && caps="$("$REALP" capabilities 2>/dev/null)"
+if ! grep -qx script <<<"$caps"; then # sigpipe-ok: herestring, no upstream writer
+    echo "skip:arm-8-9:no-real-lua-runner"
+else
+    L="$W/lrepo"
+    mkdir -p "$L/scripts/lua" "$L/target/release" "$W/lpath"
+    # The Lua runner roots a decider at the repository containing its cwd and
+    # refuses outside one (2213-ag5u), so the stand-in checkout is a repository.
+    git init -q "$L"
+    cp "$DEC" "$ROOT/scripts/plan-binary-probe.sh" "$L/scripts/"
+    cp "$REALP" "$L/target/release/tillandsias-plan"; cp "$REALP" "$W/lpath/tillandsias-plan"
+    cat > "$L/scripts/res-cd-first.sh" <<'EOS'
+. scripts/plan-binary-probe.sh
+cd / || exit 1
+P="$(resolve_plan_binary)" || exit 2
+"$P" capabilities >/dev/null
+EOS
+    cat > "$L/scripts/res-absolute.sh" <<'EOS'
+. scripts/plan-binary-probe.sh
+P="$(resolve_plan_binary)" || exit 2
+case "$P" in /*) ;; *) P="$PWD/${P#./}" ;; esac
+cd / || exit 1
+"$P" capabilities >/dev/null
+EOS
+    for k in cd-first absolute; do
+        printf 'local r = proc.run{ argv = { "bash", "scripts/res-%s.sh" }, timeout_ms = 60000 }\nif r.ok then verdict.ok("lua-%s") end\nverdict.refused("lua-%s")\n' "$k" "$k" "$k" > "$L/scripts/lua/test-$k.lua"
+    done
+    by_lpath() { (cd "$L" && env -u TILLANDSIAS_PLAN_BIN -u TILLANDSIAS_SCRIPT_RUNNER_BIN -u CARGO_TARGET_DIR PATH="$W/lpath:$BASEPATH" bash "$L/scripts/preflight-fixtures-default-target.sh" "$@" 2>&1); }
+    o8="$(by_lpath scripts/lua/test-cd-first.lua)"; rc8=$?
+    if [ "$rc8" -ne 0 ] && [[ "$o8" == *"refused:fixture-default-target:scripts/lua/test-cd-first.lua"* ]]; then
+        ok "ARM 8 a Lua fixture masked by a plan binary on PATH is refused"
+    else
+        bad "ARM 8 expected the cd-first Lua fixture refused (rc=$rc8): $(printf '%s' "$o8" | tail -2 | tr '\n' ';')"
+    fi
+    o9="$(by_lpath scripts/lua/test-absolute.lua)"; rc9=$?
+    # Not noted as red in both regimes: a fixture the runner refused everywhere
+    # is "checked" and noted, which would admit it vacuously (2213-ag5u).
+    if [ "$rc9" -eq 0 ] && [ "$(printf '%s' "$o9" | tail -1)" = "ok:fixture-default-target:1 checked" ] \
+       && [[ "$o9" != *"red-in-both-or-normal-regime"* ]]; then
+        ok "ARM 9 the absolutising Lua fixture is admitted and counted"
+    else
+        bad "ARM 9 expected the absolutising Lua fixture admitted (rc=$rc9): $(printf '%s' "$o9" | tail -2 | tr '\n' ';')"
+    fi
+    printf '[ -z "${TILLANDSIAS_FORGE_SEED_BRANCH:-}" ] && [ -z "${CARGO_TARGET_DIR:-}" ]\n' > "$L/scripts/reads-gate.sh"
+    for k in leaks drops; do
+        u=""; [ "$k" = leaks ] || u=', env_unset = { "TILLANDSIAS_*", "CARGO_TARGET_DIR" }'
+        printf 'local r = proc.run{ argv = { "bash", "scripts/reads-gate.sh" }%s }\nif r.ok then verdict.ok("lua-%s") end\nverdict.refused("lua-%s")\n' "$u" "$k" "$k" > "$L/scripts/lua/test-$k.lua"
+    done
+    o10="$(by_lpath scripts/lua/test-leaks.lua)"; rc10=$?
+    if [ "$rc10" -ne 0 ] && [[ "$o10" == *"refused:fixture-default-target:gate-env:scripts/lua/test-leaks.lua"* ]]; then
+        ok "ARM 11 a Lua fixture red only under a gate's variables is refused"
+    else
+        bad "ARM 11 expected the leaking Lua fixture refused as gate-env (rc=$rc10): $(printf '%s' "$o10" | tail -2 | tr '\n' ';')"
+    fi
+    o11="$(by_lpath scripts/lua/test-drops.lua)"; rc11=$?
+    if [[ "$o11" == *"unknown field 'env_unset'"* ]]; then
+        echo "skip:arm-12:plan-binary-without-env_unset"
+    elif [ "$rc11" -eq 0 ] && [ "$(printf '%s' "$o11" | tail -1)" = "ok:fixture-default-target:1 checked" ] \
+       && [[ "$o11" != *"note:fixture-default-target"* ]]; then
+        ok "ARM 12 the same subject with env_unset is admitted"
+    else
+        bad "ARM 12 expected the env_unset fixture admitted (rc=$rc11): $(printf '%s' "$o11" | tail -2 | tr '\n' ';')"
+    fi
+fi
+
 # ARM 6: population mode. Base holds only the decider and resolver; the
 # absolutising fixture is added (untracked), the rest are removed.
 rm -f "$R/scripts/test-cd-first.sh" "$R/scripts/test-skips.sh" "$R/scripts/test-red.sh"
@@ -144,11 +271,25 @@ git -C "$R" config user.email f@x.invalid; git -C "$R" config user.name f
 git -C "$R" add scripts/preflight-fixtures-default-target.sh scripts/plan-binary-probe.sh
 git -C "$R" commit -qm base
 git -C "$R" update-ref refs/remotes/origin/linux-next HEAD
-o6="$(cd "$R" && by_ctd)"; rc6=$?
+# The gate exports its frozen TILLANDSIAS_GATE_DIFF_BASE, a commit this scratch
+# repo does not hold (2241-f8jg: a missing base is now named, not judged), so
+# the arm names its own base.
+o6="$(cd "$R" && TILLANDSIAS_DEFAULT_TARGET_BASE= TILLANDSIAS_GATE_DIFF_BASE=refs/remotes/origin/linux-next by_ctd)"; rc6=$?
 if [ "$rc6" -eq 0 ] && [ "$(printf '%s' "$o6" | tail -1)" = "ok:fixture-default-target:1 checked" ]; then
     ok "ARM 6 a bare run finds the one added fixture and counts it"
 else
     bad "ARM 6 expected ok:...:1 checked from the added population (rc=$rc6): $(printf '%s' "$o6" | tail -2 | tr '\n' ';')"
+fi
+
+# ARM 10 (2297-vrsa): a red helper under scripts/test-support/ is not a fixture.
+# A case `*` crosses `/`. PRE-FIX RESULT: FAILS, refused as ungated-red.
+mkdir -p "$R/scripts/test-support"
+printf '#!/usr/bin/env bash\necho "helper, not a fixture"; exit 97\n' > "$R/scripts/test-support/mock.sh"
+o10="$(cd "$R" && TILLANDSIAS_DEFAULT_TARGET_BASE= TILLANDSIAS_GATE_DIFF_BASE=refs/remotes/origin/linux-next by_ctd)"; rc10=$?
+if [ "$rc10" -eq 0 ] && [ "$(printf '%s' "$o10" | tail -1)" = "ok:fixture-default-target:1 checked" ]; then
+    ok "ARM 10 a helper in a test-* directory is not counted as a fixture"
+else
+    bad "ARM 10 expected the helper left out (rc=$rc10): $(printf '%s' "$o10" | tail -2 | tr '\n' ';')"
 fi
 
 total=$((pass+fail))

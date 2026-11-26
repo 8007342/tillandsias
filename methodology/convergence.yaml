@@ -112,7 +112,7 @@ drift_control:
           record is a STEP_SECOND_REGIME variable in the .step file itself
           ("<host> <YYYY-MM-DD> <darwin|msys> <verdict>"), kept beside the step
           rather than in a sidecar so it cannot drift from its subject, and
-          enforced by scripts/check-gate-step-regimes.sh. A step that genuinely
+          enforced by scripts/lua/check-gate-step-regimes.lua. A step that genuinely
           cannot run off Linux records a NAMED SKIP as its verdict and that
           COUNTS (965-sxec): what is required is an observation from the other
           regime, not a green one. Recording a Linux host in that field does not
@@ -706,7 +706,7 @@ carried_obligations:
       The counter reaches the backlog's floor of things that stay (for
       shell-to-lua, scripts/portability/bootstrap-shell-allowlist.txt). The
       obligation is removed from the table; the ratchet stays as the growth
-      refusal, and check-decider-retirement.sh says when its deciders retire.
+      refusal, and scripts/lua/check-decider-retirement.lua says when its deciders retire.
   governance: >
     A trigger obliges the coordinator to PROPOSE the move, as one plain ask in
     the operator queue carrying the window's numbers (paid, waived, silent,
@@ -758,7 +758,12 @@ carried_obligations:
         One file from the counter's population ported to scripts/lua/ on
         `tillandsias-plan script run` with the same verdict grammar, or
         retired; the .sh deleted and both floor files lowered through
-        `check-shell-ratchet.lua --dump-floors` in the same commit.
+        `check-shell-ratchet.lua --dump-floors` in the same commit. Also an
+        item (2219-crmv): deleting a top-level scripts/*.sh OUTSIDE the
+        population and the bootstrap allowlist (a wrapper or a tombstone),
+        when the change deletes more such scripts than it adds, so a rename
+        never pays (`paid:retired-uncounted:<path>`). The counter does not
+        move for it; the payment is the retirement itself.
       item_ceiling_lines: 150
       item_ceiling_measured: >
         2026-10-10, existing floor files by wc -l: 38 at or under 60 lines,
@@ -768,6 +773,54 @@ carried_obligations:
       guard: 1577-g96z
       tally: 1577-568c
       honest_counter: 1577-57u3
+      batching:
+        ruling: >
+          Operator 2026-11-25, approving the coordinator's recommendation:
+          "I approve your recommendations on next items, delegate to agents
+          and other hosts accordingly", then "keep ./skills and specs and
+          methodology updated with these updates, so they become durable for
+          the fleet between restarts".
+        measured_before: >
+          The .sh count on linux-next fell 995 -> 711 from 2026-11-18 to
+          2026-11-25. The daily drop climbed to about 58-61 and then held flat.
+          A land run of 1-2 PRs took about 10 min, and the queue sat idle
+          between runs. Porting was the bottleneck: 3-4 ports per PR, each
+          with an exhaustive mutant set.
+        fixture_batch: >
+          A PR that ports scripts/test-*.sh fixtures carries 8-10 ports. Run
+          mutants against each fixture's main assertions only (2-3 per
+          fixture), not the exhaustive set, and name every surviving mutant in
+          the PR body.
+        careful_batch: >
+          Library, hook, tool and gate-decider scripts (scripts/lib*,
+          scripts/hooks, scripts/check-* that a gate step runs, sourced
+          helpers) keep 3-4 ports per PR with full mutants, because other
+          scripts depend on them.
+        host_row: >
+          The coordinator queues each porting host for 30 fixture ports, as
+          three PRs of 10, from its letter range. Before promising 30, the
+          host counts what is free. A fixture held by an open draft with no
+          commits for 3+ days, whose edit a port makes moot, is ported anyway.
+          The superseded draft is listed in the port PR and closed with a
+          tombstone only after the port lands.
+        images_track: >
+          images/** shell (about 107 files on 2026-11-25) runs inside
+          containers. It is its own track on podman hosts, verified in a
+          container (toolbox or podman, no sudo, no rpm-ostree layering).
+          It is not mixed into fixture batches.
+        retire_first: >
+          A test that never runs (no phase in the four a run selects, or
+          calling a probe, example or helper that does not exist) is retired
+          with its reason written in the file, not ported. One sweep PR may
+          retire many.
+        darwin_verdicts: >
+          A ported step needs a darwin line. The coordinator relays the step
+          numbers to a macOS host, which runs them on the PR head and sends
+          the verdict, and the author carries it in its next PR.
+        success_measure: >
+          The daily drop in `git ls-files '*.sh'` on linux-next, reported each
+          coordinator pass. The ruling pays off if the drop rises above about
+          60 a day.
     - name: forge-helper-shell
       stage: advisory
       since: "2026-11-08"

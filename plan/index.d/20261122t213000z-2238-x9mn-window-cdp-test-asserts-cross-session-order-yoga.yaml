@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-22 at the coordinator's direction (macuahuitl-fedora).
+packets:
+  - packet_id: window-cdp-emulation-test-asserts-a-cross-session-order
+    order: "2238-x9mn"
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [browser-mcp, tests, flake]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-browser-mcp/src/window_cdp.rs
+    title: "window_cdp emulation test asserts setAutoAttach is the first CDP message; P1's emulation can precede it"
+    context: |
+      #1330 (no browser-mcp change) was evicted by window_cdp::tests::every_page_is_emulated_before_it_runs_and_set_device_switches_them_all
+      at window_cdp.rs:995: left ("Emulation.setTouchEmulationEnabled", Some("P1")), right ("Target.setAutoAttach", None).
+      The test emits P1's attachedToTarget BEFORE WindowCdp::start, so the reader may emulate P1 before start() sends
+      setAutoAttach. Cross-session order is not the contract; each page being emulated before it runs is, and the
+      per-session assertions already pin that.
+    exit_criteria:
+      - "The test asserts exactly one session-less Target.setAutoAttach, not its index; per-session order assertions unchanged."
+      - "window_cdp tests green 30/30 consecutive runs."
+    unscoreable: "a race-free assertion cannot be falsified by a single run; the 30-run loop is the measurement"
+    provenance: "coordinator 2026-11-22 after #1330's eviction"
+    events:
+      - type: filed
+        ts: "2026-11-22T21:30:00Z"
+        host: yoga
+        summary: "filed with the fix: an index-0 assertion over concurrent CDP sends"

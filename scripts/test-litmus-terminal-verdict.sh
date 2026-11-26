@@ -66,7 +66,7 @@ fi
 if grep -q "Pass Rate%b: %d%% (%d/%d executed)" scripts/run-litmus-test.sh; then
     ok "the existing Pass Rate line keeps its exact format (seven parsers read this surface)"
 else
-    bad "the Pass Rate line was reshaped — test-litmus-missing-bound-test-reds.sh asserts it literally"
+    bad "the Pass Rate line was reshaped — test-litmus-missing-bound-test-reds.lua asserts it literally"
 fi
 
 # ── THE ALL-SKIP TEST: a question not asked is not a green ──────────────────

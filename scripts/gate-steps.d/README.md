@@ -9,7 +9,7 @@ conflict.
 
 The numeric prefix is the ORDER, spaced by ten so a later step can land
 between two without renaming either. No two files may share a prefix
-(test-gate-step-append-no-conflict.sh, arm 7, refuses the tree).
+(test-gate-step-append-no-conflict.lua, arm 7, refuses the tree).
 
 You pick the slot you mean; the LAND TOOL keeps it free (1162-qbrx). After
 its integrate and before the gate, scripts/land-on-platform-branch.sh runs

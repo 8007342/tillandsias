@@ -58,21 +58,23 @@ if [[ -n "${LITMUS_PODMAN_STATE_DIR:-}" ]]; then
     state_dir="$LITMUS_PODMAN_STATE_DIR"
 else
     calls_file="${LITMUS_PODMAN_CALLS_FILE:-/tmp/litmus-podman-calls.log}"
-    state_dir="$(dirname "$calls_file")/.fake-podman-state"
+    case "$calls_file" in
+        /*/*) state_dir="${calls_file%/*}/.fake-podman-state" ;;
+        *) state_dir="$(dirname "$calls_file")/.fake-podman-state" ;;
+    esac
 fi
 secret_dir="$state_dir/secrets"
 image_dir="$state_dir/images"
 container_dir="$state_dir/containers"
-mkdir -p "$secret_dir"
-mkdir -p "$image_dir"
-mkdir -p "$container_dir"
-
-image_key() {
-    printf '%s' "$1" | sed 's|/|__slash__|g; s|:|__colon__|g'
-}
+# Builtins, not mkdir/sed/basename, on the path every call takes: on msys each
+# spawn costs 15 to 30 ms, and a fixture makes ~90 calls (2297-vrsa).
+if [[ ! -d "$secret_dir" || ! -d "$image_dir" || ! -d "$container_dir" ]]; then
+    mkdir -p "$secret_dir" "$image_dir" "$container_dir"
+fi
 
 image_path() {
-    printf '%s/%s' "$image_dir" "$(image_key "$1")"
+    local key="${1//\//__slash__}"
+    printf '%s/%s' "$image_dir" "${key//:/__colon__}"
 }
 
 stateful_images_enabled() {
@@ -232,7 +234,12 @@ case "$subcommand" in
         if stateful_images_enabled; then
             for image in "$image_dir"/*; do
                 [[ -e "$image" ]] || continue
-                basename "$image" | sed 's|__slash__|/|g; s|__colon__|:|g'
+                image="${image##*/}"
+                image="${image//__colon__/:}"
+                # The slash travels in a variable: bash 3.2 keeps a literal
+                # backslash when the replacement is quoted or escaped.
+                slash=/
+                printf '%s\n' "${image//__slash__/$slash}"
             done
             exit 0
         fi

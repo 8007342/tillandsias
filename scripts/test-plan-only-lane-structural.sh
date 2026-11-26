@@ -40,13 +40,13 @@
 #
 # HERMETIC: two scratch git repos (a bare "remote" plus a working copy each),
 # a stub tillandsias-plan binary, a stub for check-plan-binary-current.sh's
-# OWN fixture dependency (test-expire-claims-write-is-opt-in.sh — a different
+# OWN fixture dependency (lua/test-expire-claims-write-is-opt-in.lua — a different
 # packet's 16-arm write-vs-read behaviour has nothing to do with this one),
 # mktemp only. No network, no credentials, the real repo is never touched.
 #
 # SEAMS REUSED FROM THE ESTABLISHED FIXTURES, not invented here:
 #   - the bare-remote + working-copy + `core.hooksPath` + piped-refs harness
-#     is scripts/test-pre-push-plan-lane-after-merge.sh's (arms a/b: a
+#     is scripts/lua/test-pre-push-plan-lane-after-merge.lua's (arms a/b: a
 #     non-plan path must be judged against a DIFFERENT ref than the push
 #     target, or the defect cannot even be constructed — that fixture's own
 #     header explains why a same-branch repro proves nothing).
@@ -57,6 +57,11 @@
 #     CONTAINS the grep keywords so it exercises the new validator-surface
 #     path instead.
 set -uo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-support/scratch-git.sh"  # 2245-scgt: scratch_git, scratch_trap
+# 2242-u39b: the scratch repos below are their own diff world. A gate exports
+# its frozen base (a sha of the REAL repo) and maybe its root; inherited, the
+# lane's checks would diff against an object these repos do not hold.
+unset TILLANDSIAS_GATE_DIFF_BASE TILLANDSIAS_GATE_DIFF_BASE_ROOT
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GUARD="$ROOT/scripts/hooks/pre-push-local-gate.sh"
@@ -67,7 +72,7 @@ ok()  { echo "ok:   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/plan-lane-structural.XXXXXX")"
-trap 'rm -rf "$WORK"' EXIT INT TERM
+scratch_trap 'rm -rf "$WORK"'
 export GIT_TERMINAL_PROMPT=0
 
 # ── Mutated copies of the two owned files, one per construct under test ────
@@ -152,7 +157,7 @@ git init -q --bare "$AB/bare.git"
 git init -q -b linux-next "$AB/wc"
 ( cd "$AB/wc" && git remote add origin "$AB/bare.git" \
       && git config core.hooksPath .git/hooks && git config core.autocrlf false )
-GA() { git -C "$AB/wc" -c user.email=t@t -c user.name=t "$@"; }
+GA() { scratch_git "$AB/wc" -c user.email=t@t -c user.name=t "$@"; }
 
 mkdir -p "$AB/wc/scripts/hooks" "$AB/wc/plan/index.d"
 cp "$GUARD" "$AB/wc/scripts/hooks/pre-push-local-gate.sh"
@@ -184,7 +189,7 @@ chmod +x "$AB/wc/scripts"/*.sh "$AB/wc/scripts/hooks"/*.sh 2>/dev/null || true
 # So CONSTRUCT the property rather than inherit it. If this checkout has no
 # built binary either, SKIP BY NAME rather than scoring the guard wrong for an
 # environment the arm never claimed to need — the precedent is
-# test-claims-across-branches.sh's own 1109-t8kw skip.
+# test-claims-across-branches.lua's own 1109-t8kw skip.
 #
 # AND IT IS THE BINARY, NOT yq. `yq` satisfies the lane's FIRST validator gate
 # (pre-push-local-gate.sh:1003) and is NOT enough for these arms: arm A's push
@@ -234,7 +239,7 @@ run_guard_ab_with() { # $1 = alternate hook script (absolute path)
     rm -f "$save"
     printf '%s\nGUARDRC=%d\n' "$out" "$rc"
 }
-reset_ab() { GA reset -q --hard origin/windows-next; git -C "$AB/wc" clean -qfd; mkdir -p "$AB/wc/plan/index.d"; }
+reset_ab() { GA reset -q --hard origin/windows-next; scratch_git "$AB/wc" clean -qfd; mkdir -p "$AB/wc/plan/index.d"; }
 
 if [ "$AB_VALIDATOR" -eq 0 ]; then
     echo "skip:arms-ab:no-plan-binary (1109-t8kw) — target/release/tillandsias-plan is not built in this checkout, so the lane's fold and status-loss precondition cannot be constructed (yq does not substitute, 1124-7f3u); NOT a verdict about the guard"
@@ -305,7 +310,7 @@ git init -q --bare "$CD/bare.git"
 git init -q -b linux-next "$CD/wc"
 ( cd "$CD/wc" && git remote add origin "$CD/bare.git" \
       && git config core.hooksPath .git/hooks && git config core.autocrlf false )
-GC() { git -C "$CD/wc" -c user.email=t@t -c user.name=t "$@"; }
+GC() { scratch_git "$CD/wc" -c user.email=t@t -c user.name=t "$@"; }
 
 mkdir -p "$CD/wc/scripts/hooks" "$CD/wc/plan/index.d" "$CD/wc/target/release" \
          "$CD/wc/crates/tillandsias-plan/src"
@@ -325,11 +330,10 @@ done
 # concern, unrelated to this packet; this stub exists only so
 # check-plan-binary-current.sh reaches the validator-surface stamping code
 # this packet adds, which runs BEFORE it shells out to that fixture.
-cat > "$CD/wc/scripts/test-expire-claims-write-is-opt-in.sh" <<'STUB'
-#!/usr/bin/env bash
-echo "expire-claims-write-is-opt-in: 0 passed, 0 failed"
-exit 0
-STUB
+# The fixture is Lua now, run as `$BIN script run <it>`: the checker needs only the
+# file, and the stub binary's `script` verb below prints the arm count it parses.
+mkdir -p "$CD/wc/scripts/lua"
+printf -- '-- stub\n' > "$CD/wc/scripts/lua/test-expire-claims-write-is-opt-in.lua"
 chmod +x "$CD/wc/scripts"/*.sh "$CD/wc/scripts/hooks"/*.sh 2>/dev/null || true
 
 # A REAL validator-surface source: unlike test-plan-binary-freshness.sh's
@@ -360,6 +364,7 @@ case "${1:-}" in
     check) exit 0 ;;
     validate-yaml) exit 0 ;;
     yaml-type) echo '!!map'; exit 0 ;;
+    script) echo "expire-claims-write-is-opt-in: 0 passed, 0 failed"; exit 0 ;;
 esac
 exit 0
 STUB

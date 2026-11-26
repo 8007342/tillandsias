@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: script-run-outside-any-repository-refuses-instead-of-using-the-runners-checkout
+    order: 2213-ag5u
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixture, build-speed]
+    estimated_hours: 3
+    title: |
+      tillandsias-plan script run, started outside any repository, silently roots the script at the runner binary's OWN checkout (current_exe walk); it must refuse with a named could-not-run instead.
+    context: |
+      Measured 2026-11-22 (2212-2m8s): test-plan-binary-runnability-precondition ran the Lua issue-capture port inside a scratch dir with a dead ELF; the runner resolved its root from current_exe, so fs.*, proc.run's default cwd and the port's own probe all ran against the real checkout: 27/27 with the base folding, where the dead ELF should have made it skip. The "fixture reads production host state" class, fixed at the source per coordinator macuahuitl-fedora.
+    exit_criteria:
+      - "script run from a cwd outside any repository, with a script outside any repository and no TILLANDSIAS_REPO_ROOT/PROJECT_ROOT, prints could-not-run:script-run:no-repository-root naming the cwd and exits 3, running nothing"
+      - "a script inside a repository run from a cwd outside one roots at the SCRIPT's repository, never the runner's"
+      - "an arm: a scratch dir without git init is refused, not 27/27 on the real tree; the gate, build.sh and litmus callers are unchanged"
+    unscoreable: "unpinnable-until-the-guard-exists: the refusal arm is the deliverable."
+    next_action: "Record the script path at script run; resolve cwd repo, then script repo, else refuse; cargo test arm plus a fixture arm."
+    provenance: coordinator direction; filed by lenovinha.
+    depends_on: []
+    related: [2212-2m8s, 1367-q9yc]
+    events:
+      - {type: filed, ts: '2026-11-22T12:24:19Z', host: lenovinha, summary: script run falls back to the runner's checkout}

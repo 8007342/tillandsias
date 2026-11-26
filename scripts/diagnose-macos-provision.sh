@@ -98,7 +98,7 @@ trap 'printf "\n${RED}ABORTED${RESET} — smoke test interrupted\n"' INT TERM
 #
 # So: two justified copies beat one fragile abstraction. If you are sweeping
 # callers onto the lib, SKIP THIS FILE. scripts/test-shipped-diagnostic-tool-dispatch.sh
-# and scripts/test-tool-dispatch-lib.sh both FAIL if this file starts sourcing it.
+# and scripts/lua/test-tool-dispatch-lib.lua both FAIL if this file starts sourcing it.
 TILLANDSIAS_JQ=""
 if command -v jq >/dev/null 2>&1; then
     TILLANDSIAS_JQ="jq"

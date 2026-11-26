@@ -46,7 +46,7 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-installer-reports-wsl-guest-shape.sh
+  - workspace contains scripts/lua/test-installer-reports-wsl-guest-shape.lua
   - workspace contains scripts/lua/test-installer-merges-wslconfig-swap-keys.lua
   - workspace contains scripts/install-windows.ps1
   - the shape fixture reads SOURCE only and runs everywhere; the merge fixture
@@ -55,15 +55,8 @@ preconditions:
     live WSL guest, and neither touches the real .wslconfig or group membership
 
 critical_path:
-  - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-installer-reports-wsl-guest-shape.sh && test -x scripts/test-installer-reports-wsl-guest-shape.sh && echo 'ok: wsl-guest-shape-fixture-parses'"
-    timeout_ms: 10000
-    expected_behavior: "ok: wsl-guest-shape-fixture-parses"
-    assert_exit: 0
-    assert_output_contains: "ok: wsl-guest-shape-fixture-parses"
-
   - step: "all seven arms pass against the real installer: it reads .wslconfig, derives the effective shape, names the ratio with its numbers, warns about [experimental], writes the file only inside Invoke-WslConfigEnsure after its backup, and refuses to advise when it cannot read the host"
-    command: "bash scripts/test-installer-reports-wsl-guest-shape.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-installer-reports-wsl-guest-shape.lua 2>&1"
     timeout_ms: 60000
     expected_behavior: "ok:installer-reports-wsl-guest-shape:7/7 arms"
     assert_exit: 0

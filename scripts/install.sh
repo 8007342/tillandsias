@@ -245,7 +245,7 @@ CHECKSUM_ONE="$TMPDIR_TILLANDSIAS/SHA256SUMS.$ASSET"
 say "Downloading $ASSET..."
 # ORDER 1420-jmp4: --progress-bar draws one clean # bar instead of curl's raw
 # 12-column meter, the way install-macos.sh already does. The markers around
-# this block are cut and run by scripts/test-installers-quiet-progress.sh.
+# this block are cut and run by scripts/lua/test-installers-quiet-progress.lua.
 curl -fL --progress-bar --retry 3 --retry-delay 2 -o "$BINARY_TMP" "$RELEASE_BASE/$ASSET"
 # END-ASSET-DOWNLOAD
 
@@ -387,7 +387,7 @@ echo ""
 # nothing to do. "PENDING: none" is printed rather than omitted, because
 # silence and "nothing pending" produce the same bytes.
 # TILLANDSIAS_SWAP_UNIT is a test seam only (the fixture points it at a scratch path).
-# The two marker lines are what scripts/test-installers-print-pending-banner.sh
+# The two marker lines are what scripts/lua/test-installers-print-pending-banner.lua
 # cuts on to RUN this block; keep them.
 # BEGIN-PENDING-BANNER
 pending_banner() {

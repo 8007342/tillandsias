@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: live-freeze-fixture-arm-3b-reds-on-a-stale-plan-binary-instead-of-rebuilding-or-skipping
+    field: status
+    value: implemented
+    ts: "2026-11-21T16:26:27Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: live-freeze-fixture-arm-3b-reds-on-a-stale-plan-binary-instead-of-rebuilding-or-skipping
+    event:
+      type: note
+      ts: "2026-11-21T16:26:27Z"
+      host: calmecacpilli
+      summary: |-
+        arm 3b asks the resolved binary validator-surface-hash --check and skips by name on stale:; stale stub reproduces the old red (20/21) and the new fixture passes 20/20 with one named skip; current binary 21/21

@@ -14,13 +14,13 @@ description: >
   release-asset downloads.
 preconditions:
   - workspace contains images/default/lib-common.sh
-  - workspace contains scripts/test-harness-byte-cheap.sh
+  - workspace contains scripts/lua/test-harness-byte-cheap.lua
 
 critical_path:
   - step: "download-count, coalescing, currentness, rollback, and lock fixtures pass"
-    command: "scripts/test-harness-byte-cheap.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-harness-byte-cheap.lua 2>&1"
     timeout_ms: 30000
-    expected_behavior: "PASS: harness byte-cheap fixtures"
+    expected_behavior: "ok:harness-byte-cheap:"
 
   - step: "Claude probes use official update guards without exporting them globally"
     command: "grep -Fq 'DISABLE_AUTOUPDATER=1 DISABLE_UPDATES=1' images/default/lib-common.sh && ! grep -Eq '^export (DISABLE_AUTOUPDATER|DISABLE_UPDATES)=' images/default/lib-common.sh && echo 'ok: probe-only-update-guards'"
@@ -32,8 +32,8 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: installer-and-owner-bounded"
 
-  - step: "library and fixture parse"
-    command: "bash -n images/default/lib-common.sh && bash -n scripts/test-harness-byte-cheap.sh && echo 'ok: harness-byte-cheap-parses'"
+  - step: "the library parses"
+    command: "bash -n images/default/lib-common.sh && echo 'ok: harness-byte-cheap-parses'"
     timeout_ms: 3000
     expected_behavior: "ok: harness-byte-cheap-parses"
 
@@ -55,4 +55,4 @@ rollback:
     Restore the persistent launcher before any probe, retain probe-only update
     guards, keep the official installer hard timeout below stale-lock age, and
     require ownership-token cleanup before enabling concurrent refreshes.
-  command: "scripts/test-harness-byte-cheap.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-harness-byte-cheap.lua 2>&1"

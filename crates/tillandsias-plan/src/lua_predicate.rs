@@ -143,9 +143,11 @@ pub const PROC_RUN_FIELDS: &[&str] = &[
     "argv",
     "cwd",
     "env",
+    "env_unset",
     "stdin",
     "timeout_ms",
     "group",
+    "detach",
     "capture_bytes",
 ];
 
@@ -163,8 +165,9 @@ pub const PROC_RUN_DEFAULT_TIMEOUT_MS: u64 = 300_000;
 pub(crate) fn base_env_command(
     argv: Vec<String>,
     call: &[(String, String)],
+    unset: &[String],
 ) -> Result<tillandsias_exec::Command, crate::child_env::EnvRefusal> {
-    Ok(crate::child_env::ChildEnv::for_call(call)?.command(argv))
+    Ok(crate::child_env::ChildEnv::for_call(call, unset)?.command(argv))
 }
 
 /// The cwd a door runs in when the call names none: the repository root, else
@@ -206,7 +209,7 @@ pub(crate) fn prepare_shell(
             d.remedy.unwrap_or_default()
         )));
     }
-    let mut cmd = base_env_command(argv, &[])
+    let mut cmd = base_env_command(argv, &[], &[])
         .map_err(|r| mlua::Error::RuntimeError(format!("sh.run: {}", r.lines())))?
         .current_dir(&cwd);
     let timeout_ms = timeout_ms.unwrap_or(PROC_RUN_DEFAULT_TIMEOUT_MS);
@@ -256,7 +259,7 @@ pub fn policy_gate(
     (d.strictness != cp::Strictness::Allow).then_some(d)
 }
 
-/// `proc.run{argv=..., cwd, env, stdin, timeout_ms, group}` (order 1384-aixy,
+/// `proc.run{argv=..., cwd, env, env_unset, stdin, timeout_ms, group}` (order 1384-aixy,
 /// design section 4.1): one process, run to completion, returned as a VALUE.
 /// A non-zero exit, a signal and a timeout are all DATA; only programmer
 /// errors raise. proc.run remains synchronous; the scoped script runner adds
@@ -407,9 +410,34 @@ pub(crate) fn validate_proc(
             )));
         }
     }
+    // ORDER 2305-zm8j: names this call drops from the inherited environment.
+    let mut env_unset: Vec<String> = Vec::new();
+    match spec.get::<LuaValue>("env_unset")? {
+        LuaValue::Nil => {}
+        LuaValue::Table(t) => {
+            for pair in t.pairs::<LuaValue, LuaValue>() {
+                let (LuaValue::Integer(_), LuaValue::String(p)) = pair? else {
+                    return Err(err("env_unset must be a list of strings".into()));
+                };
+                let p = p.to_str()?.to_string();
+                if !crate::child_env::unset_pattern_ok(&p) {
+                    return Err(err(format!(
+                        "env_unset entry '{p}' must be a variable name, or a name prefix ending in one '*'"
+                    )));
+                }
+                env_unset.push(p);
+            }
+        }
+        other => {
+            return Err(err(format!(
+                "env_unset must be a list of strings, not a {}",
+                other.type_name()
+            )));
+        }
+    }
     // ORDER 2031-dwwy: the one builder; a per-call class-A literal is a
     // programmer error and raises before anything is authorised or spawned.
-    let mut cmd = base_env_command(argv.clone(), &env_added)
+    let mut cmd = base_env_command(argv.clone(), &env_added, &env_unset)
         .map_err(|r| err(r.lines()))?
         .current_dir(&cwd);
 
@@ -456,6 +484,30 @@ pub(crate) fn validate_proc(
             "group=false is not supported by script-owned {caller}"
         )));
     }
+
+    // ORDER 2294-dtch. `detach = true`: the group is NOT reaped when the
+    // leader exits (by itself or by a kill from the script), so a fixture can
+    // see what its subject left behind. The deadline, `:kill()` and the
+    // script's scope close still end the whole group. Without it every
+    // "nothing survived" arm passes on a subject that leaks, because the
+    // runner reaped the leak first. The caller owns killing what survives.
+    // Unix only: on Windows the job object still ends descendants.
+    let detach = match spec.get::<LuaValue>("detach")? {
+        LuaValue::Nil => false,
+        LuaValue::Boolean(b) => b,
+        other => {
+            return Err(err(format!(
+                "detach must be a boolean, not a {}",
+                other.type_name()
+            )));
+        }
+    };
+    if detach && !group {
+        return Err(err(format!(
+            "detach=true needs group (the default); with group=false there is no group to leave unreaped in {caller}"
+        )));
+    }
+    cmd = cmd.detach(detach);
 
     // Per-fd capture cap (order 1443-esm5). Unset keeps the executor's default
     // (tillandsias_exec::DEFAULT_CAPTURE_BYTES); a clipped capture comes back
@@ -1038,74 +1090,108 @@ fn validate_repo_root(root: PathBuf) -> Result<PathBuf, String> {
     Ok(root)
 }
 
-/// Whether `root` is the cwd's NEAREST repository root: the first ancestor of
-/// the cwd, itself included, holding `plan/index.yaml` or `.git` (the same
-/// marker the cwd walk in locate_repo_root uses), both canonicalised.
+/// ORDER 2213-ag5u. Set once by `script run` to the script's own path. In
+/// script mode the root is the repository containing the cwd, else the one
+/// containing the SCRIPT, else none: never the runner binary's own checkout.
+/// The current_exe walk below made a scratch-dir fixture (no `git init`) run
+/// against the real tree — fs.*, proc.run's default cwd and the port's own
+/// probe all resolved there (27/27 where a dead ELF should have skipped).
+static SCRIPT_PATH: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// Enter script mode for this process (see [`SCRIPT_PATH`]). Idempotent.
+pub(crate) fn enter_script_mode(script: &Path) {
+    let abs = if script.is_absolute() {
+        script.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map(|d| d.join(script))
+            .unwrap_or_else(|_| script.to_path_buf())
+    };
+    let _ = SCRIPT_PATH.set(abs);
+}
+
+/// Whether `root` is the cwd's NEAREST repository: the first ancestor of the
+/// cwd, itself included, holding plan/index.yaml or .git, both canonicalised.
 /// Containment alone is not enough: fixtures build scratch trees under the
-/// checkout's own target/, so the cwd is inside PROJECT_ROOT while its tree
-/// is the scratch one. No marker above the cwd keeps the old answer
-/// (PROJECT_ROOT counts when it contains the cwd); an unreadable cwd or root
-/// answers false.
-fn project_root_is_the_cwds_repo(root: &Path) -> bool {
-    let (Ok(cwd), Ok(root)) = (
-        std::env::current_dir().and_then(|c| c.canonicalize()),
-        root.canonicalize(),
-    ) else {
+/// checkout's own target/, so the cwd is inside PROJECT_ROOT while its tree is
+/// the scratch one (2120-a44w). No marker above the cwd keeps the old answer
+/// (PROJECT_ROOT counts when it contains the cwd); no cwd, or an unreadable cwd
+/// or root, answers false.
+fn project_root_is_the_cwds_repo(root: &Path, cwd: Option<&Path>) -> bool {
+    let (Some(Ok(cwd)), Ok(root)) = (cwd.map(|c| c.canonicalize()), root.canonicalize()) else {
         return false;
     };
-    let mut dir = cwd.as_path();
+    match walk_up_to_repo(cwd.clone()) {
+        Some(nearest) => nearest == root,
+        None => cwd.starts_with(&root),
+    }
+}
+
+/// The first ancestor of `start` (inclusive) that holds plan/index.yaml or .git.
+fn walk_up_to_repo(mut dir: PathBuf) -> Option<PathBuf> {
     loop {
         if dir.join("plan/index.yaml").is_file() || dir.join(".git").exists() {
-            return dir == root;
+            return Some(dir);
         }
-        match dir.parent() {
-            Some(p) => dir = p,
-            None => return cwd.starts_with(&root),
+        if !dir.pop() {
+            return None;
         }
     }
 }
 
 fn locate_repo_root() -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("TILLANDSIAS_REPO_ROOT") {
-        let pb = PathBuf::from(p);
-        if pb.is_dir() {
-            return Some(pb);
-        }
+    locate_repo_root_from(
+        std::env::var("TILLANDSIAS_REPO_ROOT").ok(),
+        std::env::var("PROJECT_ROOT").ok(),
+        std::env::current_dir().ok(),
+        SCRIPT_PATH.get().cloned(),
+        std::env::current_exe().ok(),
+    )
+}
+
+/// The resolution order, with every input passed in so it is testable without
+/// touching the process environment or cwd.
+fn locate_repo_root_from(
+    repo_root_env: Option<String>,
+    project_root_env: Option<String>,
+    cwd: Option<PathBuf>,
+    script: Option<PathBuf>,
+    exe: Option<PathBuf>,
+) -> Option<PathBuf> {
+    if let Some(pb) = repo_root_env.map(PathBuf::from).filter(|p| p.is_dir()) {
+        return Some(pb);
     }
-    // ORDER 2120-a44w: PROJECT_ROOT counts only when the cwd is inside it. The
-    // litmus runner exports it for its children (1268-m2ir), so a fixture that
-    // runs a guard from a scratch repo used to have the guard read the REAL
+    // ORDER 2120-a44w: PROJECT_ROOT counts only when it is the cwd's own repo.
+    // The litmus runner exports it for its children (1268-m2ir), so a fixture
+    // that runs a guard from a scratch repo used to have the guard read the REAL
     // checkout instead: a negative control "passed a dead glob", and the
-    // status-loss fixture read real rows. Outside it, the cwd's own repo wins
-    // (the walk below). TILLANDSIAS_REPO_ROOT stays an explicit override.
-    if let Ok(p) = std::env::var("PROJECT_ROOT") {
-        let pb = PathBuf::from(p);
-        if pb.is_dir() && project_root_is_the_cwds_repo(&pb) {
+    // status-loss fixture read real rows. Otherwise the cwd's own repo wins (the
+    // walk below). TILLANDSIAS_REPO_ROOT stays an explicit override.
+    if let Some(pb) = project_root_env.map(PathBuf::from).filter(|p| p.is_dir()) {
+        if project_root_is_the_cwds_repo(&pb, cwd.as_deref()) {
             return Some(pb);
         }
     }
-    if let Ok(mut dir) = std::env::current_dir() {
-        loop {
-            if dir.join("plan/index.yaml").is_file() || dir.join(".git").exists() {
-                return Some(dir);
-            }
-            if !dir.pop() {
-                break;
-            }
-        }
+    if let Some(found) = cwd.and_then(walk_up_to_repo) {
+        return Some(found);
     }
-    if let Ok(mut exe) = std::env::current_exe() {
-        exe.pop();
-        loop {
-            if exe.join("plan/index.yaml").is_file() || exe.join(".git").exists() {
-                return Some(exe);
-            }
-            if !exe.pop() {
-                break;
-            }
-        }
+    if let Some(script) = script {
+        // Script mode: the script's repository, and nothing after it.
+        let dir = script.canonicalize().unwrap_or(script);
+        return dir
+            .parent()
+            .map(Path::to_path_buf)
+            .and_then(walk_up_to_repo);
     }
-    None
+    let mut exe = exe?;
+    exe.pop();
+    walk_up_to_repo(exe)
+}
+
+/// ORDER 2213-ag5u: whether a repository root resolves for this process, for
+/// `script run`'s up-front refusal.
+pub(crate) fn repo_root_resolves() -> bool {
+    find_repo_root().is_ok()
 }
 
 /// Lexicographically normalize a path, eliminating `.` and `..` segments.
@@ -1897,6 +1983,135 @@ mod tests {
         let missing = validate_repo_root(PathBuf::from("/definitely/not/a/dir/1367")).unwrap_err();
         assert!(missing.contains("unresolvable"), "{missing}");
         assert!(validate_repo_root(std::env::temp_dir()).is_ok());
+    }
+
+    /// ORDER 2120-a44w. PROJECT_ROOT names the real checkout (the litmus runner
+    /// exports it); a fixture's scratch repository lives under that checkout's
+    /// target/. From inside the scratch repo the scratch repo is the root, not
+    /// the checkout; from the checkout itself PROJECT_ROOT is honoured; and
+    /// TILLANDSIAS_REPO_ROOT is still the explicit override.
+    #[test]
+    fn project_root_is_honoured_only_from_its_own_repository() {
+        let base = std::env::temp_dir().join(format!("a44w-{}", std::process::id()));
+        let project = base.join("project");
+        let scratch = project.join("target/plan-scratch/fixture");
+        std::fs::create_dir_all(project.join(".git")).unwrap();
+        std::fs::create_dir_all(scratch.join(".git")).unwrap();
+        let pr = Some(project.to_string_lossy().into_owned());
+        let canon = |p: Option<PathBuf>| p.map(|p| p.canonicalize().unwrap());
+
+        // The defect: PROJECT_ROOT beat the scratch repo the cwd is in.
+        assert_eq!(
+            canon(locate_repo_root_from(
+                None,
+                pr.clone(),
+                Some(scratch.clone()),
+                None,
+                None
+            )),
+            Some(scratch.canonicalize().unwrap())
+        );
+        // From the project itself (or a subdir with no marker of its own) it counts.
+        assert_eq!(
+            canon(locate_repo_root_from(
+                None,
+                pr.clone(),
+                Some(project.join("target")),
+                None,
+                None
+            )),
+            Some(project.canonicalize().unwrap())
+        );
+        // The explicit override is not narrowed.
+        assert_eq!(
+            canon(locate_repo_root_from(
+                Some(project.to_string_lossy().into_owned()),
+                None,
+                Some(scratch.clone()),
+                None,
+                None
+            )),
+            Some(project.canonicalize().unwrap())
+        );
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// ORDER 2213-ag5u. In script mode the runner binary's own checkout is
+    /// never the root: a scratch dir that is not a repository (the fixture
+    /// that measured the real tree 27/27) resolves to NOTHING, and a script
+    /// inside a repository roots at that repository even from a foreign cwd.
+    #[test]
+    fn script_mode_never_falls_back_to_the_runners_checkout() {
+        let base = std::env::temp_dir().join(format!("ag5u-{}", std::process::id()));
+        let scratch = base.join("scratch");
+        let repo = base.join("repo");
+        let runner_checkout = base.join("runner");
+        for d in [
+            &scratch,
+            &repo.join("scripts/lua"),
+            &runner_checkout.join("target/release"),
+        ] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        std::fs::create_dir_all(repo.join(".git")).unwrap();
+        std::fs::create_dir_all(runner_checkout.join(".git")).unwrap();
+        let exe = runner_checkout.join("target/release/tillandsias-plan");
+        let in_scratch = scratch.join("fixture.lua");
+        let in_repo = repo.join("scripts/lua/fixture.lua");
+
+        // The defect's shape: cwd and script in a non-repo scratch dir, the
+        // runner in a checkout. Script mode: no root. Pre-fix: the runner's.
+        assert_eq!(
+            locate_repo_root_from(
+                None,
+                None,
+                Some(scratch.clone()),
+                Some(in_scratch.clone()),
+                Some(exe.clone())
+            ),
+            None
+        );
+        // MUTATION CONTROL: outside script mode the exe walk still answers, so
+        // the None above is script mode's doing, not a fixture that cannot find
+        // the runner's checkout at all.
+        assert_eq!(
+            locate_repo_root_from(None, None, Some(scratch.clone()), None, Some(exe.clone())),
+            Some(runner_checkout.clone())
+        );
+        // A script inside a repository, run from a foreign cwd: its repository.
+        assert_eq!(
+            locate_repo_root_from(
+                None,
+                None,
+                Some(scratch.clone()),
+                Some(in_repo.clone()),
+                Some(exe.clone())
+            )
+            .map(|p| p.canonicalize().unwrap()),
+            Some(repo.canonicalize().unwrap())
+        );
+        // The cwd's repository still comes first, and the explicit override first of all.
+        assert_eq!(
+            locate_repo_root_from(
+                None,
+                None,
+                Some(repo.join("scripts")),
+                Some(in_scratch.clone()),
+                Some(exe.clone())
+            ),
+            Some(repo.clone())
+        );
+        assert_eq!(
+            locate_repo_root_from(
+                Some(scratch.display().to_string()),
+                None,
+                Some(repo.clone()),
+                Some(in_repo),
+                Some(exe)
+            ),
+            Some(scratch.clone())
+        );
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     /// ORDER 1411-b5fk. The macOS shape on any Unix: the root is canonical, the

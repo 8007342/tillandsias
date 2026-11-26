@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: seven-d-to-h-fixtures-to-lua-on-a-clean-ref
+    order: "2373-f26m"
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 1
+    title: "The seven d-h ports of 2370-euvb, on a ref whose history never raises a ratchet floor"
+    context: |
+      work/2370-euvb ported nine fixtures and then left two to open refs that already port them (2219-27uv, 2124-mwzr). Restoring
+      their two shell-decider-floor lines inside the branch reads as raising a floor (check-shell-ratchet walks the commits), and a
+      pushed ref is not force-pushed. Same net tree, one commit, new ref. 2370-euvb stays as the record of what was dropped and why.
+      ports: scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh scripts/test-git-mirror-existing-volume-hardening.sh scripts/test-ensure-toolbox-properties.sh scripts/test-harness-contract-probe.sh scripts/test-git-mirror-relay-token-expiry.sh scripts/test-fleet-activity.sh scripts/test-freshness-regime-budget.sh
+    exit_criteria:
+      - "each .lua gives the same verdict as its .sh, and the same red arm under two or three mutants; every caller runs the .lua; the seven .sh files are deleted"
+    unscoreable: "unpinnable-until-the-guard-exists: the mutant parity is the deliverable."
+    next_action: "relay-preflight, PR."
+    provenance: filed by lenovinha.
+    related: [2370-euvb, 2219-27uv, 2124-mwzr]
+    events:
+      - {type: filed, ts: '2026-11-25T19:28:53Z', host: lenovinha, summary: clean ref for seven ports}

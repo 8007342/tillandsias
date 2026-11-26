@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: gate-changed-narrows-directory-wide-derived-inputs
+    field: status
+    value: blocked
+    ts: "2026-11-23T10:56:46Z"
+    host: lenovinha
+
+events:
+  - packet_id: gate-changed-narrows-directory-wide-derived-inputs
+    event:
+      type: note
+      ts: "2026-11-23T10:56:46Z"
+      host: lenovinha
+      summary: |-
+        draft PR #1424 (stacked on #1406): parts (1) and (4) plus decider; (2) and per-fixture declarations outstanding

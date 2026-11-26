@@ -28,13 +28,13 @@ preconditions:
   - workspace contains images/default/config-overlay/mcp/mcp-usage-log.sh
   - workspace contains images/default/config-overlay/mcp/project-info.sh
   - workspace contains images/default/config-overlay/mcp/forge-plan.sh
-  - workspace contains scripts/test-mcp-transport-death-trace.sh
+  - workspace contains scripts/lua/test-mcp-transport-death-trace.lua
 
 critical_path:
-  - step: "all seven death-trace vectors hold: in-flight signal, set -e abort, clean-shutdown silence, real-server clean EOF silence, idle-signal visibility without outage, client-vanish mid-write outage with tool named, forge-plan parity"
-    command: "bash scripts/test-mcp-transport-death-trace.sh 2>&1 | tail -1"
+  - step: "the death-trace vectors hold: in-flight signal, set -e abort, clean-shutdown silence, real-server clean EOF silence, idle-signal visibility without outage, client-vanish mid-write outage with tool named, forge-plan parity"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-mcp-transport-death-trace.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "ok:mcp-transport-death-trace:7"
+    expected_behavior: "ok:mcp-transport-death-trace:14 arms"
 
 observability:
   traces:

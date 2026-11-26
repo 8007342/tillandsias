@@ -21,5 +21,5 @@
 # regime these fixtures already stub. XDG_RUNTIME_DIR is left alone because
 # sd-bus, libdbus, gio and godbus all honour DBUS_SESSION_BUS_ADDRESS first.
 #
-# Guarded by scripts/test-keyring-fixtures-use-a-private-bus.sh.
+# Guarded by scripts/lua/test-keyring-fixtures-use-a-private-bus.lua.
 export DBUS_SESSION_BUS_ADDRESS="unix:path=/nonexistent/tillandsias-private-bus/no-bus"

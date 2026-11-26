@@ -10,11 +10,15 @@
 # The self-test is NOT advisory. Its whole value is that it fails loudly: three
 # versions of this check passed inspection while measuring nothing.
 #
-# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# STEP_LUA is a LITERAL path on purpose: a binding assembled from a
 # variable is invisible to every name-based scan, including the
 # bound-or-retired guard (1063-nraf). Keep it a plain string.
 STEP_DESC="Checking the SIGPIPE verdict check measures rather than pattern-matches (1076-kft9)"
-STEP_SCRIPT="scripts/test-sigpipe-verdict-measured.sh"
+STEP_LUA="scripts/lua/test-sigpipe-verdict-measured.lua"
 STEP_ERROR="the measuring check cannot detect a SIGPIPE-decided verdict, or its calibration case stopped being known-bad (1076-kft9) — see the verdict line above"
 STEP_OK="SIGPIPE verdict measurement check passed"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok: CONTROL: an evaled pipeline yields a 1-element PIPESTATUS, so the naive form measures nothing"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:sigpipe-verdict-measured:5 arms"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lib-sigpipe-verdict.sh scripts/litmus-covering-specs.sh scripts/lua/test-sigpipe-verdict-measured.lua"

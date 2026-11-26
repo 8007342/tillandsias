@@ -16,7 +16,7 @@
 //! constructs no [`ReqwestHttpClient`] at all, only the in-file
 //! `MockHttpClient`; the real client is exercised, over real loopback, by
 //! the `#[ignore]`d tests in `loopback_tests` below, which
-//! `scripts/test-cloudflare-oauth-core.sh` runs explicitly.
+//! `scripts/lua/test-cloudflare-oauth-core.lua` runs explicitly.
 //!
 //! # What is NOT in this module
 //!
@@ -46,7 +46,7 @@
 //! returned `state` against the one `begin` minted BEFORE calling
 //! `http.post_form` at all — a state mismatch never reaches the network,
 //! which is exactly what
-//! `scripts/test-cloudflare-oauth-core.sh` and this module's own
+//! `scripts/lua/test-cloudflare-oauth-core.lua` and this module's own
 //! `loopback_state_mismatch_makes_zero_token_requests` prove against the
 //! fake's ledger, not just against the fake's HTTP response.
 //!
@@ -172,7 +172,7 @@ fn transport_error(method: &str, e: &reqwest::Error) -> String {
 /// so `cargo test -p tillandsias-headless cloudflare_oauth` never
 /// constructs a [`ReqwestHttpClient`]; only the `#[ignore]`d
 /// `loopback_tests` (run explicitly by
-/// `scripts/test-cloudflare-oauth-core.sh`) do.
+/// `scripts/lua/test-cloudflare-oauth-core.lua`) do.
 pub trait HttpClient {
     /// `GET url`, no request body.
     fn get(&self, url: &str) -> Result<HttpResponse, String>;
@@ -631,7 +631,7 @@ pub fn begin(
 /// Step 3: check `returned_state` against `pending.state` BEFORE any
 /// network call — a mismatch is `Err` and `http.post_form` is never
 /// invoked, which is what
-/// `scripts/test-cloudflare-oauth-core.sh` and
+/// `scripts/lua/test-cloudflare-oauth-core.lua` and
 /// `loopback_tests::loopback_state_mismatch_makes_zero_token_requests`
 /// assert against the fake's ledger (not just the return value: moving
 /// this check after the request would still return the same `Err` string
@@ -1366,7 +1366,7 @@ mod tests {
         // so the assertion below only passes if the client-side state
         // check ran BEFORE any request — not because the mock happened to
         // refuse. This is the client-side check the fake's own ledger
-        // proves the same way in scripts/test-cloudflare-oauth-core.sh.
+        // proves the same way in scripts/lua/test-cloudflare-oauth-core.lua.
         let mock = mock_with_discovery(&["authorization_code", "refresh_token"]).with_post(
             TOKEN_ENDPOINT,
             200,
@@ -1598,7 +1598,7 @@ mod tests {
 /// `tillandsias-fake-cloudflare` (1505-svve). Every test here is
 /// `#[ignore]`d so a plain `cargo test -p tillandsias-headless
 /// cloudflare_oauth` (exit criterion: "no test constructs a network
-/// client") never runs them; `scripts/test-cloudflare-oauth-core.sh` builds
+/// client") never runs them; `scripts/lua/test-cloudflare-oauth-core.lua` builds
 /// the fake, then runs these explicitly with `--ignored --nocapture` so
 /// `begin`'s `eprintln!` note reaches the script's own captured output.
 #[cfg(test)]
@@ -1636,7 +1636,7 @@ mod loopback_tests {
         assert!(
             bin.exists(),
             "cloudflare_oauth loopback test: fake-cloudflare binary not found at {bin:?}; \
-             run scripts/test-cloudflare-oauth-core.sh (it builds this binary first), or set \
+             run scripts/lua/test-cloudflare-oauth-core.lua (it builds this binary first), or set \
              TILLANDSIAS_FAKE_CLOUDFLARE_BIN to an already-built path."
         );
         let dir = std::env::temp_dir().join(format!(
@@ -1751,7 +1751,7 @@ mod loopback_tests {
     }
 
     #[test]
-    #[ignore = "drives the real fake-cloudflare over loopback; run via scripts/test-cloudflare-oauth-core.sh"]
+    #[ignore = "drives the real fake-cloudflare over loopback; run via scripts/lua/test-cloudflare-oauth-core.lua"]
     fn loopback_exchange_succeeds_with_right_state_and_verifier() {
         let server = start_fake("happy", None);
         let http = ReqwestHttpClient::default();
@@ -1772,7 +1772,7 @@ mod loopback_tests {
     }
 
     #[test]
-    #[ignore = "drives the real fake-cloudflare over loopback; run via scripts/test-cloudflare-oauth-core.sh"]
+    #[ignore = "drives the real fake-cloudflare over loopback; run via scripts/lua/test-cloudflare-oauth-core.lua"]
     fn loopback_state_mismatch_makes_zero_token_requests() {
         let server = start_fake("state-mismatch", None);
         let http = ReqwestHttpClient::default();
@@ -1799,7 +1799,7 @@ mod loopback_tests {
     }
 
     #[test]
-    #[ignore = "drives the real fake-cloudflare over loopback; run via scripts/test-cloudflare-oauth-core.sh"]
+    #[ignore = "drives the real fake-cloudflare over loopback; run via scripts/lua/test-cloudflare-oauth-core.lua"]
     fn loopback_refresh_rotates_and_invalidates_old_refresh_token() {
         let server = start_fake("refresh", None);
         let http = ReqwestHttpClient::default();
@@ -1832,7 +1832,7 @@ mod loopback_tests {
     }
 
     #[test]
-    #[ignore = "drives the real fake-cloudflare over loopback; run via scripts/test-cloudflare-oauth-core.sh"]
+    #[ignore = "drives the real fake-cloudflare over loopback; run via scripts/lua/test-cloudflare-oauth-core.lua"]
     fn loopback_revoke_succeeds_against_real_fake() {
         let server = start_fake("revoke", None);
         let http = ReqwestHttpClient::default();
@@ -1855,7 +1855,7 @@ mod loopback_tests {
     }
 
     #[test]
-    #[ignore = "drives the real fake-cloudflare over loopback; run via scripts/test-cloudflare-oauth-core.sh"]
+    #[ignore = "drives the real fake-cloudflare over loopback; run via scripts/lua/test-cloudflare-oauth-core.lua"]
     fn loopback_device_grant_note_printed_when_discovery_lists_it() {
         let server = start_fake(
             "device-grant",
@@ -1864,7 +1864,7 @@ mod loopback_tests {
         let http = ReqwestHttpClient::default();
         // `begin` eprintln!s the note as a side effect here; this test
         // asserts the returned field (deterministic, no stderr capture
-        // needed in-process), while scripts/test-cloudflare-oauth-core.sh
+        // needed in-process), while scripts/lua/test-cloudflare-oauth-core.lua
         // greps the actual stderr this call just wrote for the literal
         // line, since eprintln! writes straight to the real fd 2 even
         // inside a `#[test]`, bypassing libtest's capture under

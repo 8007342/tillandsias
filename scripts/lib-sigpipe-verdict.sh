@@ -69,10 +69,12 @@ set -uo pipefail
 # zero-byte, zero-exit `check-*.sh` is the strongest possible green and
 # the weakest possible evidence; macuahuitl's --ci-full orphan sweep
 # found it. Renamed out of the check- namespace (lib-, per lib-ca-path.sh
-# and lib-cargo-sites.sh), AND made to refuse, because a rename stops it
+# and the cargo-site registry), AND made to refuse, because a rename stops it
 # being wired by mistake while the refusal stops it passing if it is.
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
-    echo "refused:not-a-check:lib-sigpipe-verdict.sh is a library, not a guard — source it, or run scripts/test-sigpipe-verdict-measured.sh" >&2
+    echo "refused:not-a-check:lib-sigpipe-verdict.sh is a library, not a guard" >&2
+    echo "  why: run directly it measures nothing; its functions only mean something inside a caller" >&2
+    echo "  remedy: source it (. scripts/lib-sigpipe-verdict.sh), or run tillandsias-plan script run scripts/lua/test-sigpipe-verdict-measured.lua" >&2
     exit 2
 fi
 

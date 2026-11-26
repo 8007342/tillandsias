@@ -29,7 +29,7 @@ size: instant
 
 preconditions:
   - workspace contains scripts/test-spawn-failure-names-program.sh
-  - workspace contains scripts/test-spawn-program-captured-before-spawn.sh
+  - workspace contains scripts/lua/test-spawn-program-captured-before-spawn.lua
   - a cargo toolchain is resolvable, or the fixture skips by name
 
 critical_path:
@@ -46,9 +46,9 @@ critical_path:
   - step: "the program name is captured BEFORE the spawn, because the spawn borrows the command mutably"
     # 1928-s9ae: scoped to the enclosing function; the whole-file first-occurrence
     # compare went red when 1911-3dqo added an unrelated earlier spawn.
-    command: "bash scripts/test-spawn-program-captured-before-spawn.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-spawn-program-captured-before-spawn.lua"
     timeout_ms: 10000
-    expected_behavior: "ok: program captured before spawn"
+    expected_behavior: "ok:spawn-program-captured-before-spawn:3 arms"
 
   - step: "the old undiagnosable literal is gone from the spawn site"
     command: "grep -c 'Failed to spawn build process: {e}' crates/tillandsias-headless/src/main.rs | tr -d '\\n'"

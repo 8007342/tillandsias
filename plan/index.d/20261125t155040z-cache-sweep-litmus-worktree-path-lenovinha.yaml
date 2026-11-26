@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: check-log-cache-sweep-litmus-reds-in-a-worktree-under-a-target-directory
+    order: "2364-qgr7"
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, portability]
+    estimated_hours: 1
+    title: "litmus check-log-survives-the-cache-sweep step 2 matches any /target/ in the absolute path, so it reds in a worktree that lives under a target directory"
+    context: |
+      Red on trunk on lenovinha, green on macuahuitl. Failing line on lenovinha, 2026-11-25: expected "ok: live index is outside
+      target", got "FAIL: <worktree>/.cache/convergence/check-logs.jsonl is inside target/", where <worktree> is
+      .../tillandsias/target/work/wt-9cws/target/work/wt-fcpy. The index is in the worktree's own .cache, which a sweep of THAT
+      worktree's target does not touch; the case arm */target/* matches the parent directories. It also refuses relay-preflight there
+      (refused:relay-preflight:litmus:meta-orchestration).
+      The second litmus reported with it, mcp-expert-health-probe-shape step 19, is NOT a host defect: lenovinha's own mutant of
+      2344-zk8r left four probe records in /tmp/tillandsias-timing.jsonl at 10:56Z, which made cycle-metrics.sh refuse. With that
+      file moved aside the step passes.
+    exit_criteria:
+      - "Step 2 passes in a worktree whose path contains /target/, and still fails when the index resolves inside the checkout's own target/. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-guard-exists: the litmus step is the deliverable"
+    next_action: "Strip the checkout root from the resolved path before matching target/."
+    provenance: "coordinator macuahuitl-fedora 2026-11-25, asked for a row after 2360-ud6i's relay-preflight"
+    related: [888-vgs8, 2360-ud6i]
+    events:
+      - {type: filed, ts: "2026-11-25T15:50:40Z", host: lenovinha, summary: "filed on the request of the coordinator"}

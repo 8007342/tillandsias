@@ -15,13 +15,13 @@ description: >
 
 preconditions:
   - workspace contains scripts/hooks/pre-push-local-gate.sh
-  - workspace contains scripts/test-pre-push-deletion-only.sh
+  - workspace contains scripts/lua/test-pre-push-deletion-only.lua
 
 critical_path:
   - step: "release/* deletion from a dirty unstamped tree is admitted; salvage/* deletion refused; mixed push and linux-next deletion still gated"
-    command: "bash scripts/test-pre-push-deletion-only.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-pre-push-deletion-only.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "PASS: pre-push-deletion-only 4/4 (1427-r2d2)"
+    expected_behavior: "ok:pre-push-deletion-only:5 arms"
 
 observability:
   traces:

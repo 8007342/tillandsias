@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: metrics-isolation-fixture-cannot-reach-the-hosts-shared-timing-log
+    order: "2365-mskt"
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [fixtures, observability]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/test-gate-step-metrics-isolation.lua
+      - scripts/lua/test-metrics-isolation-keeps-off-the-shared-log.lua
+    title: "the metrics-isolation fixture writes the host's real /tmp/tillandsias-timing.jsonl when the fallback-dir knob it relies on is broken"
+    context: |
+      Measured on lenovinha 2026-11-25. test-gate-step-metrics-isolation pins its provoked split with TILLANDSIAS_METRICS_FALLBACK_DIR
+      alone. A mutant renaming that variable in scripts/metrics-log-path.sh (the Lua port and the .sh alike) fell back to the absolute
+      /tmp/tillandsias-timing.jsonl and left four probe records there. cycle-metrics.sh then refused on that host for five hours and
+      mcp-expert-health-probe-shape step 19 went red. The fixture reds at arm 3, correctly, but it has already leaked by then.
+      test-metrics-isolation-keeps-off-the-shared-log looks only for records carrying the gate's run id, and these carry none.
+    exit_criteria:
+      - "With TILLANDSIAS_METRICS_FALLBACK_DIR renamed in metrics-log-path.sh, the fixture is red AND the host's /tmp/tillandsias-timing.jsonl is unchanged. Pre-fix result: FAILS, four records are added."
+      - "A test fails on the pre-fix fixture: it runs the fixture under that mutant, in a copy of scripts/, and compares the shared log's bytes."
+    unscoreable: "unpinnable-until-the-guard-exists: the test is the deliverable"
+    next_action: "Pin a second way (a scratch TMPDIR, if metrics-log-path.sh honours one, else a seam for its absolute fallback), then add the leak test."
+    provenance: "coordinator macuahuitl-fedora 2026-11-25; filed by lenovinha, whose mutant leaked"
+    related: [2344-zk8r, 2244-ge9s, 1966-ubsw, 2364-qgr7]
+    events:
+      - {type: filed, ts: "2026-11-25T15:51:42Z", host: lenovinha, summary: "filed on the request of the coordinator"}

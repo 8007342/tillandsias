@@ -501,7 +501,7 @@ thing that removed the share.
 - **THEN** the outcome SHALL be identical to the scenario above, because the
   store is a host directory and the share is in the keychain
 - **AND** this is already true on Linux today (positive control:
-  `scripts/probe-credential-cold-state.sh` names it CREDENTIAL-WARM).
+  `scripts/lua/probe-credential-cold-state.lua` names it CREDENTIAL-WARM).
 
 #### Scenario: Uninstall and HARD reset are the only paths that clear
 - **WHEN** `--uninstall` runs, or `--reset-guest` runs on a guest regime
@@ -711,7 +711,7 @@ Codex's own device flow usable without inventing a destination. Non-TTY and
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
-- `litmus:vault-auto-unseal-no-prompt` - asserts the no-prompt property.
+- `litmus:vault-auto-unseal-no-prompt` - RETIRED and unbound (2357-5quw): its commands no longer exist, so no test asserts the no-prompt property today.
 - `litmus:vault-policy-forge-cannot-read-github-token` - asserts
   forge-policy 403s on token path.
 - `litmus:git-mirror-safe-refspec-push` - transitively checks the git mirror

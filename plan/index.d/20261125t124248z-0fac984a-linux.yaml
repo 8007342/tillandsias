@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-forge-queue-jobs-audit-record-says-bare-metal
+    event:
+      type: note
+      ts: "2026-11-25T12:42:48Z"
+      agent_id: linux-lenovinha-claude-20261125t124247z
+      host: linux
+      summary: |-
+        UNEXERCISED LIST (read at trunk c6ef7c231, none tried; each behaves as bare-metal in an unprivileged forge because read_host_kind answers bare-metal). (1) command_policy.rs:816 reset_class: hard-reset in a forge is a deny (not-grantable-in-forge); as bare-metal it is a consent. (2) command_policy.rs:1659 grant_refusal: refuses on evidence OR the variable; evidence never says forge, so it rests on the variable alone, read at main.rs:5530. (3) command_policy.rs:1840 resolve_consent: returns early only when the kind or evidence is not bare-metal, so in a forge it goes on to the env pre-authorisation and token paths. (4) safe_roots.rs:58 hook_allow: its forge-only allowances do not apply (fails closed). (5) bash_policy.rs:1036 and 1112, lua_predicate.rs:246 and 767, run_verb.rs:276: take their kind from the same reading. (6) command-policies.yaml line 37, soft-reset host_kinds [bare-metal, ci]: applies in a forge. EXERCISED: audit host_kind for proc.run and policy eval, and policy eval of podman system reset (consent:policy:soft-reset), with and without TILLANDSIAS_HOST_KIND=forge and through queue.submit. CITATION: podman-run(1), /run/.containerenv: with the --privileged flag the file contains name/value pairs; measured 0 bytes in a lane with privileged=false. NOT CHECKED: windows and macOS lanes, other podman versions, and what is reachable on the far side of the forge boundary if a rule relaxes.

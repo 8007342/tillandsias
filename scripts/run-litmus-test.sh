@@ -188,7 +188,8 @@ if [[ "\${args[0]:-}" == "run" || "\${args[0]:-}" == "create" ]]; then
     fi
 fi
 
-mkdir -p "\$(dirname "\$calls_file")"
+case "\$calls_file" in /*/*) _dir="\${calls_file%/*}" ;; *) _dir="\$(dirname "\$calls_file")" ;; esac
+[ -d "\$_dir" ] || mkdir -p "\$_dir"
 {
     printf '%s\t' "\$(date -u +%FT%TZ)"
     printf 'podman'
@@ -339,6 +340,11 @@ mkdir -p "$LITMUS_STEP_STDERR_DIR" 2>/dev/null || true
 LITMUS_YQ_DEGRADED_LOG="$LITMUS_RUNTIME_DIR/yq-degraded-steps"
 LITMUS_YQ_DEGRADED=0
 : >"$LITMUS_YQ_DEGRADED_LOG" 2>/dev/null || true
+# ORDER 2309-fa7q, CENSUS ONLY: no verdict reads this. One entry per step whose
+# success_pattern matched while its command exited nonzero. (An expected_behavior
+# step like that FAILS.) In memory, because a nested runner in the same runtime
+# dir would truncate a file.
+NONZERO_TEXT_MATCHES=()
 if ! command -v yq &>/dev/null && [[ ! -x "$LITMUS_RUNTIME_DIR/bin/yq" ]]; then
     LITMUS_YQ_DEGRADED=1
     printf 'warn:litmus-degraded-no-yq — yq is not on PATH and could not be provisioned from the tillandsias-builder toolbox. Steps whose commands call yq will fail or return empty. (The runner'\''s OWN metadata reads use the compiled tillandsias-plan reader when one resolves — order 746-htj9 — and fall back to grep only without it.) Install yq on the host, or create the toolbox (see scripts/with-tillandsias-builder.sh), before trusting a verdict from this run.\n' >&2
@@ -347,7 +353,9 @@ fi
 # Now the runtime bin joins PATH — after the extraction above, and carrying the
 # shim it may just have written, so both this runner's own yaml_get and every
 # litmus step command resolve the same real yq.
-export PATH="$LITMUS_RUNTIME_DIR/bin:$PATH"
+# 2310-eji3 (yolanda, msys): as this shell spells it. A C:/ runtime dir prepended raw splits
+# at its drive colon, and the whole shim dir, podman and yq included, was off PATH.
+export PATH="$(cd "$LITMUS_RUNTIME_DIR/bin" && pwd):$PATH"
 
 # ── ORDER 746-htj9: the sanctioned YAML read path for the runner's OWN reads ─
 # Metadata reads (phase/host_kind/size/inputs, bindings queries) try
@@ -359,6 +367,12 @@ export PATH="$LITMUS_RUNTIME_DIR/bin:$PATH"
 # fresh clone that has never built the binary must still be able to run.
 # Step COMMANDS inside test files that call yq themselves are 799-tb7q's
 # territory (the toolbox shim above), not this block's.
+# ORDER 2310-eji3. A step that calls a bare `tillandsias-plan` gets the binary this
+# runner resolved, on a host with none on PATH (rc 127, msys) and never a stale one
+# ahead of the probe's answer. The shim dir is already first on every step's PATH; a
+# step that sets its own PATH, or asks a container, is untouched. Removed first: the
+# probe's last candidate is PATH, and it must not resolve last run's link to itself.
+rm -f "$LITMUS_RUNTIME_DIR/bin/tillandsias-plan" "$LITMUS_RUNTIME_DIR/bin/tillandsias-plan.exe"
 LITMUS_PLAN_BIN=""
 if [[ -f "$PROJECT_ROOT/scripts/plan-binary-probe.sh" ]]; then
     # shellcheck source=scripts/plan-binary-probe.sh
@@ -373,6 +387,13 @@ if [[ -f "$PROJECT_ROOT/scripts/plan-binary-probe.sh" ]]; then
             ./*) LITMUS_PLAN_BIN="$PROJECT_ROOT/${LITMUS_PLAN_BIN#./}" ;;
         esac
     fi
+fi
+if [[ -n "$LITMUS_PLAN_BIN" ]]; then
+    _plan_abs="$LITMUS_PLAN_BIN"
+    case "$_plan_abs" in /*|[A-Za-z]:*) ;; *) _plan_abs="$PWD/$_plan_abs" ;; esac
+    case "$LITMUS_PLAN_BIN" in *.exe) _plan_shim=tillandsias-plan.exe ;; *) _plan_shim=tillandsias-plan ;; esac
+    ln -s "$_plan_abs" "$LITMUS_RUNTIME_DIR/bin/$_plan_shim" 2>/dev/null \
+        || cp "$_plan_abs" "$LITMUS_RUNTIME_DIR/bin/$_plan_shim" 2>/dev/null || true
 fi
 # Whether that binary answers `yaml get` (1375-6pnd), decided ONCE here: _yaml_jq
 # always runs inside $(...), so a cache set there would not outlive the call.
@@ -402,7 +423,7 @@ fi
 # TILLANDSIAS_LITMUS_ALLOW_NO_PLAN_BIN=1 (the pre-1419 behaviour).
 # ONLY ON PATHS THAT EXECUTE TESTS: --parse-only and --list never run a step,
 # so they must not be gated on a binary they do not use. It first ran at top
-# level and refused test-litmus-item-opener-refused.sh ARM 3, whose mutant copy
+# level and refused test-litmus-item-opener-refused ARM 3, whose mutant copy
 # of this runner does --parse-only from a $TMP root with no binary (land57).
 _litmus_require_plan_binary() {
     [[ "${TILLANDSIAS_LITMUS_ALLOW_NO_PLAN_BIN:-}" != "1" ]] || return 0
@@ -601,6 +622,10 @@ _lt_gate_restore() {
 TIMEOUT_SECONDS=600
 VERBOSE=0
 LIST_ONLY=0
+# ORDER 2159-n9sa (priority:build-speed): --select-only walks the SAME selection
+# path as a real run and prints the same "Executing" lines and Total, but
+# executes no step. Each selected test is counted as a SKIP named select-only.
+SELECT_ONLY=0
 
 # ORDER 956-llei. CPU stall accounting for the kill-time adjudicator, read
 # from THIS cgroup's pressure file so a step run inside a container is
@@ -610,7 +635,7 @@ LIST_ONLY=0
 # when the kernel/cgroup does not expose it — the caller must then say
 # UNCLASSIFIED, never fall back to a number that measures something else.
 # LITMUS_PSI_FILE overrides the path so the hermetic fixture can inject
-# counters (scripts/test-litmus-kill-adjudicator.sh).
+# counters (scripts/lua/test-litmus-kill-adjudicator.lua).
 _lt_cpu_stall_us() {
     local f="${LITMUS_PSI_FILE:-}"
     if [ -z "$f" ]; then
@@ -1301,7 +1326,32 @@ _lt_verdict_of() { # <output> <exit_code>
 
 # ORDER 1268-fx87: the [FAIL] detail for a step's output, plus the stderr log
 # when the step wrote one. The verdict was read from stdout only.
+# ORDER 2146-tmpx: A FAILED OR TIMED-OUT STEP'S STDERR IS KEPT WHERE NOTHING
+# DELETES IT. step-stderr/ is wiped at the start of every runner invocation and
+# the gate runs one invocation per spec, so by the end of a gate the stderr of
+# an early failing step was gone: RC attempt 2 (2026-11-20) reported
+# image-build-convergence step 1 with empty output and no recoverable stderr,
+# and two hosts could not reproduce it. The copy is per test and step, written
+# even when stderr was EMPTY (the file then says so, with the exit code), so
+# "it printed nothing" is evidence rather than an absence; the path is printed
+# in the FAIL block.
+LITMUS_FAILED_STDERR_DIR="$LITMUS_RUNTIME_DIR/failed-stderr"
+_lt_keep_failed_stderr() { # <exit code>
+    local kept
+    mkdir -p "$LITMUS_FAILED_STDERR_DIR" 2>/dev/null || return 0
+    kept="$LITMUS_FAILED_STDERR_DIR/$(basename "${test_file%.yaml}")-step${step_index}.stderr"
+    {
+        printf '# %s rc=%s step=%s at %s\n' "$(basename "$test_file")" "$1" "${step_name:-step-${step_index}}" "$(date -u +%FT%TZ)"
+        if [[ -n "${step_stderr_log:-}" && -s "$step_stderr_log" ]]; then
+            cat "$step_stderr_log"
+        else
+            printf '# (stderr was empty)\n'
+        fi
+    } > "$kept" 2>/dev/null || return 0
+    printf '%s\n' "         kept-stderr=${kept}" >&2
+}
 _lt_print_output() {
+    _lt_keep_failed_stderr "${exit_code:-?}"
     printf '%s\n' "         output=${step_output}" >&2
     if [[ -n "${step_stderr_log:-}" ]]; then
         printf '%s\n' "         stderr=${step_stderr_log} ($(grep -c '' "$step_stderr_log" 2>/dev/null || echo 0) lines; not read for the verdict, 1268-fx87)" >&2
@@ -1498,6 +1548,20 @@ behavior_matches_output() {
     # assert_output_nonempty, which structured_assert_matches adjudicates
     # BEFORE this function is reached. What remains is the honest fallback the
     # interpreter always ended in: case-insensitive fixed-string containment.
+
+    # ORDER 2309-fa7q. Two expectations containment cannot judge: a bare number ("1"
+    # is in "10") is the whole output, spaces aside; and `test result: ok` with no
+    # count, which a filter matching no test prints too, needs a test that passed.
+    case "$expected_lc" in
+        *[!0-9]*) ;;
+        *) [[ "$(printf '%s' "$output" | tr -d ' \t\r')" == "$expected_lc" ]]; return ;;
+    esac
+    case "$expected_lc" in
+        "test result: ok" | "test result: ok.")
+            grep -Eq 'test result: ok\. [1-9][0-9]* passed' <<<"$output"
+            return
+            ;;
+    esac
 
     if grep -Fqi "$expected" <<<"$output" || grep -Fqi "$expected_lc" <<<"$output_lc"; then
         return 0
@@ -2084,9 +2148,30 @@ run_litmus_test_file() {
         # real git dir's gate files snapshotted around it.
         local _lt_gsnap=""
         _lt_gsnap="$(mktemp -d "${TMPDIR:-/tmp}/litmus-gate-snap.XXXXXX")" && _lt_gate_snapshot "$_lt_gsnap"
-        TILLANDSIAS_POLICY_REGIME=fixture TILLANDSIAS_FIXTURE_SCOPE="$LITMUS_FIXTURE_SCOPE" \
-            TILLANDSIAS_FIXTURE_GIT_DIRS="$LITMUS_REAL_GIT_DIRS" \
-            LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_shell_prelude}${step_command}" </dev/null >"$step_capture" 2>"$step_errcap" || exit_code=$?
+        # ORDER 2150-3j97 (priority:build-speed) — A STEP KILLED BY ITS OWN
+        # TIMEOUT WITH NO ASSERTION OUTPUT IS RE-RUN ONCE. RC attempt 4 failed
+        # only on two such kills (empty stdout, empty stderr) on a loaded host.
+        # Re-run only on rc 124/137 (timeout(1)'s TERM, then its --kill-after
+        # KILL) AND an empty stdout: a step that printed anything was judging
+        # something, so its red stands, and an assertion red (any other rc)
+        # is never re-run. The re-run is announced as flaky:<test>#<step>.
+        # A second timeout stays a timeout. LITMUS_TIMEOUT_RETRY=0 disables.
+        local _lt_retried=0
+        while :; do
+            exit_code=0
+            TILLANDSIAS_POLICY_REGIME=fixture TILLANDSIAS_FIXTURE_SCOPE="$LITMUS_FIXTURE_SCOPE" \
+                TILLANDSIAS_FIXTURE_GIT_DIRS="$LITMUS_REAL_GIT_DIRS" \
+                LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_shell_prelude}${step_command}" </dev/null >"$step_capture" 2>"$step_errcap" || exit_code=$?
+            if [[ "$_lt_retried" -eq 0 && "${LITMUS_TIMEOUT_RETRY:-1}" == 1 \
+                  && ( "$exit_code" -eq 124 || "$exit_code" -eq 137 ) && ! -s "$step_capture" ]]; then
+                _lt_retried=1
+                printf ' flaky:%s#%s timed out after %ss with no stdout (rc=%s); re-running it once\n' \
+                    "$(basename "${test_file%.yaml}")" "$step_index" "$timeout_sec" "$exit_code" >&2
+                : >"$step_capture"; : >"$step_errcap"
+                continue
+            fi
+            break
+        done
         local _lt_tampered=""
         if [[ -n "$_lt_gsnap" ]]; then
             _lt_tampered="$(_lt_gate_restore "$_lt_gsnap")"
@@ -2135,6 +2220,7 @@ run_litmus_test_file() {
 
         if [[ $exit_code -eq 124 ]]; then
             printf ' %b[TIMEOUT]%b\n' "${RED}" "${NC}" >&2
+            _lt_keep_failed_stderr 124
             LITMUS_LAST_TEST_TIMED_OUT=1
             log_warn "Test timeout after ${timeout_sec}s in step: ${step_name:-step-${step_index}}"
             # ORDER 820-c8q8. A TIMEOUT has two causes that read identically,
@@ -2312,11 +2398,23 @@ run_litmus_test_file() {
                 printf '%s\n' "         note: this expectation contains (a|b) alternation, but expectations are matched as a LITERAL SUBSTRING, not a regex — rewrite it as the longest literal all accepted outputs share (868-p8xi)" >&2
             fi
             return 1
+        elif [[ -n "$step_expected" && "$exit_code" -ne 0 ]]; then
+            # ORDER 2309-fa7q. The text matched and the command failed: a grep
+            # chain that broke after printing it, or a check whose FAIL line
+            # came after its ok line. A step that means to exit nonzero says so.
+            printf ' %b[FAIL]%b rc=%s\n' "${RED}" "${NC}" "$exit_code" >&2
+            printf '%s\n' "         the expected text matched but the command exited ${exit_code}; if that is meant, declare assert_exit: ${exit_code} and assert_output_contains (2309-fa7q)" >&2
+            _lt_print_output
+            return 1
         fi
 
         # Step matched expected behavior — surface success only after validation.
         _t_pass=$((_t_pass+1))
         printf ' %b[OK]%b\n' "${GREEN}" "${NC}" >&2
+        # 2309-fa7q: a success_pattern is logged, never judged by its exit.
+        if [[ -z "$step_structured" && "$exit_code" -ne 0 && -n "$step_success_pattern" ]]; then
+            NONZERO_TEXT_MATCHES+=("$test_name#$step_index rc=$exit_code success_pattern")
+        fi
     done
 
     for failure in "${failure_criteria[@]}"; do
@@ -2509,6 +2607,14 @@ run_tests_for_spec() {
             fi
         fi
 
+        # ORDER 2159-n9sa: everything above is selection, shared with a real
+        # run; from here on is execution, which --select-only does not do.
+        if [[ "$SELECT_ONLY" -eq 1 ]]; then
+            printf '%bℹ%b Executing %s...\n' "${BLUE}" "${NC}" "$test_name" >&2
+            log_test_result "$spec_id" "$test_name" "SKIP" "select-only (2159-n9sa): selected, not executed"
+            test_count=$((test_count+1))
+            continue
+        fi
         litmus_refresh_stale_podman_cli
         # Execute test and capture result
         # Always show which test is executing to prevent user-perceived hangs
@@ -2645,7 +2751,7 @@ print_summary() {
     printf '%bPass Rate%b: %d%% (%d/%d executed)\n' "${BOLD}" "${NC}" "$coverage_ratio" "$TESTS_PASSED" "$total_executed" >&2
     # ORDER 1309-fhxb. ADDED LINES, never a reshape of the ones above: the census
     # on the row names seven parsers of this surface, and
-    # test-litmus-missing-bound-test-reds.sh asserts the LITERAL string
+    # test-litmus-missing-bound-test-reds.lua asserts the LITERAL string
     # `Pass Rate: 100% (1/1 executed)`.
     #
     # STEP VERDICTS, and the definition is printed with them so nobody re-derives
@@ -2666,6 +2772,14 @@ print_summary() {
     # would make the test line's `skipped=` incommensurable with the step line's.
     # So: `skipped=` is VERDICT skips only, and `not-run=` is what was never
     # attempted. Neither is in the rate's denominator, and neither ever was.
+    # 2309-fa7q: the census, printed on every run that has a member.
+    if [[ ${#NONZERO_TEXT_MATCHES[@]} -gt 0 ]]; then
+        printf 'Nonzero text matches (2309-fa7q, log only): %d\n' "${#NONZERO_TEXT_MATCHES[@]}" >&2
+        local _nz
+        for _nz in ${NONZERO_TEXT_MATCHES[@]+"${NONZERO_TEXT_MATCHES[@]}"}; do
+            printf 'census:nonzero-text-match %s\n' "$_nz" >&2
+        done
+    fi
     # 2093-gfak: a quarantine is a known, cited, UNPROVEN property. Name each
     # one so a green summary cannot hide it.
     if [[ ${#QUARANTINED[@]} -gt 0 ]]; then
@@ -2885,6 +2999,10 @@ parse_args() {
         case "$1" in
             --list)
                 LIST_ONLY=1
+                shift
+                ;;
+            --select-only)
+                SELECT_ONLY=1
                 shift
                 ;;
             --parse-only)
@@ -3143,7 +3261,7 @@ main() {
             if [[ -n "$parse_reader" && -x "$parse_reader" ]]; then
                 local parse_yaml_out=""
                 # MUTATION ANCHOR, and it is load-bearing for a fixture that is
-                # not this order's. scripts/test-litmus-parse-only-duplicate-key.sh
+                # not this order's. scripts/lua/test-litmus-parse-only-duplicate-key.lua
                 # (order 1274-cbk7) proves its defect by building a PRE-FIX COPY
                 # of this runner with the duplicate-key detector neutralised and
                 # requiring the false green to come back. Once 1303-2d5g added
@@ -3240,7 +3358,12 @@ main() {
     # then fail with build.rs's own diagnostic, which already tells the reader
     # exactly what to do. Refusing the whole run here would trade 29 confusing
     # failures for a total outage on hosts that have no stake in them.
-    if [[ ! -f "$PROJECT_ROOT/images/router/tillandsias-router-sidecar" ]]; then
+    # ORDER 2118-ywk7 (priority:build-speed): ONLY A TREE THAT CAN COMPILE IT.
+    # A fixture's scratch project (a copy of scripts/, no crates/) has nothing
+    # that compiles tillandsias-headless and nothing to build the sidecar from;
+    # staging there cost ~20 s per runner start under target/plan-scratch.
+    if [[ ! -f "$PROJECT_ROOT/images/router/tillandsias-router-sidecar" \
+          && -f "$PROJECT_ROOT/crates/tillandsias-router-sidecar/Cargo.toml" ]]; then
         if [[ -f "$PROJECT_ROOT/scripts/build-sidecar.sh" ]]; then
             log_info "Staging router sidecar (build artifact, absent — 871-wrmv)..."
             if bash "$PROJECT_ROOT/scripts/build-sidecar.sh" >/dev/null 2>&1; then
@@ -3403,6 +3526,8 @@ main() {
             owner_spec="$(grep -m1 -F 'spec: ' "$resolved_file" 2>/dev/null | sed -E 's/^spec:[[:space:]]*//')"
             if [[ -n "$owner_spec" ]]; then
                 log_warn "hint: '${FILTER_SPEC}' is a test name; run its spec: scripts/run-litmus-test.sh ${owner_spec}"
+                # ORDER 2150-6vpc: one test alone is --test (1465-ijv3).
+                log_warn "hint: or run that test alone: scripts/run-litmus-test.sh ${owner_spec} --test litmus:${FILTER_SPEC#litmus:}"
             fi
         fi
         exit 1

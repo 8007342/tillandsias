@@ -632,12 +632,38 @@ pub fn run_streamed(args: &[String], on_row: &mut dyn FnMut(&str)) -> Result<(),
     run_streamed_input(args, None, on_row)
 }
 
+/// [`run_streamed`] for an engine job: when the container never started and its
+/// argv carries the CDI GPU, one retry without it (2284-p6is).
+#[cfg(feature = "host-services")]
+pub fn run_engine_streamed(args: &[String], on_row: &mut dyn FnMut(&str)) -> Result<(), String> {
+    use crate::gpu_fallback as gf;
+    let mut exit = None;
+    match run_streamed_exit(args, None, on_row, &mut exit) {
+        Err(err) if gf::never_started(exit) && gf::carries_cdi(args) => {
+            gf::notice("the image engine", &err, "retrying without the NVIDIA card");
+            run_streamed(&gf::without_cdi(args, gf::engine_second_device()), on_row)
+                .map_err(|e| gf::both(e, &err))
+        }
+        other => other,
+    }
+}
+
 /// [`run_streamed`], writing `input` to the child's stdin first (then closing
 /// it). Used for the Hugging Face header, which must not be in argv.
 pub fn run_streamed_input(
     args: &[String],
     input: Option<&[u8]>,
     on_row: &mut dyn FnMut(&str),
+) -> Result<(), String> {
+    run_streamed_exit(args, input, on_row, &mut None)
+}
+
+/// `exit` receives the exit code of a process that ran and failed.
+fn run_streamed_exit(
+    args: &[String],
+    input: Option<&[u8]>,
+    on_row: &mut dyn FnMut(&str),
+    exit: &mut Option<i32>,
 ) -> Result<(), String> {
     let mut cmd = crate::podman_command();
     cmd.args(args)
@@ -712,6 +738,7 @@ pub fn run_streamed_input(
     if status.success() {
         Ok(())
     } else {
+        *exit = status.code();
         Err(format!("{status}: {}", tail.join(" | ")))
     }
 }

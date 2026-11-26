@@ -5,11 +5,13 @@
 # exit status), against a golden generated from jq, so the check runs on hosts
 # without jq.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking json get matches jq on the bucket A/B corpus (1375-rn9b)"
-STEP_SCRIPT="scripts/test-json-query-jq-parity.sh"
+STEP_LUA="scripts/lua/test-json-query-jq-parity.lua"
 STEP_ERROR="json get diverges from jq on a corpus filter, or the verb is absent (1375-rn9b)"
 STEP_OK="json get is byte-identical to jq on the jq-subset corpus"
-STEP_SKIP_EXIT=3
-STEP_SKIP_DESC="no runnable tillandsias-plan binary resolved, so the verb could not be exercised"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:json-get-parity:79/79"
+STEP_SECOND_REGIME="yolanda 2026-11-25 msys ok:json-get-parity:7 arms"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/plan-binary-probe.sh scripts/portability/jq-subset-corpus.txt scripts/portability/jq-subset-golden.txt scripts/lua/test-json-query-jq-parity.lua"

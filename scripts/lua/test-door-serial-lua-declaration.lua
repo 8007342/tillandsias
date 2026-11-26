@@ -5,7 +5,8 @@
 -- serial (`-- preflight: serial — <reason>`), and the door's own launcher then
 -- runs it with nothing beside it.
 --
--- WHY. Gate steps 450 (scripts/test-awk-float-lc-numeric.sh) and 455 (the
+-- WHY (history; the copies left the checkout in 2278-x4tw). Gate steps 450
+-- (scripts/test-awk-float-lc-numeric.sh) and 455 (the
 -- signal .lua, which runs the same .sh) both write .mutant-lcnum-* copies
 -- beside three producers in scripts/. The door ran them concurrently with
 -- each other and with tree-scanning guards, so step 455 found step 450's live
@@ -21,7 +22,9 @@
 --   3 SH         a .sh with `# preflight: serial — r` still predecides 12
 --   4 BARE       `-- preflight: serial` with no reason runs concurrently (0),
 --                with the door's note: the reason rule holds for .lua too
---   5 WRITERS    both real writers of the .mutant-lcnum-* paths predecide 12
+--   5 FORMER     the two former writers of checkout copies: the .sh writes none now
+--                (2278-x4tw) and runs concurrently (0); the signal .lua still runs
+--                alone (12), because it times a 1 s grace
 --   6 ALONE      the door's launcher at jobs=2 runs scan, WRITER.lua, scan:
 --                the writer's window holds no scan, and no scan is open when
 --                it starts (scheduling, not a sleep race: the 1 s holds only
@@ -132,8 +135,8 @@ arm("4 BARE a `-- preflight: serial` with no reason runs concurrently, with the 
     o:find("rc=0", 1, true) ~= nil and o:find("serial-without-a-reason", 1, true) ~= nil, o)
 local w1 = predecide("post", ROOT, "scripts/test-awk-float-lc-numeric.sh")
 local w2 = predecide("post", ROOT, "scripts/lua/test-awk-float-lc-numeric-signal.lua")
-arm("5 WRITERS both writers of the .mutant-lcnum-* paths run alone (12)",
-    w1:find("rc=12", 1, true) ~= nil and w2:find("rc=12", 1, true) ~= nil, "step 450 [" .. w1 .. "] step 455 [" .. w2 .. "]")
+arm("5 FORMER the .sh that left the checkout runs concurrently (0), the timed .lua still alone (12)",
+    w1:find("rc=0", 1, true) ~= nil and w2:find("rc=12", 1, true) ~= nil, "step 450 [" .. w1 .. "] step 455 [" .. w2 .. "]")
 
 -- ── 6/7 the launcher's own scheduling ──────────────────────────────────────
 -- Each guard appends `<who> start` and `<who> end` to one log around a 1 s
@@ -205,7 +208,7 @@ arm("7 OVERLAP the same roster without the declaration runs them side by side",
 
 -- ── 8 the runner the door hands down (1635-ma2f) ───────────────────────────
 -- The stale-plan-binary block is cut out of build.sh between its exact-once
--- markers (as test-preflight-stale-plan-binary.sh does) and run with
+-- markers (as test-preflight-stale-plan-binary.lua does) and run with
 -- SCRIPT_DIR at a scratch root holding the real probe and a stub binary at
 -- ./target/release/tillandsias-plan, the resolver's own relative answer.
 local lb, le, blines = nil, nil, {}
@@ -230,11 +233,14 @@ else
     -- door's own normalisation is what this arm measures.
     fs.write(S .. "/scripts/plan-binary-probe.sh",
         'resolve_plan_binary() { echo ./target/release/tillandsias-plan; }\n')
+    -- 2281-k3sn: the door asks its binary one known classify question.
     fs.write(S .. "/target/release/tillandsias-plan",
-        '#!/bin/sh\ncase "$1" in validator-surface-hash) echo ok:validator-surface:stub ;; esac\nexit 0\n')
+        '#!/bin/sh\ncase "$1" in validator-surface-hash) echo ok:validator-surface:stub ;; script) echo could-not-run ;; esac\nexit 0\n')
     proc.run({ argv = { "chmod", "+x", ROOT .. "/" .. S .. "/target/release/tillandsias-plan" }, timeout_ms = 10000 })
+    -- 2281-k3sn: the block asks the door's own _pf_classify, so it goes with it.
+    local classify_fn = (fs.read("build.sh") or ""):match("\n(_pf_classify%(%) {.-\n}\n)") or "exit 98\n"
     local function hand(which, body)
-        fs.write(REL .. "/runner-" .. which .. ".sh", 'SCRIPT_DIR="$1"\n' .. body .. 'echo "runner=$_pf_plan_bin"\n')
+        fs.write(REL .. "/runner-" .. which .. ".sh", 'SCRIPT_DIR="$1"\n' .. classify_fn .. body .. 'echo "runner=$_pf_plan_bin"\n')
         local r = proc.run({ argv = { "bash", ROOT .. "/" .. REL .. "/runner-" .. which .. ".sh", ROOT .. "/" .. S },
             cwd = ROOT, timeout_ms = 30000 })
         return text.trim((r.stdout or "") .. (r.stderr or ""))

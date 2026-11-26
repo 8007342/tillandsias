@@ -534,16 +534,17 @@ pub async fn start(
     let mut args = run_args(plan, project_name, &out_volume, host_has_cdi_gpu(), &budget);
     // 1913-ebv8: in the forge's slice, ranked before it.
     args.extend(crate::oom_slice_args());
-    args.push(tag);
-    client
-        .run_container_observed(
-            "imagegen-studio",
-            &container_name(project_name),
-            &args,
-            debug,
-        )
-        .await
-        .map(|_| ())?;
+    // 2284-p6is: a card podman cannot attach costs the GPU, not the studio.
+    let name = container_name(project_name);
+    crate::gpu_fallback::start_studio(args, &tag, |a| {
+        let name = &name;
+        async move {
+            client
+                .run_container_observed("imagegen-studio", name, &a, debug)
+                .await
+        }
+    })
+    .await?;
     #[cfg(feature = "host-services")]
     attach(project_name, &cidr, debug)?;
     let _ = cidr;

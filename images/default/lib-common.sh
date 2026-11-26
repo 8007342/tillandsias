@@ -1909,7 +1909,7 @@ ensure_forge_spec_index() {
 #
 # Pure and argument-fed so the policy is testable without an endpoint, an
 # accelerator, or a forge — the same reason format_seed_staleness exists on the
-# Rust side. scripts/test-warm-tier-model.sh exercises every branch.
+# Rust side. scripts/lua/test-warm-tier-model.lua exercises every branch.
 #
 # THE LADDER IS THE INFERENCE CONTAINER'S, NOT A SECOND ONE. images/inference/
 # entrypoint.sh classifies by VRAM/RAM and pulls T2 (qwen2.5:7b) .. T5; this
@@ -4219,7 +4219,7 @@ start_flaky_installs() {
     flaky_install_start dev-tools ensure_forge_dev_tools
     flaky_install_start prebuilt-tools ensure_forge_prebuilt_tools
     # The OpenSpec pin stays in the FOREGROUND for now: openspec_init_if_absent
-    # must run on the pinned CLI (1441-myz3, scripts/test-openspec-pin.sh case
+    # must run on the pinned CLI (1441-myz3, scripts/lua/test-openspec-pin.lua case
     # 10). Moving it here needs the init chained behind it; see the audit.
     trace_lifecycle "tools" "flaky-optional installs started in the background (status: $(flaky_status_dir))"
     return 0

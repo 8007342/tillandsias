@@ -305,6 +305,26 @@ staleness_check() {
     done
 }
 
+# ORDER 2083-6k44. Both cheatsheet phases below run a checker that first does
+# `cargo build -p tillandsias-policy`: 7.5s on Windows against a 900ms budget,
+# on EVERY commit, plus a write into the shared target/ that a running gate
+# also builds into. They read cheatsheet and policy inputs only, so a commit
+# that stages none of those gives them nothing new to read. The full gate
+# (local-ci.sh, gate step 140, the cheatsheet litmus) still runs both on every
+# tree, so scoping the hook loses no coverage.
+# Returns 0 when any staged path starts with one of the given prefixes.
+staged_touches() {
+    local f p
+    while IFS= read -r f; do
+        for p in "$@"; do
+            [[ "$f" == "$p"* ]] && return 0
+        done
+    done < <(git diff --cached --name-only 2>/dev/null)
+    return 1
+}
+CHEATSHEET_INPUTS=(cheatsheets/ cheatsheet-sources/ crates/tillandsias-policy/
+    scripts/lua/check-cheatsheet-tiers.lua scripts/lua/check-cheatsheet-sources.lua Cargo.lock)
+
 # --- 4. Cheatsheet source binding check ------------------------------------
 # Legacy verbatim source layer check — kept for the three-release retention
 # window per @tombstone discipline. The new tier validator (check 4b) is
@@ -312,6 +332,7 @@ staleness_check() {
 # @trace spec:cheatsheet-source-layer
 
 cheatsheet_source_check() {
+    staged_touches "${CHEATSHEET_INPUTS[@]}" || return 0
     local checker="scripts/lua/check-cheatsheet-sources.lua"
     [[ -f "${REPO_ROOT}/${checker}" ]] || return 0
     [[ -f "${REPO_ROOT}/cheatsheet-sources/INDEX.json" ]] || return 0
@@ -337,18 +358,22 @@ cheatsheet_source_check() {
 }
 
 # --- 4b. Cheatsheet tier-aware validator (cheatsheets-license-tiered) ------
-# Runs scripts/check-cheatsheet-tiers.sh in --quiet mode. ERRORs surface as
+# Runs scripts/lua/check-cheatsheet-tiers.lua in --quiet mode (ported, 2241-chtr). ERRORs surface as
 # non-blocking OpenSpec warnings (CRDT-convergence philosophy). The validator
 # itself is non-fatal: it exits 0 unless tier-conditional fields are missing
 # or CRDT override discipline is violated.
 # @trace spec:cheatsheets-license-tiered
 
 cheatsheet_tier_check() {
-    local checker="${REPO_ROOT}/scripts/check-cheatsheet-tiers.sh"
+    staged_touches "${CHEATSHEET_INPUTS[@]}" || return 0
+    local checker="${REPO_ROOT}/scripts/lua/check-cheatsheet-tiers.lua" plan
     [[ -f "${checker}" ]] || return 0
+    # Non-blocking, like the rest of this check: no plan binary is no check.
+    plan="$(cd "${REPO_ROOT}" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || return 0
+    [[ -n "${plan}" ]] || return 0
 
     local output exit_code
-    output="$(bash "${checker}" --quiet 2>&1)" || exit_code=$?
+    output="$(cd "${REPO_ROOT}" && "${plan}" script run scripts/lua/check-cheatsheet-tiers.lua -- --quiet 2>&1)" || exit_code=$?
     exit_code="${exit_code:-0}"
 
     if [[ "${exit_code}" -ne 0 ]]; then

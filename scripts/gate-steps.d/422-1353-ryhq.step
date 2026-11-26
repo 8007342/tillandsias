@@ -44,7 +44,14 @@
 # is invisible to every name-based scan, including the bound-or-retired guard
 # (1063-nraf). Keep it a plain string.
 STEP_DESC="Checking the preflight verdict distinguishes what ran from what did not (1353-ryhq)"
-STEP_SCRIPT="scripts/test-preflight-verdict-categories.sh"
+STEP_LUA="scripts/lua/test-preflight-verdict-categories.lua"
 STEP_ERROR="the preflight door can again report ok: for a run that left guards unanswered, or book a guard it could not start as a refusal (1353-ryhq) — read which arm failed above; arm 2 (the categories sum to the roster) and arm 3 (unanswered means partial:, never ok:) are the load-bearing ones"
 STEP_OK="The preflight verdict states its categories and their sum, and never vouches for a guard that did not examine the tree"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:preflight-verdict-categories:6/6 (arm7 named-skipped: no setsid on this regime)"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:preflight-verdict-categories:8 arms (arm 9 named-skipped, opt-in) (work/2385-psbb @ 10fa474d9)"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="timing"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="crates/tillandsias-plan/src/script_run.rs scripts/lua/test-preflight-verdict-categories.lua"

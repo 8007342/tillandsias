@@ -35,19 +35,14 @@ severity: high
 size: long
 
 preconditions:
-  - workspace contains images/studio/Containerfile.decap and scripts/test-studio-decap.sh
+  - workspace contains images/studio/Containerfile.decap and scripts/lua/test-studio-decap.lua
   - a local localhost/tillandsias-forge image
 
 critical_path:
-  - step: "the suite parses and carries its exec bit"
-    command: "bash -n scripts/test-studio-decap.sh && test -x scripts/test-studio-decap.sh && echo 'ok: studio-decap-suite-parses'"
-    timeout_ms: 3000
-    expected_behavior: "ok: studio-decap-suite-parses"
-
   - step: "a Hugo entry is committed through the front, an off-allowlist write is put back, decap-server on loopback only"
-    command: "bash scripts/test-studio-decap.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run --timeout 14m scripts/lua/test-studio-decap.lua 2>&1"
     timeout_ms: 900000
-    expected_behavior: "PASS: the Decap lane commits a Hugo entry through the front, puts back a write outside its allowlist, decap-server on loopback only, no egress"
+    expected_behavior: "ok:studio-decap:16 arms"
 
   - step: "a Hugo project recommends Decap"
     command: "cargo test -p tillandsias-headless studio::tests::a_hugo_site_recommends_decap -- --exact"
@@ -56,7 +51,7 @@ critical_path:
 observability:
   traces:
     - "@trace spec:local-web-preview"
-  expected_log: "PASS: the Decap lane commits a Hugo entry through the front, puts back a write outside its allowlist, decap-server on loopback only, no egress"
+  expected_log: "ok:studio-decap:16 arms"
   log_fields:
     spec: local-web-preview
     test: studio-decap-commits-a-hugo-entry-through-the-front

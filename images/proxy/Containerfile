@@ -64,7 +64,7 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 # child; a real crash is counted + named + restarted under a flap cap, and the
 # benign exit-time Store::Controller segfault that fires on EVERY ordered
 # shutdown is named separately and normalised to 0 so Exited(139) means
-# something again. Fixture: scripts/test-squid-supervisor.sh.
+# something again. Fixture: scripts/lua/test-squid-supervisor.lua.
 COPY squid-supervisor.sh /usr/local/bin/squid-supervisor
 # @trace spec:external-logs-layer
 # Manifest of curated external log files published by this image.

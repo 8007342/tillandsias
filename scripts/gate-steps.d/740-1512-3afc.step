@@ -7,9 +7,14 @@
 # window control that DOES refuse) and a ref already merged into trunk are all
 # accepted; a prefix on trunk refuses against trunk.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking the gate-step prefix check refuses collisions with other unlanded refs (1512-3afc)"
-STEP_SCRIPT="scripts/test-gate-step-prefix-across-refs.sh"
+STEP_LUA="scripts/lua/test-gate-step-prefix-across-refs.lua"
 STEP_ERROR="the gate-step prefix check no longer refuses a prefix another unlanded ref holds, or refuses one it should accept (1512-3afc); see which arm failed above"
 STEP_OK="gate-step prefix check refuses cross-ref collisions and accepts free prefixes"
-STEP_SECOND_REGIME="yolanda 2026-09-30 msys ok:gate-step-prefix-across-refs-fixture:8/8"
+STEP_SECOND_REGIME="yolanda 2026-11-23 msys ok:gate-step-prefix-across-refs-fixture:12/12 at 52ad842ae (fleet-run 740: result=ok base=04cdd10a sha c2655552)"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:gate-step-prefix-across-refs-fixture:12/12 at 347b84df5 (the Lua fixture, 2333-rqjn; rc 0, relayed by macuahuitl)"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/gate-steps.d/** scripts/lua/check-gate-step-prefix-across-refs.lua scripts/plan-binary-probe.sh scripts/lua/test-gate-step-prefix-across-refs.lua"

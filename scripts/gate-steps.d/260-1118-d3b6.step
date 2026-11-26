@@ -6,9 +6,13 @@
 # engine-gated NPU tier rows the runtime never mentioned, and that silence read
 # as satisfaction.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking the inference engine is version-pinned and digest-verified, and NPU state is reported (1118-d3b6)"
-STEP_SCRIPT="scripts/test-inference-engine-pinned-and-npu-honest.sh"
+STEP_LUA="scripts/lua/test-inference-engine-pinned-and-npu-honest.lua"
 STEP_ERROR="the inference engine can be fetched unpinned or unverified, or the NPU banner went silent again while the spec still claims NPU rows (1118-d3b6) — see the verdict line above"
 STEP_OK="Inference engine pinning and NPU telemetry passed"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   CONTROL: the spec still specifies NPU rows, so reporting NPU state is still the reconciliation"
+STEP_SECOND_REGIME="macbookair 2026-11-25 darwin ok:inference-engine-pinned-and-npu-honest:12 arms"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="images/inference/entrypoint.sh openspec/specs/inference-container/spec.md scripts/install.sh scripts/lua/test-inference-engine-pinned-and-npu-honest.lua"

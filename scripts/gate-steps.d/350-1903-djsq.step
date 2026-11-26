@@ -1,0 +1,45 @@
+# ORDER 2353-ccsd: the cold-state probe fixture moved to its own Lua step (352),
+# so the harness now lists seven; "eight" below is the count when this was written.
+# ORDER 1903-djsq + 2118-9kqp (priority:build-speed). The eight credential
+# fixtures run ONCE, here, under the stricter regime: a sentinel session bus.
+# They used to be six gate steps and two inline build.sh calls AND be re-run by
+# this check, so ~36 s per gate was paid twice. This step judges each fixture's
+# own verdict (its declared could-not-run code is a named skip) and that it made
+# no connection to the bus it inherited. On a host with no dbus-daemon (macOS)
+# the fixtures still run and are judged; only the bus arm is a named skip.
+STEP_DESC="Checking the credential fixtures pass and none reaches the session bus it inherited (1903-djsq, 2118-9kqp)"
+STEP_LUA="scripts/lua/test-keyring-fixtures-use-a-private-bus.lua"
+STEP_ERROR="a credential fixture failed, or reached the session bus it inherited (1903-djsq) — read the 'verdict:' or 'bus:' line naming it above; on an operator host the inherited bus is gnome-keyring-daemon, which aborts and restarts LOCKED (1265-8qr6): source scripts/test-support/private-session-bus.sh in that fixture and stub what it fell through to"
+STEP_OK="credential fixtures pass and stay off the inherited session bus"
+# Carried from 240-900-z3kv (the cold-state fixture): a keyring cold state can
+# disagree with itself on a healthy tree, so the step gets ONE settled retry.
+STEP_HOST_STATE="keyring"
+STEP_SERIAL="reads host keyring state; owns a sentinel dbus-daemon"
+# ORDER 2171-addv (priority:build-speed). ONE lane, host. "podman host" made
+# this step EXCLUSIVE (it ran alone after the lanes, ~23 s). Measured: with a
+# logging podman shim first on PATH the full 26-arm run made 0 real podman calls
+# (the only podman is a PATH stub inside the partial-is-nonzero fixture), and no
+# fixture names an absolute podman path. A fixture that starts driving the real
+# store must add the podman lane back, which makes the step exclusive again.
+STEP_LANES="host"
+# Measured on darwin for the merged step (2118-9kqp): 8/8 credential verdicts
+# ok; the bus arm is a named skip there (no dbus-daemon on macOS).
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-21 darwin skip:keyring-fixtures-use-a-private-bus:bus-arm:no-dbus-daemon(8/8-verdicts-ok)"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY (never
+# consulted by the class-selector skip; that is STEP_INPUTS, 2118-tnut).
+STEP_READS="scripts/lua/test-keyring-fixtures-use-a-private-bus.lua crates/tillandsias-headless/src/remote_projects.rs scripts/test-support/private-session-bus.sh crates/tillandsias-headless/src/vault_bootstrap.rs scripts/check-credential-channel.sh scripts/check-refusal-affordance-added.sh scripts/clear-vault-host-credentials.sh scripts/lua/probe-credential-cold-state.lua scripts/test-check-credential-channel.sh scripts/lua/test-credential-verdict-script.lua scripts/lua/test-clear-vault-credentials-partial-is-nonzero.lua scripts/lua/test-clear-vault-host-credentials.lua scripts/lua/test-credential-channel-affordances.lua scripts/lua/test-credential-channel-names-a-locked-keyring.lua scripts/lua/test-credential-channel-survives-a-killed-probe.lua lib/lua/common/privatebus.lua"
+# ORDER 2184-sinp: DECLARED INPUTS (2118-tnut grammar). Traced from the
+# script: the eight credential fixtures it runs, the private-bus helper they
+# all source, the three subjects they drive (check-credential-channel,
+# clear-vault-host-credentials, probe-credential-cold-state), the affordance
+# auditor one of them runs, and the two Rust sources two of them grep for a
+# constant. None runs cargo or the plan binary; the rest is live host state
+# (gh, keyring, bus), which no path can name. The step script, this file and
+# the gate deciders are added by build.sh.
+# ATIME TRACE of a real run (every tracked file's atime backdated, the step
+# run, the read set listed; relatime updates an atime older than 24 h): it
+# also reads 311 files under scripts/, all *.sh, because the affordance
+# auditor's --audit scans the whole tree. The fixture keeps only
+# check-credential-channel.sh's lines, but a file that breaks the scan would
+# still change the answer, so every scripts/*.sh is declared.
+STEP_INPUTS="path:scripts/*.sh path:scripts/test-support/private-session-bus.sh path:scripts/test-check-credential-channel.sh path:scripts/lua/test-credential-verdict-script.lua path:scripts/lua/test-clear-vault-credentials-partial-is-nonzero.lua path:scripts/lua/test-clear-vault-host-credentials.lua path:scripts/lua/test-credential-channel-affordances.lua path:scripts/lua/test-credential-channel-names-a-locked-keyring.lua path:scripts/lua/test-credential-channel-survives-a-killed-probe.lua path:scripts/check-credential-channel.sh path:scripts/clear-vault-host-credentials.sh path:scripts/lua/probe-credential-cold-state.lua path:scripts/check-refusal-affordance-added.sh path:crates/tillandsias-headless/src/remote_projects.rs path:crates/tillandsias-headless/src/vault_bootstrap.rs path:lib/lua/common/*.lua"

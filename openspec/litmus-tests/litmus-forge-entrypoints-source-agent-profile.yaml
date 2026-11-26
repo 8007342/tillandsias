@@ -20,18 +20,13 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-forge-entrypoints-source-agent-profile.sh
+  - workspace contains scripts/lua/test-forge-entrypoints-source-agent-profile.lua
 
 critical_path:
-  - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-forge-entrypoints-source-agent-profile.sh && test -x scripts/test-forge-entrypoints-source-agent-profile.sh && echo 'ok: entrypoints-profile-parses'"
-    timeout_ms: 5000
-    expected_behavior: "ok: entrypoints-profile-parses"
-
   - step: "static, behavioural, loud-miss, options and negative-control arms hold"
-    command: "bash scripts/test-forge-entrypoints-source-agent-profile.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-entrypoints-source-agent-profile.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "forge-entrypoints-source-agent-profile: 6 passed, 0 failed"
+    expected_behavior: "ok:forge-entrypoints-source-agent-profile:6 arms"
 
   # 1743-h9rz: the list above named four entrypoints and missed OpenCode's,
   # and the profile linked OpenCode's skills into a directory OpenCode never

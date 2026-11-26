@@ -6,7 +6,14 @@
 #
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking the litmus runner selects identically with and without jq/yq (1375-6pnd)"
-STEP_SCRIPT="scripts/test-litmus-runner-reads-without-jq.sh"
+STEP_LUA="scripts/lua/test-litmus-runner-reads-without-jq.lua"
 STEP_ERROR="the litmus runner's test selection depends on jq/yq being present (1375-6pnd)"
 STEP_OK="litmus selection is byte-identical with and without jq/yq"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin PASS: litmus-runner-reads-without-jq selection=24 tests, byte-identical"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:litmus-runner-reads-without-jq:5 arms (work/2386-lrg1 @ 8126c0fa5)"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="runs the litmus runner (it wipes its runtime dirs)"
+STEP_LANES="litmus"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/run-litmus-test.sh scripts/lua/test-litmus-runner-reads-without-jq.lua"

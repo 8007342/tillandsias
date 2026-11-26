@@ -36,7 +36,7 @@ ck() { # ck <description> <expected-substring-or-empty> <haystack> <want-rc> <go
     if [ "$wrc" != "$grc" ]; then
         printf '  FAIL %s (expected rc=%s, got rc=%s)\n' "$desc" "$wrc" "$grc"; fail=$((fail+1)); return
     fi
-    if [ -n "$want" ] && ! printf '%s' "$hay" | grep -qF "$want"; then
+    if [ -n "$want" ] && ! grep -qF <<<"$hay" "$want"; then
         printf '  FAIL %s (output lacks: %s)\n' "$desc" "$want"; fail=$((fail+1)); return
     fi
     printf '  ok   %s\n' "$desc"; pass=$((pass+1))

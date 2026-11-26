@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: pre-receive-nvidia-cdi-and-delegate-ladder-fixtures-ported-to-lua
+    order: "2330-sn77"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/test-no-stale-base-revert-pre-receive.lua
+      - scripts/lua/test-nvidia-cdi-stale-hostpath.lua
+      - scripts/lua/test-local-delegate-ladder.lua
+    title: "three shell fixtures ported to Lua: pre-receive stale-base guard, nvidia CDI stale hostPath, local delegate ladder"
+    context: |
+      ports: test-no-stale-base-revert-pre-receive, test-nvidia-cdi-stale-hostpath, test-local-delegate-ladder.
+      Claimed by yoga before the work, in the coordinator's test-[i-o]* range.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its subject is mutated; callers run the .lua; the three .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by build.sh, a gate step and a litmus"
+    provenance: "coordinator queue 2026-11-24 (test-[i-o]* range), yoga"
+    related: [1001-i5ux, 1248-j6vd, 1834-ujsf]
+    events:
+      - {type: claimed, ts: "2026-11-25T04:26:25Z", host: yoga, summary: "claimed; work ref work/2330-sn77"}

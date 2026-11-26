@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by doris-windows 2026-11-26 porting the agreement fixture (2387-rca8).
+packets:
+  - packet_id: rust-metrics-log-path-joins-with-backslashes-on-windows-so-writer-and-shell-reader-never-compare-equal
+    order: 2387-x65b
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [metrics, windows, msys, repo-root, fixture]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+    title: |
+      On native Windows tillandsias-plan metrics-log-path joins with backslashes, so its answer never string-equals the shell rule's under msys and the agreement fixture's arms 1b, 1d and W are red there
+    context: |
+      Measured on doris (native Windows, msys Git Bash) 2026-11-26:
+        rust : C:/<checkout>\.cache\metrics\forge-expert-usage.jsonl   (mixed separators)
+        shell: /c/<checkout>/.cache/metrics/forge-expert-usage.jsonl
+        rust, outside a checkout: /tmp\forge-expert-usage.jsonl (want /tmp/forge-expert-usage.jsonl)
+      Same file, but every string comparison fails. Consumers that compare the
+      path as a string: scripts/cycle-metrics.sh (the 1096-p3tn split guard reads
+      the defaulted path), scripts/lua/test-metrics-log-path-agreement.lua arms 1b,
+      1d and W. Ruled by macuahuitl 2026-11-26: keep the fixture strict (normalising
+      there would hide a real writer/reader mismatch); fix the Rust side.
+    verifiable_closure: |
+      tillandsias-plan script run scripts/lua/test-metrics-log-path-agreement.lua
+      prints ok:metrics-log-path-agreement:<n> on an msys host. PRE-FIX RESULT:
+      FAILS — violation:metrics-log-path-agreement:3-failed on doris (1b, 1d, W).
+    unscoreable: "the closure is the fixture scripts/lua/test-metrics-log-path-agreement.lua, run by gate step 279-1455-d7hc; no separate litmus pin"
+    next_action: >
+      Make metrics-log-path print one canonical spelling: forward slashes always,
+      and under msys the form the shell rule prints for the same root (or have both
+      sides agree on C:/x). Keep the Linux and darwin answers byte-identical.
+    notes: |
+      size: S

@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: keep-id-warm-test-flakes-on-a-second-shifting-query
+    order: 2198-ee49
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [podman]
+    estimated_hours: 2
+    title: |
+      keep_id_warm_tests::a_built_image_is_keep_id_warm_before_its_first_start flakes (after_warm 0 != 1): warm_keep_id_mapping re-queries the store's shifting support and silently returns when that podman info fails under load. The warm takes the answer the caller measured and reports why it did not warm.
+    context: |
+      macuahuitl-fedora, 2026-11-22: evicted #1301 on the land queue (macuahuitl, rootless podman, JOBS=1, no overlapping gates); "assertion left == right failed: the warm made the mapped copy, left: 0 right: 1", no store-fault message; the next gate passed. The test already measured shifting=false, then the warm asked again.
+    exit_criteria:
+      - 'the warm cannot silently skip after the test measured a store that cannot shift; a warm that does not run names its cause in the failure; the live test passes repeatedly on lenovinha'
+    unscoreable: 'unpinnable-until-the-guard-exists: the cargo test itself is the proof and is recorded in the PR.'
+    next_action: 'Split the warm into a measured-answer core returning its outcome; the test uses it.'
+    provenance: coordinator direction; filed by lenovinha.
+    depends_on: []
+    related: [1785-655p, 1960-kidw, 2054-kiwm, 2152-2vzj]
+    events:
+      - {type: filed, ts: '2026-11-22T07:54:26Z', host: lenovinha, summary: filed the keep-id warm test re-query flake}

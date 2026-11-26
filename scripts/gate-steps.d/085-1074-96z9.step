@@ -15,10 +15,17 @@
 # matters: a MISS must stay inside `_run`, or the hit/miss pair would look tidy
 # while the only measurement of the step's real cost quietly disappeared.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf): a binding assembled
+# STEP_LUA is a LITERAL path on purpose (1063-nraf): a binding assembled
 # from a variable is invisible to every name-based scan.
 STEP_DESC="Checking a memo hit is observable and a miss stays profiled (1074-96z9)"
-STEP_SCRIPT="scripts/test-memo-hit-observability.sh"
+STEP_LUA="scripts/lua/test-memo-hit-observability.lua"
 STEP_ERROR="a memo outcome stopped being measurable (1074-96z9) — see the verdict line above"
 STEP_OK="Memo-hit observability check passed"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"
+STEP_SECOND_REGIME="yolanda 2026-11-25 msys ok:memo-hit-observability:15 arms"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="timing"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/gate-steps.d/955-831-ezea.step scripts/lua/check-archiver-ready-set.lua scripts/archive-plan-packets.sh scripts/cycle-metrics.sh scripts/lua/test-cycle-metrics-recurrence.lua scripts/lua/test-memo-hit-observability.lua"

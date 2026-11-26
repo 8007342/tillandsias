@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # @trace spec:ci-release
 #
-# test-unrunnable-platform-arms.sh — falsify scripts/check-unrunnable-platform-arms.sh.
+# test-unrunnable-platform-arms.sh — falsify scripts/lua/check-unrunnable-platform-arms.lua.
 #
 # Order 1194-davi.
 #
@@ -21,7 +21,14 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 2
-GUARD="scripts/check-unrunnable-platform-arms.sh"
+GUARD="scripts/lua/check-unrunnable-platform-arms.lua"
+# ORDER 2118-9mk4: the guard is a lua decider run by the plan binary; its fs is
+# confined to the repo it runs in, so scratch files live under target/ and the
+# probe repo carries its own copies.
+PLAN="$( . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null )" || PLAN=""
+case "$PLAN" in ./*) PLAN="$ROOT/${PLAN#./}" ;; esac
+[ -n "$PLAN" ] || { echo "FAIL: no plan binary resolves; the guard under test is a lua decider"; exit 1; }
+guard() { "$PLAN" script run "$GUARD" -- "$@"; }
 
 pass=0; fail=0
 ok()  { echo "  ok: $1"; pass=$((pass+1)); }
@@ -29,7 +36,8 @@ bad() { echo "  FAIL: $1"; fail=$((fail+1)); }
 
 [ -f "$GUARD" ] || { echo "FAIL: $GUARD absent — nothing to test"; exit 1; }
 
-TMP="$(mktemp -d "${TMPDIR:-/tmp}/unrunnable-arms-test.XXXXXX")"
+mkdir -p "$ROOT/target"
+TMP="$(mktemp -d "$ROOT/target/unrunnable-arms-test.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 
 # A spec source in the documented 8-field shape:
@@ -46,7 +54,7 @@ _P1="check-credential"; _P2="channel.sh"; PROVER="${_P1}-${_P2}"
   printf 'SPEC\n}\n'
 } > "$TMP/spec.sh"
 
-run() { bash "$GUARD" --spec-source "$TMP/spec.sh" "$@" 2>"$TMP/err"; }
+run() { guard --spec-source "$TMP/spec.sh" "$@" 2>"$TMP/err"; }
 
 echo "ARM 1: a change touching nothing platform-scoped is SILENT (negative control)"
 out="$(run --platform linux --base HEAD)"; rc=$?
@@ -65,7 +73,7 @@ fi
 
 echo "ARM 3: a SHORT row makes it refuse rather than read the wrong column"
 printf 'required_tools() {\ncat <<SPEC\ntimeout|binary|gate|macos\nSPEC\n}\n' > "$TMP/short.sh"
-out3="$(bash "$GUARD" --spec-source "$TMP/short.sh" --platform linux 2>/dev/null)"; rc3=$?
+out3="$(guard --spec-source "$TMP/short.sh" --platform linux 2>/dev/null)"; rc3=$?
 if [ $rc3 -eq 0 ] && printf '%s' "$out3" | /usr/bin/grep -q '^fail:unrunnable-platform-arms:unparsable-spec'; then
     ok "a 4-field row is refused as unparsable, and the refusal still exits 0"
 else
@@ -74,7 +82,7 @@ fi
 
 echo "ARM 4: an EMPTY spec skips loudly and never reports ok"
 printf 'required_tools() {\ncat <<SPEC\nSPEC\n}\n' > "$TMP/empty.sh"
-out4="$(bash "$GUARD" --spec-source "$TMP/empty.sh" --platform linux 2>/dev/null)"
+out4="$(guard --spec-source "$TMP/empty.sh" --platform linux 2>/dev/null)"
 if printf '%s' "$out4" | /usr/bin/grep -q '^skipped:unrunnable-platform-arms:no-rows'; then
     ok "no rows parsed reports skipped:, not ok: (785-sqe6)"
 else
@@ -82,7 +90,7 @@ else
 fi
 
 echo "ARM 5: an ABSENT spec source skips rather than passing over an empty set"
-out5="$(bash "$GUARD" --spec-source "$TMP/does-not-exist.sh" --platform linux 2>/dev/null)"
+out5="$(guard --spec-source "$TMP/does-not-exist.sh" --platform linux 2>/dev/null)"
 if printf '%s' "$out5" | /usr/bin/grep -q '^skipped:unrunnable-platform-arms:no-spec-source'; then
     ok "absent source reports skipped:no-spec-source"
 else
@@ -90,7 +98,7 @@ else
 fi
 
 echo "ARM 6: an unresolvable base ref skips rather than diffing the world"
-out6="$(bash "$GUARD" --base refs/heads/definitely-no-such-ref --platform linux 2>/dev/null)"
+out6="$(guard --base refs/heads/definitely-no-such-ref --platform linux 2>/dev/null)"
 if printf '%s' "$out6" | /usr/bin/grep -q '^skipped:unrunnable-platform-arms:no-diff-base'; then
     ok "unresolvable base reports skipped:no-diff-base"
 else
@@ -100,7 +108,7 @@ fi
 echo "ARM 7: the advisory NEVER exits non-zero, on any arm above"
 allrc=0
 for spec in "$TMP/spec.sh" "$TMP/short.sh" "$TMP/empty.sh" "$TMP/does-not-exist.sh"; do
-    bash "$GUARD" --spec-source "$spec" --platform linux >/dev/null 2>&1 || allrc=$?
+    guard --spec-source "$spec" --platform linux >/dev/null 2>&1 || allrc=$?
 done
 if [ "$allrc" -eq 0 ]; then
     ok "every verdict exits 0 — it is advisory, never a refusal (1194-davi)"
@@ -111,12 +119,12 @@ fi
 echo "ARM 8: THE DISCRIMINATING CONTROL — the same prover file is SILENT on the"
 echo "       platform that actually runs the arm, so this is about scope and not"
 echo "       about matching a filename."
-probe="$TMP/probe_repo"; mkdir -p "$probe/scripts"
+probe="$TMP/probe_repo"; mkdir -p "$probe/scripts/lua"
 # The guard resolves its OWN repo root from BASH_SOURCE and cd's there, so it
 # cannot be pointed at another tree by cd-ing first — running it from here
 # would silently report on THIS repo's diff instead of the probe's, which is a
 # green that measures the wrong subject. Copy it in so its root IS the probe.
-cp "$ROOT/$GUARD" "$probe/scripts/"
+cp "$ROOT/$GUARD" "$probe/scripts/lua/"; cp "$TMP/spec.sh" "$probe/spec.sh"
 (
   cd "$probe" || exit 1
   git init -q . 2>/dev/null
@@ -125,9 +133,9 @@ cp "$ROOT/$GUARD" "$probe/scripts/"
   git add -A >/dev/null 2>&1; git commit -qm base >/dev/null 2>&1
   printf 'changed\n' >> "scripts/$PROVER"
 ) || true
-_pg="$probe/scripts/$(basename "$GUARD")"
-lin="$(bash "$_pg" --spec-source "$TMP/spec.sh" --platform linux --base HEAD 2>/dev/null)"
-mac="$(bash "$_pg" --spec-source "$TMP/spec.sh" --platform macos --base HEAD 2>/dev/null)"
+pguard() { (cd "$probe" && "$PLAN" script run "$GUARD" -- "$@"); }
+lin="$(pguard --spec-source spec.sh --platform linux --base HEAD 2>/dev/null)"
+mac="$(pguard --spec-source spec.sh --platform macos --base HEAD 2>/dev/null)"
 if printf '%s' "$lin" | /usr/bin/grep -q '^advisory:' && printf '%s' "$mac" | /usr/bin/grep -q '^ok:'; then
     ok "linux gets advisory:, macos gets ok: for the SAME changed file"
 else
@@ -142,7 +150,7 @@ echo "ARM 10: the ADVISORY path itself exits 0 — the branch ARM 7 cannot reach
 # supposed. An arm whose other branch is unreachable on the host running it is
 # not testing that branch; this one drives the probe repo, where the advisory
 # genuinely fires.
-bash "$_pg" --spec-source "$TMP/spec.sh" --platform linux --base HEAD >/dev/null 2>&1
+pguard --spec-source spec.sh --platform linux --base HEAD >/dev/null 2>&1
 _arc=$?
 if [ "$_arc" -eq 0 ]; then
     ok "a FIRING advisory still exits 0 (rc=$_arc)"
@@ -153,7 +161,7 @@ fi
 echo "ARM 9: the guard is BOUND — something actually invokes it"
 # A closure citing a fixture nothing executes protects nothing. The advisory
 # must be called from the land path, before the push.
-if /usr/bin/grep -q 'check-unrunnable-platform-arms.sh' scripts/land-on-platform-branch.sh; then
+if /usr/bin/grep -q 'check-unrunnable-platform-arms.lua' scripts/land-on-platform-branch.sh; then
     ok "scripts/land-on-platform-branch.sh invokes the advisory"
 else
     bad "nothing invokes the advisory — it is an orphan and protects nothing"
@@ -179,7 +187,7 @@ _auditor_plan() {
 _ap="$(_auditor_plan)" || _ap=""
 if [ -f scripts/lua/audit-guard-activation.lua ] && [ -n "$_ap" ]; then
     _av="$("$_ap" script run scripts/lua/audit-guard-activation.lua 2>/dev/null | /usr/bin/grep '^orphans:' || true)"
-    if printf '%s' "$_av" | /usr/bin/grep -q 'check-unrunnable-platform-arms.sh'; then
+    if printf '%s' "$_av" | /usr/bin/grep -q 'check-unrunnable-platform-arms'; then
         bad "the orphan auditor reports this guard as an ORPHAN: $_av"
     else
         ok "audit-guard-activation does not list it as an orphan"

@@ -16,7 +16,7 @@ preconditions:
   - workspace contains scripts/check-added-test-is-referenced.sh
 critical_path:
   - step: "bash composition-hazard lint names the pre-fix pipeline and not the comment"
-    command: "bash scripts/test-bash-composition-hazards.sh 2>&1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-bash-composition-hazards.lua 2>&1"
     expected_behavior: "ok:bash-composition-hazards:"
     assert_exit: 0
     assert_output_contains: "ok:bash-composition-hazards:"
@@ -34,10 +34,10 @@ critical_path:
     assert_output_contains: "ok:packet-tier-fixture:4 arms"
     timeout_ms: 120000
   - step: "cycle driver passes outcomes through and skips on overlap"
-    command: "bash scripts/test-cycle-driver.sh 2>&1"
-    expected_behavior: "PASS: cycle-driver fixture"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-cycle-driver.lua 2>&1"
+    expected_behavior: "ok:cycle-driver:8 arms"
     assert_exit: 0
-    assert_output_contains: "PASS: cycle-driver fixture"
+    assert_output_contains: "ok:cycle-driver:8 arms"
     timeout_ms: 120000
   - step: "e2e preflight refuses a live runtime"
     command: "bash scripts/test-e2e-preflight-live-runtime.sh 2>&1"
@@ -46,10 +46,10 @@ critical_path:
     assert_output_contains: "PASS: e2e-preflight refuses live runtime"
     timeout_ms: 120000
   - step: "embed endpoint derivation"
-    command: "bash scripts/test-embed-endpoint-derivation.sh 2>&1"
-    expected_behavior: "PASS: embed-endpoint derivation"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-embed-endpoint-derivation.lua 2>&1"
+    expected_behavior: "ok:embed-endpoint-derivation:10 arms"
     assert_exit: 0
-    assert_output_contains: "PASS: embed-endpoint derivation"
+    assert_output_contains: "ok:embed-endpoint-derivation:10 arms"
     timeout_ms: 120000
   - step: "enclave network guard discovers its launchers"
     command: "bash scripts/test-enclave-network-internal-discovery.sh 2>&1"
@@ -76,10 +76,10 @@ critical_path:
     assert_output_contains: "ok:fragment-status-loss-row-boundary:"
     timeout_ms: 120000
   - step: "every resident process keeps the token due-check"
-    command: "bash scripts/test-github-token-rotation-entry-points.sh 2>&1"
-    expected_behavior: "PASS: github-token-rotation-entry-points"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-github-token-rotation-entry-points.lua 2>&1"
+    expected_behavior: "ok:github-token-rotation-entry-points:9 arms"
     assert_exit: 0
-    assert_output_contains: "PASS: github-token-rotation-entry-points"
+    assert_output_contains: "ok:github-token-rotation-entry-points:9 arms"
     timeout_ms: 120000
   - step: "guest staging refuses a binary without the control wire"
     command: "bash scripts/test-guest-staging-refuses-a-wireless-binary.sh 2>&1"

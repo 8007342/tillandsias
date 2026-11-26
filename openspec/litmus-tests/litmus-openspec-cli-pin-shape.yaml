@@ -15,18 +15,18 @@ size: instant
 preconditions:
   - workspace contains openspec/cli-version
   - workspace contains scripts/openspec-pin.sh
-  - workspace contains scripts/test-openspec-pin.sh
+  - workspace contains scripts/lua/test-openspec-pin.lua
 
 critical_path:
-  - step: "pin script and fixture are executable and parse"
-    command: "test -x scripts/openspec-pin.sh && test -x scripts/test-openspec-pin.sh && bash -n scripts/openspec-pin.sh scripts/test-openspec-pin.sh && echo 'ok: executable'"
+  - step: "pin script is executable and parses, and the fixture is the .lua"
+    command: "test -x scripts/openspec-pin.sh && test -f scripts/lua/test-openspec-pin.lua && bash -n scripts/openspec-pin.sh && echo 'ok: executable'"
     timeout_ms: 2000
     expected_behavior: "ok: executable"
 
   - step: "pin, check, drift, bump and the forge-side pinned install (hermetic stubs)"
-    command: "bash scripts/test-openspec-pin.sh"
-    timeout_ms: 30000
-    expected_behavior: "ok:openspec-pin"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-openspec-pin.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:openspec-pin:32 arms"
 
   - step: "the live tree's generated skills match the pin"
     command: "scripts/openspec-pin.sh drift"

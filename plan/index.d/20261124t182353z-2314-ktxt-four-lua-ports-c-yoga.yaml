@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: competing-gate-compaction-claims-and-closure-guard-fixtures-ported-to-lua
+    order: "2314-ktxt"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/test-competing-gate-no-dispatch-cause.lua
+      - scripts/lua/test-compaction-coverage.lua
+      - scripts/lua/test-claims-affordance.lua
+      - scripts/lua/test-closure-guards-name-the-way-out.lua
+    title: "four shell fixtures ported to Lua: competing gate cause, compaction coverage, claims affordance, closure guards"
+    context: |
+      ports: test-competing-gate-no-dispatch-cause, test-compaction-coverage, test-claims-affordance, test-closure-guards-name-the-way-out.
+      Claimed by yoga before the work, in the coordinator's test-[a-c]* range.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its subject is mutated; callers run the .lua; the four .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by build.sh, their gate steps and their litmus"
+    provenance: "coordinator queue 2026-11-24 (test-[a-c]* range), yoga"
+    related: [1221-vkbj, 843-624y, 1247-omqr, 1136-n8sh]
+    events:
+      - {type: claimed, ts: "2026-11-24T18:23:53Z", host: yoga, summary: "claimed; work ref work/2314-ktxt"}
