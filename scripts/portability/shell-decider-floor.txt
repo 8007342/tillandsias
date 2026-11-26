@@ -34,7 +34,6 @@ scripts/check-native-lint-attested.sh
 scripts/check-nix-builder-e2e.sh
 scripts/check-nix-deps-stability.sh
 scripts/check-no-competing-gate.sh
-scripts/check-no-tracked-binaries.sh
 scripts/check-pickup-role-grammar.sh
 scripts/check-plan-binary-current.sh
 scripts/check-plan-binary-probe-usage.sh
@@ -54,7 +53,6 @@ scripts/check-spec-index-resolution-agreement.sh
 scripts/check-stranded-in-progress.sh
 scripts/check-stranded-plan-writes.sh
 scripts/check-test-baseline.sh
-scripts/check-unrunnable-platform-arms.sh
 scripts/check-yaml-reader-availability.sh
 scripts/test-awk-float-lc-numeric.sh
 scripts/test-build-image-installed-version-alias.sh
@@ -156,13 +154,9 @@ scripts/test-release-tier-freshness.sh
 scripts/test-reopen-is-history-not-loss.sh
 scripts/test-reset-flags-are-accepted.sh
 scripts/test-reset-state-contract.sh
-scripts/test-run-verb-agent-door.sh
 scripts/test-running-image-freshness.sh
-scripts/test-salvage-audit.sh
 scripts/test-salvage-net.sh
 scripts/test-scorable-closure-quoting.sh
-scripts/test-scorable-obligation-gate.sh
-scripts/test-scorable-obligation-splitter.sh
 scripts/test-script-exec-bits.sh
 scripts/test-seam-writers-canonical.sh
 scripts/test-secrets.sh
@@ -176,7 +170,6 @@ scripts/test-smoke-evidence-dir-is-fresh.sh
 scripts/test-smoke-forge-lane-cold-host-outcome.sh
 scripts/test-smoke-verifies-a-signature.sh
 scripts/test-spawn-failure-names-program.sh
-scripts/test-spec-index-durable-tier-demotion.sh
 scripts/test-spec-index-endpoint-classification.sh
 scripts/test-stranded-plan-writes.sh
 scripts/test-timing-clock-resolution.sh

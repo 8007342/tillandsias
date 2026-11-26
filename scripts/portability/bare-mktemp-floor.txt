@@ -15,7 +15,6 @@ scripts/check-mcp-expert-health.sh 1
 scripts/check-mcp-live-build.sh 1
 scripts/check-mcp-surface.sh 1
 scripts/check-mo-full-attestations.sh 1
-scripts/check-no-tracked-binaries.sh 1
 scripts/check-plan-binary-current.sh 1
 scripts/check-release-asset-integrity.sh 1
 scripts/check-script-exec-bits.sh 1
@@ -87,14 +86,12 @@ scripts/test-reclaim-stranded-claims.sh 1
 scripts/test-release-tier-freshness.sh 1
 scripts/test-reset-state-contract.sh 2
 scripts/test-running-image-freshness.sh 1
-scripts/test-salvage-audit.sh 1
 scripts/test-salvage-net.sh 1
 scripts/test-set-field-refuses-unknown-flags.sh 1
 scripts/test-sigpipe-verdict-pipelines.sh 1
 scripts/test-silverblue-update-skew-probe.sh 1
 scripts/test-skill-canonicalization-remedy.sh 1
 scripts/test-smoke-verifies-a-signature.sh 1
-scripts/test-spec-index-durable-tier-demotion.sh 1
 scripts/test-spec-index-endpoint-classification.sh 1
 scripts/test-tool-materialize-litmus-surfaces-arm.sh 1
 scripts/test-uninstall-matcher-spares-bystanders.sh 1

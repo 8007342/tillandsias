@@ -368,7 +368,6 @@ scripts scripts/check-must-ship-rows.sh 5
 scripts scripts/check-nix-builder-e2e.sh 7
 scripts scripts/check-nix-deps-stability.sh 6
 scripts scripts/check-no-competing-gate.sh 6
-scripts scripts/check-no-tracked-binaries.sh 7
 scripts scripts/check-pickup-role-grammar.sh 3
 scripts scripts/check-plan-binary-current.sh 5
 scripts scripts/check-plan-binary-probe-usage.sh 8
@@ -388,7 +387,6 @@ scripts scripts/check-spec-index-resolution-agreement.sh 4
 scripts scripts/check-stranded-in-progress.sh 5
 scripts scripts/check-stranded-plan-writes.sh 3
 scripts scripts/check-test-baseline.sh 8
-scripts scripts/check-unrunnable-platform-arms.sh 5
 scripts scripts/claim-ledger-node.sh 6
 scripts scripts/clamp-ca-material.sh 1
 scripts scripts/claude-delegate.sh 1
@@ -581,13 +579,9 @@ scripts scripts/test-release-tier-freshness.sh 2
 scripts scripts/test-reopen-is-history-not-loss.sh 4
 scripts scripts/test-reset-flags-are-accepted.sh 2
 scripts scripts/test-reset-state-contract.sh 3
-scripts scripts/test-run-verb-agent-door.sh 3
 scripts scripts/test-running-image-freshness.sh 6
-scripts scripts/test-salvage-audit.sh 7
 scripts scripts/test-salvage-net.sh 13
 scripts scripts/test-scorable-closure-quoting.sh 5
-scripts scripts/test-scorable-obligation-gate.sh 15
-scripts scripts/test-scorable-obligation-splitter.sh 14
 scripts scripts/test-script-exec-bits.sh 3
 scripts scripts/test-seam-writers-canonical.sh 7
 scripts scripts/test-secrets.sh 7
