@@ -99,7 +99,6 @@ scripts/test-litmus-podman-preflight-trigger.sh
 scripts/test-litmus-step-pipefail.sh
 scripts/test-litmus-terminal-verdict.sh
 scripts/test-macos-vsock-inference-closure.sh
-scripts/test-metrics-log-path-agreement.sh
 scripts/test-mo-full-attest.sh
 scripts/test-nix-cache-service.sh
 scripts/test-nix-toolbox.sh

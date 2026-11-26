@@ -515,7 +515,7 @@ const USAGE: &str = concat!(
     "                                     there is no writable checkout. Mirrors scripts/metrics-log-path.sh,\n",
     "                                     which a Rust binary cannot source — this subcommand exists so the\n",
     "                                     two implementations can be COMPARED by a gate (arm 1b of\n",
-    "                                     scripts/test-metrics-log-path-agreement.sh) instead of drifting.\n",
+    "                                     scripts/lua/test-metrics-log-path-agreement.lua) instead of drifting.\n",
     "                                     Before it, the CLI wrote usage records to a hardcoded /tmp while\n",
     "                                     every shell reader looked in .cache/metrics: 901 records written,\n",
     "                                     0 readable. Reads no ledger, so it answers on a broken one.\n",
@@ -3113,7 +3113,7 @@ fn utc_now_iso() -> String {
 ///
 /// So the algorithm is duplicated ON PURPOSE and the DRIFT is what gets gated: the
 /// `metrics-log-path` subcommand below exposes this function's answer, and arm 1 of
-/// `scripts/test-metrics-log-path-agreement.sh` compares it against the shell rule's
+/// `scripts/lua/test-metrics-log-path-agreement.lua` compares it against the shell rule's
 /// answer for the same root. A divergence cannot land silently, which is the property
 /// the single-file rule was protecting. Keep the two in step, and change them together.
 pub fn metrics_default_log(basename: &str, repo_root: Option<&Path>) -> PathBuf {

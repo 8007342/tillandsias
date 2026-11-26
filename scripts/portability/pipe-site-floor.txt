@@ -531,7 +531,6 @@ scripts scripts/test-litmus-fake-podman-hermetic.sh 1
 scripts scripts/test-litmus-podman-preflight-trigger.sh 1
 scripts scripts/test-litmus-step-pipefail.sh 3
 scripts scripts/test-litmus-terminal-verdict.sh 2
-scripts scripts/test-metrics-log-path-agreement.sh 1
 scripts scripts/test-nix-cache-service.sh 1
 scripts scripts/test-nix-toolbox.sh 9
 scripts scripts/test-no-competing-gate.sh 2
