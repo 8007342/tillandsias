@@ -41,6 +41,12 @@ T:arm("2 a present but unusable tool is not handed back", got == "", got)
 T:arm("3 and the return code says so", rc == 1, "rc=" .. rc)
 rc = sh('"$BASH" ./caller.sh "$lib" >/dev/null 2>&1\n')
 T:arm("4 its caller reaches could-not-run instead of passing over nothing", rc == 2, "rc=" .. rc)
+-- 6 a stub toolbox that can run the tool, so no real container is asked.
+fs.mkdir(W.rel .. "/bin-box")
+fs.write(W.rel .. "/bin-box/toolbox", "#!/bin/sh\nexit 0\n")
+rc, got = sh('chmod +x bin-box/toolbox || exit 9\nPATH="$PWD/bin-box:$PATH"\n. "$lib" || exit 9\nresolve_tool tilde-probe-broken 2>/dev/null\n')
+T:arm("6 a toolbox that can run it is the fallback",
+    rc == 0 and got == "toolbox run --container tillandsias-builder tilde-probe-broken", "rc=" .. rc .. " " .. got)
 
 -- MUTATION: without the usability probe the broken tool comes back and the caller passes.
 local src = fs.read("scripts/lib/tool-dispatch.sh"):gsub("\r\n", "\n")
