@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: relay-preflight-selects-only-shell-fixtures-so-a-lua-only-diff-reports-fixtures-0-as-ok
+    field: status
+    value: obsoleted
+    ts: "2026-11-26T21:26:19Z"
+    host: doris
+  - packet_id: relay-preflight-selects-only-shell-fixtures-so-a-lua-only-diff-reports-fixtures-0-as-ok
+    field: next_action
+    value: "Obsoleted by 2415-ea3h (yoga, #1671), which fixes the same relay-preflight fixtures=0 hole. That is the single row for it."
+    ts: "2026-11-26T21:26:19Z"
+    host: doris
