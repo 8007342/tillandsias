@@ -1,4 +1,4 @@
--- @trace order:877-mynm, order:863-iicc, order:964-fwvh, order:2400-prg4
+-- @trace order:877-mynm, order:863-iicc, order:2400-prg4
 -- @env PATH HOME
 --
 -- test-pre-push-empty-ref-list.lua — pin what an EMPTY pre-push ref list means, and pin
@@ -24,7 +24,7 @@
 -- then reads this checkout's .git/tillandsias-gate-stamp, so the stamp is held aside for
 -- those arms and restored on every path, including an error (pcall below).
 --
--- HERMETIC AGAINST GLOBAL GIT CONFIG (964-fwvh): a global core.hooksPath replaces
+-- HERMETIC AGAINST GLOBAL GIT CONFIG (order 964, unfiled in the ledger): a global core.hooksPath replaces
 -- .git/hooks, so the spy would never run; each scratch repo pins its own.
 --
 -- The guard is run with the gate's env (TILLANDSIAS_* kept, as the .sh's child inherited

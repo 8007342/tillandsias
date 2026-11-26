@@ -1,4 +1,4 @@
--- @trace order:1124-7f3u, order:889-twhe, order:531-*, order:1926-pmau, order:2217-ab8h, order:2400-prg4
+-- @trace order:1124-7f3u, order:889-twhe, order:531-*, order:2217-ab8h, order:2400-prg4
 -- @env PATH HOME
 --
 -- test-pre-push-plan-lane-fails-closed-without-binary.lua — pin that the pre-push
@@ -21,7 +21,7 @@
 --
 -- yq is a STUB on purpose (the hook's two calls only): the arm tests what happens AFTER
 -- the yq tier passes. The scratch repo pins core.hooksPath (a global one would replace
--- it). TILLANDSIAS_SURFACE_ROOT is dropped (1926-pmau), and TILLANDSIAS_PLAN_BIN and
+-- it). TILLANDSIAS_SURFACE_ROOT is dropped (order 1926, unfiled in the ledger), and TILLANDSIAS_PLAN_BIN and
 -- CARGO_TARGET_DIR are dropped from the no-binary pushes: they are probe routes. The hook
 -- never re-enters build.sh (it only names it in refusals), so gate_inherit is n/a.
 --
