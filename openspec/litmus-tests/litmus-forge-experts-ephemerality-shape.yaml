@@ -240,9 +240,14 @@ critical_path:
     # readers. If they drift, the index is built where nobody looks and the
     # system reports a MISSING index rather than a misconfigured one — silent by
     # construction, which is how the whole embedding step hid for weeks (552).
-    command: "out=$(bash scripts/check-spec-index-resolution-agreement.sh 2>&1 | tail -1); case \"$out\" in ok:spec-index-resolution-agreement:*) printf '%s\\n' \"$out\" ;; *) echo \"REGRESSION: $out\"; exit 1 ;; esac"
+    command: "out=$(\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-spec-index-resolution-agreement.lua 2>/dev/null); case \"$out\" in ok:spec-index-resolution-agreement:*) printf '%s\\n' \"$out\" ;; *) echo \"REGRESSION: $out\"; exit 1 ;; esac"
     timeout_ms: 30000
     expected_behavior: "ok:spec-index-resolution-agreement:"
+
+  - step: "CARVE-OUT 2b: that guard refuses a drifted block, a lost marker, a missing resolver, an empty resolution and a producer that ignores its block"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-spec-index-resolution-agreement.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:spec-index-resolution-agreement-fixture:"
 
   - step: "the state READER only ever reads the ephemeral surface"
     # A renderer that falls back to a persisted copy would resurrect dead

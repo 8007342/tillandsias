@@ -18,7 +18,6 @@ scripts/check-mo-full-attestations.sh 1
 scripts/check-plan-binary-current.sh 1
 scripts/check-release-asset-integrity.sh 1
 scripts/check-script-exec-bits.sh 1
-scripts/check-spec-index-resolution-agreement.sh 2
 scripts/clamp-ca-material.sh 1
 scripts/cycle-preflight.sh 2
 scripts/diagnose-proxy.sh 1

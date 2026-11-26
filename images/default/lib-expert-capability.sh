@@ -365,7 +365,7 @@ _tec_build_in_flight() {
 #     is silently ABSENT rather than loudly missing, which is how the embedding
 #     step stayed unwritten on every host for weeks. Agreement is proven
 #     BEHAVIOURALLY — the block is extracted from each file and executed under
-#     one env — by scripts/check-spec-index-resolution-agreement.sh. Edit all
+#     one env — by scripts/lua/check-spec-index-resolution-agreement.lua. Edit all
 #     three together or that guard goes red.
 #
 #     Precedence, highest first:
