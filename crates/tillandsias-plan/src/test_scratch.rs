@@ -22,8 +22,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, Once};
 
 static DIRS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+#[cfg_attr(not(unix), allow(dead_code))]
 static HOOK: Once = Once::new();
 
+#[cfg_attr(not(unix), allow(dead_code))]
 extern "C" fn remove_recorded() {
     if let Ok(dirs) = DIRS.lock() {
         for d in dirs.iter() {
@@ -34,6 +36,9 @@ extern "C" fn remove_recorded() {
 
 /// Record `path` for removal at process exit (idempotent per path).
 pub fn remember(path: &Path) {
+    // libc is a unix-only dependency of this crate: elsewhere dirs are recorded and not removed
+    // at exit. The inode exhaustion this exists for is a Linux tmpfs /tmp (2407-aq7x).
+    #[cfg(unix)]
     HOOK.call_once(|| {
         // SAFETY: registers a plain `extern "C" fn()` with the C runtime; it touches only
         // its own static and the filesystem.
@@ -69,6 +74,7 @@ mod tests {
     /// The hook is the part that matters, so it is exercised in a CHILD process: the child
     /// makes a recorded dir and exits; the parent sees it gone. An unrecorded control in the
     /// same child stays, so "gone" is the hook's doing, not a cleanup by the child.
+    #[cfg(unix)]
     #[test]
     fn a_recorded_dir_is_removed_when_the_process_exits() {
         if std::env::var_os("TEST_SCRATCH_CHILD").is_some() {
