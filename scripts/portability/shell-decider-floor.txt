@@ -92,12 +92,6 @@ scripts/test-image-build-convergence.sh
 scripts/test-image-usability-check.sh
 scripts/test-join-the-fleet-idempotent.sh
 scripts/test-land-queue.sh
-scripts/test-litmus-budget-tally.sh
-scripts/test-litmus-fake-podman-hermetic.sh
-scripts/test-litmus-podman-preflight-diagnosis.sh
-scripts/test-litmus-podman-preflight-trigger.sh
-scripts/test-litmus-step-pipefail.sh
-scripts/test-litmus-terminal-verdict.sh
 scripts/test-macos-vsock-inference-closure.sh
 scripts/test-mo-full-attest.sh
 scripts/test-nix-cache-service.sh
