@@ -50,8 +50,6 @@ scripts/test-concurrent-forge-shared-stack.sh 1
 scripts/test-e2e-preflight-live-runtime.sh 2
 scripts/test-enclave-network-internal-discovery.sh 2
 scripts/test-exec-bits-guard-end-to-end.sh 1
-scripts/test-expire-claims-write-is-opt-in.sh 1
-scripts/test-fake-cloudflare.sh 1
 scripts/test-fragment-batch-never-collapses-verdicts.sh 1
 scripts/test-fragment-status-loss.sh 1
 scripts/test-gate-stamp-memoization.sh 1
@@ -60,14 +58,12 @@ scripts/test-git-mirror-vault-agent-auto-auth.sh 1
 scripts/test-groundtruth-corpus-declaration.sh 3
 scripts/test-guest-binaries-nix-lane.sh 1
 scripts/test-guest-staging-refuses-a-wireless-binary.sh 2
-scripts/test-harness-byte-cheap.sh 1
 scripts/test-harness-rollback.sh 1
 scripts/test-headless-env-lock-is-single.sh 1
 scripts/test-hook-mover-enumeration-is-batched.sh 2
 scripts/test-host-slug-resolution.sh 2
 scripts/test-image-build-convergence.sh 1
 scripts/test-litmus-budget-tally.sh 1
-scripts/test-metrics-log-path-agreement.sh 1
 scripts/test-no-competing-gate.sh 1
 scripts/test-opencode-vault-auth-content.sh 1
 scripts/test-plan-binary-probe-usage-determinism.sh 2

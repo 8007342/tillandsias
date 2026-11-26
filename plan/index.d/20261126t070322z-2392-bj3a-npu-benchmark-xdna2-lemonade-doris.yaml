@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by doris-windows 2026-11-26 at macuahuitl's request; mirrors 2381-tfna (base M5) so results compare across hosts.
+packets:
+  - packet_id: npu-inference-benchmark-on-xdna2-lemonade-flm-vs-cpu-and-igpu
+    order: 2392-bj3a
+    status: ready
+    kind: research
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [npu, large-ram, inference, benchmark]
+    size: S
+    estimated_hours: 3
+    title: 'Measure Lemonade flm:npu vs llamacpp:cpu and llamacpp:vulkan (Radeon 890M) on an XDNA 2 host: small-model chat, embeddings, memory, power'
+    context: >-
+      Host capability tags npu and large-ram (AMD Ryzen AI 9 HX 370, XDNA 2 NPU, 64 GB). Lemonade 2026.48.3
+      is installed per-user with flm:npu v1.0.13, llamacpp:cpu and llamacpp:vulkan b12233 already present
+      (plan/issues/npu-runtime-survey-xdna2-2026-11-25-doris-windows.md). Same shape as 2381-tfna, so the
+      M5 and XDNA 2 numbers sit side by side for the 2381-zueb budget and the LAN-pooling direction in 2381-778w.
+      CONSTRAINT: run only on models the operator has already downloaded, and only once the operator says so.
+      Start no downloads, install no backend, accept no terms.
+    exit_criteria:
+    - 'Decode tok/s, prefill tok/s and time to first token for 0.5B, 1.7B and 4B class chat models on each backend that serves them (flm:npu, llamacpp:cpu, llamacpp:vulkan): three runs each, same prompts, fixed output length.'
+    - 'Embedding throughput for one embedding model (Qwen3-Embedding-0.6B or EmbeddingGemma, whichever is downloaded) on the backends that serve it.'
+    - 'Resident memory per model per backend (process working set, and NPU or shared GPU memory if the OS reports it).'
+    - 'Package power during decode, if Windows reports it without an admin tool; otherwise recorded as not-reported, never estimated.'
+    - 'Model ids, quantisations, backend versions and driver versions recorded with every run.'
+    verifiable_closure: 'plan/issues/npu-inference-benchmark-xdna2-<date>-doris-windows.md with the raw runs.'
+    unscoreable: 'a measurement: its deliverable is the dated benchmark record with raw runs, not a pass/fail test'
+    next_action: >-
+      Wait for the operator's go and their downloaded-model list. Then drive Lemonade's OpenAI-compatible
+      API on 127.0.0.1:13305 (load, stream with timing, unload), reading usage and timing fields from the
+      response, and memory from the process table.
+    related: [2381-tfna, 2381-778w, 2381-zueb]

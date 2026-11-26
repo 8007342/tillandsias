@@ -17,7 +17,6 @@ scripts/check-deslop-sweep-health.sh
 scripts/check-enclave-ca-consistency.sh
 scripts/check-enclave-network-internal.sh
 scripts/check-enclave-service-health.sh
-scripts/check-fleet-membership.sh
 scripts/check-forge-findings-persisted.sh
 scripts/check-groundtruth-regime-invariance.sh
 scripts/check-host-tools.sh
@@ -62,15 +61,10 @@ scripts/test-codex-oauth-restore.sh
 scripts/test-concurrent-forge-shared-stack.sh
 scripts/test-e2e-preflight-live-runtime.sh
 scripts/test-enclave-network-internal-discovery.sh
-scripts/test-enclave-proxy-lib.sh
 scripts/test-exec-bits-guard-end-to-end.sh
-scripts/test-expire-claims-write-is-opt-in.sh
-scripts/test-fake-cloudflare.sh
 scripts/test-fleet-heartbeat-sees-a-ledger-filed-blocker.sh
-scripts/test-fleet-msg-same-host.sh
 scripts/test-forge-findings-persisted.sh
 scripts/test-forge-localization-staged.sh
-scripts/test-forge-project-trust-seeds.sh
 scripts/test-forge-src-budget-report.sh
 scripts/test-forge-swap-service.sh
 scripts/test-fragment-batch-never-collapses-verdicts.sh
@@ -85,7 +79,6 @@ scripts/test-groundtruth-corpus-declaration.sh
 scripts/test-guest-binaries-nix-lane.sh
 scripts/test-guest-crashloop-detection.sh
 scripts/test-guest-staging-refuses-a-wireless-binary.sh
-scripts/test-harness-byte-cheap.sh
 scripts/test-harness-rollback.sh
 scripts/test-headless-env-lock-is-single.sh
 scripts/test-headless-sidecar-target-gate.sh
@@ -96,7 +89,6 @@ scripts/test-host-tools.sh
 scripts/test-if-not-pipeline-guard.sh
 scripts/test-image-build-convergence.sh
 scripts/test-image-usability-check.sh
-scripts/test-join-the-fleet-idempotent.sh
 scripts/test-litmus-budget-tally.sh
 scripts/test-litmus-fake-podman-hermetic.sh
 scripts/test-litmus-podman-preflight-diagnosis.sh
@@ -104,7 +96,6 @@ scripts/test-litmus-podman-preflight-trigger.sh
 scripts/test-litmus-step-pipefail.sh
 scripts/test-litmus-terminal-verdict.sh
 scripts/test-macos-vsock-inference-closure.sh
-scripts/test-metrics-log-path-agreement.sh
 scripts/test-mo-full-attest.sh
 scripts/test-nix-cache-service.sh
 scripts/test-nix-toolbox.sh
@@ -158,10 +149,8 @@ scripts/test-smoke-forge-lane-cold-host-outcome.sh
 scripts/test-smoke-verifies-a-signature.sh
 scripts/test-spawn-failure-names-program.sh
 scripts/test-spec-index-endpoint-classification.sh
-scripts/test-stranded-plan-writes.sh
 scripts/test-timing-clock-resolution.sh
 scripts/test-token-instrument.sh
-scripts/test-tool-dispatch-lib.sh
 scripts/test-tool-materialize-litmus-surfaces-arm.sh
 scripts/test-tool-materialize.sh
 scripts/test-tray-surface-parity-gate.sh

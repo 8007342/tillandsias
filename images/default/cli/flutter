@@ -1,60 +1,77 @@
-#!/usr/bin/env bash
-# flutter — run Flutter for this forge's project.
-#
-# The forge image carries no Flutter SDK (2.5 GB unpacked). The usual path is
-# the host: over the lane's MCP socket, flutter-lane asks the host to run
-# `flutter <args>` in the shared tillandsias-flutter image (1637-5765).
-#
-# When the host cannot (order 1874-pn3s), in order:
-#   1 a cached SDK in the durable project cache,
-#     $TILLANDSIAS_PROJECT_CACHE/flutter-sdk/bin/flutter (the cache volume,
-#     never the ~/src tmpfs, which is lost with the forge), runs instead;
-#   2 otherwise a typed refusal names why and the remedy:
-#       refused:flutter:<reason> remedy=<what to do>
-#     with exit 69 (EX_UNAVAILABLE), where the bare `exit 69` used to be.
-#
-# @trace spec:local-web-preview, order:1637-5765, order:1874-pn3s
+#!/usr/bin/env lua
+-- flutter — run Flutter for this forge's project.
+--
+-- The forge image carries no Flutter SDK (2.5 GB unpacked). The usual path is
+-- the host: over the lane's MCP socket, flutter-lane asks the host to run
+-- `flutter <args>` in the shared tillandsias-flutter image (1637-5765).
+--
+-- When the host cannot (order 1874-pn3s), in order:
+--   1 a cached SDK in the durable project cache,
+--     $TILLANDSIAS_PROJECT_CACHE/flutter-sdk/bin/flutter (the cache volume,
+--     never the ~/src tmpfs, which is lost with the forge), runs instead;
+--   2 otherwise a typed refusal names why and the remedy:
+--       refused:flutter:<reason> remedy=<what to do>
+--     with exit 69 (EX_UNAVAILABLE), where the bare `exit 69` used to be.
+--
+-- Stock Lua 5.4 (order 2394-4iwp). The lane client and the SDK run with this
+-- process's stdin, stdout and stderr; every argument is single-quoted by q().
+--
+-- @trace spec:local-web-preview, order:1637-5765, order:1874-pn3s, order:2394-4iwp
 
-LIB_DIR="${TILLANDSIAS_FLUTTER_LIB_DIR:-/usr/local/lib/tillandsias}"
-LANE_CLIENT="${TILLANDSIAS_FLUTTER_LANE_CLIENT:-/opt/agents/tillandsias-cli/libexec/flutter-lane}"
-CACHE="${TILLANDSIAS_PROJECT_CACHE:-/home/forge/.cache/tillandsias-project}"
-SRC="${TILLANDSIAS_FLUTTER_SRC_DIR:-/home/forge/src}"
-UNAVAILABLE=69
+local function q(s) return "'" .. tostring(s):gsub("'", "'\\''") .. "'" end
+local function env(n, d) local v = os.getenv(n); if v == nil or v == "" then return d end return v end
+-- The code a shell would report: the exit status, or 128 + the signal.
+local function status(ok, how, n)
+    if how == "signal" then return 128 + (n or 0) end
+    return n or (ok and 0 or 1)
+end
 
-# shellcheck source=../lib-lane.sh
-source "$LIB_DIR/lib-lane.sh" 2>/dev/null || lane_socket_state() { echo unknown; }
+local LIB_DIR = env("TILLANDSIAS_FLUTTER_LIB_DIR", "/usr/local/lib/tillandsias")
+local LANE_CLIENT = env("TILLANDSIAS_FLUTTER_LANE_CLIENT", "/opt/agents/tillandsias-cli/libexec/flutter-lane")
+local CACHE = env("TILLANDSIAS_PROJECT_CACHE", "/home/forge/.cache/tillandsias-project")
+local SRC = env("TILLANDSIAS_FLUTTER_SRC_DIR", "/home/forge/src")
+local UNAVAILABLE = 69
 
-lane="$(lane_socket_state)"
-why=""
-if [ "$lane" = ready ]; then
-    "$LANE_CLIENT" "$@"
-    rc=$?
-    # 69 is the client's own "the host cannot run it"; any other code is
-    # flutter's, and is the answer.
-    [ "$rc" -ne "$UNAVAILABLE" ] && exit "$rc"
-    why="host-toolchain-unavailable"
+local args = {}
+for i = 1, #arg do args[#args + 1] = q(arg[i]) end
+local ARGS = #args > 0 and (" " .. table.concat(args, " ")) or ""
+
+-- lib-lane.sh is bash; its verdict is read the way the shell version read it.
+local h = io.popen("bash -c " .. q("source " .. q(LIB_DIR .. "/lib-lane.sh")
+    .. " 2>/dev/null || lane_socket_state() { echo unknown; }; lane_socket_state"))
+local lane = (h:read("a") or ""):gsub("\n+$", "")
+h:close()
+
+local why
+if lane == "ready" then
+    local rc = status(os.execute(q(LANE_CLIENT) .. ARGS))
+    -- 69 is the client's own "the host cannot run it"; any other code is
+    -- flutter's, and is the answer.
+    if rc ~= UNAVAILABLE then os.exit(rc) end
+    why = "host-toolchain-unavailable"
 else
-    why="lane-$lane"
-fi
+    why = "lane-" .. lane
+end
 
-sdk="$CACHE/flutter-sdk/bin/flutter"
-case "$CACHE/" in
-    "$SRC"/*) sdk="" ;; # a cache on the src tmpfs is no cache
-esac
-if [ -n "$sdk" ] && [ -x "$sdk" ]; then
-    echo "flutter (tillandsias): host toolchain unavailable ($why); using the cached SDK at $sdk" >&2
-    exec "$sdk" "$@"
-fi
+local sdk = CACHE .. "/flutter-sdk/bin/flutter"
+-- a cache on the src tmpfs is no cache
+local cache_slash, src_slash = CACHE .. "/", SRC .. "/"
+if cache_slash:sub(1, #src_slash) == src_slash then sdk = "" end
+if sdk ~= "" and os.execute("[ -x " .. q(sdk) .. " ]") then
+    io.stderr:write("flutter (tillandsias): host toolchain unavailable (" .. why .. "); using the cached SDK at " .. sdk .. "\n")
+    io.stderr:flush()
+    os.exit(status(os.execute("exec " .. q(sdk) .. ARGS)))
+end
 
-case "$why" in
-    lane-stale)
-        remedy="the lane socket exists but nothing on the host accepts; with the tray running it is re-served within a second, then retry (tillandsias-doctor shows host_lane)" ;;
-    lane-absent|lane-unset)
-        remedy="this forge was launched without a host lane; relaunch it from the tray, or place an SDK at $CACHE/flutter-sdk" ;;
-    host-toolchain-unavailable)
-        remedy="the host could not prepare the tillandsias-flutter image (see the message above); retry, or place an SDK at $CACHE/flutter-sdk" ;;
-    *)
-        remedy="lib-lane.sh is missing from $LIB_DIR, so the lane cannot be judged; run tillandsias-doctor" ;;
-esac
-echo "refused:flutter:$why remedy=$remedy" >&2
-exit "$UNAVAILABLE"
+local remedy
+if why == "lane-stale" then
+    remedy = "the lane socket exists but nothing on the host accepts; with the tray running it is re-served within a second, then retry (tillandsias-doctor shows host_lane)"
+elseif why == "lane-absent" or why == "lane-unset" then
+    remedy = "this forge was launched without a host lane; relaunch it from the tray, or place an SDK at " .. CACHE .. "/flutter-sdk"
+elseif why == "host-toolchain-unavailable" then
+    remedy = "the host could not prepare the tillandsias-flutter image (see the message above); retry, or place an SDK at " .. CACHE .. "/flutter-sdk"
+else
+    remedy = "lib-lane.sh is missing from " .. LIB_DIR .. ", so the lane cannot be judged; run tillandsias-doctor"
+end
+io.stderr:write("refused:flutter:" .. why .. " remedy=" .. remedy .. "\n")
+os.exit(UNAVAILABLE)

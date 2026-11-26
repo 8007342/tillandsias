@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-check-fleet-membership-and-its-fixture-to-lua
+    order: 2392-dn3f
+    status: implemented
+    kind: refactor
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua-port, join-the-fleet, decider]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/check-fleet-membership.lua
+      - scripts/check-fleet-membership.sh
+      - scripts/lua/test-join-the-fleet-idempotent.lua
+      - scripts/test-join-the-fleet-idempotent.sh
+      - skills/join-the-fleet/SKILL.md
+    title: |
+      Port scripts/check-fleet-membership.sh and test-join-the-fleet-idempotent.sh to Lua (handed to doris by yolanda, 2026-11-26)
+    context: |
+      Every line and the verdict are byte-identical: diffed against the .sh on doris (msys) in the
+      default, forge and JOIN_FLEET_PROBES=0 modes. Seams kept: JOIN_FLEET_ROOT, JOIN_FLEET_GIT_DIR,
+      JOIN_FLEET_PROBES. The fixture keeps arms 1-8 and adds 7m, a mutation that reads .git/hooks
+      unconditionally and must say ok where arm 7 says todo (1255-s4im). Because the skill and
+      methodology worker_slot tell a worker to RUN the checker, both now name
+      `tillandsias-plan script run scripts/lua/check-fleet-membership.lua` (methodology first).
+      Folds in #1195's one line for this file (it no longer exists as shell); #1195 can be tombstoned
+      for this file after the land.
+    verifiable_closure: |
+      tillandsias-plan script run scripts/lua/test-join-the-fleet-idempotent.lua prints
+      ok:join-the-fleet-idempotent:16 arms. Measured on doris (msys): 16 arms; the .sh it replaces
+      printed ok:join-the-fleet-idempotent:8/8 on the same host.
+    unscoreable: "the closure is the fixture bound by litmus:join-the-fleet-idempotent; no separate pin"
+status:
+  - packet_id: port-check-fleet-membership-and-its-fixture-to-lua
+    field: status
+    value: implemented
+    ts: "2026-11-26T07:06:57Z"
+    host: doris

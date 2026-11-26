@@ -515,7 +515,7 @@ const USAGE: &str = concat!(
     "                                     there is no writable checkout. Mirrors scripts/metrics-log-path.sh,\n",
     "                                     which a Rust binary cannot source — this subcommand exists so the\n",
     "                                     two implementations can be COMPARED by a gate (arm 1b of\n",
-    "                                     scripts/test-metrics-log-path-agreement.sh) instead of drifting.\n",
+    "                                     scripts/lua/test-metrics-log-path-agreement.lua) instead of drifting.\n",
     "                                     Before it, the CLI wrote usage records to a hardcoded /tmp while\n",
     "                                     every shell reader looked in .cache/metrics: 901 records written,\n",
     "                                     0 readable. Reads no ledger, so it answers on a broken one.\n",
@@ -3113,7 +3113,7 @@ fn utc_now_iso() -> String {
 ///
 /// So the algorithm is duplicated ON PURPOSE and the DRIFT is what gets gated: the
 /// `metrics-log-path` subcommand below exposes this function's answer, and arm 1 of
-/// `scripts/test-metrics-log-path-agreement.sh` compares it against the shell rule's
+/// `scripts/lua/test-metrics-log-path-agreement.lua` compares it against the shell rule's
 /// answer for the same root. A divergence cannot land silently, which is the property
 /// the single-file rule was protecting. Keep the two in step, and change them together.
 pub fn metrics_default_log(basename: &str, repo_root: Option<&Path>) -> PathBuf {
@@ -3145,6 +3145,32 @@ pub fn metrics_default_log(basename: &str, repo_root: Option<&Path>) -> PathBuf 
         Some(d) if !d.is_empty() => PathBuf::from(d).join(basename),
         _ => PathBuf::from("/tmp").join(basename),
     }
+}
+
+/// ORDER 2387-x65b. The spelling the shell rule prints for the same path, so the
+/// writer's answer and the reader's compare equal as STRINGS (cycle-metrics.sh's
+/// 1096-p3tn split guard and the agreement fixture both do). On Windows
+/// `Path::join` adds backslashes, so the answer was `C:/<checkout>\.cache\metrics\x`
+/// and `/tmp\x` while the shell said `/c/<checkout>/.cache/metrics/x` and `/tmp/x`:
+/// one file, never equal. Only the PRINTED answer changes; the writer opens the
+/// same file either way. Pure, so all three regimes are testable on any host.
+fn shell_spelling(p: &str, windows: bool, msys: bool) -> String {
+    if !windows {
+        return p.to_string();
+    }
+    let s = p.replace('\\', "/");
+    if msys {
+        let b = s.as_bytes();
+        if b.len() >= 2
+            && b[0].is_ascii_alphabetic()
+            && b[1] == b':'
+            && (b.len() == 2 || b[2] == b'/')
+        {
+            let rest = if b.len() > 2 { &s[2..] } else { "/" };
+            return format!("/{}{}", (b[0] as char).to_ascii_lowercase(), rest);
+        }
+    }
+    s
 }
 
 /// Find the checkout THIS BINARY came from — not the one the caller happens to
@@ -6054,11 +6080,13 @@ fn main() {
             std::process::exit(2);
         }
         let root = args.get(2).map(PathBuf::from);
-        emit(
-            metrics_default_log(base, root.as_deref())
-                .to_string_lossy()
-                .as_ref(),
-        );
+        let resolved = metrics_default_log(base, root.as_deref());
+        let msys = cfg!(windows) && std::env::var_os("MSYSTEM").is_some_and(|v| !v.is_empty());
+        emit(&shell_spelling(
+            &resolved.to_string_lossy(),
+            cfg!(windows),
+            msys,
+        ));
         return;
     }
 
@@ -13871,5 +13899,34 @@ owned_files:
         // unable to ADD a scalar field that does not exist yet.
         let p = packet();
         assert!(!field_is_list(&p, "verifiable_closure"));
+    }
+}
+
+#[cfg(test)]
+mod shell_spelling_tests_2387_x65b {
+    use super::shell_spelling;
+
+    #[test]
+    fn unix_is_identity() {
+        assert_eq!(shell_spelling(r"/a\b/c", false, false), r"/a\b/c");
+    }
+
+    #[test]
+    fn windows_native_uses_forward_slashes() {
+        assert_eq!(
+            shell_spelling(r"C:/r\.cache\metrics\x.jsonl", true, false),
+            "C:/r/.cache/metrics/x.jsonl"
+        );
+        assert_eq!(shell_spelling(r"/tmp\x.jsonl", true, false), "/tmp/x.jsonl");
+    }
+
+    #[test]
+    fn msys_uses_the_shell_drive_form() {
+        assert_eq!(
+            shell_spelling(r"C:/r\.cache\metrics\x.jsonl", true, true),
+            "/c/r/.cache/metrics/x.jsonl"
+        );
+        assert_eq!(shell_spelling(r"/tmp\x.jsonl", true, true), "/tmp/x.jsonl");
+        assert_eq!(shell_spelling("D:", true, true), "/d/");
     }
 }
