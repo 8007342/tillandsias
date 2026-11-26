@@ -36,6 +36,7 @@ end
 -- The forge runs the command with its own lua (2389-8rmy); a host has none, so
 -- it is loaded here with io.popen and os answered by this fixture: every shell
 -- line it builds still runs for real, under the env the case sets.
+local SH = require("common.fixture").posix_shell()
 local function run_doctor(e, ...)
     local so, se, stop = {}, {}, {}
     local function sink(t) return { write = function(self, ...) for _, v in ipairs({ ... }) do t[#t + 1] = v end return self end } end
@@ -44,7 +45,7 @@ local function run_doctor(e, ...)
         arg = { [0] = "/usr/local/bin/tillandsias-doctor", ... },
         io = { stdout = sink(so), stderr = sink(se), popen = function(c)
             -- The command line goes to a shell on stdin: the runtime refuses `sh -c <string>`.
-            local r = proc.run({ argv = { "bash", "-s" }, stdin = c .. "\n", env = e, timeout_ms = 120000 })
+            local r = proc.run({ argv = { SH, "-s" }, stdin = c .. "\n", env = e, timeout_ms = 120000 })
             local s = r.stdout or ""
             return { read = function() local x = s; s = ""; return x end,
                 close = function() return r.code == 0 or nil, "exit", r.code end }
