@@ -1,0 +1,17 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: gate-refuses-a-workspace-test-run-that-leaves-temp-dirs
+    field: status
+    value: implemented
+    ts: "2026-11-26T13:24:08Z"
+    host: yoga
+  - packet_id: workspace-tests-leak-tmp-dirs-and-exhaust-tmpfs-inodes-headless-and-gate
+    field: status
+    value: implemented
+    ts: "2026-11-26T13:24:08Z"
+    host: yoga
+events:
+  - packet_id: gate-refuses-a-workspace-test-run-that-leaves-temp-dirs
+    event: {type: implemented, ts: "2026-11-26T13:24:08Z", host: yoga, summary: "implemented on work/2408-rkvd (stacked on work/2407-aana and work/2407-aq7x by merge): build.sh's workspace test step runs under a fresh TMPDIR under /tmp and check-test-tmp-leftovers.lua refuses any entry left; red on trunk's tests (129 left, grouped by shape), green with both slices (0 left); fixture 6 arms"}
+  - packet_id: workspace-tests-leak-tmp-dirs-and-exhaust-tmpfs-inodes-headless-and-gate
+    event: {type: implemented, ts: "2026-11-26T13:24:08Z", host: yoga, summary: "the headless half is work/2407-aana (#1642) and the gate half is work/2408-rkvd"}
