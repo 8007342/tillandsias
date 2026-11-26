@@ -10770,6 +10770,24 @@
       "from": "image:proxy",
       "kind": "package",
       "optional": false,
+      "to": "pkg:alpine:lua5.4"
+    },
+    {
+      "from": "image:proxy",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-filesystem"
+    },
+    {
+      "from": "image:proxy",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-lpeg"
+    },
+    {
+      "from": "image:proxy",
+      "kind": "package",
+      "optional": false,
       "to": "pkg:alpine:openssl"
     },
     {
@@ -10801,6 +10819,24 @@
       "kind": "package",
       "optional": false,
       "to": "pkg:alpine:libcap"
+    },
+    {
+      "from": "image:router",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4"
+    },
+    {
+      "from": "image:router",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-filesystem"
+    },
+    {
+      "from": "image:router",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-lpeg"
     },
     {
       "from": "image:router",
@@ -18090,6 +18126,24 @@
       "from": "image:vault",
       "kind": "package",
       "optional": false,
+      "to": "pkg:alpine:lua5.4"
+    },
+    {
+      "from": "image:vault",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-filesystem"
+    },
+    {
+      "from": "image:vault",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-lpeg"
+    },
+    {
+      "from": "image:vault",
+      "kind": "package",
+      "optional": false,
       "to": "pkg:alpine:socat"
     },
     {
@@ -18109,6 +18163,24 @@
       "kind": "package",
       "optional": false,
       "to": "pkg:alpine:busybox-extras"
+    },
+    {
+      "from": "image:web",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4"
+    },
+    {
+      "from": "image:web",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-filesystem"
+    },
+    {
+      "from": "image:web",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-lpeg"
     },
     {
       "from": "image:web-wrangler",
@@ -57637,18 +57709,18 @@
       "homepage": "https://pkgs.alpinelinux.org/packages?name=busybox-extras",
       "homepage_kind": "package-index",
       "id": "pkg:alpine:busybox-extras",
-      "license": "unknown",
-      "license_family": "unknown",
-      "license_source": "none",
+      "license": "GPL-2.0-only",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apk; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "busybox-extras",
       "optional": false,
       "pulled_by": [
         "image:web"
       ],
       "source": "images/web/Containerfile",
-      "version": "unknown"
+      "version": "1.36.1-r31"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=ca-certificates",
@@ -57788,6 +57860,66 @@
       ],
       "source": "images/router/Containerfile",
       "version": "2.78-r0"
+    },
+    {
+      "homepage": "https://pkgs.alpinelinux.org/packages?name=lua5.4",
+      "homepage_kind": "package-index",
+      "id": "pkg:alpine:lua5.4",
+      "license": "MIT",
+      "license_family": "permissive",
+      "license_source": "package-manager",
+      "link": "container-image",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
+      "name": "lua5.4",
+      "optional": false,
+      "pulled_by": [
+        "image:proxy",
+        "image:router",
+        "image:vault",
+        "image:web"
+      ],
+      "source": "images/proxy/Containerfile",
+      "version": "5.4.7-r0"
+    },
+    {
+      "homepage": "https://pkgs.alpinelinux.org/packages?name=lua5.4-filesystem",
+      "homepage_kind": "package-index",
+      "id": "pkg:alpine:lua5.4-filesystem",
+      "license": "MIT",
+      "license_family": "permissive",
+      "license_source": "package-manager",
+      "link": "container-image",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
+      "name": "lua5.4-filesystem",
+      "optional": false,
+      "pulled_by": [
+        "image:proxy",
+        "image:router",
+        "image:vault",
+        "image:web"
+      ],
+      "source": "images/proxy/Containerfile",
+      "version": "1.8.0-r4"
+    },
+    {
+      "homepage": "https://pkgs.alpinelinux.org/packages?name=lua5.4-lpeg",
+      "homepage_kind": "package-index",
+      "id": "pkg:alpine:lua5.4-lpeg",
+      "license": "MIT",
+      "license_family": "permissive",
+      "license_source": "package-manager",
+      "link": "container-image",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
+      "name": "lua5.4-lpeg",
+      "optional": false,
+      "pulled_by": [
+        "image:proxy",
+        "image:router",
+        "image:vault",
+        "image:web"
+      ],
+      "source": "images/proxy/Containerfile",
+      "version": "1.1.0-r0"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=nss-tools",
@@ -60991,15 +61123,15 @@
   "schema": "tillandsias-stack/v1",
   "summary": {
     "components": 57,
-    "edges": 3113,
+    "edges": 3125,
     "license_families": {
       "model": 7,
-      "permissive": 1712,
+      "permissive": 1715,
       "service": 15,
-      "strong-copyleft": 25,
-      "unknown": 162,
+      "strong-copyleft": 26,
+      "unknown": 161,
       "weak-copyleft": 20
     },
-    "nodes": 1941
+    "nodes": 1944
   }
 }

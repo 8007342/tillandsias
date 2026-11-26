@@ -1371,6 +1371,10 @@ proxy	alpine	libncursesw	6.5_p20250503-r0	X11
 proxy	alpine	libssl3	3.5.9-r0	Apache-2.0
 proxy	alpine	libstdc++	14.2.0-r6	GPL-2.0-or-later AND LGPL-2.1-or-later
 proxy	alpine	logrotate	3.21.0-r1	GPL-2.0-or-later
+proxy	alpine	lua5.4	5.4.7-r0	MIT
+proxy	alpine	lua5.4-filesystem	1.8.0-r4	MIT
+proxy	alpine	lua5.4-libs	5.4.7-r0	MIT
+proxy	alpine	lua5.4-lpeg	1.1.0-r0	MIT
 proxy	alpine	musl	1.2.5-r13	MIT
 proxy	alpine	musl-utils	1.2.5-r13	MIT AND BSD-2-Clause AND GPL-2.0-or-later
 proxy	alpine	ncurses-terminfo-base	6.5_p20250503-r0	X11
@@ -1403,16 +1407,23 @@ router	alpine	libcap2	2.78-r0	BSD-3-Clause OR GPL-2.0-only
 router	alpine	libcrypto3	3.5.9-r0	Apache-2.0
 router	alpine	libcurl	8.22.0-r0	curl
 router	alpine	libidn2	2.3.8-r0	GPL-2.0-or-later OR LGPL-3.0-or-later
+router	alpine	libncursesw	6.6_p20260516-r0	X11
 router	alpine	libpsl	0.21.5-r3	MIT
 router	alpine	libssl3	3.5.9-r0	Apache-2.0
 router	alpine	libunistring	1.4.1-r0	GPL-2.0-or-later OR LGPL-3.0-or-later
+router	alpine	lua5.4	5.4.8-r0	MIT
+router	alpine	lua5.4-filesystem	1.8.0-r5	MIT
+router	alpine	lua5.4-libs	5.4.8-r0	MIT
+router	alpine	lua5.4-lpeg	1.1.0-r1	MIT
 router	alpine	mailcap	2.1.54-r0	Public Domain
 router	alpine	musl	1.2.5-r24	MIT
 router	alpine	musl-utils	1.2.5-r24	MIT AND BSD-2-Clause AND GPL-2.0-or-later
+router	alpine	ncurses-terminfo-base	6.6_p20260516-r0	X11
 router	alpine	nghttp2-libs	1.69.0-r0	MIT
 router	alpine	nspr	4.36-r0	MPL-2.0
 router	alpine	nss	3.123.1-r0	MPL-2.0
 router	alpine	nss-tools	3.123.1-r0	MPL-2.0
+router	alpine	readline	8.3.3-r1	GPL-3.0-or-later
 router	alpine	scanelf	1.3.8-r2	GPL-2.0-only
 router	alpine	sqlite-libs	3.53.4-r0	blessing
 router	alpine	ssl_client	1.37.0-r30	GPL-2.0-only
@@ -1450,6 +1461,10 @@ vault	alpine	libncursesw	6.5_p20241006-r3	X11
 vault	alpine	libpsl	0.21.5-r3	MIT
 vault	alpine	libssl3	3.3.3-r0	Apache-2.0
 vault	alpine	libunistring	1.2-r0	GPL-2.0-or-later OR LGPL-3.0-or-later
+vault	alpine	lua5.4	5.4.7-r0	MIT
+vault	alpine	lua5.4-filesystem	1.8.0-r4	MIT
+vault	alpine	lua5.4-libs	5.4.7-r0	MIT
+vault	alpine	lua5.4-lpeg	1.1.0-r0	MIT
 vault	alpine	musl	1.2.5-r9	MIT
 vault	alpine	musl-utils	1.2.5-r9	MIT AND BSD-2-Clause AND GPL-2.0-or-later
 vault	alpine	ncurses-terminfo-base	6.5_p20241006-r3	X11
@@ -1465,6 +1480,28 @@ vault	alpine	tzdata	2025a-r0	Public-Domain
 vault	alpine	utmps-libs	0.1.2.3-r2	ISC
 vault	alpine	zlib	1.3.1-r2	Zlib
 vault	alpine	zstd-libs	1.5.6-r2	BSD-3-Clause OR GPL-2.0-or-later
+web	alpine	alpine-baselayout	3.6.5-r0	GPL-2.0-only
+web	alpine	alpine-baselayout-data	3.6.5-r0	GPL-2.0-only
+web	alpine	alpine-keys	2.4-r1	MIT
+web	alpine	apk-tools	2.14.4-r1	GPL-2.0-only
+web	alpine	busybox	1.36.1-r31	GPL-2.0-only
+web	alpine	busybox-binsh	1.36.1-r31	GPL-2.0-only
+web	alpine	busybox-extras	1.36.1-r31	GPL-2.0-only
+web	alpine	ca-certificates-bundle	20260413-r0	MPL-2.0 AND MIT
+web	alpine	libcrypto3	3.3.7-r0	Apache-2.0
+web	alpine	libncursesw	6.4_p20240420-r2	X11
+web	alpine	libssl3	3.3.7-r0	Apache-2.0
+web	alpine	lua5.4	5.4.6-r1	MIT
+web	alpine	lua5.4-filesystem	1.8.0-r4	MIT
+web	alpine	lua5.4-libs	5.4.6-r1	MIT
+web	alpine	lua5.4-lpeg	1.0.2-r3	MIT
+web	alpine	musl	1.2.5-r3	MIT
+web	alpine	musl-utils	1.2.5-r3	MIT AND BSD-2-Clause AND GPL-2.0-or-later
+web	alpine	ncurses-terminfo-base	6.4_p20240420-r2	X11
+web	alpine	readline	8.2.10-r0	GPL-3.0-or-later
+web	alpine	scanelf	1.3.7-r2	GPL-2.0-only
+web	alpine	ssl_client	1.36.1-r31	GPL-2.0-only
+web	alpine	zlib	1.3.2-r0	Zlib
 web-wrangler	debian	adduser	3.134	unknown
 web-wrangler	debian	apt	2.6.1	unknown
 web-wrangler	debian	base-files	12.4+deb12u12	unknown
