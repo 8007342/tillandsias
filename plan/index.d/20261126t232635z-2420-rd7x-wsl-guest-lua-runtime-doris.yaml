@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by doris-windows 2026-11-26 at macuahuitl's request, under the operator's "LUA everywhere" ruling.
+packets:
+  - packet_id: the-wsl2-builder-guest-gets-a-lua-runtime-so-its-guest-side-scripts-can-port
+    order: 2420-rd7x
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, wsl2, lua, shell-to-lua, builder]
+    estimated_hours: 4
+    owned_files:
+      - scripts/with-wsl2-builder.sh
+    related: [2413-2wnc, 770-ehym]
+    title: |
+      Give the tillandsias-build WSL2 guest a Lua runtime, so wsl-guest-session, wsl2-src-mirror, wsl2-build-memory-cap and wsl2-build-target-prune can move to Lua
+    context: |
+      Operator ruling 2026-11-26: Lua everywhere, a runtime in every container, and the WSL builder guest
+      is one. Four scripts run INSIDE the guest and have no runner there today: wsl-guest-session.sh (209
+      lines, wraps every guest build command), wsl2-src-mirror.sh (161), wsl2-build-memory-cap.sh (51) and
+      wsl2-build-target-prune.sh (57). #1674 added distro Lua 5.4 to the proxy, router, vault and web
+      images. One difference needs deciding first: the repo's scripts/lua/*.lua are written against
+      `tillandsias-plan script run` (fs, proc, verdict, the env allowlist), so distro lua alone cannot run
+      them. The guest already has cargo and builds tillandsias-plan into ~/.local/bin
+      (wsl-plan-expert-ensure.sh, inner lane), which would be that runtime. Distro lua (dnf install lua)
+      is the #1674 pattern for anything that must run before that build exists.
+    exit_criteria:
+      - The guest init (WSL2_INIT, digest-guarded) installs the chosen runtime, and a guest command can run tillandsias-plan script run <x>.lua.
+      - RED FIRST, a guest probe shows no runner before the init change.
+      - The guest-side scripts can then port one by one, each red-first against its .sh. The sourced libraries (with-wsl2-builder.sh, lib-wsl-*.sh) stay shell until build.sh moves.
+    verifiable_closure: |
+      In the tillandsias-build distro after init, `tillandsias-plan script run scripts/lua/<probe>.lua` prints
+      its verdict. A Windows host's build.sh forward still passes.
+    unscoreable: "needs a WSL2 builder distro; no fixture host runs one yet"
+    next_action: >
+      Decide the runtime (the guest-built tillandsias-plan, distro lua, or both), then the init change.
+status:
+  - packet_id: the-wsl2-builder-guest-gets-a-lua-runtime-so-its-guest-side-scripts-can-port
+    field: status
+    value: ready
+    ts: "2026-11-26T23:26:35Z"
+    host: doris
