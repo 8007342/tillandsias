@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: images-warp-build-refuses-vendor-version-drift
+    order: "2414-rhzh"
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [images, warp]
+    estimated_hours: 1
+    owned_paths: [images/warp/Containerfile]
+    title: "images/warp does not build on trunk: the vendor repo now serves cloudflare-warp 2026.8.2115.0, pinned 2026.7.1377.0"
+    context: |
+      Measured on lenovinha 2026-11-26 at trunk 699171763 (rootless podman build images/warp):
+      refused:warp-image:version-drift:pinned=2026.7.1377.0:repo=2026.8.2115.0. The guard is working as designed (the vendor
+      index lists only the newest build, so the pin is checked after install). Fix: a deliberate WARP_VERSION bump, read the
+      vendor changelog between the two versions, rebuild, and run the warp lane's own checks. Found while taking the
+      baseline for 2413-jvhh (images/warp Lua runtime), which cannot be measured until this lands.
+    exit_criteria:
+      - "podman build images/warp succeeds on trunk with WARP_VERSION naming the version the vendor serves, and the warp lane's checks pass"
+    unscoreable: "unpinnable-until-the-guard-exists: a version bump measured by a build."
+    next_action: "bump WARP_VERSION after reading the vendor changelog."
+    provenance: filed by lenovinha; found during the 2413 baseline builds.
+    related: [2413-jvhh]
+    events:
+      - {type: filed, ts: '2026-11-26T20:32:14Z', host: lenovinha, summary: warp image refuses vendor version drift}
