@@ -125,6 +125,10 @@ pub(crate) const LEGACY_VERDICT_WORDS: &[(&str, &[i32])] = &[
     ("never:", &[1]),
     ("drift:", &[1]),
     ("missing:", &[0, 1]),
+    // check-claims-across-branches (1034-whsp, ported in its Lua port): a sibling
+    // holds the packet (exit 1), and no branch or local fold knows it (exit 2).
+    ("claimed-elsewhere:", &[1]),
+    ("unknown-packet:", &[2]),
     // check-deslop-sweep-health (829-dkuc, ported in 2400-hwnk): a rule that could
     // not be scored is NOT a pass, and gets its own exit (2), never ok's 0.
     ("unknown:", &[2]),

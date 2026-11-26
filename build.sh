@@ -3369,7 +3369,7 @@ _gs_one() {
     # correctly: a runs= from either half is a partition presenting as a
     # total), the refusal emits nothing, every arm driving it observes
     # zeros, pre-build fails, ci-full never reaches post-build, and
-    # check-release-tier-freshness.sh answers never:release-tier forever.
+    # check-release-tier-freshness.lua answers never:release-tier forever.
     # One missing env export makes the whole release tier unmeasurable on
     # the host that runs it.
     #
@@ -3491,7 +3491,7 @@ _gs_one() {
             _error "  That path is the NON-CHECKOUT FALLBACK and it shares production's basename, so those"
             _error "  records carry this host's real name and split the timing log. cycle-metrics.sh will then"
             _error "  refuse to publish any number, every arm driving it reads zero, and"
-            _error "  check-release-tier-freshness.sh answers never:release-tier on this host from now on."
+            _error "  check-release-tier-freshness.lua answers never:release-tier on this host from now on."
             _error "  FIX: export TILLANDSIAS_TIMING_LOG (and any other TILLANDSIAS_*_LOG the step drives)"
             _error "  to a path inside the step's own scratch dir, so a hermetic fixture cannot reach the"
             _error "  host's metrics. See the eleven fixtures 1096-p3tn already converted for the shape."
@@ -3809,7 +3809,7 @@ _run_litmus_phase() {
 
 # ORDER 1185-9qx6. Record a phase THIS script ran into the check-log index, as
 # part of the run id exported at the top of the ci-full dispatch, so
-# check-release-tier-freshness.sh can see a full tier was exercised.
+# check-release-tier-freshness.lua can see a full tier was exercised.
 #
 # BEST-EFFORT BY CONSTRUCTION: a missing jq or an unwritable target/ costs a
 # record and never the gate that earned it. The inverse — failing a green
@@ -4102,7 +4102,7 @@ if [[ "$FLAG_CI" == true ]] || [[ "$FLAG_CI_FULL" == true ]]; then
         # log, scripts/convergence-log-path.sh) sees; the post-build status smoke
         # and the runtime residual litmus run from this script through
         # run-litmus-test.sh and wrote no record at all. That is why
-        # check-release-tier-freshness.sh read `never:release-tier` after a GREEN
+        # check-release-tier-freshness.lua read `never:release-tier` after a GREEN
         # ci-full on macuahuitl 2026-09-14 — every one of the index's 245 entries
         # was ci_phase pre-build, so the FULL-tier run its 1174-6r4k rule requires
         # could never come from the run it guards. Each phase records its own real

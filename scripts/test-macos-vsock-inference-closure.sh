@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # @trace spec:vsock-transport
+# drives-vm: boots the guest through the installed tray and installs a oneshot in it (2399-vsok)
 #
 # test-macos-vsock-inference-closure.sh — order 830-xsk2, the row's closure.
 #

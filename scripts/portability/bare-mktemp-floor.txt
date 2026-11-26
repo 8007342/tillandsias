@@ -74,7 +74,6 @@ scripts/test-preflight-fixtures-default-target.sh 1
 scripts/test-pretooluse-command-policy.sh 1
 scripts/test-provider-device-auth.sh 1
 scripts/test-reclaim-stranded-claims.sh 1
-scripts/test-release-tier-freshness.sh 1
 scripts/test-reset-state-contract.sh 2
 scripts/test-running-image-freshness.sh 1
 scripts/test-salvage-net.sh 1

@@ -249,20 +249,39 @@ say "Downloading $ASSET..."
 curl -fL --progress-bar --retry 3 --retry-delay 2 -o "$BINARY_TMP" "$RELEASE_BASE/$ASSET"
 # END-ASSET-DOWNLOAD
 
-if curl -fsL --retry 3 --retry-delay 2 -o "$CHECKSUMS_TMP" "$RELEASE_BASE/SHA256SUMS"; then
-    if grep -E "[[:space:]]${ASSET}$" "$CHECKSUMS_TMP" > "$CHECKSUM_ONE"; then
-        if command -v sha256sum >/dev/null 2>&1; then
-            say "Verifying SHA256 checksum..."
-            (cd "$TMPDIR_TILLANDSIAS" && sha256sum -c "$(basename "$CHECKSUM_ONE")")
-        else
-            say "sha256sum not found; skipping checksum verification."
-        fi
-    else
-        say "SHA256SUMS did not contain $ASSET; skipping checksum verification."
+# BEGIN-ASSET-VERIFY
+# ORDER 1068-phrh: never install a binary that could not be checked. Each of
+# these used to print "skipping checksum verification" and install anyway: no
+# SHA256SUMS, the asset not listed in it, no sha256sum on PATH. Each now stops
+# with one plain sentence; macOS and minimal hosts verify through shasum.
+# TILLANDSIAS_INSTALL_UNVERIFIED=1 is the single override, and says it was used.
+# The messages do not print the variable: installer output is for end users
+# (operator ruling 2026-10-08, check-installer-end-user-output.lua), so the
+# override is documented here and in the release notes, not on the screen.
+# Cut and run by scripts/lua/test-install-refuses-unverified-asset.lua.
+_unverified() {
+    if [ "${TILLANDSIAS_INSTALL_UNVERIFIED:-}" = "1" ]; then
+        say "Download not verified ($1); installing anyway, as asked."
+        return 0
     fi
+    die "The download could not be checked ($1), so nothing was installed. Please try again later."
+}
+if ! curl -fsL --retry 3 --retry-delay 2 -o "$CHECKSUMS_TMP" "$RELEASE_BASE/SHA256SUMS"; then
+    _unverified "the release has no checksum list"
+elif ! grep -E "[[:space:]]${ASSET}$" "$CHECKSUMS_TMP" > "$CHECKSUM_ONE"; then
+    _unverified "the checksum list does not name $ASSET"
+elif command -v sha256sum >/dev/null 2>&1; then
+    say "Verifying SHA256 checksum..."
+    (cd "$TMPDIR_TILLANDSIAS" && sha256sum -c --status "$(basename "$CHECKSUM_ONE")") \
+        || die "The download does not match its published checksum, so nothing was installed. Please try again."
+elif command -v shasum >/dev/null 2>&1; then
+    say "Verifying SHA256 checksum..."
+    (cd "$TMPDIR_TILLANDSIAS" && shasum -a 256 -c --status "$(basename "$CHECKSUM_ONE")") \
+        || die "The download does not match its published checksum, so nothing was installed. Please try again."
 else
-    say "SHA256SUMS not available; skipping checksum verification."
+    _unverified "this system has neither sha256sum nor shasum"
 fi
+# END-ASSET-VERIFY
 
 chmod 0755 "$BINARY_TMP"
 mkdir -p "$INSTALL_DIR"

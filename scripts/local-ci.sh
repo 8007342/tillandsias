@@ -274,7 +274,7 @@ DELTA_JSON="$SIGNATURE_DIR/centicolon-delta.json"
 RUNTIME_STATUS_FILE="$SIGNATURE_DIR/runtime-phase.status"
 CHECK_LOG_DIR="$SIGNATURE_DIR/check-logs"
 # ORDER 1174-6r4k — THE WRITER HONOURS THE SAME OVERRIDE THE READER DOES.
-# check-release-tier-freshness.sh has always read
+# check-release-tier-freshness.lua has always read
 # ${TILLANDSIAS_CHECK_LOG_INDEX:-target/convergence/check-logs.jsonl}, but this
 # path was fixed — so a diagnostic run could not be pointed away from the record
 # the daily exercise reads, and every `--phase pre-build` reproduction polluted
@@ -295,7 +295,7 @@ CHECK_LOG_INDEX="$("$REPO_ROOT/scripts/convergence-log-path.sh")" || { echo "cou
 VERSION_VALUE="$(cat VERSION 2>/dev/null || echo "0.0.0.0")"
 SOURCE_COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || echo "unknown")"
 # ORDER 1185-9qx6 — THE RUN ID IS THE CORRELATION KEY, SO IT MUST BE SHAREABLE.
-# check-release-tier-freshness.sh groups check-log records by ci_run_id and
+# check-release-tier-freshness.lua groups check-log records by ci_run_id and
 # calls a run FULL-tier when its phases cover pre-build, post-build and runtime.
 # `./build.sh --ci-full` drives the pre-build phase through THIS script and the
 # other two itself, so those records can only join this run if the caller can

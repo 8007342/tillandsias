@@ -6,7 +6,6 @@ scripts/check-arrival-routing.sh
 scripts/check-build-cache-sweep.sh
 scripts/check-capability-row.sh
 scripts/check-carry-forward.sh
-scripts/check-claims-across-branches.sh
 scripts/check-containers-conf-proxy-env.sh
 scripts/check-credential-channel.sh
 scripts/check-daily-maintenance.sh
@@ -34,7 +33,6 @@ scripts/check-plan-binary-current.sh
 scripts/check-plan-binary-probe-usage.sh
 scripts/check-refusal-affordance-added.sh
 scripts/check-release-asset-integrity.sh
-scripts/check-release-tier-freshness.sh
 scripts/check-resumable-claim-dirt.sh
 scripts/check-running-image-freshness.sh
 scripts/check-salvage-refs-ledger.sh
@@ -114,8 +112,6 @@ scripts/test-reclaim-stranded-claims.sh
 scripts/test-refusal-affordance-added.sh
 scripts/test-relay-preflight.sh
 scripts/test-release-asset-integrity.sh
-scripts/test-release-tier-freshness-reads-ci-full.sh
-scripts/test-release-tier-freshness.sh
 scripts/test-reopen-is-history-not-loss.sh
 scripts/test-reset-flags-are-accepted.sh
 scripts/test-reset-state-contract.sh
