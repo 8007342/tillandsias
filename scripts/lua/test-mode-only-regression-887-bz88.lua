@@ -10,7 +10,7 @@
 -- core.fileMode=false is git's own declaration that it cannot (NTFS, drvfs), and they are a
 -- named skip there.
 --
--- Verdict: ok:mode-only-regression-fixture:all | violation:mode-only-regression-fixture:<n>-failed
+-- Verdict: ok:mode-only-regression-fixture:<n> arms (11; 8 where core.fileMode=false skips arms 3 and 5) | violation:mode-only-regression-fixture:<n>-failed
 
 local fixture = require "common.fixture"
 local T = fixture.new("mode-only-regression-fixture")
@@ -93,4 +93,4 @@ if modes then
 end
 local real = (T:must{ "git", "-C", ROOT, "ls-files", "-s", "--", VICTIM, env_unset = { "GIT_*" } }.stdout or ""):match("^%d+")
 T:arm("6 the committed check-credential-channel.sh is 100755", real == "100755", real)
-T:finish({ ok = function() return "ok:mode-only-regression-fixture:all" end })
+T:finish()
