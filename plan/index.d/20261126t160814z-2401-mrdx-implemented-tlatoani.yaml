@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: land-queue-arm60-b-order-red-on-darwin
+    field: status
+    value: implemented
+    ts: "2026-11-26T16:08:14Z"
+    host: tlatoanis-macbook-air
+events:
+  - packet_id: land-queue-arm60-b-order-red-on-darwin
+    event: {type: implemented, ts: "2026-11-26T16:08:14Z", host: tlatoanis-macbook-air, summary: "BSD nice prints usage; read via ps fallback; ARM 60 green, mutant red"}
