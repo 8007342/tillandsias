@@ -661,6 +661,78 @@ capabilities:
         host_kind: windows
       timestamp: "2026-09-12T04:07:21.223908100+00:00"
       probe_identity: 0.4.260819+dd67baad90407fa3
+  - ts: "2026-11-25T00:00:00Z"
+    host: windows
+    locus: windows-host
+    capability_tags:
+    - npu
+    - large-ram
+    - large-disk
+    - integrated-gpu
+    document:
+      schema_version: 2
+      legacy_tier: cpu
+      devices:
+      - device_class: cpu
+        vendor: amd
+        name: AMD Ryzen AI 9 HX 370 w/ Radeon 890M
+        device_node: null
+        fw_version: null
+        driver: null
+        usable: true
+        unusable_reason: null
+        lanes:
+        - host-native
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags: null
+        cpu_cores:
+          physical: 12
+          logical: 24
+        system_ram_gb: 61.6
+      - device_class: gpu
+        vendor: amd
+        name: AMD Radeon(TM) 890M Graphics
+        device_node: null
+        fw_version: null
+        driver: "32.0.21030.2001"
+        usable: true
+        unusable_reason: null
+        lanes:
+        - host-native
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags: null
+        cpu_cores: null
+        system_ram_gb: null
+      - device_class: npu
+        vendor: amd
+        name: NPU Compute Accelerator Device (XDNA 2, PCI VEN_1022 DEV_17F0)
+        device_node: null
+        fw_version: null
+        driver: "32.0.203.257"
+        usable: true
+        unusable_reason: null
+        lanes:
+        - host-native
+        tops: 50
+        tops_source: vendor-spec-not-os-reported
+        memory_bandwidth_gbps: null
+        memory_bandwidth_source: unknown
+        cpu_flags: null
+        cpu_cores: null
+        system_ram_gb: null
+      engines: []
+      measurements: []
+      host:
+        is_battery_present: null
+        os_build: "Windows 11 Home 26H2 build 26300.9974"
+        free_disk_gb: 1326.8
+        host_id: doris
+        host_id_source: node-name
+        host_kind: windows
+      timestamp: "2026-11-25T00:00:00Z"
+      probe_identity: manual-survey-claude-session
 plan_index:
   version: v1
   root: plan/
