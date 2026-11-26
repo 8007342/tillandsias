@@ -1002,7 +1002,7 @@ mod tests {
 
     fn temp_image_root() -> PathBuf {
         let root =
-            std::env::temp_dir().join(format!("tillandsias-image-routing-{}", std::process::id()));
+            crate::test_scratch::path(format!("tillandsias-image-routing-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         for image in ["default", "proxy", "git", "inference", "web"] {
             let dir = root.join("images").join(image);
