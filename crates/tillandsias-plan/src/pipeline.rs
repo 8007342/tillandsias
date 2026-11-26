@@ -1505,8 +1505,8 @@ mod tests {
         let tellme = include_str!("../../../images/default/cli/tellme");
         let sep = crate::context_pack::PACK_SEPARATOR.replace('\n', "\\n");
         assert!(
-            tellme.contains(&format!("printf '{sep}'")),
-            "tellme_context_pack must print the separator {sep:?}"
+            tellme.contains(&format!("local PACK_SEPARATOR = \"{sep}\"")),
+            "tellme_context_pack must append the separator {sep:?}"
         );
     }
 

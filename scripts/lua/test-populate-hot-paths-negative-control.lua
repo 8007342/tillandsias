@@ -108,7 +108,7 @@ cp "$3/images/default/cli/tellme" "$2/tellme"
 chmod a+x "$1"          # mktemp made it 0700; the lane user must traverse it
 chmod -R a+rX "$1/opt"
 ]], TMPD, BIN, ROOT)
-local t = lane('exec bash "' .. BIN .. '/tellme" about --list\n', { "BASH_ENV=/dev/null", "TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets" })
+local t = lane('exec lua "' .. BIN .. '/tellme" about --list\n', { "BASH_ENV=/dev/null", "TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets" })
 local terr, tout = t.stderr or "", t.stdout or ""
 T:arm("4 tellme exits 0", t.code == 0, "rc=" .. tostring(t.code) .. " stderr: " .. terr:gsub("\n", " "))
 T:arm("5 tellme names the degraded copy it serves",
