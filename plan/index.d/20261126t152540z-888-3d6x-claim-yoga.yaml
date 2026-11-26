@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: daily-maintenance-body-runs-before-the-startup-boundary-exists
+    field: status
+    value: in_progress
+    ts: "2026-11-26T15:25:40Z"
+    host: yoga
+events:
+  - packet_id: daily-maintenance-body-runs-before-the-startup-boundary-exists
+    event: {type: claimed, ts: "2026-11-26T15:25:40Z", host: yoga, summary: "claimed by yoga from the plan batch (coordinator 2026-11-26); work ref work/888-3d6x"}
