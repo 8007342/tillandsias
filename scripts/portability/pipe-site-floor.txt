@@ -587,13 +587,9 @@ scripts scripts/test-release-tier-freshness.sh 2
 scripts scripts/test-reopen-is-history-not-loss.sh 4
 scripts scripts/test-reset-flags-are-accepted.sh 2
 scripts scripts/test-reset-state-contract.sh 3
-scripts scripts/test-run-verb-agent-door.sh 3
 scripts scripts/test-running-image-freshness.sh 6
-scripts scripts/test-salvage-audit.sh 7
 scripts scripts/test-salvage-net.sh 13
 scripts scripts/test-scorable-closure-quoting.sh 5
-scripts scripts/test-scorable-obligation-gate.sh 15
-scripts scripts/test-scorable-obligation-splitter.sh 14
 scripts scripts/test-script-exec-bits.sh 3
 scripts scripts/test-seam-writers-canonical.sh 7
 scripts scripts/test-secrets.sh 7

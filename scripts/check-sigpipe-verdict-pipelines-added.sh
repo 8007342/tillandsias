@@ -167,7 +167,7 @@ UNBOUNDED_PRODUCER_RE='(^|[;&|(]|[[:space:]])(/[^[:space:]|;&()]*/)?(cat|find|jo
 #
 # THE DISPROOF IS 1306-ifhv, measured on yoga 2026-09-20. The flaking line was
 # `printf '%s' "$out" | grep -qi 'ANCESTRY IS NOT USED' && ok … || bad …` in
-# scripts/test-salvage-audit.sh. `$out` was a captured audit transcript of
+# scripts/test-salvage-audit.sh (now scripts/lua/test-salvage-audit.lua). `$out` was a captured audit transcript of
 # 15,569 BYTES. Under a default 64 KB pipe it fits one write and never flakes,
 # which is why forty replays were clean; under the 8,192-byte pipes a loaded
 # host hands out once its open pipes pass /proc/sys/fs/pipe-user-pages-soft it

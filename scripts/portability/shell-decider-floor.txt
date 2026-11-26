@@ -164,13 +164,9 @@ scripts/test-release-tier-freshness.sh
 scripts/test-reopen-is-history-not-loss.sh
 scripts/test-reset-flags-are-accepted.sh
 scripts/test-reset-state-contract.sh
-scripts/test-run-verb-agent-door.sh
 scripts/test-running-image-freshness.sh
-scripts/test-salvage-audit.sh
 scripts/test-salvage-net.sh
 scripts/test-scorable-closure-quoting.sh
-scripts/test-scorable-obligation-gate.sh
-scripts/test-scorable-obligation-splitter.sh
 scripts/test-script-exec-bits.sh
 scripts/test-seam-writers-canonical.sh
 scripts/test-secrets.sh
@@ -184,7 +180,6 @@ scripts/test-smoke-evidence-dir-is-fresh.sh
 scripts/test-smoke-forge-lane-cold-host-outcome.sh
 scripts/test-smoke-verifies-a-signature.sh
 scripts/test-spawn-failure-names-program.sh
-scripts/test-spec-index-durable-tier-demotion.sh
 scripts/test-spec-index-endpoint-classification.sh
 scripts/test-stranded-plan-writes.sh
 scripts/test-timing-clock-resolution.sh
