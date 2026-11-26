@@ -20,7 +20,7 @@ local T = fixture.new("gate-phase-rows-carry-run-id")
 local ROOT = fixture.repo_root()
 local W = T:scratch()
 
-local FNS = { "_now_ms", "_phase_close", "_step", "_phase_emit_timing", "_run", "_gate_run_id_begin" }
+local FNS = { "_now_ms", "_cpu_children_now", "_phase_close", "_step", "_phase_emit_timing", "_run", "_gate_run_id_begin" }
 local build = text.lines(fs.read("build.sh"))
 local body, missing = {}, {}
 for _, n in ipairs(FNS) do
