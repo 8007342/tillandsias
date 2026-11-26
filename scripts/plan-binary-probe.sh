@@ -103,16 +103,24 @@ resolve_plan_binary() {
     # per-distro setting that can be turned back on without anyone touching this
     # repository, which is why this is fixed by ordering rather than left to the
     # environment.
+    #
+    # ORDER 2404-7yv4 — EVERY RELEASE BUILD, AND PATH, BEFORE ANY DEBUG BUILD. A crate's
+    # `cargo test` leaves target/debug/tillandsias-plan behind, and nothing keeps
+    # it current. With debug second in each group, a worktree without a release
+    # build answered that leftover ahead of the release copy on PATH (which
+    # check-plan-binary-current.sh keeps in ~/.local/bin): lenovinha 2026-11-26,
+    # three ci-release litmus red on one worktree only. Debug still answers when
+    # nothing else runs. Fixture: test-plan-binary-probe-release-over-debug.lua.
     for candidate in \
         ${ctd:+"$ctd/release/tillandsias-plan"} \
-        ${ctd:+"$ctd/debug/tillandsias-plan"} \
         ${ctd:+"$ctd/release/tillandsias-plan.exe"} \
-        ${ctd:+"$ctd/debug/tillandsias-plan.exe"} \
         ./target/release/tillandsias-plan \
-        ./target/debug/tillandsias-plan \
         ./target/release/tillandsias-plan.exe \
-        ./target/debug/tillandsias-plan.exe \
-        "$(command -v tillandsias-plan 2>/dev/null)"; do
+        "$(command -v tillandsias-plan 2>/dev/null)" \
+        ${ctd:+"$ctd/debug/tillandsias-plan"} \
+        ${ctd:+"$ctd/debug/tillandsias-plan.exe"} \
+        ./target/debug/tillandsias-plan \
+        ./target/debug/tillandsias-plan.exe; do
         [ -n "$candidate" ] || continue
         [ -f "$candidate" ] || continue
         # ORDER 1508-7s4w. On MSYS (Git Bash) an EXTENSIONLESS name whose `.exe`

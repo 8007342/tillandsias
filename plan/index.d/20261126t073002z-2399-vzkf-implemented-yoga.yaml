@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: retire-unreachable-dependency-resolver-and-its-dead-caller
+    field: status
+    value: implemented
+    ts: "2026-11-26T07:30:02Z"
+    host: yoga
+events:
+  - packet_id: retire-unreachable-dependency-resolver-and-its-dead-caller
+    event: {type: implemented, ts: "2026-11-26T07:30:02Z", host: yoga, summary: "implemented on work/2399-vzkf: script and run_dependency_check removed with a one-line retirement note at the old call site; litmus:mcp-on-demand-bridge-shape green; headless fmt, clippy -D warnings and tests green"}

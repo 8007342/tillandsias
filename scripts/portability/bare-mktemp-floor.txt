@@ -18,7 +18,6 @@ scripts/check-mo-full-attestations.sh 1
 scripts/check-plan-binary-current.sh 1
 scripts/check-release-asset-integrity.sh 1
 scripts/check-script-exec-bits.sh 1
-scripts/check-spec-index-resolution-agreement.sh 2
 scripts/clamp-ca-material.sh 1
 scripts/cycle-preflight.sh 2
 scripts/diagnose-proxy.sh 1
@@ -63,8 +62,6 @@ scripts/test-headless-env-lock-is-single.sh 1
 scripts/test-hook-mover-enumeration-is-batched.sh 2
 scripts/test-host-slug-resolution.sh 2
 scripts/test-image-build-convergence.sh 1
-scripts/test-land-queue.sh 1
-scripts/test-litmus-budget-tally.sh 1
 scripts/test-no-competing-gate.sh 1
 scripts/test-opencode-vault-auth-content.sh 1
 scripts/test-plan-binary-probe-usage-determinism.sh 2

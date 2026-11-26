@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: test-selector-flags-host-scoped-criteria-passes-cwd-root-which-the-native-runner-refuses
+    field: status
+    value: implemented
+    ts: "2026-11-26T08:02:02Z"
+    host: doris
+events:
+  - packet_id: test-selector-flags-host-scoped-criteria-passes-cwd-root-which-the-native-runner-refuses
+    event: {type: implemented, ts: "2026-11-26T08:02:02Z", host: doris, summary: "Implemented on work/2392-qkr4 (stacked on work/2392-t29z, #1611). The selector's cwd is FS_ROOT: \"/\" on Linux and darwin, and the checkout's drive root (C:/) on native Windows, still outside any checkout, which is what \"/\" was for. Measured on doris (msys): ok:selector-flags-host-scoped-criteria:6 arms; before, refused:script-error (cwd '/' is relative)."}

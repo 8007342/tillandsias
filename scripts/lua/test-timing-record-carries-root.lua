@@ -38,8 +38,8 @@ local function record(s)
 end
 local function where(r) return r.root or r.root_unusable end
 -- One record through the real emitter, from the checkout at W/<dir>.
-local function emit(dir, emitter)
-    local log = dir .. ".jsonl"
+local function emit(dir, emitter, log)
+    log = log or dir .. ".jsonl"
     local rc, _, err = sh({ emitter or (ROOT .. "/" .. EMITTER), "--emit-timing", "step=" .. dir, "phase=test", "duration_ms=5", "exit=0" },
         { TILLANDSIAS_TIMING_LOG = W.abs .. "/" .. log, PROJECT_ROOT = W.abs .. "/" .. dir })
     if rc ~= 0 or not fs.exists(W.rel .. "/" .. log) then T:refuse("emitter-wrote-nothing", "rc=" .. tostring(rc) .. " " .. err) end
@@ -99,5 +99,10 @@ local function swap(from, to)
 end
 r, raw = fallback(swap('        /tmp/*)\n', '        /no-such-prefix/*)\n'))
 T:arm("5 MUTATION without the fallback branch the record is silent", where(r) == nil or r.fallback_reason == nil, raw)
+
+-- 6 a checkout's own log names that checkout, whatever root the process was handed.
+fs.mkdir(W.rel .. "/checkout/.cache/metrics")
+line = emit("worktree", nil, "checkout/.cache/metrics/t.jsonl")
+T:arm("6 a record in a checkout's own log answers with that checkout", record(line).root == W.abs .. "/checkout", line)
 
 T:finish()

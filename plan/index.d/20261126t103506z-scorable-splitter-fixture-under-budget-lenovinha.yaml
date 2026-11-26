@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: scorable-obligation-splitter-fixture-fits-its-budget
+    order: "2406-7f88"
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [litmus, build-speed]
+    estimated_hours: 1
+    title: "test-scorable-obligation-splitter.lua: the live-ledger arm costs 2 x 7,740 proc.run spawns and outlives its 60 s budget on slow hosts"
+    context: |
+      litmus:scorable-obligation-splitter reds ci-release on lenovinha (note on 2364-qgr7; macuahuitl asked for a lighter fixture, not a
+      bigger number, 2026-11-26). Arm 3 ran awk once per fragment per splitter through proc.run: 74-105 s here. Lighter: one shell per
+      splitter runs the same per-file awk (per-file END semantics kept), a marker line names each file, and one awk compacts the stream
+      to file, packet and closure-non-empty. 27 s on the same host, 14/14 arms. The first try returned the full closure text (13.7 MB),
+      hit the runner's capture cap and lost 8 rows silently, so truncation is now a failed arm. Still linear in the ledger:
+      the awk spawn per file remains.
+    exit_criteria:
+      - "the fixture's 14 arms green on lenovinha inside the litmus budget, with the same verdicts as the per-file pass"
+    unscoreable: "unpinnable-until-the-guard-exists: a budget fix."
+    next_action: "PR."
+    provenance: filed by lenovinha; asked by macuahuitl 2026-11-26.
+    related: [2364-qgr7, 2386-zxgc]
+    events:
+      - {type: filed, ts: '2026-11-26T10:35:06Z', host: lenovinha, summary: splitter fixture over budget}

@@ -242,7 +242,7 @@ const USAGE: &str = concat!(
     "                                     line, exit 0. A YAML parse bounds attribution to the\n",
     "                                     events block, so PROSE that quotes the marker inside a\n",
     "                                     block scalar is never read as a declaration. Backs the\n",
-    "                                     closure-event pass of check-fragment-status-loss.sh.\n",
+    "                                     closure-event pass of check-fragment-status-loss.lua.\n",
     "           carry-forward-check-batch <fragment.yaml>...\n",
     "                                     ORDER 1500-gu5r. carry-forward-check over MANY\n",
     "                                     fragments in one process: one tab-separated line per\n",
@@ -2004,7 +2004,7 @@ fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
         "deliverable",
         "depends_on",
         // ORDER 1218-25z3. `must_ship` marks a row as REQUIRED IN THE NEXT CUT,
-        // and scripts/check-must-ship-rows.sh reads it from this projection.
+        // and scripts/lua/check-must-ship-rows.lua reads it from this projection.
         //
         // IT IS HERE RATHER THAN AS A TAG BECAUSE THE ALTERNATIVES WERE
         // MEASURED AND BLOCKED, not because a field was the first idea:
@@ -3026,7 +3026,7 @@ fn read_query_vec(path: &Path) -> Vec<f32> {
 /// terminal — until the 650-dq6u ladder added the non-terminal `implemented`
 /// rung. From then on an honest non-terminal write emitted a fragment claiming
 /// completion in the event stream while the status channel said otherwise, and
-/// `check-fragment-status-loss.sh` refused it AFTER the write and AFTER a
+/// `check-fragment-status-loss.lua` refused it AFTER the write and AFTER a
 /// commit. It cost two cycles on this host inside one hour.
 fn evidence_event_shape(status: &str) -> (&'static str, String) {
     if tillandsias_plan::is_terminal_status(status) {
@@ -3143,8 +3143,40 @@ pub fn metrics_default_log(basename: &str, repo_root: Option<&Path>) -> PathBuf 
     // ORDER 1966-ubsw: a gate's private fallback, as the shell rule honours it.
     match std::env::var_os("TILLANDSIAS_METRICS_FALLBACK_DIR") {
         Some(d) if !d.is_empty() => PathBuf::from(d).join(basename),
-        _ => PathBuf::from("/tmp").join(basename),
+        _ => fallback_tmp().join(basename),
     }
+}
+
+/// ORDER 2392-nuca. The directory the shell rule's `/tmp` names. Off Windows it is
+/// `/tmp`. On native Windows `PathBuf::from("/tmp")` is `<current drive>:\tmp`, while
+/// Git for Windows mounts its `/tmp` on the user temp dir (`usertemp`, i.e. `%TEMP%`,
+/// which is `std::env::temp_dir()`), so the writer and the shell reader named two
+/// different directories whose strings agreed. The printed answer maps this back to
+/// `/tmp` under msys (`metrics-log-path`), so the strings still agree.
+fn fallback_tmp() -> PathBuf {
+    if cfg!(windows) {
+        std::env::temp_dir()
+    } else {
+        PathBuf::from("/tmp")
+    }
+}
+
+/// The printed spelling of a resolved metrics path: under msys, a path inside the
+/// Windows temp dir is spelled through Git Bash's `/tmp` mount, as the shell rule
+/// prints it (2392-nuca); everything else goes through `shell_spelling`.
+fn printed_metrics_path(resolved: &Path, windows: bool, msys: bool, tmp: &Path) -> String {
+    if windows
+        && msys
+        && let Ok(rest) = resolved.strip_prefix(tmp)
+    {
+        let rest = shell_spelling(&rest.to_string_lossy(), true, false);
+        return if rest.is_empty() {
+            "/tmp".to_string()
+        } else {
+            format!("/tmp/{rest}")
+        };
+    }
+    shell_spelling(&resolved.to_string_lossy(), windows, msys)
 }
 
 /// ORDER 2387-x65b. The spelling the shell rule prints for the same path, so the
@@ -3422,7 +3454,7 @@ pub fn log_cli_usage(tool: &str, outcome: &str, latency_ms: u128) {
 /// MEASURED on macuahuitl 2026-08-18: 133ms per invocation, of which 132ms is
 /// that load. `capabilities`, which returns before it, costs 1ms.
 ///
-/// check-fragment-status-loss.sh calls all three once per fragment, so the
+/// check-fragment-status-loss.lua calls all three once per fragment, so the
 /// waste was 3 x 102 x 132ms ~= 40s on EVERY `./build.sh --check`, on every
 /// host. It crossed litmus:fragment-status-loss-attribution-shape's 30s step
 /// budget when the second and third channels landed (797-qm4t, 812-d45t) —
@@ -3481,7 +3513,7 @@ pub fn log_cli_usage(tool: &str, outcome: &str, latency_ms: u128) {
 /// fresh definition from a re-declaration without loading the ledger, and it
 /// must not load the ledger (it lives with the 816-kq2z fragment-only arms for
 /// the same 132ms reason). The discarded-declaration class is
-/// check-fragment-status-loss.sh's, not this one; the remedy text points at
+/// check-fragment-status-loss.lua's, not this one; the remedy text points at
 /// `set-field`, which writes the LWW channel.
 ///
 /// Returns the gap packet_ids, sorted and deduplicated.
@@ -4410,7 +4442,7 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
                 std::process::exit(2);
             }
             // ORDER 1307-kic6. MULTI-PATH MODE, AND IT NEVER COLLAPSES A
-            // VERDICT. check-fragment-status-loss.sh called this once per
+            // VERDICT. check-fragment-status-loss.lua called this once per
             // fragment; on a host where a process spawn costs 134 ms that is
             // 1302 spawns for one of three passes. Handed every path at once it
             // is ONE spawn -- but only if a bad fragment among good ones is
@@ -4561,7 +4593,7 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
             true
         }
         "fragment-terminal-events" => {
-            // ORDER 752-pst5. The closure-event pass of check-fragment-status-loss.sh
+            // ORDER 752-pst5. The closure-event pass of check-fragment-status-loss.lua
             // reads every fragment in plan/index.d and asks, per packet: does its
             // events block DECLARE a terminal `completed` event? The shell's old
             // answer was a line-grep with ad-hoc resets, and it could not tell an
@@ -4579,7 +4611,7 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
             // are the sibling added-fragments-parse gate's job. That made
             // "this fragment declares no terminal events" and "this fragment
             // could not be read" the SAME answer to the caller: empty stdout,
-            // exit 0. The caller (check-fragment-status-loss.sh) additionally
+            // exit 0. The caller (check-fragment-status-loss.lua) additionally
             // sent stderr to /dev/null, so the note reached nobody and a
             // fragment carrying an undelivered closure passed the gate green.
             // Found when the 785-sqe6 fixture wrote `": "` into a summary,
@@ -4601,7 +4633,7 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
             }
             // ORDER 1307-kic6. MULTI-PATH MODE, AND THE PER-FILE VERDICT IS THE
             // WHOLE POINT HERE. This subcommand's EXIT CODE is how
-            // check-fragment-status-loss.sh detects an unparseable fragment --
+            // check-fragment-status-loss.lua detects an unparseable fragment --
             // 787-f7dh exists because "declares no terminal events" and "could
             // not be read" were once the same answer. Batching 1302 fragments
             // into one process must therefore NOT collapse 1302 verdicts into
@@ -6082,10 +6114,11 @@ fn main() {
         let root = args.get(2).map(PathBuf::from);
         let resolved = metrics_default_log(base, root.as_deref());
         let msys = cfg!(windows) && std::env::var_os("MSYSTEM").is_some_and(|v| !v.is_empty());
-        emit(&shell_spelling(
-            &resolved.to_string_lossy(),
+        emit(&printed_metrics_path(
+            &resolved,
             cfg!(windows),
             msys,
+            &fallback_tmp(),
         ));
         return;
     }
@@ -8086,7 +8119,7 @@ fn main() {
             // can branch on, and refuses only under `--strict-fragments`, which
             // the surfaces that genuinely cannot tolerate a partial corpus turn
             // on for themselves. The author-side diff-scoped gate
-            // (698-7n6q / check-added-fragments-parse.sh) keeps its job of
+            // (698-7n6q / check-added-fragments-parse.lua) keeps its job of
             // stopping the fragment at whoever wrote it.
             let skipped = ledger.skipped_fragments();
             for bad in skipped {
@@ -10933,7 +10966,7 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 //
                 // plan/long-running.md is a filtered view of ACTIVE multi_cycle
                 // packets, so a terminal packet must leave it.
-                // check-long-running-view.sh enforces that correctly — but it runs
+                // check-long-running-view.lua enforces that correctly — but it runs
                 // inside the gate (build.sh), so the refusal fires for WHOEVER LANDS
                 // NEXT. Measured 2026-09-15: completing 330 left its row behind, and
                 // the fleet-wide land block was paid for by yoga, who had to prove
@@ -10994,7 +11027,7 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                                 "error: '{order}' is multi_cycle and still listed in {view_path}, which is a filtered view of ACTIVE multi_cycle packets."
                             );
                             eprintln!(
-                                "       Remove its row in the SAME COMMIT as this status change (the wording check-long-running-view.sh uses)."
+                                "       Remove its row in the SAME COMMIT as this status change (the wording check-long-running-view.lua uses)."
                             );
                             eprintln!(
                                 "       Refused here rather than at land time, where the cost falls on whoever lands next rather than on you (1211-q9bm)."
@@ -11171,7 +11204,7 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 // from then on an honest `--evidence "..."` on a non-terminal
                 // rung emitted a fragment claiming completion in the event
                 // stream while the status channel said otherwise —
-                // check-fragment-status-loss.sh (correctly) refused it, AFTER
+                // check-fragment-status-loss.lua (correctly) refused it, AFTER
                 // the write and AFTER a commit, and its remedy text describes
                 // the other violation class. It cost two cycles on this host in
                 // one hour before being fixed here.
@@ -12568,7 +12601,7 @@ mod tests {
     /// 696-6byc. A non-terminal ladder rung written with `--evidence` must NOT
     /// emit a terminal event: doing so makes the fragment claim completion in
     /// the event stream while its status channel says otherwise, which
-    /// check-fragment-status-loss.sh refuses — after the write, after a commit.
+    /// check-fragment-status-loss.lua refuses — after the write, after a commit.
     #[test]
     fn evidence_event_type_follows_the_status_being_written() {
         let (ty, prefix) = evidence_event_shape("implemented");
@@ -12899,7 +12932,8 @@ mod tests {
     #[test]
     fn a_status_entry_is_a_lease_whatever_the_reason_text_says() {
         // Same temp-dir idiom the sibling fold tests use; no dev-dependency.
-        let dir = std::env::temp_dir().join(format!("tilland-lease-{}", std::process::id()));
+        let dir =
+            tillandsias_plan::test_scratch::path(format!("tilland-lease-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("tempdir");
         let index = dir.join("index.yaml");
@@ -13287,7 +13321,8 @@ mod tests {
     /// actually fires, which is what this pins.
     #[test]
     fn a_failing_envelope_is_downgraded_to_unsupported_naming_the_violations() {
-        let dir = std::env::temp_dir().join(format!("tilland-523-sv-{}", std::process::id()));
+        let dir =
+            tillandsias_plan::test_scratch::path(format!("tilland-523-sv-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("mk root");
         let fresh = Freshness::new("deadbeef".to_string(), "2026-07-29T00:00:00Z".to_string());
@@ -13364,7 +13399,8 @@ mod tests {
 
     #[test]
     fn citation_root_is_carried_and_derivable() {
-        let dir = std::env::temp_dir().join(format!("tilland-523-cr-{}", std::process::id()));
+        let dir =
+            tillandsias_plan::test_scratch::path(format!("tilland-523-cr-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("plan")).expect("mk plan dir");
         std::fs::write(
@@ -13928,5 +13964,42 @@ mod shell_spelling_tests_2387_x65b {
         );
         assert_eq!(shell_spelling(r"/tmp\x.jsonl", true, true), "/tmp/x.jsonl");
         assert_eq!(shell_spelling("D:", true, true), "/d/");
+    }
+}
+
+#[cfg(test)]
+mod printed_metrics_path_tests_2392_nuca {
+    use super::printed_metrics_path;
+    use std::path::Path;
+
+    #[test]
+    fn msys_spells_the_temp_dir_through_the_tmp_mount() {
+        let tmp = Path::new(r"C:\Users\u\AppData\Local\Temp");
+        assert_eq!(
+            printed_metrics_path(&tmp.join("x.jsonl"), true, true, tmp),
+            "/tmp/x.jsonl"
+        );
+    }
+
+    #[test]
+    fn native_windows_prints_the_real_dir_and_unix_is_unchanged() {
+        let tmp = Path::new(r"C:\Users\u\AppData\Local\Temp");
+        assert_eq!(
+            printed_metrics_path(&tmp.join("x.jsonl"), true, false, tmp),
+            "C:/Users/u/AppData/Local/Temp/x.jsonl"
+        );
+        assert_eq!(
+            printed_metrics_path(Path::new("/tmp/x.jsonl"), false, false, Path::new("/tmp")),
+            "/tmp/x.jsonl"
+        );
+    }
+
+    #[test]
+    fn a_checkout_path_is_not_mistaken_for_temp() {
+        let tmp = Path::new(r"C:\Users\u\AppData\Local\Temp");
+        assert_eq!(
+            printed_metrics_path(Path::new(r"C:/r\.cache\metrics\x.jsonl"), true, true, tmp),
+            "/c/r/.cache/metrics/x.jsonl"
+        );
     }
 }

@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: private-metrics-fallback-fixture-cannot-run-its-nested-gate-inside-a-toolbox
+    field: status
+    value: implemented
+    ts: "2026-11-26T10:24:52Z"
+    host: yoga
+events:
+  - packet_id: private-metrics-fallback-fixture-cannot-run-its-nested-gate-inside-a-toolbox
+    event: {type: implemented, ts: "2026-11-26T10:24:52Z", host: yoga, summary: "implemented on work/2405-ai5t: the inner gate's env goes through fixture.gate_inherit with the six names declared in @env; red first inside the toolbox (9-failed, TOOLBOX_PATH not set), green after there and on the host (9/9), and litmus:gate-step-private-metrics-fallback green in the toolbox; the break is ac2c4f711 (2031-dwwy), which made TOOLBOX_PATH a declared inherit"}

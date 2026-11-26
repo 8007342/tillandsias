@@ -1,5 +1,5 @@
 -- preflight: serial — runs the litmus runner, which wipes its runtime dirs
--- @trace order:1204-3s2s, order:1096-p3tn, order:2244-ge9s, order:2344-zk8r, order:2365-mskt, spec:observability-metrics
+-- @trace order:1204-3s2s, order:1096-p3tn, order:2244-ge9s, order:2344-zk8r, order:2365-mskt, order:2399-lrg3, spec:observability-metrics
 --
 -- test-gate-step-metrics-isolation.lua — a gate step must not write into the host's
 -- shared metrics path. Measured on lenovinha 2026-09-15: a fixture ran the litmus
@@ -30,7 +30,7 @@ local T = fixture.new("step-metrics-isolation")
 local ROOT = fixture.repo_root()
 local SH = fixture.posix_shell()
 local PLAN = fixture.plan_binary()
-local SUBJECT = "scripts/test-litmus-budget-tally.sh"
+local SUBJECT = "scripts/lua/test-litmus-budget-tally.lua"
 if not fs.exists(SUBJECT) then verdict.emit("skip:step-metrics-isolation:" .. SUBJECT .. " absent", 3) end
 local W = T:scratch()
 local GATE_ENV = { "TILLANDSIAS_TIMING_*", "TILLANDSIAS_METRICS_*" }
@@ -45,7 +45,13 @@ local function log_in(dir)
     return fs.exists(p) and fs.read(p) or nil
 end
 fs.mkdir(W.rel .. "/fb2"); fs.mkdir(W.rel .. "/fb3")
-local r = T:run{ SH, ROOT .. "/" .. SUBJECT, cwd = ROOT, env_unset = GATE_ENV, timeout_ms = 600000,
+-- The subject is a Lua fixture since 2399-lrg3, so it runs as the gate runs it: through the
+-- plan binary. It still drives the litmus runner from a scratch root, which is what this arm asks.
+-- Measured 2026-11-26: this arm no longer reds when the subject stops naming its timing log,
+-- because `script run` already routes the child's timing into target/plan-scratch. The kit now
+-- carries the isolation; arm 3 still proves the fallback mechanism itself refuses.
+if PLAN == "" then T:skip("no-runnable-plan-binary") end
+local r = T:run{ PLAN, "script", "run", ROOT .. "/" .. SUBJECT, cwd = ROOT, env_unset = GATE_ENV, timeout_ms = 600000,
     env = { TILLANDSIAS_METRICS_FALLBACK_DIR = W.abs .. "/fb2" } }
 local l = log_in("fb2")
 T:arm("2 " .. SUBJECT .. " does not reach the fallback log", l == nil, "rc=" .. tostring(r.code) .. " wrote " .. tostring(l):sub(1, 200))

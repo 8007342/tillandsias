@@ -2731,7 +2731,8 @@ mod tests {
         F: std::future::Future<Output = io::Result<U>> + Send,
         U: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
     {
-        let dir = std::env::temp_dir().join(format!("tl-relay-{tag}-{}", std::process::id()));
+        let dir =
+            tillandsias_core::test_scratch::path(format!("tl-relay-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let transport = Transport::Unix(dir.join("relay.sock"));
@@ -2853,8 +2854,10 @@ mod tests {
     /// @trace order:148, spec:vsock-transport
     #[tokio::test]
     async fn serve_listener_keeps_serving_after_earlier_connections_close() {
-        let dir =
-            std::env::temp_dir().join(format!("tillandsias-keepalive-{}", std::process::id()));
+        let dir = tillandsias_core::test_scratch::path(format!(
+            "tillandsias-keepalive-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("scratch dir");
         let sock = dir.join("control.sock");
@@ -3739,10 +3742,12 @@ mod tests {
 
         // A child that never reads its slave (hermetic HOME as in the
         // pty_handler tests, so `-l` profile sourcing stays silent).
-        let hermetic_home = std::env::temp_dir()
-            .join(format!("tillandsias-wedge-vsock-{}", std::process::id()))
-            .to_string_lossy()
-            .into_owned();
+        let hermetic_home = tillandsias_core::test_scratch::path(format!(
+            "tillandsias-wedge-vsock-{}",
+            std::process::id()
+        ))
+        .to_string_lossy()
+        .into_owned();
         std::fs::create_dir_all(&hermetic_home).expect("hermetic HOME creates");
         write_envelope(
             &mut client,

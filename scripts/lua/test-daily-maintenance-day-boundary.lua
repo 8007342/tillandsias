@@ -6,7 +6,7 @@
 -- TZ and `date` does not, so a verdict that moves when only TZ moves reads local time; both
 -- signs of offset are exercised. Ported from the .sh (2375-ch7i).
 --
--- Verdict: ok:daily-maintenance-day-boundary:all | fail:daily-maintenance-day-boundary: <arms>
+-- Verdict: ok:daily-maintenance-day-boundary:<n> arms | fail:daily-maintenance-day-boundary: <arms>
 
 local fixture = require "common.fixture"
 local T = fixture.new("daily-maintenance-day-boundary")
@@ -71,5 +71,4 @@ else
     local b = check(late, "Asia/Tokyo", nil, W.abs .. "/pre.sh")
     T:arm("5 MUTATION the pre-fix guard disagrees across zones", a ~= b and a ~= "" and b ~= "", a .. " / " .. b)
 end
-T:finish({ ok = function() return "ok:daily-maintenance-day-boundary:all" end,
-    fail = function(_, f) return "fail:daily-maintenance-day-boundary: " .. table.concat(f, " | ") end })
+T:finish({ fail = function(_, f) return "fail:daily-maintenance-day-boundary: " .. table.concat(f, " | ") end })

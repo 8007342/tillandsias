@@ -70,7 +70,7 @@ fn lock_dir() -> PathBuf {
 /// future, while all of them still contend on the same files with each other.
 #[cfg(test)]
 fn lock_dir() -> PathBuf {
-    std::env::temp_dir().join(format!("tillandsias-locks-test-{}", std::process::id()))
+    tillandsias_core::test_scratch::path(format!("tillandsias-locks-test-{}", std::process::id()))
 }
 
 /// Lock-file name prefix/suffix shared by `lock_path` and the

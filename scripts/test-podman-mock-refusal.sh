@@ -5,7 +5,7 @@
 #
 # 97cb255a9 made the top-level `case` in scripts/test-support/podman-mock.sh
 # fail closed and put the packet's negative control in
-# scripts/test-litmus-fake-podman-hermetic.sh. That closed the outer hole. It
+# scripts/test-litmus-fake-podman-hermetic.sh (now scripts/lua/test-litmus-fake-podman-hermetic.lua). That closed the outer hole. It
 # did not close the class: the SAME fall-through was reachable one level down,
 # from an inner `case` that matched nothing, left its arm with no output, and
 # landed on the file's trailing `exit 0`. `podman image ls`, `podman secret

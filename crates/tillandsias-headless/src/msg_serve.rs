@@ -61,6 +61,20 @@ use tillandsias_msg::store::{self, Accept, Envelope};
 /// The bare-metal mailbox every host has (coordinator default, reversible).
 pub const HOST_LANE: &str = "host";
 
+/// In tests, a per-process store that is removed when the test process exits (2407-aana;
+/// one per process under nextest). Outside tests, nothing.
+#[cfg(test)]
+fn test_store_root() -> Option<PathBuf> {
+    Some(tillandsias_core::test_scratch::path(format!(
+        "tillandsias-test-msg-{}",
+        std::process::id()
+    )))
+}
+#[cfg(not(test))]
+fn test_store_root() -> Option<PathBuf> {
+    None
+}
+
 /// The store root: TILLANDSIAS_MSG_ROOT, else
 /// `$XDG_STATE_HOME/tillandsias/msg`, else `~/.local/state/tillandsias/msg`.
 /// A unit-test build with no explicit root gets a per-process temp root, so no
@@ -71,8 +85,8 @@ pub fn store_root() -> PathBuf {
     if let Some(r) = var("TILLANDSIAS_MSG_ROOT") {
         return PathBuf::from(r);
     }
-    if cfg!(test) {
-        return std::env::temp_dir().join(format!("tillandsias-test-msg-{}", std::process::id()));
+    if let Some(r) = test_store_root() {
+        return r;
     }
     store::default_store_root(
         var("XDG_STATE_HOME").map(PathBuf::from),

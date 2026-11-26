@@ -1,0 +1,17 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-26, on macuahuitl's queue.
+packets:
+- packet_id: macos-inference-engine-benchmark-on-base-m5
+  order: 2381-tfna
+  status: implemented
+  verifiable_closure: 'plan/issues/macos-inference-engine-benchmark-2026-11-26.md, with the raw runs.'
+  unscoreable: 'a measurement: its deliverable is the dated benchmark record with raw runs, not a pass/fail test'
+  next_action: >-
+    Measured on base M5 16 GB with Qwen3.5 0.8B/2B/4B (4-bit class) and Qwen3-Embedding-0.6B. mlx_lm.server is fastest
+    at every size: decode 199/100/47 tok/s, prefill about 7160/3584/1437 tok/s. llama-server decodes 160/82/40 and is
+    weakest on prefill. Ollama-MLX nvfp4 decodes 134/66/36. Embeddings: llama-server 75 inputs/s against Ollama 47;
+    mlx_lm has no embeddings endpoint. EmbeddingGemma was skipped (gated, Gemma terms). Power not reported (needs root).
+    llama.cpp memory is RSS, because footprint misses its mmapped weights. The engine choice goes to 2381-iy9u; the
+    reserves go to 2381-zueb.
+  events:
+  - {type: implemented, ts: '2026-11-26T14:03:26Z', host: tlatoanis-macbook-air, summary: 'benchmark recorded: 3 engines x 3 sizes + embeddings, raw runs in plan/issues'}
