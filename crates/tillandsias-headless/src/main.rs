@@ -24430,9 +24430,7 @@ async fn run_headless_async(
     tokio::task::spawn_blocking(run_disk_usage_check);
 
     // Wave 21a Gap ON-009: Check and refresh GitHub token if expired
-    // Wave 21b Gap ON-010: Check for missing project dependencies before forge launch
-    // @trace gap:ON-010, spec:forge-environment-discoverability
-    // run_dependency_check();
+    // Wave 21b Gap ON-010 retired (2399-vzkf): run_dependency_check, #[allow(dead_code)] and never called, ran /opt/cheatsheets/dependency-resolver.sh, a path the image never wrote; both are gone.
 
     let metrics_handle = spawn_metrics_sampler();
 
@@ -24920,88 +24918,6 @@ fn run_disk_usage_check() {
                 gap = "TR-006",
                 error = %e,
                 "failed to invoke disk usage check (non-blocking)"
-            );
-        }
-    }
-}
-
-/// Check for missing project dependencies before forge launch.
-///
-/// This implements gap:ON-010. Scans the current project for dependency files
-/// (Cargo.toml, package.json, requirements.txt, etc.) and checks if required
-/// tools (rustc, cargo, node, npm, python3, etc.) are available in PATH.
-///
-/// Output: Displays missing dependencies as a formatted list to stderr.
-/// Non-blocking: If dependency check fails, startup continues.
-///
-/// @trace gap:ON-010, spec:forge-environment-discoverability
-#[allow(dead_code)]
-fn run_dependency_check() {
-    use std::process::Command;
-
-    let project_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-
-    // Call the dependency-resolver.sh script to scan for missing dependencies
-    let resolver_script = "/opt/cheatsheets/dependency-resolver.sh";
-
-    // Check if the script exists; if not, skip silently (may be running in environment without it)
-    if !Path::new(resolver_script).exists() {
-        debug!(
-            gap = "ON-010",
-            "dependency-resolver.sh not found; skipping dependency check"
-        );
-        return;
-    }
-
-    match Command::new("bash")
-        .arg(resolver_script)
-        .arg(&project_dir)
-        .output()
-    {
-        Ok(output) => {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-
-            // Parse JSON output
-            if let Ok(missing_deps) = serde_json::from_str::<Vec<serde_json::Value>>(&stdout) {
-                if !missing_deps.is_empty() {
-                    // Display missing dependencies to user
-                    eprintln!("\n[dependency resolver] Missing project dependencies:");
-                    for dep in &missing_deps {
-                        if let (Some(tool), Some(install_hint)) =
-                            (dep.get("tool"), dep.get("install"))
-                        {
-                            eprintln!(
-                                "  - {} (install: {})",
-                                tool.as_str().unwrap_or("unknown"),
-                                install_hint.as_str().unwrap_or("see docs")
-                            );
-                        }
-                    }
-                    eprintln!("  → You can continue, but some tools may not work as expected.\n");
-
-                    // Log structured event for observability
-                    tracing::info!(
-                        gap = "ON-010",
-                        spec = "forge-environment-discoverability",
-                        missing_count = missing_deps.len(),
-                        "project dependencies check completed"
-                    );
-                } else {
-                    debug!(gap = "ON-010", "all project dependencies available");
-                }
-            } else {
-                debug!(
-                    gap = "ON-010",
-                    "failed to parse dependency resolver output; skipping"
-                );
-            }
-        }
-        Err(e) => {
-            // Non-critical error; don't fail startup
-            tracing::warn!(
-                gap = "ON-010",
-                error = %e,
-                "dependency check failed (non-blocking)"
             );
         }
     }
