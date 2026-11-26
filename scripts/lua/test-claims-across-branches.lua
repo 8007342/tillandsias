@@ -14,6 +14,8 @@
 --   13 an ancestor sibling holds nothing, 14 in batch too           15 a diverged one does
 --   16 an override that fixes its own --index does not blind the fold
 --   17 the selector's exit contract: --batch exits 1 held, 0 clean, 2 blind (select-work-batch.sh)
+--   11 on msys: a caller deadline cuts a fold (no trap can run there), and the next run sweeps it
+--   18 the sweep: a dead owner and an old pid-less extract go; a live owner and a fresh one stay
 --
 -- 2392-9zcp: the subject is the Lua decider, run by the real plan binary (the runner); the
 -- stubs only answer its folds, through TILLANDSIAS_PLAN_BIN.
@@ -106,6 +108,29 @@ T:arm("10 a packet nothing knows is unknown, not ok", says(x, 2, "unknown-packet
 
 fs.mkdir(w.rel .. "/xtmp"); fs.mkdir(w.rel .. "/block")
 exe(w.rel .. "/block/tillandsias-plan", "#!/bin/sh\necho $$ >\"" .. w.abs .. "/block/started\"\nread _ <\"" .. w.abs .. "/block/fifo\"\n")
+local function xleft()
+    local k = 0
+    for _, f in ipairs(fs.list(w.rel .. "/xtmp")) do if f:match("^xbranch%.") then k = k + 1 end end
+    return k
+end
+-- 2392-tv47: a TERM from Git Bash to a native runner is not how anything on Windows ends a decider, and
+-- it hard-terminates the runner's MSYS descendants, so no trap can run. On msys arm 11 drives the REAL
+-- path, a caller's deadline (tillandsias-exec terminates the job), and the bound is the next run's
+-- sweep. The TERM arm stays where it is real, on Unix.
+local MSYS = SH ~= "bash"
+if MSYS then
+    T:must{ SH, "-s", "--", w.abs, stdin = 'mkfifo "$1/block/fifo"\n' }
+    local d = proc.run{ argv = { RUNNER, "script", "run", g.abs .. "/" .. CHECK, "--", "SOME-PKT", "--no-fetch" }, cwd = g.abs,
+        env = { PATH = env.get("PATH"), HOME = env.get("HOME"), TMPDIR = w.abs .. "/xtmp", TILLANDSIAS_PLAN_BIN = w.abs .. "/block/tillandsias-plan" },
+        env_unset = { "TILLANDSIAS_*", "GIT_*", "CARGO_TARGET_DIR" }, timeout_ms = 8000 }
+    local residue = xleft()
+    -- Measured on doris: residue=0 here, so on the deadline path the fold's trap does run; the sweep is
+    -- the bound for the stops where it cannot (SIGKILL, a Git Bash kill, a machine that loses power).
+    T:arm("11a PREMISE the deadline cut a live fold", fs.exists(w.rel .. "/block/started") and d.code ~= 0 and d.status == "timed_out",
+        "residue=" .. residue .. " rc=" .. tostring(d.code) .. " " .. tostring(d.status))
+    local after = check(FREE, "export TMPDIR='" .. w.abs .. "/xtmp'\n")
+    T:arm("11b the next run sweeps the extract a deadline-killed run left", xleft() == 0 and says(after, 0, "ok:cross-branch-claims:"), xleft() .. " left; " .. after.why)
+else
 local r = T:run{ SH, "-s", "--", g.abs, w.abs, CHECK, RUNNER, cwd = g.abs, env_unset = { "TILLANDSIAS_*", "GIT_*", "CARGO_TARGET_DIR" }, timeout_ms = 120000, stdin = [==[
 cd "$1" || exit 90
 W="$2"; mkfifo "$W/block/fifo" || exit 91
@@ -124,6 +149,7 @@ echo "live=$live left=$(left) rc=$rc"
 got = text.trim(r.stdout or "")
 T:arm("11a PREMISE the kill reached a live fold", (tonumber(got:match("live=(%d+)")) or 0) > 0, got .. (r.stderr or ""))
 T:arm("11b a run killed mid-fold leaves no extract", got:match("left=(%d+)") == "0" and got:match("rc=(%d+)") ~= "0", got)
+end
 x = check(FREE, "export TMPDIR='" .. w.abs .. "/xtmp'\n")
 local n = 0
 for _, f in ipairs(fs.list(w.rel .. "/xtmp")) do
@@ -161,4 +187,24 @@ local blind = check(HOLD, ST .. "git remote remove origin 2>/dev/null\n", "--bat
 T:arm("17a selector contract: held is exit 1 with a claimed-elsewhere:<id>:<branch> line", says(held, 1, "claimed-elsewhere:SOME-PKT:"), held.why)
 T:arm("17b selector contract: clean is exit 0", says(clean, 0, "ok:cross-branch-claims:"), clean.why)
 T:arm("17c selector contract: a blind fold is exit 2, never 0", says(blind, 2, "blocked:"), blind.why)
+
+-- 18 (2392-tv47): the sweep. Stale is a dead owner pid, or a pid-less name over 60 minutes old. A live
+-- owner's extract and a fresh pid-less one are kept (the controls: the sweep must not eat a running fold).
+fs.mkdir(w.rel .. "/sweep")
+local sw = T:run{ SH, "-s", "--", g.abs, w.abs .. "/sweep", CHECK, RUNNER, FREE, cwd = g.abs, env_unset = { "TILLANDSIAS_*", "GIT_*", "CARGO_TARGET_DIR" }, timeout_ms = 300000, stdin = [==[
+cd "$1" || exit 90
+S="$2"; sleep 120 & live=$!
+mkdir -p "$S/xbranch.999999.dead/plan" "$S/xbranch.OLDLEGACY/plan" "$S/xbranch.NEWLEGACY/plan" "$S/xbranch.$live.live/plan"
+touch -d '2 hours ago' "$S/xbranch.OLDLEGACY"
+TMPDIR="$S" TILLANDSIAS_PLAN_BIN="$5" "$4" script run "$3" -- SOME-PKT --no-fetch </dev/null >"$S/out" 2>"$S/err"; echo "rc=$?"
+for n in 999999.dead OLDLEGACY NEWLEGACY "$live.live"; do [ -d "$S/xbranch.$n" ] && echo "kept:${n#$live.}" || echo "gone:${n#$live.}"; done
+grep -o 'swept-stale-extracts:[0-9]*' "$S/err"
+kill "$live" 2>/dev/null
+]==] }
+local so = (sw.stdout or ""):gsub("\r", "")
+T:arm("18a a dead owner's extract is swept", text.contains(so, "gone:999999.dead"), so)
+T:arm("18b a pid-less extract over an hour old is swept", text.contains(so, "gone:OLDLEGACY"), so)
+T:arm("18c CONTROL a live owner's extract is kept", text.contains(so, "kept:live"), so)
+T:arm("18d CONTROL a fresh pid-less extract is kept", text.contains(so, "kept:NEWLEGACY"), so)
+T:arm("18e the sweep says how many it removed", text.contains(so, "swept-stale-extracts:2"), so)
 T:finish()

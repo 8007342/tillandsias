@@ -122,7 +122,7 @@ _claim_host_on_branch() { # _claim_host_on_branch <archived-tree> <packet-id-or-
 local FOLD = PARSER .. [==[
 ROOT="$1"; BIN="$2"; B="$3"; MODE="$4"; CHK="$5"; shift 5
 cd "$ROOT" || exit 9
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/xbranch.XXXXXX")" || { echo FOLD=fail; exit 0; }
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/xbranch.$$.XXXXXX")" || { echo FOLD=fail; exit 0; }
 trap 'rm -rf "$tmp"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -195,6 +195,31 @@ do
     for _, k in ipairs{ "TILLANDSIAS_WORKSTATION", "TILLANDSIAS_HOST_KIND" } do local v = eget(k); if v then NAMES[v] = true end end
 end
 local function is_me(h) return h ~= nil and h ~= "" and NAMES[h] == true end
+
+-- ORDER 1423-ydy3 / 2392-tv47: THE BOUND FOR AN ABRUPT STOP. The fold's own trap removes its extract on
+-- every stop it can see. Some it cannot: SIGKILL, and on native Windows every way a native runner is
+-- ended. A deadline uses TerminateJobObject, and a Git Bash kill hard-terminates the runner's MSYS
+-- descendants. Neither lets a trap run. So each run first removes the extracts whose owner is gone.
+-- An extract is named xbranch.<fold-shell-pid>.XXXXXX, and one whose pid is no longer alive is
+-- stale. A name without a pid (the older xbranch.XXXXXX form) is stale after 60 minutes, which is
+-- longer than any fold's own 600 s deadline.
+do
+    local r = proc.run{ argv = { SH, "-s" }, timeout_ms = 60000, stdin = [==[
+n=0
+for d in "${TMPDIR:-/tmp}"/xbranch.*; do
+    [ -d "$d" ] || continue
+    pid="${d##*/xbranch.}"; pid="${pid%%.*}"
+    case "$pid" in
+        ''|*[!0-9]*) [ -n "$(find "$d" -maxdepth 0 -mmin +60 2>/dev/null)" ] || continue ;;
+        *) ! kill -0 "$pid" 2>/dev/null || continue ;;
+    esac
+    rm -rf "$d" && n=$((n + 1))
+done
+echo "$n"
+]==] }
+    local n = tonumber(text.trim(r.stdout or "")) or 0
+    if n > 0 then log.raw("note:cross-branch-claims:swept-stale-extracts:" .. n .. " (an earlier run stopped before its trap ran)") end
+end
 
 local CURRENT = text.trim(git("rev-parse", "--abbrev-ref", "HEAD").stdout or "")
 -- ORDER 1948-xbaf: a sibling that is an ANCESTOR of HEAD holds nothing HEAD has not folded.
