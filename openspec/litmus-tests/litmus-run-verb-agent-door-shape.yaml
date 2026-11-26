@@ -12,23 +12,18 @@ severity: normal
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-run-verb-agent-door.sh
+  - workspace contains scripts/lua/test-run-verb-agent-door.lua
 
 critical_path:
-  - step: "fixture parses and is executable"
-    command: "bash -n scripts/test-run-verb-agent-door.sh && test -x scripts/test-run-verb-agent-door.sh && echo 'ok: parse'"
-    timeout_ms: 2000
-    expected_behavior: "ok: parse"
-
   - step: "argv integrity, policy-before-spawn, base environment, plain-form exit mapping"
-    command: "bash scripts/test-run-verb-agent-door.sh 2>&1 | tail -n 1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-run-verb-agent-door.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "PASS: run-verb-agent-door"
+    expected_behavior: "ok:run-verb-agent-door:"
 
 observability:
   traces:
     - "@trace spec:command-runtime"
-  expected_log: "PASS: run-verb-agent-door"
+  expected_log: "ok:run-verb-agent-door:"
   log_fields:
     spec: "command-runtime"
     test: "run-verb-agent-door-shape"
@@ -39,4 +34,4 @@ rollback:
     A door that spawns before the policy decides, or forwards the caller's
     environment, is the defect this verb exists to remove: restore
     decide-then-spawn and the base environment first.
-  command: "bash scripts/test-run-verb-agent-door.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-run-verb-agent-door.lua 2>&1"

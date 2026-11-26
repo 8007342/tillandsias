@@ -7324,8 +7324,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _step "Checking test-scorable-obligation-gate (1063-nraf; 580ms)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-scorable-obligation-gate.sh" 2>&1; then
-        _error "scripts/test-scorable-obligation-gate.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+    if ! _run_lua_decider "scripts/lua/test-scorable-obligation-gate.lua" 2>&1; then
+        _error "scripts/lua/test-scorable-obligation-gate.lua failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
         exit 1
     fi
     _step "Checking the held-claim report (1115-srfr)..."
@@ -7426,7 +7426,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # guard is here rather than a third careful edit because "one copy fixed, one
     # copy missed" is the defect this project repeats most.
     _step "Checking every guest-destroying purge clears the host vault credentials (803-49re)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-purge-clears-vault-credentials.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-purge-clears-vault-credentials.lua" 2>&1; then
         _error "a script unregisters the tillandsias distro without clearing the host's copy of that guest's Vault identity (803-49re) — call Clear-TillandsiasVaultHostCredentials from scripts/clear-vault-host-credentials.ps1"
         exit 1
     fi

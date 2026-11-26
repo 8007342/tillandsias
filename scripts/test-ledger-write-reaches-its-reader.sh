@@ -41,7 +41,8 @@ else
     # file-not-found — the same rule the probe's own callers follow.
     resolve_plan_binary() { return 1; }
 fi
-PLAN="$(resolve_plan_binary 2>/dev/null || true)"
+# From the CHECKOUT, absolute: the probe's fallback is cwd-relative (84f37ff24).
+PLAN="$(cd "$ROOT" && _p="$(resolve_plan_binary 2>/dev/null)" && case "$_p" in (/*) printf '%s' "$_p" ;; (*) printf '%s/%s' "$PWD" "${_p#./}" ;; esac)" || PLAN=""
 [ -n "$PLAN" ] || { echo "refused:no-plan-binary — the probe resolved nothing runnable"; exit 2; }
 
 # ---------------------------------------------------------------- fixtures --
@@ -478,10 +479,10 @@ fi
 # A refactor that drops it must fail HERE, not only on the sled that owned it,
 # so this script keeps a presence arm on the label rather than a whole-file
 # grep (that guard's header discusses correction fragments at length).
-if grep -qF 'obligation in a correction fragment satisfies the FOLDED packet' "$ROOT/scripts/test-scorable-obligation-gate.sh"; then
-    ok "arm4: the 1071-adhj discharge label is present in test-scorable-obligation-gate.sh"
+if grep -qF 'obligation in a correction fragment satisfies the FOLDED packet' "$ROOT/scripts/lua/test-scorable-obligation-gate.lua"; then
+    ok "arm4: the 1071-adhj discharge label is present in test-scorable-obligation-gate.lua"
 else
-    bad "arm4: the 1071-adhj discharge label is missing from test-scorable-obligation-gate.sh"
+    bad "arm4: the 1071-adhj discharge label is missing from test-scorable-obligation-gate.lua"
 fi
 
 # ------------------------------------------------------- LIVE LANE (opt-in) --

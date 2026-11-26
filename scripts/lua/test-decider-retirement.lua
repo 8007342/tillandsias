@@ -1,7 +1,7 @@
 -- @env PATH HOME
 -- @trace order:1443-xkwb, order:2222-icbs, order:2377-znx4
 --
--- test-decider-retirement.lua — check-decider-retirement.sh retires a shell decider only when its
+-- test-decider-retirement.lua — check-decider-retirement.lua retires a shell decider only when its
 -- population is bootstrap scripts alone, never on an empty scan. Ported from the .sh of the same
 -- name (2377-znx4). Scratch trees; the last of arm 2 and arm 4 read this checkout.
 --
@@ -17,7 +17,7 @@ local fixture = require "common.fixture"
 local T = fixture.new("decider-retirement")
 local SH, PLAN, ROOT = fixture.posix_shell(), fixture.plan_binary(), fixture.repo_root()
 if PLAN == "" then T:refuse("no-plan-binary") end
-local RETIRE, ALLOW = ROOT .. "/scripts/check-decider-retirement.sh", "scripts/portability/bootstrap-shell-allowlist.txt"
+local RETIRE, ALLOW = ROOT .. "/scripts/lua/check-decider-retirement.lua", "scripts/portability/bootstrap-shell-allowlist.txt"
 local function run(argv, cwd, more)
     local e = { PATH = env.get("PATH"), HOME = env.get("HOME"), TILLANDSIAS_PLAN_BIN = PLAN }
     for k, v in pairs(more or {}) do e[k] = v end
@@ -38,7 +38,7 @@ local function decider(name, d)
     if name == "check-jq-callsite-ratchet" then return run({ SH, ROOT .. "/scripts/" .. name .. ".sh", "--root", d }, ROOT) end
     return run({ SH, ROOT .. "/scripts/" .. name .. ".sh" }, ROOT, { TILLANDSIAS_SIGPIPE_ROOT = d })
 end
-local function retire(d, more) return run(d and { SH, RETIRE, "--root", d } or { SH, RETIRE }, ROOT, more) end
+local function retire(d, more) return run(d and { PLAN, "script", "run", RETIRE, "--", "--root", d } or { PLAN, "script", "run", RETIRE }, ROOT, more) end
 local DECIDERS = { "check-bash-dialect", "check-sigpipe-verdict-pipelines-added", "check-jq-callsite-ratchet" }
 local function retired(x)
     local n = 0

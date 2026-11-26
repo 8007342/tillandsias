@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: nine-e-to-t-shell-fixtures-ported-to-lua
+    order: "2387-b6v2"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 6
+    owned_files:
+      - scripts/lua/test-enclave-proxy-lib.lua
+      - scripts/lua/test-expire-claims-write-is-opt-in.lua
+      - scripts/lua/test-fake-cloudflare.lua
+      - scripts/lua/test-fleet-msg-same-host.lua
+      - scripts/lua/test-forge-project-trust-seeds.lua
+      - scripts/lua/test-gate-stamp-memoization.lua
+      - scripts/lua/test-harness-byte-cheap.lua
+      - scripts/lua/test-host-kind-evidence-not-from-workspace.lua
+      - scripts/lua/test-tool-dispatch-lib.lua
+    title: "nine e-t shell fixtures ported to Lua"
+    context: |
+      ports: enclave-proxy-lib expire-claims-write-is-opt-in fake-cloudflare fleet-msg-same-host forge-project-trust-seeds gate-stamp-memoization harness-byte-cheap host-kind-evidence-not-from-workspace tool-dispatch-lib. Claimed by yoga before the work; every other unowned e/f/g/h/t fixture is in an open PR, and
+      test-git-mirror-vault-agent-auto-auth stays shell (lenovinha, 2375-ch7i).
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its main assertions are mutated; callers run the .lua; the nine .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by gate steps, build.sh and litmus tests"
+    provenance: "coordinator 2026-11-26 (f, g, h with e and t), yoga"
+    related: [2386-zxgc]
+    events:
+      - {type: claimed, ts: "2026-11-26T03:01:18Z", host: yoga, summary: "claimed; work ref work/2387-b6v2"}
