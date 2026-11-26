@@ -473,6 +473,28 @@ mod tests {
         (d, repo)
     }
 
+    /// A directory handle whose mtime can be set (ORDER 2402-57m9). On Windows a
+    /// directory opens only with FILE_FLAG_BACKUP_SEMANTICS, and set_modified needs
+    /// FILE_WRITE_ATTRIBUTES; `File::open` asks for neither, so the fixture died with
+    /// "Access is denied" (os error 5) before any arm ran. Elsewhere it is File::open.
+    fn open_dir_for_mtime(dir: &Path) -> std::fs::File {
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            const FILE_WRITE_ATTRIBUTES: u32 = 0x0100;
+            const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+            std::fs::OpenOptions::new()
+                .access_mode(FILE_WRITE_ATTRIBUTES)
+                .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+                .open(dir)
+                .unwrap()
+        }
+        #[cfg(not(windows))]
+        {
+            std::fs::File::open(dir).unwrap()
+        }
+    }
+
     fn names(paths: &[PathBuf]) -> Vec<String> {
         paths
             .iter()
@@ -633,8 +655,7 @@ mod tests {
             let s = t.join("debug/incremental").join(name);
             std::fs::create_dir_all(s.join("s-x")).unwrap();
             std::fs::write(s.join("s-x/query-cache.bin"), vec![1u8; 1000]).unwrap();
-            std::fs::File::open(&s)
-                .unwrap()
+            open_dir_for_mtime(&s)
                 .set_modified(
                     std::time::UNIX_EPOCH + std::time::Duration::from_secs(1000 + i as u64),
                 )
