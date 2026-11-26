@@ -63,7 +63,8 @@ T:arm("4 REASONLESS a declaration with no reason is not honoured", d4 == "run", 
 -- 5 the loop: the decider is asked before _cap runs the fixture, and the skip is named.
 local loop = src:match("_fx_ran=0\n(.-)done <<FXEOF2") or ""
 local ask = loop:find('_drives_vm "$_fx"', 1, true)
-local cap = loop:find('_cap bash "$_fx"', 1, true)
+-- 2415-ea3h: the run call is `_cap "${_fx_cmd[@]}"` (bash for .sh, the runner for .lua).
+local cap = loop:find('_cap "${_fx_cmd[@]}"', 1, true)
 T:arm("5 WIRED the fixture loop asks _drives_vm before it runs a fixture, and names the opt-in",
     ask ~= nil and cap ~= nil and ask < cap and text.contains(loop, "TILLANDSIAS_RELAY_DRIVE_VM=1"),
     "ask=" .. tostring(ask) .. " cap=" .. tostring(cap))

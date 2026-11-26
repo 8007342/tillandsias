@@ -89,11 +89,12 @@ if not ok_walk or type(walked) ~= "table" then
     verdict.emit("blocked:cheatsheet-frontmatter:no-tree:" .. DIR, 2)
 end
 local files = {}
+local function rel_of(p) if p:sub(1, #DIR + 1) ~= DIR .. "/" then return DIR .. "/" .. p end return p end
+-- 2417-jzhh: an unreadable sheet blocks by name instead of being judged as empty
+local SRC = require("common.listed_read").read_all("cheatsheet-frontmatter", walked, rel_of)
 for _, p in ipairs(walked) do
-    local rel = p
-    if rel:sub(1, #DIR + 1) ~= DIR .. "/" then rel = DIR .. "/" .. rel end
-    local okr, body = pcall(fs.read, rel)
-    files[#files + 1] = { rel:sub(#DIR + 2), okr and body or "" }
+    local rel = rel_of(p)
+    files[#files + 1] = { rel:sub(#DIR + 2), SRC[rel] }
 end
 table.sort(files, function(a, b) return a[1] < b[1] end)
 

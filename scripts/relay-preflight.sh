@@ -316,6 +316,9 @@ MERGED_SHA="$(git rev-parse --short HEAD)"
 # ── shared diff surfaces, computed ONCE ─────────────────────────────────────
 DIFF_ALL="$(git diff --name-only "$BASE"...HEAD 2>/dev/null | LC_ALL=C sort -u)"
 DIFF_SCRIPTS="$(printf '%s\n' "$DIFF_ALL" | grep -E '^scripts/.*\.sh$' || true)"
+# ORDER 2415-ea3h: the fixture phase's subjects are the shell AND Lua scripts the
+# diff touched. DIFF_SCRIPTS stays *.sh for the deciders that read it.
+DIFF_SUBJECTS="$(printf '%s\n' "$DIFF_ALL" | grep -E '^scripts/.*\.(sh|lua)$' || true)"
 FRAGMENTS_ADDED=0
 if grep -q '^plan/index\.d/' <<<"$DIFF_ALL"; then FRAGMENTS_ADDED=1; fi
 
@@ -545,8 +548,14 @@ if [ "$PLAN_MODE" = 1 ]; then
 fi
 
 # ── phase 5: touched fixtures, LISTED before any of them run ────────────────
-_all_fixtures="$(git ls-files 'scripts/test-*.sh' 2>/dev/null | grep -v '^scripts/test-support/' | LC_ALL=C sort -u)"
-_set_a="$(printf '%s\n' "$DIFF_SCRIPTS" | grep -E '^scripts/test-[^/]+\.sh$' | grep -v '^scripts/test-support/' || true)"
+# ORDER 2415-ea3h (doris, relayed as 2413-3dap): the population and the subjects
+# were *.sh only, so a Lua-only diff selected ZERO fixtures on every host and the
+# line still read ok (fixtures=0 on every relay of 2026-11-26). Lua fixtures are
+# scripts/lua/test-*.lua; a caller that sets only DIFF_SCRIPTS (a fixture cutting
+# this block) still selects as before.
+_all_fixtures="$(git ls-files 'scripts/test-*.sh' 'scripts/lua/test-*.lua' 2>/dev/null | grep -v '^scripts/test-support/' | LC_ALL=C sort -u)"
+_fx_subjects="${DIFF_SUBJECTS-$DIFF_SCRIPTS}"
+_set_a="$(printf '%s\n' "$_fx_subjects" | grep -E '^scripts/(test-[^/]+\.sh|lua/test-[^/]+\.lua)$' | grep -v '^scripts/test-support/' || true)"
 # ORDER 1594-mtc3: DIFF_SCRIPTS includes the paths the diff DELETES, and every
 # shell->lua port deletes a test-*.sh, so _set_a selected a fixture that no
 # longer exists and reported it red ("No such file"; #314 on 2026-10-11).
@@ -562,7 +571,7 @@ SETAEOF
 _set_a="$_set_a_present"
 # END-SET-A-EXISTS
 _set_b=""
-if [ -n "$DIFF_SCRIPTS" ]; then
+if [ -n "$_fx_subjects" ]; then
     while IFS= read -r _fx; do
         [ -n "$_fx" ] || continue
         [ -f "$_fx" ] || continue
@@ -571,7 +580,7 @@ if [ -n "$DIFF_SCRIPTS" ]; then
             [ -n "$_sp" ] || continue
             grep -qF -- "$_sp" "$_fx" 2>/dev/null && { _hit=1; break; }
         done <<DIFFEOF
-$DIFF_SCRIPTS
+$_fx_subjects
 DIFFEOF
         [ "$_hit" = 1 ] && _set_b="${_set_b}${_fx}
 "
@@ -619,7 +628,13 @@ if [ "$PLAN_MODE" != 1 ]; then
             echo "skip:relay-preflight:$_name:drives-the-macos-vm — set TILLANDSIAS_RELAY_DRIVE_VM=1 to run it (2399-vsok)" >&2
             continue
         fi
-        if _cap bash "$_fx"; then
+        # 2415-ea3h: a .lua fixture runs through the one runner; no runner is red
+        # (DEC_OUT says why), never a skip.
+        _fx_cmd=(bash "$_fx")
+        if [ "${_fx%.lua}" != "$_fx" ]; then
+            if _lua_runner "$_name"; then _fx_cmd=("$_lb" script run "$_fx"); else _fx_cmd=(sh -c 'printf "%s\n" "$1"; exit 3' _ "$DEC_OUT"); fi
+        fi
+        if _cap "${_fx_cmd[@]}"; then
             _item "$_name" ok "$_t"
         else
             _item "$_name" red "$_t"
@@ -794,12 +809,17 @@ if [ -n "$FIRST_FAIL_TOKEN" ]; then
     exit "$FIRST_FAIL_RC"
 fi
 
+# ORDER 2415-ea3h: zero selected is legitimate (a plan-only diff) but is not a
+# passing fixture run, so the count says not-run rather than 0. The ok: prefix
+# is an interface (land queue, pushgreen) and stays.
+_fx_field="$fixture_n"; [ "$fixture_n" = 0 ] && _fx_field=not-run
+
 if [ "$PLAN_MODE" = 1 ]; then
-    echo "ok:relay-preflight:plan:refs=${#refs[@]} deciders=$decider_n fixtures=$fixture_n crates=$crate_n litmus=${litmus_run}/${litmus_deferred}"
+    echo "ok:relay-preflight:plan:refs=${#refs[@]} deciders=$decider_n fixtures=$_fx_field crates=$crate_n litmus=${litmus_run}/${litmus_deferred}"
     timing_emit relay-preflight relay "$T0" 0
     exit 0
 fi
 
-echo "ok:relay-preflight:${MERGED_SHA}:refs=${#refs[@]} deciders=$decider_n fmt=${fmt_state} fixtures=$fixture_n crates=$crate_n litmus=${litmus_run}/${litmus_deferred}"
+echo "ok:relay-preflight:${MERGED_SHA}:refs=${#refs[@]} deciders=$decider_n fmt=${fmt_state} fixtures=$_fx_field crates=$crate_n litmus=${litmus_run}/${litmus_deferred}"
 timing_emit relay-preflight relay "$T0" 0
 exit 0
