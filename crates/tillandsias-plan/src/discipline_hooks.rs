@@ -438,7 +438,14 @@ mod tests {
         let cfg = t.path().join("gitconfig");
         std::fs::write(
             &cfg,
-            format!("[core]\n\thooksPath = {}\n", global_hooks.display()),
+            // ORDER 2402-6c9q. Forward slashes: git reads a backslash in a config value
+            // as an escape, so a raw Windows path (C:\Users\...) made this file
+            // unparseable ("bad config line 2") and `git init` below failed. Git accepts
+            // C:/... on Windows; elsewhere this is the identity.
+            format!(
+                "[core]\n\thooksPath = {}\n",
+                global_hooks.display().to_string().replace('\\', "/")
+            ),
         )
         .unwrap();
         let st = Command::new("git")
@@ -470,13 +477,24 @@ mod tests {
         let (scope, value) = local.split_once('\t').unwrap();
         assert_eq!(scope, "local", "the repo now carries its own hooksPath");
         assert_eq!(PathBuf::from(value), done.dir);
-        assert!(done.dir.ends_with("hooks") && done.dir.starts_with(repo.canonicalize().unwrap()));
+        // Both sides canonical: on Windows canonicalize() gives the verbatim \\?\C:\... form
+        // while done.dir comes from git as C:/..., so only like-for-like compares (2402-6c9q).
+        assert!(
+            done.dir.ends_with("hooks")
+                && done
+                    .dir
+                    .canonicalize()
+                    .unwrap()
+                    .starts_with(repo.canonicalize().unwrap())
+        );
         assert!(done.dir.join("pre-push").is_file());
         let note = done
             .hooks_path_set
             .as_deref()
             .expect("it says that it set it");
-        assert!(note.contains(value) && note.contains(&global_hooks.to_string_lossy().to_string()));
+        // The global value as it was written into the scratch config (forward slashes, 2402-6c9q).
+        let global_written = global_hooks.to_string_lossy().replace('\\', "/");
+        assert!(note.contains(value) && note.contains(&global_written));
         // NEGATIVE CONTROL (1442-wyf9): nothing lands in the global dir.
         assert_eq!(std::fs::read_dir(&global_hooks).unwrap().count(), 0);
     }
