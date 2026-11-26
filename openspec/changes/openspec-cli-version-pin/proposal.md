@@ -57,7 +57,7 @@ exactly what a forge at that version writes, and launch has nothing to change.
 
 ## Impact
 
-- `openspec/cli-version`, `scripts/openspec-pin.sh`, `scripts/test-openspec-pin.sh`
+- `openspec/cli-version`, `scripts/openspec-pin.sh`, `scripts/lua/test-openspec-pin.lua`
 - `images/default/lib-common.sh`, the four forge entrypoints
 - `skills/meta-orchestration/SKILL.md` (coordinator duty 6)
 - `openspec/litmus-tests/litmus-openspec-cli-pin-shape.yaml`, bound to

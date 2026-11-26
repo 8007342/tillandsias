@@ -47,7 +47,6 @@ scripts/select-work-batch.sh 4
 scripts/stamp-requirement-ids.sh 2
 scripts/test-build-image-installed-version-alias.sh 1
 scripts/test-check-credential-channel.sh 1
-scripts/test-cloudflare-oauth-core.sh 1
 scripts/test-codex-oauth-restore.sh 1
 scripts/test-concurrent-forge-shared-stack.sh 1
 scripts/test-e2e-preflight-live-runtime.sh 2
@@ -77,18 +76,14 @@ scripts/test-litmus-bindings.sh 1
 scripts/test-litmus-budget-tally.sh 1
 scripts/test-litmus-runner-reports-rc.sh 2
 scripts/test-litmus-tracked-file-kill-safety.sh 2
-scripts/test-metrics-log-fallback-is-loud.sh 1
 scripts/test-metrics-log-path-agreement.sh 1
 scripts/test-no-competing-gate.sh 1
-scripts/test-opencode-render-probe.sh 1
 scripts/test-opencode-vault-auth-content.sh 1
 scripts/test-plan-binary-probe-usage-determinism.sh 2
 scripts/test-plan-binary-probe.sh 1
 scripts/test-plan-field-get.sh 1
-scripts/test-plan-fragments-lane-affordance.sh 1
 scripts/test-plan-orders-fragment-fold.sh 1
 scripts/test-podman-sync-budgets.sh 1
-scripts/test-pre-push-version-guard.sh 1
 scripts/test-pre-push-work-ref-lane.sh 1
 scripts/test-preflight-fixtures-default-target.sh 1
 scripts/test-pretooluse-command-policy.sh 1

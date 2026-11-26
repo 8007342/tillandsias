@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-25. p-s fixtures, PR 1 of 3 (macuahuitl: 8-10 ports per PR, operator rule 2026-11-25).
+packets:
+- packet_id: port-p-s-fixtures-pr-1-of-3
+  order: 2375-psb9
+  status: implemented
+  kind: chore
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [shell-to-lua, macos, fixtures, portability]
+  size: M
+  implementer_tier: sonnet
+  estimated_hours: 4
+  title: 'Nine whole-file shell-to-Lua ports from the p-s range (PR 1 of 3)'
+  ports: [scripts/test-precommit-zero-trace-scan-scope.sh, scripts/test-preflight-scratch-is-off-checkout.sh, scripts/test-pilot-lua-ports.sh, scripts/test-plan-fragments-lane-affordance.sh, scripts/test-populate-hot-paths-negative-control.sh, scripts/test-pre-push-version-guard.sh, scripts/test-preflight-refused-name-lines-whole.sh, scripts/test-script-run-verb.sh, scripts/test-plan-fragments-lane-carries-status.sh]
+  context: >-
+    Each port keeps its arms and moves to the common.fixture grammar. Callers: gate steps 965, 426, 795, 760, 650
+    (STEP_LUA), 235 (reads), test-gate-thresholds-are-chosen.lua (its CONTROL is now the .lua; the floor it pins reads
+    "> 20"), build.sh (populate-hot-paths via _run_lua_decider), litmus pilot-lua-ports, plan-fragments-lane-refusals-
+    carry-affordance, script-run-verb, versioning-shape, and methodology/versioning.yaml. reset-flags-are-accepted was
+    ported and dropped: off a forge the run door's soft-reset rule asks for consent before spawning
+    tillandsias --reset-guest, so the Lua arm 1 can only be red here; its .sh stays.
+  exit_criteria:
+  - 'Each .lua gives the same verdict as its .sh on the trunk tree, and the same red arms under a mutant.'
+  - 'Every caller runs the .lua; the nine .sh files and their floor lines are gone.'
+  verifiable_closure: 'Mutant parity in the PR; the five gate steps and four litmus tests green on darwin, 795 and populate-hot-paths on a Linux/msys host.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the mutant parity is the deliverable.'
+  next_action: >-
+    Implemented. Darwin green on seven; populate-hot-paths-negative-control skips (not root) and
+    preflight-refused-name-lines-whole skips (no /proc) on every Mac, so both need a first Lua run on Linux root / msys
+    (step 795 keeps yolanda's msys regime line from the .sh until then).
+  provenance: 'tlatoanis-macbook-air 2026-11-25, on macuahuitl-fedora''s direction.'
+  related: [2360-psb8]
+  events:
+  - {type: filed, ts: '2026-11-25T18:57:07Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}

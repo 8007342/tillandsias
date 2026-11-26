@@ -4219,7 +4219,7 @@ start_flaky_installs() {
     flaky_install_start dev-tools ensure_forge_dev_tools
     flaky_install_start prebuilt-tools ensure_forge_prebuilt_tools
     # The OpenSpec pin stays in the FOREGROUND for now: openspec_init_if_absent
-    # must run on the pinned CLI (1441-myz3, scripts/test-openspec-pin.sh case
+    # must run on the pinned CLI (1441-myz3, scripts/lua/test-openspec-pin.lua case
     # 10). Moving it here needs the init chained behind it; see the audit.
     trace_lifecycle "tools" "flaky-optional installs started in the background (status: $(flaky_status_dir))"
     return 0

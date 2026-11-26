@@ -85,9 +85,12 @@ local ROSTER = {
     gate("unrunnable-platform-arms", "scripts/test-unrunnable-platform-arms.sh", "/tmp/unrunnable-platform-arms.log",
         "Cross-platform gate-arm advisory names arms this host cannot run", "Cross-platform arm advisory regression",
         "1194-davi: the advisory runs on the land path; its fixture runs here."),
-    gate("must-ship-rows", "scripts/test-must-ship-rows.sh", "/tmp/must-ship-rows.log",
-        "Must-ship-next release advisory names rows absent from the cut", "Must-ship advisory regression",
-        "1218-25z3: the advisory runs on the release path; its fixture runs here."),
+    { id = "must-ship-rows", kind = "gate", runtime = "lua",
+        path = "scripts/lua/test-must-ship-rows.lua", args = "-", log = "/tmp/must-ship-rows.log",
+        pass_msg = "Must-ship-next release advisory names rows absent from the cut",
+        fail_msg = "Must-ship advisory regression (see /tmp/must-ship-rows.log)",
+        missing_detail = "scripts/lua/test-must-ship-rows.lua (or no plan binary)",
+        why = "1218-25z3: the advisory runs on the release path; its fixture runs here (Lua since 2380-wjrd)." },
     -- Both ported to Lua on trunk while this roster was in flight; the roster
     -- follows the port (merge of 2026-11-23).
     { id = "unstable-installer-default", kind = "gate", runtime = "lua",
