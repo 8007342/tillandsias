@@ -20,12 +20,6 @@
 
 local US = "\31"
 
-local function gate(id, path, log, pass_msg, fail_what, why)
-    return { id = id, kind = "gate", runtime = "bash", path = path, args = "-", log = log,
-        pass_msg = pass_msg, fail_msg = fail_what .. " (see " .. log .. ")",
-        missing_detail = path, why = why }
-end
-
 local ROSTER = {
     { id = "tray-string-corpus-drift", kind = "report", runtime = "lua",
         path = "scripts/lua/check-tray-string-corpus-drift.lua", args = "-",
