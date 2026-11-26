@@ -200,7 +200,7 @@ pub fn measure(transcript: Option<&Path>, since: Option<&str>) -> SessionTokens 
         subagent_tokens: 0,
         agents: 0,
         by_model: "-".to_string(),
-        source: path.display().to_string(),
+        source: source_spelling(&path),
     };
     let subdir = path.with_extension("").join("subagents");
     let mut files: Vec<PathBuf> = std::fs::read_dir(&subdir)
@@ -274,5 +274,45 @@ mod tests {
             "cache_read_input_tokens"
         );
         assert_eq!(measure(None, None).source, "absent");
+    }
+}
+
+/// ORDER 2418-hgrm: the `source` a token record carries, spelled with `/` on every
+/// host. A discovered transcript is built with `PathBuf::join`, which writes
+/// `\` on Windows; cycle-metrics.sh then strips backslashes from the field, so
+/// the record read `..._projects_-slug_<id>.jsonl` and named no file. A path the
+/// caller passed in is kept as given apart from the separator.
+fn source_spelling(path: &std::path::Path) -> String {
+    let s = path.display().to_string();
+    if cfg!(windows) {
+        s.replace('\\', "/")
+    } else {
+        s
+    }
+}
+
+#[cfg(test)]
+mod source_spelling_tests {
+    use super::source_spelling;
+
+    /// Windows: a joined path's backslashes become `/`. Pre-fix the source kept them.
+    #[cfg(windows)]
+    #[test]
+    fn a_joined_windows_path_is_spelled_with_forward_slashes() {
+        let p = std::path::Path::new("C:/cfg")
+            .join("projects")
+            .join("-slug")
+            .join("s.jsonl");
+        assert_eq!(source_spelling(&p), "C:/cfg/projects/-slug/s.jsonl");
+    }
+
+    /// Unix: unchanged, byte for byte.
+    #[cfg(unix)]
+    #[test]
+    fn a_unix_path_is_unchanged() {
+        let p = std::path::Path::new("/cfg")
+            .join("projects")
+            .join("a\\b.jsonl");
+        assert_eq!(source_spelling(&p), "/cfg/projects/a\\b.jsonl");
     }
 }
