@@ -41,7 +41,8 @@ else
     # file-not-found — the same rule the probe's own callers follow.
     resolve_plan_binary() { return 1; }
 fi
-PLAN="$(resolve_plan_binary 2>/dev/null || true)"
+# From the CHECKOUT, absolute: the probe's fallback is cwd-relative (84f37ff24).
+PLAN="$(cd "$ROOT" && _p="$(resolve_plan_binary 2>/dev/null)" && case "$_p" in (/*) printf '%s' "$_p" ;; (*) printf '%s/%s' "$PWD" "${_p#./}" ;; esac)" || PLAN=""
 [ -n "$PLAN" ] || { echo "refused:no-plan-binary — the probe resolved nothing runnable"; exit 2; }
 
 # ---------------------------------------------------------------- fixtures --

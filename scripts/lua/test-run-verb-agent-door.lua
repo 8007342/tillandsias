@@ -77,6 +77,7 @@ x = run{ "--timeout-ms", "300", "--", "sleep", "5" }
 T:arm("7 a deadline is exit 124", x.rc == 124, x.why)
 x = run{ "--", "no-such-program-8pur" }
 T:arm("7 an unknown program is exit 127", x.rc == 127, x.why)
+-- native-argv: compared with the same directory's own pwd -P below, in whatever form this host prints
 x = run{ "--cwd", w.abs, "--", "pwd", "-P" }
 local real = text.trim(T:run{ SH, "-s", "--", w.abs, stdin = 'cd "$1" && pwd -P\n' }.stdout or "")
 T:arm("7 --cwd sets the child's working directory", text.trim(x.out) == real, x.why)
