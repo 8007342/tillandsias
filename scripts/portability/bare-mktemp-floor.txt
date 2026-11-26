@@ -69,13 +69,9 @@ scripts/test-hook-mover-enumeration-is-batched.sh 2
 scripts/test-host-slug-resolution.sh 2
 scripts/test-image-build-convergence.sh 1
 scripts/test-land-queue.sh 1
-scripts/test-ledger-node-claim-resolution.sh 1
 scripts/test-ledger-prose-roundtrip.sh 1
 scripts/test-ledger-write-reaches-its-reader.sh 3
-scripts/test-litmus-bindings.sh 1
 scripts/test-litmus-budget-tally.sh 1
-scripts/test-litmus-runner-reports-rc.sh 2
-scripts/test-litmus-tracked-file-kill-safety.sh 2
 scripts/test-metrics-log-path-agreement.sh 1
 scripts/test-no-competing-gate.sh 1
 scripts/test-opencode-vault-auth-content.sh 1

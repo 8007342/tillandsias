@@ -106,11 +106,9 @@ scripts/test-image-usability-check.sh
 scripts/test-join-the-fleet-idempotent.sh
 scripts/test-land-gate-refusal-names-its-step.sh
 scripts/test-land-queue.sh
-scripts/test-ledger-node-claim-resolution.sh
 scripts/test-ledger-prose-roundtrip.sh
 scripts/test-ledger-write-reaches-its-reader.sh
 scripts/test-litmus-binding-truth.sh
-scripts/test-litmus-bindings.sh
 scripts/test-litmus-budget-tally.sh
 scripts/test-litmus-diff-scope.sh
 scripts/test-litmus-fake-podman-hermetic.sh
@@ -119,12 +117,8 @@ scripts/test-litmus-parse-instruments-agree.sh
 scripts/test-litmus-parse-only-duplicate-key.sh
 scripts/test-litmus-podman-preflight-diagnosis.sh
 scripts/test-litmus-podman-preflight-trigger.sh
-scripts/test-litmus-runner-reads-without-jq.sh
-scripts/test-litmus-runner-reports-rc.sh
 scripts/test-litmus-step-pipefail.sh
-scripts/test-litmus-structured-assert.sh
 scripts/test-litmus-terminal-verdict.sh
-scripts/test-litmus-tracked-file-kill-safety.sh
 scripts/test-loop-status-append-input.sh
 scripts/test-macos-vsock-inference-closure.sh
 scripts/test-metrics-log-path-agreement.sh
