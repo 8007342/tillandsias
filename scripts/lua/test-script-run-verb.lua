@@ -30,7 +30,7 @@ local T = fixture.new("script-run-verb")
 local ROOT = fixture.repo_root()
 local PLAN = fixture.plan_binary()
 if PLAN == "" then T:skip("no-validator") end
-if not fixture.is_abs(PLAN) then PLAN = ROOT .. "/" .. PLAN:gsub("^%./", "") end
+if PLAN:sub(1, 1) ~= "/" and not PLAN:match("^%a:[/\\]") then PLAN = ROOT .. "/" .. PLAN:gsub("^%./", "") end
 
 local W = T:scratch()
 local TLOG = W.abs .. "/timing.jsonl"

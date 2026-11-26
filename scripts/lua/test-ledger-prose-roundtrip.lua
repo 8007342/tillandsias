@@ -27,7 +27,7 @@ local ROOT = fixture.repo_root()
 local BIN = fixture.plan_binary()
 if BIN == "" then T:skip("no-plan-binary") end
 -- ABSOLUTE: the probe may answer repo-relative, and the cases run from a scratch directory.
-if not fixture.is_abs(BIN) then BIN = ROOT .. "/" .. BIN:gsub("^%./", "") end
+if BIN:sub(1, 1) ~= "/" and not BIN:match("^%a:[/\\]") then BIN = ROOT .. "/" .. BIN:gsub("^%./", "") end
 
 local PROSE = "Only `accel_mem_budget_gb` licenses reading it as the whole machine.\n"
     .. "A card will read $(nproc) and $HOME, and that is the correct answer.\n"

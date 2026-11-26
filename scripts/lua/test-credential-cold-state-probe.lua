@@ -31,7 +31,7 @@ local T = fixture.new("credential-cold-state-probe")
 local ROOT = fixture.repo_root()
 local PLAN = fixture.plan_binary()
 if PLAN == "" then T:refuse("no-plan-binary", "build one: cargo build --release -p tillandsias-plan") end
-if not fixture.is_abs(PLAN) then PLAN = ROOT .. "/" .. PLAN:gsub("^%./", "") end
+if PLAN:sub(1, 1) ~= "/" and not PLAN:match("^%a:[/\\]") then PLAN = ROOT .. "/" .. PLAN:gsub("^%./", "") end
 local PROBE = "scripts/lua/probe-credential-cold-state.lua"
 local SRC = fs.read(PROBE)
 local W = T:scratch()
