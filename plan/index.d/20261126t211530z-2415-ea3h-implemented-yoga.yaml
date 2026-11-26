@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: relay-preflight-phase-5-selects-lua-fixtures
+    field: status
+    value: implemented
+    ts: "2026-11-26T21:15:30Z"
+    host: yoga
+events:
+  - packet_id: relay-preflight-phase-5-selects-lua-fixtures
+    event:
+      type: implemented
+      ts: "2026-11-26T21:15:30Z"
+      host: yoga
+      summary: |
+        On work/2415-ea3h. Phase 5's population adds scripts/lua/test-*.lua and its subjects are DIFF_SUBJECTS
+        (scripts/**.sh and .lua); a caller setting only DIFF_SCRIPTS selects as before. A .lua fixture runs
+        through _lua_runner; no runner is red with its could-not-run reason, never a skip. Zero selected
+        prints fixtures=not-run inside the unchanged ok:relay-preflight: line.
+        Red first: test-relay-preflight-selects-lua-fixtures.lua (7 arms) fails arms 1-3 on trunk's block;
+        two mutants (population without the .lua glob, set A without .lua) each fail. test-relay-preflight.sh
+        14/14, deleted-fixture 3, derived-checks 7, tray-trigger 11, vm-fixture-opt-in 6 (its run-call anchor
+        updated to the new _cap "${_fx_cmd[@]}").
