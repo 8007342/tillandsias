@@ -53,7 +53,7 @@ while not got and secs() < PR_S do sh("sleep 2"); got = take() end
 -- sees the tree or its build output. A dir there that is not this repo's is refused.
 local TREE = env.get("SHADOW_TREE") or ""
 local function common(d) return text.trim(run({ "git", "-C", d, "rev-parse", "--path-format=absolute", "--git-common-dir" }).stdout or "") end
-if TREE:sub(1, 1) ~= "/" or (exists(TREE) and common(TREE) ~= common(ROOT)) then
+if not (TREE:sub(1, 1) == "/" or TREE:find("^%a:[/\\]")) or (exists(TREE) and common(TREE) ~= common(ROOT)) then
     if got then release() end
     verdict.could_not_run("shadow-intake", "SHADOW_TREE is not absolute, or is not a worktree of this repo: " .. TREE)
 end

@@ -5064,7 +5064,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # and 1087-h2z9's ratchet is for differences worth keeping, not for ones
     # nobody measured.
     _step "Checking the cross-platform unrunnable-arm advisory (1194-davi)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-unrunnable-platform-arms.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-unrunnable-platform-arms.lua" 2>&1; then
         _error "the cross-platform arm advisory regressed — an author can again break an arm their gate cannot run, with no signal"
         exit 1
     fi
@@ -7348,8 +7348,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _step "Checking the probe-usage guard answers the same twice (1130-qk7d; 20 runs)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-probe-usage-determinism.sh" 2>&1; then
-        _error "scripts/test-plan-binary-probe-usage-determinism.sh failed — the probe-usage guard gave more than one verdict on an unchanged tree. That is 1130-qk7d: grep -q SIGPIPEs its upstream, pipefail reports 141, and an eligible file is silently dropped. Read WHICH arm failed: arm 1 is the regression pin, arm 2 is only a positive control and passes on the unfixed code"
+    if ! _run_lua_decider "scripts/lua/test-plan-binary-probe-usage-determinism.lua" 2>&1; then
+        _error "scripts/lua/test-plan-binary-probe-usage-determinism.lua failed — the probe-usage guard gave more than one verdict on an unchanged tree. That is 1130-qk7d: grep -q SIGPIPEs its upstream, pipefail reports 141, and an eligible file is silently dropped. Read WHICH arm failed: arm 1 is the regression pin, arm 2 is only a positive control and passes on the unfixed code"
         exit 1
     fi
     _step "Checking the probe-usage guard walks its whole population (1128-j9fc)..."

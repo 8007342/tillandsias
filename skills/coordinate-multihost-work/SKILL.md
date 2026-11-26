@@ -305,6 +305,11 @@ When you queue porting hosts:
   its letter range, as three PRs of 8–10. Mutants run on each fixture's main
   assertions only (2–3 per fixture), and survivors are named in the PR. The
   host counts the free fixtures before promising 30.
+- **"Free" means no open ref ports it, not only "no .lua on trunk":**
+  filter candidates against every `origin/work/*` ref that deletes the `.sh`
+  and every open PR touching it BEFORE claiming. On 2026-11-26 all eight of
+  a batch's approved ports turned out to be on Family D refs (#1150–#1157),
+  and only `check-carried-obligations` caught it, one overlap per run (2412-ewmt).
 - **Fixtures held by stale drafts:** a fixture held by a draft with no
   commits for 3+ days, whose edit a port makes moot, is ported anyway. The
   draft is listed in the port PR and closed with a tombstone after the port
