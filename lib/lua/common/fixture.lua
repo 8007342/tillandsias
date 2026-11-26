@@ -227,11 +227,23 @@ function M.gate_inherit(e)
     return e
 end
 
+-- ORDER 2392-2gm8. A command the door REFUSES (status policy_denied / policy_consent_required)
+-- returns ok=false, code=nil and raises nothing; that is the door's contract (a denial is a
+-- result). In a fixture it let an unchecked cleanup read as done: a refused `rm -rf` of a
+-- snapshot left the checkout's gate stamp borrowed while the run was green. So a refusal ends
+-- the fixture with refused:<name>:door-refused, naming the command, rule and remedy. A fixture
+-- whose SUBJECT is the refusal passes refusal_ok = true and gets the result back.
 function T:run(spec)
     local argv = {}
     for i, a in ipairs(spec) do argv[i] = a end
-    return proc.run{ argv = argv, cwd = spec.cwd, env = spec.env, env_unset = spec.env_unset, stdin = spec.stdin,
+    local r = proc.run{ argv = argv, cwd = spec.cwd, env = spec.env, env_unset = spec.env_unset, stdin = spec.stdin,
         timeout_ms = spec.timeout_ms or 120000 }
+    if not spec.refusal_ok and type(r.status) == "string" and r.status:match("^policy_") then
+        self:refuse("door-refused", table.concat(argv, " ") .. ": " .. r.status .. " (" .. tostring(r.rule_id) .. ") "
+            .. tostring(r.why) .. " — remedy: " .. tostring(r.remedy)
+            .. " (if the refusal is this fixture's subject, pass refusal_ok = true; 2392-2gm8)")
+    end
+    return r
 end
 
 -- Run, and refuse the whole test if the setup command fails.

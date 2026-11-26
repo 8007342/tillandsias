@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: archive-answerability-copy-budget-counts-loose-git-objects
+    field: status
+    value: implemented
+    ts: "2026-11-26T05:01:51Z"
+    host: yoga
+events:
+  - packet_id: archive-answerability-copy-budget-counts-loose-git-objects
+    event: {type: implemented, ts: "2026-11-26T05:01:51Z", host: yoga, summary: "implemented on work/2390-kivc: .git/objects is read through an alternate, not copied; red first on 3084 KB of loose objects over a 2048 KB budget, green on both copy paths, three mutants red, the full check 535/535 on a real .git dir"}

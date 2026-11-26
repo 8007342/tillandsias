@@ -81,6 +81,47 @@ else
     bad("mutant: the link was skipped without the prune loop, so the arms prove nothing")
 end
 
+-- ORDER 2390-kivc. The budget counted .git's LOOSE objects: #1599 was evicted at
+-- 1049356 KB against 1048576 KB on a host whose .git was 851 MB, 532 MB of it loose,
+-- whatever the change. A scratch repo with ~3 MB of loose objects and a 2048 KB
+-- budget (lowered in the cut, never in the script) is that host in miniature: the
+-- copy must complete on both paths, read the live objects through an alternate, and
+-- leave the live object store as it was.
+local SHB = require("common.fixture").posix_shell()
+local B = S .. "/loose"
+sh({ "mkdir", "-p", B .. "/plan" })
+fs.write(rel .. "/loose/plan/index.yaml", "packets: []\n")
+sh({ "git", "-C", B, "init", "-q" })
+local mk = proc.run({ argv = { SHB, "-s", "--", B }, timeout_ms = 60000, stdin =
+    'cd "$1" || exit 9\nfor i in 1 2 3; do head -c 1048576 /dev/urandom > blob$i; git hash-object -w blob$i; rm -f blob$i; done\n' })
+local oid = (mk.stdout or ""):match("(%x+)\n?$") or ""
+local function objects_kb()
+    local r = proc.run({ argv = { "du", "-sk", B .. "/.git/objects" }, timeout_ms = 30000 })
+    return tonumber((r.stdout or ""):match("^(%d+)")) or 0
+end
+local live_kb = objects_kb()
+local small, nb = cut:gsub("\nBUDGET_KB=%$%(%( 1024 %* 1024 %)%)", "\nBUDGET_KB=2048")
+if nb == 1 and live_kb > 2048 and #oid >= 40 then
+    ok("premise: the budget line is cut once, and the scratch .git holds " .. live_kb .. " KB of loose objects over a 2048 KB budget")
+else
+    bad("premise: budget lines=" .. nb .. " loose=" .. live_kb .. " KB oid=[" .. oid .. "]")
+end
+local R0 = R
+R = B
+for _, arm in ipairs({ { "loose-cp", false }, { "loose-tar", true } }) do
+    local T, r = drive(arm[1], small, arm[2])
+    local done = r.stdout:find("copy-block-completed", 1, true)
+    local read = proc.run({ argv = { "git", "-C", T, "cat-file", "-e", oid }, timeout_ms = 30000 })
+    local copied = tonumber((proc.run({ argv = { "du", "-sk", T .. "/.git/objects" }, timeout_ms = 30000 }).stdout or ""):match("^(%d+)")) or -1
+    if done and read.code == 0 and objects_kb() == live_kb and copied >= 0 and copied < 256 then
+        ok(arm[1] .. ": loose objects over the budget do not refuse the copy; the copy reads them through the alternate (" .. copied .. " KB of its own) and the live store is unchanged")
+    else
+        bad(arm[1] .. ": completed=" .. tostring(done ~= nil) .. " readable=" .. tostring(read.code == 0) ..
+            " live=" .. live_kb .. "->" .. objects_kb() .. " KB copied=" .. copied .. " KB out=" .. (r.stdout .. r.stderr):sub(1, 300))
+    end
+end
+R = R0
+
 sh({ "find", S, "-delete" })
 if fail > 0 then
     verdict.emit("violation:archive-answerability-tree-copy:" .. pass .. "/" .. (pass + fail), 1)

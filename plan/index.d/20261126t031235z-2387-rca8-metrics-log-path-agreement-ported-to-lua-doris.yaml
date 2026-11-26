@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-scripts-test-metrics-log-path-agreement-sh-to-lua
+    order: 2387-rca8
+    status: implemented
+    kind: refactor
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua-port, metrics, fixture]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/test-metrics-log-path-agreement.lua
+      - scripts/test-metrics-log-path-agreement.sh
+      - scripts/gate-steps.d/279-1455-d7hc.step
+    title: |
+      Port scripts/test-metrics-log-path-agreement.sh to Lua (assigned to doris by macuahuitl 2026-11-26)
+    context: |
+      Every arm is kept, including the 1209-hkcq no-pollution arm, the 8b mutation
+      and the 9/9b/9c split controls. The DEFAULT-path exemption in
+      check-cycle-metrics-fixtures-pin-logs.lua moves to the .lua. Arm 1's report
+      needle follows 2387-9kta's change to cycle-metrics.sh.
+    verifiable_closure: |
+      tillandsias-plan script run scripts/lua/test-metrics-log-path-agreement.lua
+      prints ok:metrics-log-path-agreement:<n> on Linux. On msys it is
+      violation:metrics-log-path-agreement:3-failed (1b, 1d, W): red on msys,
+      packet 2387-x65b, not skips.
+    unscoreable: "the closure is the fixture itself, run by gate step 279-1455-d7hc; no separate litmus pin"
+status:
+  - packet_id: port-scripts-test-metrics-log-path-agreement-sh-to-lua
+    field: status
+    value: implemented
+    ts: "2026-11-26T03:12:35Z"
+    host: doris
