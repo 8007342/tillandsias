@@ -88,9 +88,9 @@ critical_path:
     # changes — 680-zphp), and carries its own negative control: a real
     # packet_id, a real order token and a slashed real id must all still
     # claim, so "refuse everything" cannot satisfy it.
-    command: "bash scripts/test-ledger-node-claim-resolution.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-ledger-node-claim-resolution.lua"
     timeout_ms: 30000
-    expected_behavior: "ok:ledger-node-claim-resolution-fixture:10"
+    expected_behavior: "ok:ledger-node-claim-resolution:11 arms"
 
   - step: "the meta-orchestration skill consults the claim probe before node closure"
     command: "grep -q 'claim-ledger-node.sh' skills/meta-orchestration/SKILL.md && echo 'ok: skill-consults-probe'"
