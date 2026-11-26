@@ -343,7 +343,6 @@ scripts scripts/check-base-ledger-status-loss.sh 7
 scripts scripts/check-build-cache-sweep.sh 3
 scripts scripts/check-capability-row.sh 17
 scripts scripts/check-carry-forward.sh 6
-scripts scripts/check-claims-across-branches.sh 5
 scripts scripts/check-containers-conf-proxy-env.sh 4
 scripts scripts/check-credential-channel.sh 15
 scripts scripts/check-daily-maintenance.sh 2

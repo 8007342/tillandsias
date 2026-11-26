@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-check-claims-across-branches-sh-to-lua
+    order: 2392-9zcp
+    status: implemented
+    kind: refactor
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua-port, claims, decider]
+    estimated_hours: 4
+    owned_files:
+      - scripts/lua/check-claims-across-branches.lua
+      - scripts/check-claims-across-branches.sh
+      - scripts/select-work-batch.sh
+      - scripts/lua/test-claims-across-branches.lua
+      - scripts/lua/test-claims-affordance.lua
+    title: |
+      Port scripts/check-claims-across-branches.sh to Lua (handed to doris by yolanda, 2026-11-26)
+    context: |
+      Grammar, exits and affordances unchanged. Each sibling's archive, tar and fold run in one
+      shell child that owns its extract through its own trap (1423-ydy3). select-work-batch.sh runs
+      the .lua through the plan binary and keeps the TILLANDSIAS_XBRANCH_CHECK seam for shell stubs.
+      Widens the verdict grammar: claimed-elsewhere:[1] and unknown-packet:[2] join
+      LEGACY_VERDICT_WORDS in script_run.rs. The answer.rs refusal and the sibling_claims.rs doc
+      now name the .lua. New arm 17 pins the selector's exit contract (1 held, 0 clean, 2 blind).
+    verifiable_closure: |
+      tillandsias-plan script run scripts/lua/test-claims-across-branches.lua and
+      scripts/lua/test-claims-affordance.lua print their ok lines on Linux. On msys,
+      test-claims-affordance is 12/12 and test-claims-across-branches is 19/20, with arm 11b red on
+      msys, packet 2392-tv47, not a skip.
+    unscoreable: "the closure is the two existing fixtures, run by gate step 953-1034-whsp; no separate litmus pin"
+status:
+  - packet_id: port-check-claims-across-branches-sh-to-lua
+    field: status
+    value: implemented
+    ts: "2026-11-26T09:00:00Z"
+    host: doris

@@ -1,7 +1,7 @@
 -- @env PATH HOME
--- @trace order:1034-whsp, order:1948-xbaf, order:2372-snfs
+-- @trace order:1034-whsp, order:1948-xbaf, order:2372-snfs, order:2392-9zcp
 --
--- test-claims-across-branches.lua — check-claims-across-branches.sh reports a packet a sibling
+-- test-claims-across-branches.lua — check-claims-across-branches.lua reports a packet a sibling
 -- branch holds, and never answers "unclaimed" when it could not look. Ported from the .sh of the
 -- same name (2372-snfs). A scratch repository with a diverged osx-next; the plan binary is a stub
 -- that answers one status for every ledger.
@@ -13,13 +13,19 @@
 --   11 TERM mid-fold leaves no extract, 12 nor does a normal run
 --   13 an ancestor sibling holds nothing, 14 in batch too           15 a diverged one does
 --   16 an override that fixes its own --index does not blind the fold
+--   17 the selector's exit contract: --batch exits 1 held, 0 clean, 2 blind (select-work-batch.sh)
+--
+-- 2392-9zcp: the subject is the Lua decider, run by the real plan binary (the runner); the
+-- stubs only answer its folds, through TILLANDSIAS_PLAN_BIN.
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-claims-across-branches.lua
 -- Verdict: ok:claims-across-branches:<n> arms | violation:...
 
 local fixture = require "common.fixture"
 local T = fixture.new("claims-across-branches")
-local SH, CHECK = fixture.posix_shell(), "scripts/check-claims-across-branches.sh"
+local SH, CHECK = fixture.posix_shell(), "scripts/lua/check-claims-across-branches.lua"
+local RUNNER = fixture.plan_binary()
+if RUNNER == "" then T:refuse("no-plan-binary", "the decider is Lua; build tillandsias-plan to run it") end
 local w = T:scratch()
 local function exe(path, body)
     fs.write(path, body)
@@ -37,7 +43,7 @@ local function git(...)
     local a = { "git", "-C", g.abs, "-c", "core.hooksPath=/dev/null", ... }
     return text.trim(T:must(a).stdout or "")
 end
-fs.mkdir(g.rel .. "/scripts"); fs.mkdir(g.rel .. "/plan/index.d")
+fs.mkdir(g.rel .. "/scripts/lua"); fs.mkdir(g.rel .. "/plan/index.d")
 for _, f in ipairs{ CHECK, "scripts/plan-binary-probe.sh" } do fs.write(g.rel .. "/" .. f, fs.read(f)) end
 fs.write(g.rel .. "/plan/index.yaml", "packets: []\n"); fs.write(g.rel .. "/plan/index.d/README.md", "# keep\n")
 git("add", "-A"); git("commit", "-qm", "a sibling's ledger")
@@ -54,11 +60,12 @@ sibling(osx)
 
 -- The environment is set by a shell, so a label of one space or an unset variable is what it says.
 local function check(bin, more, ...)
-    local pre = "unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE CARGO_TARGET_DIR\n" .. (bin and "export TILLANDSIAS_PLAN_BIN='" .. bin .. "'\n" or "") .. (more or "")
-    local a = { SH, "-s", "--", g.abs .. "/" .. CHECK }
+    local pre = "R='" .. RUNNER .. "'\nunset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE CARGO_TARGET_DIR\n" .. (bin and "export TILLANDSIAS_PLAN_BIN='" .. bin .. "'\n" or "") .. (more or "")
+    local a = { SH, "-s", "--", g.abs .. "/" .. CHECK, "--" }
     for _, v in ipairs{ ... } do a[#a + 1] = v end
-    if #a == 4 then a[5] = "SOME-PKT"; a[6] = "--no-fetch" end
-    local r = proc.run{ argv = a, cwd = g.abs, env = { PATH = env.get("PATH"), HOME = env.get("HOME") }, env_unset = { "TILLANDSIAS_*", "GIT_*", "CARGO_TARGET_DIR" }, timeout_ms = 120000, stdin = pre .. 'exec bash "$@" </dev/null\n' }
+    if #a == 5 then a[6] = "SOME-PKT"; a[7] = "--no-fetch" end
+    local r = proc.run{ argv = a, cwd = g.abs, env = { PATH = env.get("PATH"), HOME = env.get("HOME") }, env_unset = { "TILLANDSIAS_*", "GIT_*", "CARGO_TARGET_DIR" }, timeout_ms = 300000,
+        stdin = pre .. 'exec "$R" script run "$@" </dev/null\n' }
     local o = "\n" .. (r.stdout or ""):gsub("\r", "")
     return { rc = r.code, out = o, why = "rc=" .. tostring(r.code) .. o:sub(1, 300) .. (r.stderr or ""):sub(1, 300) }
 end
@@ -89,7 +96,9 @@ local got = parse("tree", row("status", "2026-01-01T00:00:00Z", "older-host"), r
 T:arm("6 the parser takes the entry with the greatest ts", got == "newer-host", got)
 got = parse("tree2", row("packets", "2026-01-01T00:00:00Z", "first-host"), "    field: status\n    ts: \"2027-01-01T00:00:00Z\"\n    host: leaked-host\npackets:\n  - packet_id: unrelated-packet\n")
 T:arm("7 its block state resets at each fragment", got == "first-host", got)
-x = check(nil, "export PATH=/usr/bin:/bin HOME='" .. w.abs .. "'\n")
+-- A PATH with no plan binary on it that still finds git: the native runner spawns git itself.
+local GITDIR = (fixture.which("git") or "/usr/bin/git"):gsub("/[^/]*$", "")
+x = check(nil, "export PATH=\"$(cygpath -u '" .. GITDIR .. "' 2>/dev/null || echo '" .. GITDIR .. "'):/usr/bin:/bin\" HOME='" .. w.abs .. "'\n")
 T:arm("8 no plan binary blocks rather than reporting unclaimed", says(x, 2, "blocked:no-plan-binary"), x.why)
 T:arm("9 a run prints a machine-readable verdict line", text.contains(free.out, "\nok:") or text.contains(free.out, "\nblocked:"), free.why)
 x = check(NONE, nil, "NO-SUCH-PACKET-1091", "--no-fetch")
@@ -97,16 +106,19 @@ T:arm("10 a packet nothing knows is unknown, not ok", says(x, 2, "unknown-packet
 
 fs.mkdir(w.rel .. "/xtmp"); fs.mkdir(w.rel .. "/block")
 exe(w.rel .. "/block/tillandsias-plan", "#!/bin/sh\necho $$ >\"" .. w.abs .. "/block/started\"\nread _ <\"" .. w.abs .. "/block/fifo\"\n")
-local r = T:run{ SH, "-s", "--", g.abs, w.abs, CHECK, cwd = g.abs, env_unset = { "TILLANDSIAS_*", "GIT_*", "CARGO_TARGET_DIR" }, timeout_ms = 120000, stdin = [==[
+local r = T:run{ SH, "-s", "--", g.abs, w.abs, CHECK, RUNNER, cwd = g.abs, env_unset = { "TILLANDSIAS_*", "GIT_*", "CARGO_TARGET_DIR" }, timeout_ms = 120000, stdin = [==[
 cd "$1" || exit 90
 W="$2"; mkfifo "$W/block/fifo" || exit 91
 left() { n=0; for f in "$W"/xtmp/xbranch.*; do [ -e "$f" ] && n=$((n + 1)); done; echo "$n"; }
-TMPDIR="$W/xtmp" TILLANDSIAS_PLAN_BIN="$W/block/tillandsias-plan" bash "$3" SOME-PKT --no-fetch </dev/null >/dev/null 2>&1 & c=$!
+TMPDIR="$W/xtmp" TILLANDSIAS_PLAN_BIN="$W/block/tillandsias-plan" "$4" script run "$3" -- SOME-PKT --no-fetch </dev/null >/dev/null 2>&1 & c=$!
 i=0; while [ ! -s "$W/block/started" ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i + 1)); done
 live="$(left)"
 kill -TERM "$c" 2>/dev/null
 [ ! -s "$W/block/started" ] || kill -TERM "$(cat "$W/block/started")" 2>/dev/null
 wait "$c" 2>/dev/null; rc=$?
+# The extract belongs to the fold's own shell child, whose trap runs as the blocked stub dies;
+# allow the few seconds that takes, never longer.
+i=0; while [ "$(left)" != 0 ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
 echo "live=$live left=$(left) rc=$rc"
 ]==] }
 got = text.trim(r.stdout or "")
@@ -139,4 +151,14 @@ echo "PKT	in_progress	some-packet-name"
 exe(w.rel .. "/indexed-plan", "#!/bin/sh\nexec \"" .. w.abs .. "/built/release/tillandsias-plan\" --index /scratch/index.yaml \"$@\"\n")
 x = check(w.abs .. "/indexed-plan", "export CARGO_TARGET_DIR='" .. w.abs .. "/built'\n")
 T:arm("16 an override that fixes its own --index does not blind the fold", says(x, 1, "claimed-elsewhere:SOME-PKT:osx-next"), x.why)
+
+-- 17: the contract select-work-batch.sh branches on, from the real decider: 1 held, with the
+-- claimed-elsewhere:<id>:<branch> line its sed reads; 0 clean; 2 when it could not fold.
+local ST = "export TILLANDSIAS_XBRANCH_ANCESTOR_SKIP=0\n"
+local held, clean = check(HOLD, ST, "--batch", "SOME-PKT"), check(FREE, ST, "--batch", "SOME-PKT")
+-- --batch always fetches, so blind it by taking the remote away (its refs go with it).
+local blind = check(HOLD, ST .. "git remote remove origin 2>/dev/null\n", "--batch", "SOME-PKT")
+T:arm("17a selector contract: held is exit 1 with a claimed-elsewhere:<id>:<branch> line", says(held, 1, "claimed-elsewhere:SOME-PKT:"), held.why)
+T:arm("17b selector contract: clean is exit 0", says(clean, 0, "ok:cross-branch-claims:"), clean.why)
+T:arm("17c selector contract: a blind fold is exit 2, never 0", says(blind, 2, "blocked:"), blind.why)
 T:finish()

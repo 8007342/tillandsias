@@ -857,8 +857,8 @@ impl Envelope {
             self.answer = format!(
                 "{head_line}\nSTALE LEDGER: this answer comes from {} ({}), which is missing {} \
                  plan commit(s) that {} has ({}, {}). Rows shown may already be claimed or \
-                 closed; fetch and read trunk, and run scripts/check-claims-across-branches.sh \
-                 before claiming.\n{}",
+                 closed; fetch and read trunk, and run tillandsias-plan script run \
+                 scripts/lua/check-claims-across-branches.lua -- <id> before claiming.\n{}",
                 short(&s.head_commit),
                 s.head_date.as_deref().unwrap_or("date unknown"),
                 s.plan_commits_missing,
