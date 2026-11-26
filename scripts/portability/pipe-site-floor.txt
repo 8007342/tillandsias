@@ -354,7 +354,7 @@ scripts scripts/check-enclave-network-internal.sh 5
 scripts scripts/check-enclave-service-health.sh 16
 scripts scripts/check-forge-findings-persisted.sh 3
 scripts scripts/check-groundtruth-regime-invariance.sh 3
-scripts scripts/check-host-tools.sh 105
+scripts scripts/check-host-tools.sh 104
 scripts scripts/check-issue-citation-convention.sh 8
 scripts scripts/check-jq-callsite-ratchet.sh 17
 scripts scripts/check-litmus-pin-claims.sh 5
@@ -441,7 +441,7 @@ scripts scripts/litmus-helper-browser-isolation.sh 3
 scripts scripts/litmus-helper-event-driven.sh 6
 scripts scripts/litmus-helper-storage-isolation.sh 13
 scripts scripts/litmus-helper-tray-network-bootstrap.sh 3
-scripts scripts/litmus-stdlib.sh 10
+scripts scripts/litmus-stdlib.sh 4
 scripts scripts/local-ci.sh 49
 scripts scripts/loop-status-metrics-audit.sh 3
 scripts scripts/loop-success-probe.sh 1
@@ -521,7 +521,7 @@ scripts scripts/test-guest-binaries-nix-lane.sh 9
 scripts scripts/test-harness-rollback.sh 6
 scripts scripts/test-headless-sidecar-target-gate.sh 1
 scripts scripts/test-hook-mover-enumeration-is-batched.sh 1
-scripts scripts/test-host-tools.sh 30
+scripts scripts/test-host-tools.sh 16
 scripts scripts/test-image-build-convergence.sh 2
 scripts scripts/test-image-usability-check.sh 1
 scripts scripts/test-land-queue.sh 1

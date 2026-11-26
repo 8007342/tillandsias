@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: litmus-stdlib-mf-holds-misses-a-present-match-on-a-large-haystack
+    field: status
+    value: implemented
+    ts: "2026-11-26T08:44:35Z"
+    host: yoga
+events:
+  - packet_id: litmus-stdlib-mf-holds-misses-a-present-match-on-a-large-haystack
+    event: {type: implemented, ts: "2026-11-26T08:44:35Z", host: yoga, summary: "implemented on work/2400-az2b: the six mf_holds primitives and the two host-tools sites take here-strings; test-litmus-stdlib-holds-large-haystack.lua red on trunk's primitives (all six holds missed, both lacks passed, 5 runs of 5) and green after; wired as step 18 of litmus:litmus-stdlib-portability-shape (the closure's litmus name, written as litmus:stdlib-portability-shape in the claim, is litmus:litmus-stdlib-portability-shape); pipe floors lowered for the three files"}

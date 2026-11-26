@@ -529,7 +529,7 @@ for _p in $(printf '%s\n' "$_spec" | awk -F'|' '{print $4}' | tr ',' '\n' | sort
     # Nothing may be named that the spec did not declare for this platform.
     _stray=""
     for _m in $_named $_reported_missing; do
-        printf '%s\n' "$_declared" | grep -qx "$_m" || _stray="${_stray:+$_stray,}$_m"
+        grep -qx "$_m" <<<"$_declared" || _stray="${_stray:+$_stray,}$_m"
     done
     # present + missing must account for every declared tool, exactly once.
     _n_missing="$(printf '%s\n' "$_reported_missing" | grep -c .)"
