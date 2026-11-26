@@ -19,23 +19,23 @@ size: instant
 
 preconditions:
   - workspace contains scripts/hooks/claude-pretooluse-command-policy.sh
-  - workspace contains scripts/test-pretooluse-command-policy.sh
+  - workspace contains scripts/lua/test-pretooluse-command-policy.lua
 
 critical_path:
   - step: "stub and fixture parse"
-    command: "bash -n scripts/hooks/claude-pretooluse-command-policy.sh scripts/test-pretooluse-command-policy.sh && test -x scripts/test-pretooluse-command-policy.sh && echo 'ok: parse'"
+    command: "bash -n scripts/hooks/claude-pretooluse-command-policy.sh && test -f scripts/lua/test-pretooluse-command-policy.lua && echo 'ok: parse'"
     timeout_ms: 2000
     expected_behavior: "ok: parse"
 
   - step: "every shape decides as the row requires, with the ordinary-command NEGATIVE CONTROL allowing silently"
-    command: "bash scripts/test-pretooluse-command-policy.sh 2>&1 | tail -n 1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-pretooluse-command-policy.lua"
     timeout_ms: 120000
-    expected_behavior: "PASS: pretooluse-command-policy"
+    expected_behavior: "ok:pretooluse-command-policy:40 arms"
 
 observability:
   traces:
     - "@trace spec:command-policies"
-  expected_log: "PASS: pretooluse-command-policy"
+  expected_log: "ok:pretooluse-command-policy:40 arms"
   log_fields:
     spec: "command-policies"
     test: "pretooluse-command-policy-shape"
@@ -45,4 +45,4 @@ rollback:
   on_failure: >
     A bridge that refuses an ordinary command stops the fleet: restore
     unknown-shapes-allow first; TILLANDSIAS_PRETOOLUSE_HOOK=off is the kill switch.
-  command: "bash scripts/test-pretooluse-command-policy.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-pretooluse-command-policy.lua"

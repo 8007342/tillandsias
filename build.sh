@@ -7319,8 +7319,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _step "Checking test-podman-sync-budgets (1063-nraf; 116ms)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-podman-sync-budgets.sh" 2>&1; then
-        _error "scripts/test-podman-sync-budgets.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+    if ! _run_lua_decider "scripts/lua/test-podman-sync-budgets.lua" 2>&1; then
+        _error "scripts/lua/test-podman-sync-budgets.lua failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
         exit 1
     fi
     _step "Checking test-scorable-obligation-gate (1063-nraf; 580ms)..."

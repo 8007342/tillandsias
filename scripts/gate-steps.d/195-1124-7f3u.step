@@ -16,16 +16,16 @@
 # is an expectation from reading the arms, not a measurement, and it is written
 # here as the former.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking the plan-only push lane fails closed without a fold validator (1124-7f3u)"
-STEP_SCRIPT="scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh"
+STEP_LUA="scripts/lua/test-pre-push-plan-lane-fails-closed-without-binary.lua"
 STEP_ERROR="the plan-only lane admitted a fragment-bearing push it could not fold, or the fast lane stopped accepting a valid one (1124-7f3u) — see the arm above"
 STEP_OK="Plan-lane fail-closed check passed"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   arm3: an issues-only push is still accepted with no plan binary (refusal stays scoped)"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-26 darwin ok:pre-push-plan-lane-fails-closed-without-binary:6 arms (work/2400-prg4 @ b2c62d37a)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
 STEP_LANES="timing"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="images/default/lib-common.sh plan/index.d/** plan/index.yaml plan/issues/** scripts/hooks/** scripts/hooks/pre-push-local-gate.sh scripts/lua/** scripts/lua/check-fragment-status-loss.lua scripts/plan-binary-probe.sh scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh scripts/with-wsl2-builder.sh"
+STEP_READS="images/default/lib-common.sh plan/index.d/** plan/index.yaml plan/issues/** scripts/hooks/** scripts/hooks/pre-push-local-gate.sh scripts/lua/** scripts/lua/check-fragment-status-loss.lua scripts/plan-binary-probe.sh scripts/lua/test-pre-push-plan-lane-fails-closed-without-binary.lua scripts/with-wsl2-builder.sh"

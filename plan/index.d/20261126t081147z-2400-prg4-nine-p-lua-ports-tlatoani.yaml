@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-26. p range, batch 4, per macuahuitl 2026-11-26.
+packets:
+- packet_id: port-p-fixtures-batch-4
+  order: 2400-prg4
+  status: implemented
+  kind: chore
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [shell-to-lua, macos, fixtures, portability]
+  size: M
+  implementer_tier: sonnet
+  estimated_hours: 4
+  title: 'Nine whole-file shell-to-Lua ports from the p range (batch 4)'
+  ports: [scripts/test-plan-field-get.sh, scripts/test-plan-lane-agreeing-deletion.sh, scripts/test-plan-orders-fragment-fold.sh, scripts/test-podman-sync-budgets.sh, scripts/test-portability-idioms.sh, scripts/test-pretooluse-command-policy.sh, scripts/test-pre-push-empty-ref-list.sh, scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh, scripts/test-pre-push-work-ref-lane.sh]
+  context: >-
+    Each port keeps its arms. Nothing reaches the real podman, a remote, or a credential flow: the command-policy
+    shapes are data fed to policy eval, and the pre-push hooks run only against scratch repos. pre-push-work-ref-lane
+    now builds its world with `git clone --shared` under kit scratch, where the .sh added a worktree to the real
+    checkout. Callers: steps 950, 992, 998 and 195 (STEP_LUA, fresh darwin regimes); build.sh's podman-sync-budgets
+    decider; five litmus tests without pipes (plan-field-get's skip prefix is now skip:plan-field-get:); comment
+    pointers in pre-push-local-gate.sh, bootstrap-shell-allowlist.txt and idiom-parity-corpus.txt. Still held in the
+    p range: plan-binary-probe* (after #1435), provider-device-auth (careful read), pending-capability-row-does-not-wedge,
+    and the larger promote-stable-evidence-gate, preflight-front-door, preflight-fixtures-default-target,
+    plan-only-lane-structural, pre-push-honours-a-live-freeze, podman-mock-refusal and plan-binary-copy-refresh.
+  exit_criteria:
+  - 'Each .lua gives the same verdict as its .sh on the trunk tree, and the same red arms under a mutant.'
+  - 'Every caller runs the .lua; the nine .sh files and their floor lines are gone.'
+  verifiable_closure: 'Mutant parity in the PR; the four gate steps, the build.sh decider and five litmus tests green on darwin and in the Linux land gate.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the mutant parity is the deliverable.'
+  next_action: 'Implemented.'
+  provenance: 'tlatoanis-macbook-air 2026-11-26, on macuahuitl-fedora''s direction.'
+  related: [2399-lrg3, 2385-psbb, 2380-psba]
+  events:
+  - {type: filed, ts: '2026-11-26T08:11:47Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}
