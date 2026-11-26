@@ -101,7 +101,10 @@ if BIN == "" then
     -- NOT a pass: an absent binary means this participant was not examined.
     out.line("skip: no tillandsias-plan binary to ask (build it to exercise the Rust participant)")
 else
+    -- The root as a shell caller spells it ($(pwd), /c/x under msys), as the .sh's
+    -- ROOT was and as cycle-metrics.sh's REPO_ROOT is; never the native C:/x form.
     local x = sh([==[
+R="$(cd "$R" && pwd)"
 say rust "$("$BIN" metrics-log-path forge-expert-usage.jsonl "$R" 2>/dev/null)"
 say shell "$(. "$R/scripts/metrics-log-path.sh" 2>/dev/null || true; metrics_default_log forge-expert-usage.jsonl "$R")"
 say outside "$("$BIN" metrics-log-path forge-expert-usage.jsonl "/nonexistent-checkout-$$" 2>/dev/null)"

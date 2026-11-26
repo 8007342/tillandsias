@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: rust-metrics-log-path-joins-with-backslashes-on-windows-so-writer-and-shell-reader-never-compare-equal
+    field: status
+    value: implemented
+    ts: "2026-11-26T05:00:00Z"
+    host: doris
+events:
+  - packet_id: rust-metrics-log-path-joins-with-backslashes-on-windows-so-writer-and-shell-reader-never-compare-equal
+    event: {type: implemented, ts: "2026-11-26T05:00:00Z", host: doris, summary: "implemented on work/2387-x65b (stacked on work/2387-rca8). The metrics-log-path subcommand prints shell_spelling() of its answer: forward slashes on Windows, and under msys (MSYSTEM set) the /c/x drive form the shell rule prints for a pwd-spelled root. Only the printed answer changes. Three unit tests cover unix, native Windows and msys. The fixture's arm 1b now passes the root as a shell caller spells it ($(pwd)), as the .sh did. Measured on doris (msys): ok:metrics-log-path-agreement:20 arms; with the Rust change reverted, 1b, 1d and W are red. Not addressed: Rust's /tmp on native Windows is <drive>:\\tmp, not msys's /tmp, so the outside-a-checkout fallback still names two different directories; that is a separate packet if it matters."}
