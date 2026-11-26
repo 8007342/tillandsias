@@ -2387,7 +2387,7 @@ PFEOF
     _pf_now
     _pf_iso="$_pf_iso deadline-clock=$_PF_CLOCK"
     # ORDER 1616-njfd: and the budget that applies, so a regression reads
-    # against the right number (test-preflight-front-door.sh judges by it).
+    # against the right number (test-preflight-front-door.lua judges by it, through common.preflight_judge).
     _pf_budget
     _pf_iso="$_pf_iso budget=${_PF_BUDGET}s budget-regime=$_PF_BUDGET_REGIME decider-deadline=${_pf_ddeadline}s"
 
@@ -5261,7 +5261,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "vault-shutdown classifier fixture passed"
 
     _step "Checking the promote-stable evidence gate and dry-run..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-promote-stable-evidence-gate.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-promote-stable-evidence-gate.lua" 2>&1; then
         _error "promote-stable's gate or its --dry-run regressed — this script flips an outward-facing release channel"
         exit 1
     fi

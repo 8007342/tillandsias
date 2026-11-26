@@ -537,12 +537,9 @@ scripts scripts/test-plan-orders-fragment-fold.sh 7
 scripts scripts/test-podman-mock-refusal.sh 4
 scripts scripts/test-portability-idioms.sh 13
 scripts scripts/test-pre-push-empty-ref-list.sh 6
-scripts scripts/test-pre-push-honours-a-live-freeze.sh 11
 scripts scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh 7
 scripts scripts/test-pre-push-work-ref-lane.sh 12
-scripts scripts/test-preflight-front-door.sh 8
 scripts scripts/test-pretooluse-command-policy.sh 3
-scripts scripts/test-promote-stable-evidence-gate.sh 18
 scripts scripts/test-provider-device-auth.sh 1
 scripts scripts/test-reclaim-stranded-claims.sh 9
 scripts scripts/test-relay-preflight.sh 15
