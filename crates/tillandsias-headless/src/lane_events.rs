@@ -295,7 +295,8 @@ mod tests {
     /// directory becomes a notification on a registered connection.
     #[test]
     fn a_datagram_from_the_mirror_becomes_a_notification() {
-        let dir = std::env::temp_dir().join(format!("lane-events-dg-{}", std::process::id()));
+        let dir =
+            tillandsias_core::test_scratch::path(format!("lane-events-dg-{}", std::process::id()));
         let socket = bind(&dir).expect("bind");
         let project = format!("lane-events-dg-{}", std::process::id());
         let (host, forge) = UnixStream::pair().expect("pair");
