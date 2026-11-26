@@ -116,13 +116,11 @@ scripts/test-podman-mock-refusal.sh
 scripts/test-podman-sync-budgets.sh
 scripts/test-portability-idioms.sh
 scripts/test-pre-push-empty-ref-list.sh
-scripts/test-pre-push-honours-a-live-freeze.sh
 scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh
 scripts/test-pre-push-work-ref-lane.sh
 scripts/test-preflight-fixtures-default-target.sh
 scripts/test-preflight-front-door.sh
 scripts/test-pretooluse-command-policy.sh
-scripts/test-promote-stable-evidence-gate.sh
 scripts/test-provider-device-auth.sh
 scripts/test-reclaim-stranded-claims.sh
 scripts/test-refusal-affordance-added.sh

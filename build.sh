@@ -5261,7 +5261,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "vault-shutdown classifier fixture passed"
 
     _step "Checking the promote-stable evidence gate and dry-run..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-promote-stable-evidence-gate.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-promote-stable-evidence-gate.lua" 2>&1; then
         _error "promote-stable's gate or its --dry-run regressed — this script flips an outward-facing release channel"
         exit 1
     fi
