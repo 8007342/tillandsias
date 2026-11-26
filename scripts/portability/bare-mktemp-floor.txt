@@ -15,7 +15,6 @@ scripts/check-mcp-expert-health.sh 1
 scripts/check-mcp-live-build.sh 1
 scripts/check-mcp-surface.sh 1
 scripts/check-mo-full-attestations.sh 1
-scripts/check-no-tracked-binaries.sh 1
 scripts/check-plan-binary-current.sh 1
 scripts/check-release-asset-integrity.sh 1
 scripts/check-script-exec-bits.sh 1
