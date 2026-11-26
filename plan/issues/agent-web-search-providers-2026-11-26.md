@@ -1,7 +1,7 @@
-# Agent web-search providers: what OpenCode's five are (2026-11-26)
+# Agent web access: the search providers, and text-friendly sources (2026-11-26)
 
 Order 2388-mihv. This was asked by the operator on 2026-11-26, and is the
-input to the openspec change `agent-web-search-backends`.
+input to the openspec change `agent-web-reading`.
 
 Method: a research sub-agent read the OpenCode source (a shallow clone of
 github.com/anomalyco/opencode, where sst/opencode now lives) and each vendor's
@@ -56,11 +56,70 @@ request to any provider. Anything it could not confirm is marked unverified.
 4. **Exa's key is in the URL.** OpenCode passes it as a query parameter, so any
    proxy log of the URL carries the key.
 
+## Operator direction (2026-11-26)
+
+"No I don't want to close those paths ... Do not close their search exits ...
+We want to make things easier for our agents, not harder." The search
+providers stay as they are.
+
+## Second pass: text-friendly sources to add
+
+A second research sub-agent ran on the same day, under the same rules.
+
+**Feeds and open APIs.** The first four were fetched; the last two come from
+listings only and are unverified:
+- `lobste.rs/rss`;
+- `hnrss.org`, Hacker News as RSS, Atom and JSON Feed, built on Algolia;
+- the HN Firebase API at `hacker-news.firebaseio.com/v0`, which needs no key;
+- The Register, on `www.theregister.com` and `api.theregister.com`;
+- LWN at `lwn.net/headlines/rss`, from a search snippet;
+- Ars Technica and Phoronix.
+
+Reddit's `.rss` often refuses bots (unverified).
+
+**llms.txt.** This is a Markdown index of a site's docs, proposed by Jeremy
+Howard in 2024; the spec is at https://llmstxt.org/. Mintlify-hosted docs
+generate one automatically. Each host still needs probing.
+
+**Plain-text docs:**
+- RFCs as text at `www.rfc-editor.org`; they are immutable;
+- Python's plain-text docs archive at `docs.python.org/3/download.html`;
+- PEPs.
+
+**Mirrorable docsets:**
+- DevDocs, under MPL, with each upstream licence kept;
+- Kiwix ZIM files, including Stack Exchange and Wikipedia under CC-BY-SA.
+
+Sizes were not retrieved.
+
+**Registry JSON:** crates.io's sparse index, PyPI's JSON API, the npm registry
+and proxy.golang.org. Versioned artifacts on all four are immutable, so they
+cache well.
+
+**Reader services.** r.jina.ai turns a page into Markdown, but it sees every
+URL and allows 20 requests per minute per IP without a key. A local converter
+avoids both.
+
+**Curated agent allowlists.** No public, maintained one was found. GitHub
+Copilot, GitLab Duo, Codex cloud and Docker Sandboxes each document their own,
+but their contents were not retrieved.
+
+**Already allowlisted:** devdocs.io, docs.rs, pypi.org, .crates.io,
+.npmjs.org, .golang.org, .go.dev, .firebaseio.com, .github.com and
+.githubusercontent.com.
+
+**Not yet allowlisted:** the feeds, rfc-editor.org, docs.python.org and
+peps.python.org.
+
 ## Recommendation
 
-See `openspec/changes/agent-web-search-backends`:
+See `openspec/changes/agent-web-reading`:
 
-- Close the forge's direct paths now.
-- Serve search from `enclave-fetch`, with the key in Vault.
-- First backend: Parallel or Tavily. Research SearXNG as the self-hosted default.
-- Never use any vendor fetch tool, and never use keyless access.
+- a catalog of text-friendly sources, from which a `reading` tier is generated;
+- squid caching by kind;
+- an llms.txt probe that proposes new hosts;
+- a local docs mirror;
+- a local Markdown reader in enclave-fetch;
+- a weekly review of denied hosts.
+
+Nothing existing is removed.
