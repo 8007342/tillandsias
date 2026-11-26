@@ -5313,7 +5313,22 @@ fn plan_orders_fold_fragments(
         .and_then(|p| p.get_mut("steps"))
         .and_then(|s| s.as_sequence_mut())
         .ok_or_else(|| "plan_index.steps sequence not found".to_string())?;
-    steps.extend(folded);
+    // 2410-pdup: `packets:` is a G-Set keyed by packet_id, so a fragment that
+    // re-declares a packet already present (base or an earlier fragment) is
+    // the SAME packet, not a second member of its order group. Appending it
+    // anyway reported `duplicate-order:<N>: p(ready), p(implemented)` and held
+    // every gate red on trunk (2381-tfna, 2026-11-26). A different packet_id
+    // on the same order still collides, as it must.
+    let mut seen: std::collections::BTreeSet<String> = steps
+        .iter()
+        .filter_map(|s| s.get("packet_id").and_then(|v| v.as_str()).map(str::to_string))
+        .collect();
+    for packet in folded {
+        match packet.get("packet_id").and_then(|v| v.as_str()) {
+            Some(id) if !seen.insert(id.to_string()) => {}
+            _ => steps.push(packet),
+        }
+    }
 
     if !status_overrides.is_empty() {
         for step in steps.iter_mut() {
@@ -5885,6 +5900,46 @@ trailing"#;
     fn plan_orders_missing_steps_is_a_parse_failure() {
         let yaml: serde_yaml::Value = serde_yaml::from_str("unrelated: true").unwrap();
         assert!(plan_orders_check(&yaml).is_err());
+    }
+
+    /// 2410-pdup: a fragment that re-declares a packet already filed (same
+    /// packet_id, same order) folds into ONE packet — `packets:` is a G-Set
+    /// keyed by packet_id — so it is not a duplicate order. Before the fix the
+    /// fold appended it as a second step and plan-orders reported
+    /// `duplicate-order:2381-tfna: p(ready), p(implemented)`, which held every
+    /// gate red on trunk on 2026-11-26. A DIFFERENT packet_id on the same
+    /// order must still violate.
+    #[test]
+    fn plan_orders_same_id_redeclaration_is_not_a_duplicate() {
+        let dir = std::env::temp_dir().join(format!("pdup-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("index.d")).unwrap();
+        let base = "plan_index:\n  steps: []\n";
+        fs::write(dir.join("index.yaml"), base).unwrap();
+        fs::write(
+            dir.join("index.d/a-file.yaml"),
+            "packets:\n  - packet_id: p\n    order: 900-aaaa\n    status: ready\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("index.d/b-redeclare.yaml"),
+            "packets:\n  - packet_id: p\n    order: 900-aaaa\n    status: implemented\n",
+        )
+        .unwrap();
+        let fold = |dir: &Path| {
+            let mut y: serde_yaml::Value = serde_yaml::from_str(base).unwrap();
+            plan_orders_fold_fragments(&dir.join("index.yaml"), &mut y).unwrap();
+            plan_orders_check(&y)
+        };
+        assert!(fold(&dir).is_ok(), "same-id re-declaration: {:?}", fold(&dir));
+        fs::write(
+            dir.join("index.d/c-collide.yaml"),
+            "packets:\n  - packet_id: q\n    order: 900-aaaa\n    status: ready\n",
+        )
+        .unwrap();
+        let err = fold(&dir).unwrap_err();
+        assert!(err[0].starts_with("duplicate-order:900-aaaa:"), "{err:?}");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// 1459-b5fh: byte order, pinned on the exact pairs that glibc en_US and
