@@ -73,7 +73,6 @@ scripts/test-groundtruth-corpus-declaration.sh
 scripts/test-guest-binaries-nix-lane.sh
 scripts/test-guest-crashloop-detection.sh
 scripts/test-guest-staging-refuses-a-wireless-binary.sh
-scripts/test-harness-rollback.sh
 scripts/test-headless-env-lock-is-single.sh
 scripts/test-headless-sidecar-target-gate.sh
 scripts/test-hook-mover-enumeration-is-batched.sh
@@ -92,7 +91,6 @@ scripts/test-opencode-vault-auth-content.sh
 scripts/test-order-citations-resolve.sh
 scripts/test-pending-capability-row-does-not-wedge.sh
 scripts/test-plan-binary-copy-refresh.sh
-scripts/test-plan-binary-probe-usage-determinism.sh
 scripts/test-plan-binary-probe.sh
 scripts/test-plan-binary-runnability-precondition.sh
 scripts/test-plan-field-get.sh
@@ -138,7 +136,6 @@ scripts/test-tool-materialize-litmus-surfaces-arm.sh
 scripts/test-tool-materialize.sh
 scripts/test-tray-surface-parity-gate.sh
 scripts/test-uninstall-matcher-spares-bystanders.sh
-scripts/test-unrunnable-platform-arms.sh
 scripts/test-vault-shutdown-forwards-sigterm.sh
 scripts/verify-closure.sh
 scripts/verify-version-monotonic.sh
