@@ -1636,7 +1636,7 @@ unbalanced backtick, a literal `$(`) — but understand what that can and cannot
 do: a *balanced* substitution leaves no trace at all, so the refusal is a
 backstop, not a guarantee. The file is the guarantee.
 
-Pinned by `scripts/test-ledger-prose-roundtrip.sh`, which asserts byte-identity
+Pinned by `scripts/lua/test-ledger-prose-roundtrip.lua`, which asserts byte-identity
 for text containing backticks, `$(...)` and `$VAR`.
 
 ### Multi-line `perl -0pi` edits are FORBIDDEN on this tree (hard rule, 2026-09-04)

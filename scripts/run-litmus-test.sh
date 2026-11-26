@@ -635,7 +635,7 @@ SELECT_ONLY=0
 # when the kernel/cgroup does not expose it — the caller must then say
 # UNCLASSIFIED, never fall back to a number that measures something else.
 # LITMUS_PSI_FILE overrides the path so the hermetic fixture can inject
-# counters (scripts/test-litmus-kill-adjudicator.sh).
+# counters (scripts/lua/test-litmus-kill-adjudicator.lua).
 _lt_cpu_stall_us() {
     local f="${LITMUS_PSI_FILE:-}"
     if [ -z "$f" ]; then
@@ -3261,7 +3261,7 @@ main() {
             if [[ -n "$parse_reader" && -x "$parse_reader" ]]; then
                 local parse_yaml_out=""
                 # MUTATION ANCHOR, and it is load-bearing for a fixture that is
-                # not this order's. scripts/test-litmus-parse-only-duplicate-key.sh
+                # not this order's. scripts/lua/test-litmus-parse-only-duplicate-key.lua
                 # (order 1274-cbk7) proves its defect by building a PRE-FIX COPY
                 # of this runner with the duplicate-key detector neutralised and
                 # requiring the false green to come back. Once 1303-2d5g added
