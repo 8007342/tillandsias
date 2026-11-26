@@ -68,6 +68,14 @@ end
 local STUB = W.abs .. "/bin/tillandsias"
 fs.write(W.rel .. "/bin/tillandsias", '#!/bin/sh\necho "STUB-tillandsias $*"\n')
 T:must{ "chmod", "+x", STUB }
+-- 2418-q7rv: on Windows the run door spawns natively, and a #!/bin/sh stub is not an executable
+-- there (os error 193). CreateProcess tries <path>.exe for an extensionless path, so a native
+-- stub beside it, Git's true.exe (exits 0 whatever its args), runs under the SAME argv the policy
+-- judges. Unix never looks for the .exe.
+if fixture.posix_shell() ~= "bash" then
+    local t = T:run{ fixture.posix_shell(), "-s", "--", W.abs .. "/bin/tillandsias.exe", stdin = 'cp /usr/bin/true.exe "$1"\n' }
+    if t.code ~= 0 then T:refuse("no-native-stub", "could not copy Git's true.exe as the stub") end
+end
 local _, pe = plan{ "policy", "eval", "--", STUB, "--reset-state" }
 if pe ~= "consent:policy:soft-reset" then T:refuse("premise", "the stub argv left the soft-reset class ([" .. pe .. "])") end
 
