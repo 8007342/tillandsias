@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-26, at macuahuitl's request.
+packets:
+- packet_id: door-deadline-kill-leaks-fixture-worktrees
+  order: 2405-wtlk
+  status: open
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [preflight, fixtures, disk, portability]
+  size: S
+  title: 'A door guard killed at the 5 s deadline leaks its git worktree into $TMPDIR'
+  context: >-
+    Measured on tlatoanis-macbook-air 2026-11-26: 7 detached worktrees at $TMPDIR/tmp.*/wt, each HEAD a
+    "scratch: 2195-wlsh" commit on no branch, each with the overlaid edits uncommitted. They appeared 02:49-03:27 local
+    during preflight-front-door door runs. The source is scripts/test-pre-push-work-ref-lane.sh, which does
+    git worktree add and removes it only in an EXIT trap. A deadline kill the trap cannot catch skips the
+    removal, and the door's sweep does not reap it. The leak leaves a registered worktree in the live checkout (it
+    poisons diff-scoped checks and git worktree list) and a full tree copy on disk per kill. The Lua port
+    (2400-prg4, #1627) uses a --shared clone under kit scratch and does not leak this way. Other .sh fixtures that
+    worktree-add under mktemp may. POSSIBLY RELATED: macuahuitl is tracing a Linux gate leak that fills a 32 GB
+    /tmp. A per-kill tree copy that no step reaps is one way to get there, and it is worth checking first.
+  exit_criteria:
+  - 'The door (or the kit) reaps the worktrees and scratch a killed guard leaves, or the guard cannot leave any.'
+  - 'git worktree list in the live checkout is unchanged after a preflight whose guards hit the deadline.'
+  verifiable_closure: 'A preflight run with a guard forced to the deadline leaves git worktree list and $TMPDIR tmp.* counts unchanged.'
+  next_action: 'Land #1627 (removes this leaker), then grep remaining .sh fixtures for worktree add under mktemp, and make the door reap registered worktrees under its scratch on a kill.'
+  provenance: 'tlatoanis-macbook-air 2026-11-26; worktrees removed with git worktree remove --force + prune after checking each was scratch.'
+  related: [2404-grd6, 2400-prg4, 2195-wlsh]
+  events:
+  - {type: filed, ts: '2026-11-26T11:33:12Z', host: tlatoanis-macbook-air, summary: 'filed; 7 leaked scratch worktrees removed on this host'}

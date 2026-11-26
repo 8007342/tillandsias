@@ -328,4 +328,46 @@ case("P8 no plan binary refuses", d, "^refused:promote%-gate:" .. VQ .. "$", nil
 case("P9 --force overrides it, as it does the reports", d, "^would%-promote:" .. VQ .. "$", { VER, "--dry-run", "--force" },
     merge(PG, { PG_RC = "1", PG_LINE = "refused:promote-gate:" .. VER .. ":queue=gating" }))
 
+-- M05 (2404-grd6): THE DEMOTE VERIFY-AFTER. A live demote whose writes "succeed" while
+-- /releases/latest stays sticky must refuse; without the verify read it printed demoted:.
+-- The writes go only to a scratch-local gh/git that log them; nothing reaches a network.
+local DB = { rel = W.rel .. "/dbin", abs = W.abs .. "/dbin" }
+fs.mkdir(DB.rel)
+local DLOG_D_REL, DLOG_D = W.rel .. "/demote.log", W.abs .. "/demote.log"
+exe(DB, "gh", [[#!/usr/bin/env bash
+echo "gh $*" >> "$DEMOTE_LOG"
+case "$1 ${2:-}" in
+    "release view") printf '%s\n' "deadbeef"; exit 0 ;;
+    "repo view")   printf '%s\n' "8007342/tillandsias"; exit 0 ;;
+    "release edit") exit 0 ;;
+esac
+case " $* " in
+    *"releases/latest"*) printf '%s\n' "$LATEST_AFTER"; exit 0 ;;
+    *"releases/tags/"*)  printf '%s\n' "12345"; exit 0 ;;
+esac
+exit 0
+]])
+exe(DB, "git", [[#!/usr/bin/env bash
+echo "git $*" >> "$DEMOTE_LOG"
+exit 0
+]])
+local TGT = "v0.4.260810.1"
+local function demote_live(latest_after)
+    fs.write(DLOG_D_REL, "")
+    local dd = fresh_root()
+    local r = T:run{ SH, dd.abs .. "/scripts/promote-stable.sh", "demote", VER, "--to", TGT,
+        env = { PATH = DB.abs .. ":" .. BASE_PATH, DEMOTE_LOG = DLOG_D, LATEST_AFTER = latest_after,
+            TILLANDSIAS_PLAN_BIN = PLAN_STUB, GIT_CEILING_DIRECTORIES = W.abs },
+        env_unset = UNSET, cwd = dd.abs, timeout_ms = 60000 }
+    return r.code, verdict_line(r.stdout or ""), fs.read(DLOG_D_REL) or ""
+end
+local rcs, vs, ls = demote_live(VER)
+T:arm("M05a a sticky latest after a live demote is refused", rcs ~= 0
+    and vs:find("^refused:demote%-verify%-failed:" .. VQ .. "$") ~= nil and text.contains(ls, "releases/latest"),
+    "rc=" .. tostring(rcs) .. " verdict='" .. vs .. "'")
+local rcv, vv = demote_live(TGT)
+T:arm("M05b a latest that moved verifies the demote", rcv == 0
+    and vv:find("^demoted:" .. VQ .. ":latest%-now:" .. TGT:gsub("%.", "%%.") .. "$") ~= nil,
+    "rc=" .. tostring(rcv) .. " verdict='" .. vv .. "'")
+
 T:finish()
