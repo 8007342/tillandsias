@@ -111,7 +111,7 @@ RED=$'\033[0;31m'; YLW=$'\033[0;33m'; GRN=$'\033[0;32m'; RST=$'\033[0m'
 # because nobody had decoded what an empty list MEANS.
 #
 # MEASURED, hermetically, against a scratch repo with a bare remote (the
-# fixture is scripts/test-pre-push-empty-ref-list.sh):
+# fixture is scripts/lua/test-pre-push-empty-ref-list.lua):
 #
 #   fast-forward push .................... 125 bytes, one ref
 #   git push --dry-run origin HEAD ....... 108 bytes, one ref

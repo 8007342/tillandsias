@@ -1,4 +1,4 @@
-# idiom-parity-corpus.txt — DATA for scripts/test-portability-idioms.sh's
+# idiom-parity-corpus.txt — DATA for scripts/lua/test-portability-idioms.lua's
 # PARITY arm (1570-g4rx). Not a script: the advisory scans *.sh only, so the
 # idioms below are never counted against the live tree. The fixture splits this
 # file on its `=== <path>` headers into a scratch tree, runs the pre-port .sh

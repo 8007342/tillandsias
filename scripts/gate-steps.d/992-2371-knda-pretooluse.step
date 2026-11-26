@@ -2,10 +2,10 @@
 #
 # Nothing ran this fixture: its litmus is bound to a draft spec, which the runner does not select.
 # Native Windows reds are 2371-r2v9; the gate there runs in the Linux builder.
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking the PreToolUse command hook refuses what it must (2371-knda)"
-STEP_SCRIPT="scripts/test-pretooluse-command-policy.sh"
+STEP_LUA="scripts/lua/test-pretooluse-command-policy.lua"
 STEP_ERROR="the command hook agents run under no longer refuses or allows as pinned (1443-we89) — see the FAIL lines above"
 STEP_OK="pretooluse-command-policy fixture passed"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:rc0-no-verdict-line"
-STEP_READS="scripts/hooks/claude-pretooluse-command-policy.sh scripts/lua/check-bash-dialect.lua images/default/lib-common.sh scripts/plan-binary-probe.sh scripts/test-pretooluse-command-policy.sh"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-26 darwin ok:pretooluse-command-policy:40 arms (work/2400-prg4 @ b2c62d37a)"
+STEP_READS="scripts/hooks/claude-pretooluse-command-policy.sh scripts/lua/check-bash-dialect.lua images/default/lib-common.sh scripts/plan-binary-probe.sh scripts/lua/test-pretooluse-command-policy.lua"

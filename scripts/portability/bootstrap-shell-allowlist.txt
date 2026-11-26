@@ -31,7 +31,7 @@ build.sh
 scripts/check-yaml-reader-availability.sh
 # ...nor gate the push that arrives before it exists: the pre-push hook's
 # plan-only lane validates an issues-only push with this checker (881-29me),
-# and test-pre-push-plan-lane-fails-closed-without-binary.sh ARM 3 pins that
+# and test-pre-push-plan-lane-fails-closed-without-binary.lua ARM 3 pins that
 # such a push is ACCEPTED with no plan binary, so the checker cannot run on
 # Lua (§6.5 row 2, 2222-icbs).
 scripts/check-issue-citation-convention.sh

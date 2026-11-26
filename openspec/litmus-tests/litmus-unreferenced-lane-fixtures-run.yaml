@@ -52,7 +52,7 @@ critical_path:
     assert_output_contains: "ok:plan-binary-survives-wrapper:3 arms"
     timeout_ms: 120000
   - step: "a path deleted on both sides is agreement in the plan lane"
-    command: "bash scripts/test-plan-lane-agreeing-deletion.sh 2>&1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-plan-lane-agreeing-deletion.lua 2>&1"
     expected_behavior: "ok:plan-lane-agreeing-deletion:"
     assert_exit: 0
     assert_output_contains: "ok:plan-lane-agreeing-deletion:"

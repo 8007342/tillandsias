@@ -75,9 +75,9 @@ critical_path:
     # there rather than re-declaring under `packets:`, which would be a G-Set
     # no-op — and case 5 removes the override to prove case 4 passes because
     # the channel was read, not because the rule went lax.
-    command: "bash scripts/test-plan-orders-fragment-fold.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-plan-orders-fragment-fold.lua"
     timeout_ms: 180000
-    expected_behavior: "PASS: plan-orders fragment-fold fixture (order 832-q4mn)"
+    expected_behavior: "ok:plan-orders-fragment-fold:6 arms"
 
 observability:
   traces:
