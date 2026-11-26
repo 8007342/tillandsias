@@ -10,14 +10,14 @@
 #
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking a newly-added Rust test cannot pin source text without a negative control (1473-scdq)"
-STEP_SCRIPT="scripts/test-rust-source-pin-added.sh"
+STEP_LUA="scripts/lua/test-rust-source-pin-added.lua"
 STEP_ERROR="the Rust source-pin guard no longer refuses an added include_str! pin, or admits one it should not (1473-scdq); see which arm failed above"
 STEP_OK="added Rust source-literal pins need a negative control or a stated reason"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-29 darwin ok:rust-source-pin-added-fixture:7/7"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:rust-source-pin-added-fixture:8 arms (work/2385-psbb @ 10fa474d9)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
 STEP_LANES="checkout"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/lua/check-rust-source-pin-added.lua scripts/test-rust-source-pin-added.sh"
+STEP_READS="scripts/lua/check-rust-source-pin-added.lua scripts/lua/test-rust-source-pin-added.lua"

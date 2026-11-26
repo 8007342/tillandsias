@@ -14,7 +14,7 @@ select-work-batch.sh
 ```
 
 - **Today the vocabulary is closed.** `crates/tillandsias-plan/src/lib.rs` allows only haiku, sonnet and opus. `local` is added there.
-- **The fixture changes too.** `scripts/test-packet-tier-fields.sh` gains an arm that `local` is accepted, and keeps the arm that `gpt` is refused.
+- **The fixture changes too.** `scripts/lua/test-packet-tier-fields.lua` gains an arm that `local` is accepted, and keeps the arm that `gpt` is refused.
 
 ## 2. The delegate
 
