@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: shell-fixtures-ported-to-lua-batch-8
+    order: "2412-ewmt"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 6
+    owned_files:
+      - scripts/lua/check-yaml-reader-availability.lua
+      - scripts/lua/test-plan-binary-probe-usage-determinism.lua
+      - scripts/lua/test-harness-rollback.lua
+      - scripts/lua/test-image-usability-check.lua
+      - scripts/lua/test-uninstall-matcher-spares-bystanders.lua
+      - scripts/lua/test-capture-helper.lua
+    title: "six shell fixtures ported to Lua (batch 8), none on any open work ref"
+    context: |
+      Replaces obsoleted 2410-g5vq (all of whose ports were Family D's). FILTERED FIRST: no .lua on trunk, no
+      origin/work/* ref deletes the .sh (103 deletions across refs checked), no open PR touches either path
+      (559 PR files checked), credential/vault/secret fixtures and the five waiver candidates excluded.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its main assertions are mutated; callers run the .lua; the .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by gate steps and litmus tests"
+    provenance: "coordinator 2026-11-26 option (a), yoga"
+    related: [2410-g5vq, 2411-tqdz]
+    events:
+      - {type: claimed, ts: "2026-11-26T19:16:40Z", host: yoga, summary: "claimed; work ref work/2412-ewmt"}
