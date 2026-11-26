@@ -365,7 +365,7 @@ arm("ARM 58: HEAVY_MAX caps a train's heavy and unmeasured members; the rest go 
 -- builder wrapper (a named skip where there is no builder).
 local STUB60 = [[
 [ -e dirt-from-shadow ] && dirty=dirty || dirty=clean
-echo "shadow gates=$(grep -c . "@GATES@") nice=$(nice) $dirty shared=${TILLANDSIAS_SHARED_TARGET:-on}" >> "@SEEN@"
+echo "shadow gates=$(grep -c . "@GATES@") nice=$(n=$(nice 2>/dev/null) || n=$(ps -o nice= -p $$); echo $n) $dirty shared=${TILLANDSIAS_SHARED_TARGET:-on}" >> "@SEEN@"
 echo dirt > dirt-from-shadow; echo dirt >> seed-dirt
 if [ -e c83.txt ]; then echo "heavy:guard:x fixtures=9 crates=28 changed=1"; exit 10; fi
 if [ -e c82.txt ]; then echo "select:intake fixtures=6/9 deferred=1 crates=0/28 changed=1 base=x"; exit 1; fi
@@ -416,7 +416,10 @@ local tree_pat = "^shadow:tree " .. (S60.dir .. "/shtree"):gsub("%p", "%%%0") ..
 if not (landed(l60, "^shadow:accept:") == 3 and line(l60, tree_pat) and line(o60, "^land:81 ") and line(o60, "^land:83 ")
     and line(o60, "^evict:land%-queue:82")) then b60[#b60 + 1] = "a-landing" end
 -- nice -n 10 adds to the caller's own niceness: an agent session at 5 gives 15.
-local nice60 = math.min(19, (tonumber(text.trim((L:sh("nice")))) or 0) + 10)
+-- BSD nice with no utility prints usage and exits 1 (measured on darwin, 2401-mrdx), so
+-- the shadow and this read both ask `nice`, falling back to ps for the same number.
+local NICE_SH = "n=$(nice 2>/dev/null) || n=$(ps -o nice= -p $$); echo $n"
+local nice60 = math.min(19, (tonumber(text.trim((L:sh(NICE_SH)))) or 0) + 10)
 if landed(L:read(S60.dir .. "/seen"), "gates=3 nice=" .. nice60 .. " clean shared=off$") ~= 3 then b60[#b60 + 1] = "b-order" end
 if not (text.trim((L:sh("git -C " .. q(S60.WORK) .. " status --porcelain --untracked-files=no"))) == ""
     and L:sh("[ -e " .. q(S60.WORK .. "/dirt-from-shadow") .. " ] || [ -e " .. q(S60.WORK .. "/target/shadow-intake") .. " ] || echo clean") ~= ""
