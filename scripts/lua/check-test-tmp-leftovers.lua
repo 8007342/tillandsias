@@ -14,11 +14,13 @@
 -- other process on the host as well; the private dir measures only the run.
 --
 -- Usage: tillandsias-plan script run scripts/lua/check-test-tmp-leftovers.lua -- <dir>
--- Verdict: ok:test-tmp-leftovers:0 left | violation:test-tmp-leftovers:<n> | could-not-run:...
+-- Verdict: ok:test-tmp-leftovers:0 left | violation:test-tmp-leftovers:<n> | could-not-run:... | skip:test-tmp-leftovers:no-dir
 
 local NAME = "test-tmp-leftovers"
 local dir = arg and arg[1]
-if not dir or dir == "" then verdict.could_not_run(NAME, "no directory given (-- <dir>)") end
+-- Run with no directory (gate-changed runs every check-*.lua bare), there is no test run to judge:
+-- a named skip. build.sh hands it the workspace test run's temp dir.
+if not dir or dir == "" then verdict.emit("skip:" .. NAME .. ":no-dir (build.sh hands it the workspace test run's temp dir)", 0) end
 -- fs is confined to the repository and this dir is outside it, so ls reads it.
 local r = proc.run{ argv = { "ls", "-A1", "--", dir }, timeout_ms = 30000 }
 if r.status ~= "exited" or r.code ~= 0 then
