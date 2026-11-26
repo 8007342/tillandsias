@@ -25,7 +25,7 @@ local T = fixture.new("session-tokens")
 local ROOT, SH = fixture.repo_root(), fixture.posix_shell()
 local PLAN = fixture.plan_binary()
 if PLAN == "" then T:refuse("no-plan-binary", "build one: cargo build --release -p tillandsias-plan") end
-if PLAN:sub(1, 1) ~= "/" then PLAN = ROOT .. "/" .. PLAN:gsub("^%./", "") end
+if not fixture.is_abs(PLAN) then PLAN = ROOT .. "/" .. PLAN:gsub("^%./", "") end
 local ST, CM = ROOT .. "/scripts/session-tokens.sh", ROOT .. "/scripts/cycle-metrics.sh"
 if not fs.exists("scripts/session-tokens.sh") then T:refuse("subject-missing", "scripts/session-tokens.sh") end
 
