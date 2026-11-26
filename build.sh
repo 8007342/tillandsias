@@ -6635,6 +6635,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus YAML parse gate passed"
 
+    # ORDER 2402-mw57 — two files declared one litmus id and the runner loaded
+    # only one of them, so the other's steps never ran.
+    _step "Checking every litmus id is declared once, by the file it resolves to (2402-mw57)..."
+    if ! _run_lua_decider "scripts/lua/check-litmus-id-unique.lua" 2>&1; then
+        _error "a litmus id is declared twice, or by a file it does not resolve to — the runner loads one and the other never runs (2402-mw57; the REFUSED lines are above)"
+        exit 1
+    fi
+    _info "Litmus id uniqueness gate passed"
+
     # ORDER 1594-mtc3 — relay-preflight's phase 5 does not select a test-*.sh
     # the diff deletes (every shell->lua port deletes one) as a touched fixture.
     _step "Checking relay-preflight skips deleted fixtures (1594-mtc3)..."
