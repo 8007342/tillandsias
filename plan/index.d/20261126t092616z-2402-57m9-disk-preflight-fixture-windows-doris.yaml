@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed and fixed by doris-windows 2026-11-26 (three of three Windows lib-red packets, ruled by macuahuitl).
+packets:
+  - packet_id: disk-preflight-test-fixture-cannot-open-a-directory-on-windows
+    order: 2402-57m9
+    status: implemented
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, rust-test, disk-preflight]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-plan/src/disk_preflight.rs
+    title: |
+      Four disk_preflight tests fail on native Windows before any arm runs: the fixture opens a directory with File::open to set its mtime
+    context: |
+      Measured on doris (native Windows) 2026-11-26, origin/linux-next, cargo test --release -p tillandsias-plan --lib:
+        unreadable_free_space_prunes_nothing, below_the_floor_incremental_is_pruned_oldest_first_and_the_run_is_ok,
+        at_the_floor_nothing_is_pruned_and_a_dry_run_removes_nothing, a_held_target_is_kept_and_named_busy
+      all panicked at disk_preflight.rs:637:18, `std::fs::File::open(&s).unwrap()`. Actual: Err(Os { code: 5,
+      kind: PermissionDenied, message: "Access is denied." }). On Windows a directory opens only with
+      FILE_FLAG_BACKUP_SEMANTICS, and set_modified needs FILE_WRITE_ATTRIBUTES; File::open asks for
+      neither. The production code is not involved: the failure is in the test fixture.
+    verifiable_closure: |
+      cargo test -p tillandsias-plan --lib disk_preflight::tests passes on native Windows (10/10 on doris)
+      and on Linux, where the helper is File::open as before.
+    unscoreable: "the closure is the existing Rust unit tests, run on both platforms; no litmus pin"
+    next_action: >
+      Implemented, test-only: open_dir_for_mtime() opens with FILE_WRITE_ATTRIBUTES and
+      FILE_FLAG_BACKUP_SEMANTICS on Windows, and File::open elsewhere.
+status:
+  - packet_id: disk-preflight-test-fixture-cannot-open-a-directory-on-windows
+    field: status
+    value: implemented
+    ts: "2026-11-26T09:26:16Z"
+    host: doris
