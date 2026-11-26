@@ -5874,16 +5874,26 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # in-process races --test-threads=1 serialised cannot occur (~45 s against
     # ~97 s on yoga, 0 failures in a 10-run soak); _fg_filter is libtest's
     # --exact form, which nextest accepts after `--`.
+    # ORDER 2408-rkvd: this pass compiles mod tray, which the --workspace pass cannot see, so
+    # it gets its own temp dir under /tmp and the same leftovers check.
+    _fg_tmp="$(mktemp -d /tmp/tillandsias-gate-fg-tests.XXXXXX)" || { _error "could not make the feature-gated run's temp dir under /tmp (2408-rkvd)"; exit 1; }
     if _test_runner_is_nextest; then
-    _run cargo nextest run -p tillandsias-headless --bin tillandsias \
+    TMPDIR="$_fg_tmp" _run cargo nextest run -p tillandsias-headless --bin tillandsias \
         --features tray,listen-vsock --no-fail-fast \
         --manifest-path "$SCRIPT_DIR/Cargo.toml" ${_fg_filter[@]+-- "${_fg_filter[@]}"} 2>&1 |
         tee "$_fg_transcript" || _fg_rc="${PIPESTATUS[0]}"
     else
-    _run cargo test -p tillandsias-headless --bin tillandsias \
+    TMPDIR="$_fg_tmp" _run cargo test -p tillandsias-headless --bin tillandsias \
         --features tray,listen-vsock --no-fail-fast \
         --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 ${_fg_filter[@]+"${_fg_filter[@]}"} 2>&1 |
         tee "$_fg_transcript" || _fg_rc="${PIPESTATUS[0]}"
+    fi
+    _fg_tmp_rc=0
+    _run_lua_decider "scripts/lua/check-test-tmp-leftovers.lua" "$_fg_tmp" 2>&1 || _fg_tmp_rc=$?
+    rm -rf -- "${_fg_tmp:?}"
+    if [ "$_fg_tmp_rc" -ne 0 ]; then
+        _error "the tray/listen-vsock tests left entries in their temp dir (the REFUSED lines above name them) — 2408-rkvd"
+        exit 1
     fi
     if [[ $_fg_rc -ne 0 ]]; then
         _error "the tray/listen-vsock test set failed (cargo rc=$_fg_rc) — transcript: $_fg_transcript"
