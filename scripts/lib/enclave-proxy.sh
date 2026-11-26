@@ -40,7 +40,7 @@
 # run-forge-project.sh runs against a mounted checkout), so a binary dependency
 # converts a stale list into a hard failure. One shell definition plus a GATE
 # that fails when it diverges from the Rust constant gets the same protection
-# without the runtime coupling — scripts/test-enclave-proxy-lib.sh is that gate,
+# without the runtime coupling — scripts/lua/test-enclave-proxy-lib.lua is that gate,
 # and it parses main.rs rather than restating the value, so the next change to
 # ENCLAVE_NO_PROXY_BASE breaks the build instead of stranding the fleet.
 #

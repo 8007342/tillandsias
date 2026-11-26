@@ -5237,7 +5237,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # stale claim, because "writes nothing" is trivially satisfied by breaking
     # the reaper and would silently delete 641-e2qa criterion 2.
     _step "Checking expire-claims writes only when asked (1067-24q6)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-expire-claims-write-is-opt-in.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-expire-claims-write-is-opt-in.lua" 2>&1; then
         _error "expire-claims mutates without an explicit --write, or --write no longer expires — a read probe can release another host's lease"
         exit 1
     fi
@@ -5538,7 +5538,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # main.rs rather than restating the value, so the next change to
     # ENCLAVE_NO_PROXY_BASE breaks the build instead of stranding the fleet.
     _step "Checking the enclave proxy list has one definition (923-rmtw)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-enclave-proxy-lib.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-enclave-proxy-lib.lua" 2>&1; then
         _error "the shell enclave proxy list drifted from ENCLAVE_NO_PROXY_BASE, or a script re-pasted it"
         exit 1
     fi

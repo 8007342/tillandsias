@@ -57,7 +57,6 @@
 1 scripts/run-litmus-test.sh
 8 scripts/spec-index-ensure.sh
 1 scripts/test-opencode-vault-auth-content.sh
-1 scripts/test-tool-dispatch-lib.sh
 6 scripts/tillandsias-host-push-cert.sh
 10 scripts/update-convergence-dashboard.sh
 3 scripts/windows-host-capability-probe.sh

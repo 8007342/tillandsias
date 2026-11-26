@@ -511,12 +511,7 @@ scripts scripts/test-check-credential-channel.sh 12
 scripts scripts/test-claims-fleet-visible.sh 13
 scripts scripts/test-codex-oauth-restore.sh 1
 scripts scripts/test-enclave-network-internal-discovery.sh 1
-scripts scripts/test-enclave-proxy-lib.sh 4
-scripts scripts/test-expire-claims-write-is-opt-in.sh 4
-scripts scripts/test-fake-cloudflare.sh 11
 scripts scripts/test-fleet-heartbeat-sees-a-ledger-filed-blocker.sh 13
-scripts scripts/test-fleet-msg-same-host.sh 5
-scripts scripts/test-forge-project-trust-seeds.sh 1
 scripts scripts/test-forge-src-budget-report.sh 1
 scripts scripts/test-forge-swap-service.sh 6
 scripts scripts/test-fragment-batch-never-collapses-verdicts.sh 1
@@ -527,7 +522,6 @@ scripts scripts/test-git-mirror-vault-agent-auto-auth.sh 18
 scripts scripts/test-github-token-auto-rotation.sh 1
 scripts scripts/test-groundtruth-corpus-declaration.sh 8
 scripts scripts/test-guest-binaries-nix-lane.sh 9
-scripts scripts/test-harness-byte-cheap.sh 1
 scripts scripts/test-harness-rollback.sh 6
 scripts scripts/test-headless-sidecar-target-gate.sh 1
 scripts scripts/test-hook-mover-enumeration-is-batched.sh 1
@@ -598,7 +592,6 @@ scripts scripts/test-support/podman-mock.sh 25
 scripts scripts/test-support/secret-tool-fake.sh 1
 scripts scripts/test-timing-clock-resolution.sh 2
 scripts scripts/test-token-instrument.sh 2
-scripts scripts/test-tool-dispatch-lib.sh 18
 scripts scripts/test-tool-materialize-litmus-surfaces-arm.sh 3
 scripts scripts/test-tool-materialize.sh 5
 scripts scripts/test-tray-surface-parity-gate.sh 1
