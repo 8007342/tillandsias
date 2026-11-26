@@ -5517,7 +5517,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # it, so this asserts it directly, and its negative control reproduces the
     # shell mangling that started the order.
     _step "Checking ledger prose round-trips byte-identically (971-7muc)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-ledger-prose-roundtrip.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-ledger-prose-roundtrip.lua" 2>&1; then
         _error "a ledger write alters the prose it was given — the record cannot be trusted to say what its author wrote"
         exit 1
     fi
@@ -7161,7 +7161,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # negative control matters as much as the rest: arms that only check a
     # refusal are satisfied by a tool that refuses unconditionally.
     _step "Checking a land gate refusal names its step and its log (1033-iycs)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-land-gate-refusal-names-its-step.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-land-gate-refusal-names-its-step.lua" 2>&1; then
         _error "the land tool's gate refusal lost its diagnostic (1033-iycs) — see the verdict line above"
         exit 1
     fi
