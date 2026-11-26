@@ -25,6 +25,7 @@ packets:
   - 'The door (or the kit) reaps the worktrees and scratch a killed guard leaves, or the guard cannot leave any.'
   - 'git worktree list in the live checkout is unchanged after a preflight whose guards hit the deadline.'
   verifiable_closure: 'A preflight run with a guard forced to the deadline leaves git worktree list and $TMPDIR tmp.* counts unchanged.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the future litmus is litmus-preflight-door-reaps-killed-guard-worktrees.yaml.'
   next_action: 'Land #1627 (removes this leaker), then grep remaining .sh fixtures for worktree add under mktemp, and make the door reap registered worktrees under its scratch on a kill.'
   provenance: 'tlatoanis-macbook-air 2026-11-26; worktrees removed with git worktree remove --force + prune after checking each was scratch.'
   related: [2404-grd6, 2400-prg4, 2195-wlsh]
