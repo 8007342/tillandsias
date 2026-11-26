@@ -25,7 +25,7 @@ local EXEMPT = {
     ["scripts/lua/test-cycle-flow-emit-idempotency.lua"] = "emit-only (--emit-flow, its own FLOW_LOG); never reports",
     ["scripts/lua/test-timing-record-carries-reproduced.lua"] = "emit-only (--emit-timing / --emit-timing-batch); never reports",
     ["scripts/lua/test-mcp-transport-death-trace.lua"] = "quotes the outage grep as text; never runs the script",
-    ["scripts/test-tool-dispatch-lib.sh"] = "lists the script as a converted file; never runs it",
+    ["scripts/lua/test-tool-dispatch-lib.lua"] = "lists the script as a converted file; never runs it",
     ["scripts/lua/test-gate-step-private-metrics-fallback.lua"] = "names it in prose only; never runs it",
 }
 

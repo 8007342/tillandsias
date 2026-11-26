@@ -1,196 +1,231 @@
-#!/usr/bin/env bash
-# tillandsias-doctor — one command that says what in this forge works and why
-# not: the host lane socket, each MCP server, the router (direct and through
-# the proxy), the flutter toolchain, the cheatsheets, free space, and that
-# there is no in-forge renderer.
-#
-# Usage: tillandsias-doctor [--json]
-#
-# Exit 0 when every check is ok or skipped, 1 when any failed.
-#
-# WHY (order 1874-6p63). One dead lane socket showed up as four unrelated
-# faults (publish_local "not shipped", browser.open missing, flutter exit 69,
-# a router self-test that could not tell proxy from router) and cost an agent
-# more than twelve calls to localise. Each row here names its own reason.
-#
-# @trace spec:forge-environment-discoverability, spec:mcp-tool-socket
-# @cheatsheet runtime/forge-container.md
+#!/usr/bin/env lua
+-- tillandsias-doctor — one command that says what in this forge works and why
+-- not: the host lane socket, each MCP server, the router (direct and through
+-- the proxy), the flutter toolchain, the cheatsheets, free space, and that
+-- there is no in-forge renderer.
+--
+-- Usage: tillandsias-doctor [--json]
+--
+-- Exit 0 when every check is ok or skipped, 1 when any failed.
+--
+-- WHY (order 1874-6p63). One dead lane socket showed up as four unrelated
+-- faults (publish_local "not shipped", browser.open missing, flutter exit 69,
+-- a router self-test that could not tell proxy from router) and cost an agent
+-- more than twelve calls to localise. Each row here names its own reason.
+--
+-- Stock Lua 5.4 (order 2389-8rmy). Every probe still runs as a shell command;
+-- each value that reaches one is single-quoted by q(), never spliced.
+--
+-- @trace spec:forge-environment-discoverability, spec:mcp-tool-socket, order:2389-8rmy
+-- @cheatsheet runtime/forge-container.md
 
-set -uo pipefail
+local USAGE = [[tillandsias-doctor — one command that says what in this forge works and why
+not: the host lane socket, each MCP server, the router (direct and through
+the proxy), the flutter toolchain, the cheatsheets, free space, and that
+there is no in-forge renderer.
 
-JSON=0
-case "${1:-}" in
-    --json) JSON=1 ;;
-    -h|--help) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    "") ;;
-    *) echo "tillandsias-doctor: unknown arg '$1'" >&2
-       echo "usage: tillandsias-doctor [--json]" >&2; exit 2 ;;
-esac
+Usage: tillandsias-doctor [--json]
 
-# Every input is an env seam so the fixture can run this outside the image.
-LIB_DIR="${TILLANDSIAS_DOCTOR_LIB_DIR:-/usr/local/lib/tillandsias}"
-MCP_CONFIG="${TILLANDSIAS_DOCTOR_MCP_CONFIG:-$HOME/.config/opencode/config.json}"
-CHEATSHEETS="${TILLANDSIAS_DOCTOR_CHEATSHEETS:-/opt/cheatsheets}"
-SRC_DIR="${TILLANDSIAS_DOCTOR_SRC_DIR:-$HOME/src}"
-CACHE_DIR="${TILLANDSIAS_DOCTOR_CACHE_DIR:-$HOME/.cache}"
-PROBE_SECS="${TILLANDSIAS_DOCTOR_PROBE_SECS:-5}"
-PROJECT="${TILLANDSIAS_PROJECT:-}"
+Exit 0 when every check is ok or skipped, 1 when any failed.
+]]
 
-# shellcheck source=../lib-lane.sh
-source "$LIB_DIR/lib-lane.sh" 2>/dev/null || lane_socket_state() { echo unknown; }
+local JSON = false
+local a = arg[1]
+if a == "--json" then
+    JSON = true
+elseif a == "-h" or a == "--help" then
+    io.stdout:write(USAGE); os.exit(0)
+elseif a ~= nil and a ~= "" then
+    io.stderr:write("tillandsias-doctor: unknown arg '" .. a .. "'\n", "usage: tillandsias-doctor [--json]\n")
+    os.exit(2)
+end
 
-NAMES=() STATES=() DETAILS=()
-row() { NAMES+=("$1"); STATES+=("$2"); DETAILS+=("$3"); }
+local function q(s) return "'" .. tostring(s):gsub("'", "'\\''") .. "'" end
+-- sh(script) -> stdout, exit code. Each script runs under bash, as the shell
+-- version did (lib-lane.sh is bash; pipefail is set where a pipe is judged).
+local function sh(script)
+    local h = io.popen("bash -c " .. q(script))
+    local o = h:read("a") or ""
+    local _, _, code = h:close()
+    return o, code or 0
+end
+local function chomp(s) return (s:gsub("\n+$", "")) end
+local function flat(s) return (s:gsub("\n", " ")) end
+local function has(cmd) local _, c = sh("command -v " .. q(cmd) .. " >/dev/null 2>&1"); return c == 0 end
+-- "rc\n<rest>" from a script that prints its own exit code first.
+local function rc_and(o) local rc, rest = o:match("^(%d+)\n?(.*)$"); return tonumber(rc) or 1, rest or "" end
 
-# ── Lane socket ───────────────────────────────────────────────
-lane="$(lane_socket_state)"
-case "$lane" in
-    ready)
-        # 2070-mtf9: the tray writes lane-stale beside the socket when an
-        # older launcher still serves this lane after an upgrade. It answers,
-        # but every tool runs the old build.
-        stale_note="$(dirname "${TILLANDSIAS_CONTROL_SOCKET}")/lane-stale"
-        if [ -s "$stale_note" ]; then
-            row lane failed "host_lane=stale-build: $(head -c 600 "$stale_note" | tr '\n' ' ')— remedy: ask the operator to relaunch this forge's window from the tray, so the installed build serves the lane"
-        else
-            row lane ok "host_lane=ready socket=${TILLANDSIAS_CONTROL_SOCKET}"
-        fi
-        ;;
-    stale)  row lane failed "host_lane=stale: ${TILLANDSIAS_CONTROL_SOCKET} exists but nothing on the host accepts (connect refused); publish_local, browser.open and flutter all fail until the tray re-serves the lane" ;;
-    absent) row lane failed "host_lane=absent: no socket at ${TILLANDSIAS_CONTROL_SOCKET}; this forge was launched without a lane" ;;
-    unset)  row lane skip "host_lane=unset: TILLANDSIAS_CONTROL_SOCKET is not set; this forge has no host lane" ;;
-    *)      row lane failed "host_lane=unknown: the lane could not be judged (lib-lane.sh missing from $LIB_DIR, or no curl)" ;;
-esac
+-- Every input is an env seam so the fixture can run this outside the image.
+local function env(n, d) local v = os.getenv(n); if v == nil or v == "" then return d end return v end
+local HOME = os.getenv("HOME") or ""
+local LIB_DIR = env("TILLANDSIAS_DOCTOR_LIB_DIR", "/usr/local/lib/tillandsias")
+local MCP_CONFIG = env("TILLANDSIAS_DOCTOR_MCP_CONFIG", HOME .. "/.config/opencode/config.json")
+local CHEATSHEETS = env("TILLANDSIAS_DOCTOR_CHEATSHEETS", "/opt/cheatsheets")
+local SRC_DIR = env("TILLANDSIAS_DOCTOR_SRC_DIR", HOME .. "/src")
+local CACHE_DIR = env("TILLANDSIAS_DOCTOR_CACHE_DIR", HOME .. "/.cache")
+local PROBE_SECS = env("TILLANDSIAS_DOCTOR_PROBE_SECS", "5")
+local PROJECT = os.getenv("TILLANDSIAS_PROJECT") or ""
+local SOCK = os.getenv("TILLANDSIAS_CONTROL_SOCKET") or ""
 
-# ── MCP servers ───────────────────────────────────────────────
-# Each server is started as OpenCode starts it, sent one JSON-RPC initialize,
-# and judged by its first line: a `result` is ok, an `error`, no answer or an
-# exit is failed, with the server's own words as the reason.
-mcp_probe() {
-    local name="$1"; shift
-    local out err rc
-    err="$(mktemp)"
-    out="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"tillandsias-doctor","version":"1"}}}' \
-        | timeout "$PROBE_SECS" "$@" 2>"$err" | head -n 1)"
-    rc=$?
-    local why
-    why="$(tr '\n' ' ' <"$err" | sed 's/  */ /g; s/ $//' | cut -c1-240)"
-    rm -f "$err"
-    if [[ "$out" == *'"result"'* ]]; then
-        row "mcp:$name" ok "initialize answered"
-    elif [[ "$out" == *'"error"'* ]]; then
-        row "mcp:$name" failed "initialize refused: $(printf '%s' "$out" | cut -c1-240)"
-    elif [ -n "$why" ]; then
-        row "mcp:$name" failed "$why"
+local NAMES, STATES, DETAILS = {}, {}, {}
+local function row(n, s, d) NAMES[#NAMES + 1] = n; STATES[#STATES + 1] = s; DETAILS[#DETAILS + 1] = d end
+
+-- ── Lane socket ───────────────────────────────────────────────
+local lane = chomp((sh("source " .. q(LIB_DIR .. "/lib-lane.sh") .. " 2>/dev/null || lane_socket_state() { echo unknown; }; lane_socket_state")))
+if lane == "ready" then
+    -- 2070-mtf9: the tray writes lane-stale beside the socket when an
+    -- older launcher still serves this lane after an upgrade. It answers,
+    -- but every tool runs the old build.
+    local note = (SOCK:match("^(.*)/[^/]*$") or ".") .. "/lane-stale"
+    local text, c = sh("[ -s " .. q(note) .. " ] && head -c 600 " .. q(note))
+    if c == 0 then
+        row("lane", "failed", "host_lane=stale-build: " .. flat(text) .. "— remedy: ask the operator to relaunch this forge's window from the tray, so the installed build serves the lane")
     else
-        row "mcp:$name" failed "no answer to initialize within ${PROBE_SECS}s (rc=$rc)"
-    fi
-}
-
-if [ ! -r "$MCP_CONFIG" ]; then
-    row mcp failed "no MCP config at $MCP_CONFIG"
-elif ! command -v jq >/dev/null 2>&1; then
-    row mcp failed "jq is not on PATH; cannot read $MCP_CONFIG"
+        row("lane", "ok", "host_lane=ready socket=" .. SOCK)
+    end
+elseif lane == "stale" then
+    row("lane", "failed", "host_lane=stale: " .. SOCK .. " exists but nothing on the host accepts (connect refused); publish_local, browser.open and flutter all fail until the tray re-serves the lane")
+elseif lane == "absent" then
+    row("lane", "failed", "host_lane=absent: no socket at " .. SOCK .. "; this forge was launched without a lane")
+elseif lane == "unset" then
+    row("lane", "skip", "host_lane=unset: TILLANDSIAS_CONTROL_SOCKET is not set; this forge has no host lane")
 else
-    while IFS=$'\t' read -r name enabled cmd; do
-        [ -n "$name" ] || continue
-        if [ "$enabled" = "false" ]; then
-            row "mcp:$name" skip "disabled in $MCP_CONFIG"
-            continue
-        fi
-        # A read loop, not mapfile: same argv, and it also runs under the bash
-        # 3.2 a macOS host uses for the doctor's fixture (2006-wahn).
-        argv=()
-        while IFS= read -r _arg; do argv+=("$_arg"); done < <(printf '%s' "$cmd" | jq -r '.[]')
-        if [ "${#argv[@]}" -eq 0 ] || { [ ! -x "${argv[0]}" ] && ! command -v "${argv[0]}" >/dev/null 2>&1; }; then
-            row "mcp:$name" failed "command not found: ${argv[0]:-<empty>}"
-            continue
-        fi
-        mcp_probe "$name" "${argv[@]}"
-    done < <(jq -r '.mcp // {} | to_entries[] | select(.value.type != "remote") | [.key, ((.value.enabled // true)|tostring), (.value.command|tojson)] | @tsv' "$MCP_CONFIG" 2>/dev/null)
-fi
+    row("lane", "failed", "host_lane=unknown: the lane could not be judged (lib-lane.sh missing from " .. LIB_DIR .. ", or no curl)")
+end
 
-# ── Router, direct and through the proxy ──────────────────────
-# An unrouted name answers with the router's own "no route" body, so either
-# path proves the router is there without depending on a running service.
-router_probe() {
-    local how="$1"; shift
-    local body rc
-    body="$(timeout "$PROBE_SECS" curl -sS --max-time "$PROBE_SECS" "$@" 2>&1)"
-    rc=$?
-    if [[ "$body" == *tillandsias-router* ]]; then
-        row "router:$how" ok "the router answered"
-    elif [ "$rc" -eq 0 ]; then
-        row "router:$how" failed "an answer, but not from the router: $(printf '%s' "$body" | tr '\n' ' ' | cut -c1-160)"
+-- ── MCP servers ───────────────────────────────────────────────
+-- Each server is started as OpenCode starts it, sent one JSON-RPC initialize,
+-- and judged by its first line: a `result` is ok, an `error`, no answer or an
+-- exit is failed, with the server's own words as the reason.
+local INIT = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"tillandsias-doctor","version":"1"}}}'
+local function mcp_probe(name, argv)
+    local words = {}
+    for i, w in ipairs(argv) do words[i] = q(w) end
+    local rc, rest = rc_and((sh("set -o pipefail; err=\"$(mktemp)\"; out=\"$(printf '%s\\n' " .. q(INIT)
+        .. " | timeout " .. q(PROBE_SECS) .. " " .. table.concat(words, " ") .. " 2>\"$err\" | head -n 1)\"; rc=$?; "
+        .. "printf '%s\\n%s\\n' \"$rc\" \"$out\"; cat \"$err\"; rm -f \"$err\"")))
+    local out, err = rest:match("^([^\n]*)\n?(.*)$")
+    local why = flat(err or ""):gsub(" +", " "):gsub(" $", ""):sub(1, 240)
+    if out:find('"result"', 1, true) then
+        row("mcp:" .. name, "ok", "initialize answered")
+    elseif out:find('"error"', 1, true) then
+        row("mcp:" .. name, "failed", "initialize refused: " .. out:sub(1, 240))
+    elseif why ~= "" then
+        row("mcp:" .. name, "failed", why)
     else
-        row "router:$how" failed "$(printf '%s' "$body" | tr '\n' ' ' | cut -c1-200) (curl rc=$rc)"
-    fi
-}
-if ! command -v curl >/dev/null 2>&1; then
-    row router failed "curl is not on PATH"
-else
-    probe_name="doctor-unrouted.${PROJECT:-forge}.localhost"
-    router_probe direct --noproxy '*' -H "Host: $probe_name" "http://router:8080/"
-    router_probe via-proxy -x "http://proxy:3128" "http://$probe_name/"
-fi
+        row("mcp:" .. name, "failed", "no answer to initialize within " .. PROBE_SECS .. "s (rc=" .. rc .. ")")
+    end
+end
 
-# ── Flutter toolchain ─────────────────────────────────────────
-if ! command -v flutter >/dev/null 2>&1; then
-    row flutter skip "flutter is not on PATH in this forge"
+local function lines(s)
+    local t = {}
+    -- As `while read -r` does: every newline ends a line, and a last line
+    -- without one still counts.
+    local rest = s:gsub("[^\n]*\n", function(l) t[#t + 1] = l:sub(1, -2); return "" end)
+    if rest ~= "" then t[#t + 1] = rest end
+    return t
+end
+
+if select(2, sh("[ -r " .. q(MCP_CONFIG) .. " ]")) ~= 0 then
+    row("mcp", "failed", "no MCP config at " .. MCP_CONFIG)
+elseif not has("jq") then
+    row("mcp", "failed", "jq is not on PATH; cannot read " .. MCP_CONFIG)
 else
-    ferr="$(timeout 60 flutter --version 2>&1 >/dev/null)"
-    frc=$?
-    if [ "$frc" -eq 0 ]; then
-        row flutter ok "flutter --version ran"
+    local listing = sh("jq -r '.mcp // {} | to_entries[] | select(.value.type != \"remote\") | [.key, ((.value.enabled // true)|tostring), (.value.command|tojson)] | @tsv' "
+        .. q(MCP_CONFIG) .. " 2>/dev/null")
+    for _, l in ipairs(lines(listing)) do
+        local name, enabled, cmd = l:match("^([^\t]*)\t([^\t]*)\t(.*)$")
+        if name and name ~= "" then
+            if enabled == "false" then
+                row("mcp:" .. name, "skip", "disabled in " .. MCP_CONFIG)
+            else
+                local argv = lines((sh("printf '%s' " .. q(cmd) .. " | jq -r '.[]'")))
+                local a0 = argv[1]
+                if not a0 or (select(2, sh("[ -x " .. q(a0) .. " ]")) ~= 0 and not has(a0)) then
+                    row("mcp:" .. name, "failed", "command not found: " .. (a0 or "<empty>"))
+                else
+                    mcp_probe(name, argv)
+                end
+            end
+        end
+    end
+end
+
+-- ── Router, direct and through the proxy ──────────────────────
+-- An unrouted name answers with the router's own "no route" body, so either
+-- path proves the router is there without depending on a running service.
+local function router_probe(how, ...)
+    local words = {}
+    for i, w in ipairs({ ... }) do words[i] = q(w) end
+    local rc, body = rc_and((sh("body=\"$(timeout " .. q(PROBE_SECS) .. " curl -sS --max-time " .. q(PROBE_SECS) .. " "
+        .. table.concat(words, " ") .. " 2>&1)\"; printf '%s\\n%s' \"$?\" \"$body\"")))
+    if body:find("tillandsias-router", 1, true) then
+        row("router:" .. how, "ok", "the router answered")
+    elseif rc == 0 then
+        row("router:" .. how, "failed", "an answer, but not from the router: " .. flat(body):sub(1, 160))
     else
-        row flutter failed "flutter --version exit $frc: $(printf '%s' "$ferr" | tr '\n' ' ' | cut -c1-200)"
-    fi
-fi
-
-# ── Cheatsheets ───────────────────────────────────────────────
-n_sheets="$(find "$CHEATSHEETS" -type f -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
-if [ "${n_sheets:-0}" -gt 0 ]; then
-    row cheatsheets ok "$n_sheets cheatsheets in $CHEATSHEETS"
+        row("router:" .. how, "failed", flat(body):sub(1, 200) .. " (curl rc=" .. rc .. ")")
+    end
+end
+if not has("curl") then
+    row("router", "failed", "curl is not on PATH")
 else
-    row cheatsheets failed "$CHEATSHEETS is empty or missing"
-fi
+    local probe_name = "doctor-unrouted." .. (PROJECT ~= "" and PROJECT or "forge") .. ".localhost"
+    router_probe("direct", "--noproxy", "*", "-H", "Host: " .. probe_name, "http://router:8080/")
+    router_probe("via-proxy", "-x", "http://proxy:3128", "http://" .. probe_name .. "/")
+end
 
-# ── Free space ────────────────────────────────────────────────
-space() {
-    local name="$1" dir="$2" line avail use
-    line="$(df -Pk "$dir" 2>/dev/null | tail -n 1)"
-    if [ -z "$line" ]; then
-        row "space:$name" failed "$dir is not mounted"
+-- ── Flutter toolchain ─────────────────────────────────────────
+if not has("flutter") then
+    row("flutter", "skip", "flutter is not on PATH in this forge")
+else
+    local frc, ferr = rc_and((sh("ferr=\"$(timeout 60 flutter --version 2>&1 >/dev/null)\"; printf '%s\\n%s' \"$?\" \"$ferr\"")))
+    if frc == 0 then
+        row("flutter", "ok", "flutter --version ran")
+    else
+        row("flutter", "failed", "flutter --version exit " .. frc .. ": " .. flat(ferr):sub(1, 200))
+    end
+end
+
+-- ── Cheatsheets ───────────────────────────────────────────────
+local n_sheets = tonumber((sh("find " .. q(CHEATSHEETS) .. " -type f -name '*.md' 2>/dev/null | wc -l"):match("%d+"))) or 0
+if n_sheets > 0 then
+    row("cheatsheets", "ok", n_sheets .. " cheatsheets in " .. CHEATSHEETS)
+else
+    row("cheatsheets", "failed", CHEATSHEETS .. " is empty or missing")
+end
+
+-- ── Free space ────────────────────────────────────────────────
+local function space(name, dir)
+    local line = chomp((sh("df -Pk " .. q(dir) .. " 2>/dev/null | tail -n 1")))
+    if line == "" then
+        row("space:" .. name, "failed", dir .. " is not mounted")
         return
-    fi
-    avail="$(printf '%s' "$line" | awk '{print $4}')"
-    use="$(printf '%s' "$line" | awk '{print $5}')"
-    if [ "${avail:-0}" -lt 102400 ]; then
-        row "space:$name" failed "$dir: $((avail / 1024)) MiB free ($use used)"
-    else
-        row "space:$name" ok "$dir: $((avail / 1024)) MiB free ($use used)"
-    fi
-}
-space workspace "$SRC_DIR"
-space cache "$CACHE_DIR"
+    end
+    local f = {}
+    for w in line:gmatch("%S+") do f[#f + 1] = w end
+    local avail, use = tonumber(f[4]) or 0, f[5] or ""
+    local what = dir .. ": " .. (avail // 1024) .. " MiB free (" .. use .. " used)"
+    row("space:" .. name, avail < 102400 and "failed" or "ok", what)
+end
+space("workspace", SRC_DIR)
+space("cache", CACHE_DIR)
 
-# ── Renderer ──────────────────────────────────────────────────
-row renderer info "no in-forge renderer: nothing here can display a page; open previews in the host browser with browser.open or publish_local, which need host_lane=ready"
+-- ── Renderer ──────────────────────────────────────────────────
+row("renderer", "info", "no in-forge renderer: nothing here can display a page; open previews in the host browser with browser.open or publish_local, which need host_lane=ready")
 
-# ── Report ────────────────────────────────────────────────────
-failed=0
-for st in "${STATES[@]}"; do [ "$st" = failed ] && failed=1; done
+-- ── Report ────────────────────────────────────────────────────
+local failed = 0
+for _, st in ipairs(STATES) do if st == "failed" then failed = 1 end end
 
-if [ "$JSON" -eq 1 ]; then
-    {
-        for i in "${!NAMES[@]}"; do
-            printf '%s\t%s\t%s\n' "${NAMES[$i]}" "${STATES[$i]}" "${DETAILS[$i]}"
-        done
-    } | jq -Rn --argjson failed "$failed" \
-        '{ok: ($failed == 0), checks: [inputs | split("\t") | {name: .[0], status: .[1], detail: .[2]}]}'
+if JSON then
+    local rows = {}
+    for i = 1, #NAMES do rows[i] = q(NAMES[i]) .. " " .. q(STATES[i]) .. " " .. q(DETAILS[i]) end
+    io.stdout:write((sh("printf '%s\\t%s\\t%s\\n' " .. table.concat(rows, " ") .. " | jq -Rn --argjson failed " .. failed
+        .. " '{ok: ($failed == 0), checks: [inputs | split(\"\\t\") | {name: .[0], status: .[1], detail: .[2]}]}'")))
 else
-    for i in "${!NAMES[@]}"; do
-        printf '%-18s %-7s %s\n' "${NAMES[$i]}" "${STATES[$i]}" "${DETAILS[$i]}"
-    done
-fi
-exit "$failed"
+    for i = 1, #NAMES do
+        io.stdout:write(string.format("%-18s %-7s %s\n", NAMES[i], STATES[i], DETAILS[i]))
+    end
+end
+os.exit(failed)

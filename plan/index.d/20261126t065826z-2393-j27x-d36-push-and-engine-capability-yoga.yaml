@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: forge-lua-helpers-d36-push-and-project-engine-capability
+    order: 2393-j27x
+    status: in_progress
+    kind: feature
+    title: "forge-lua-helpers D3.6 wave: lib-push-capability and lib-project-engine-capability bodies to Lua helpers"
+    capability_tags: [linux, podman, tooling]
+    owned_files:
+      - openspec/changes/forge-lua-helpers/design.md
+      - openspec/changes/forge-lua-helpers/tasks.md
+      - images/default/lib-push-capability.sh
+      - images/default/lua/push-capability.lua
+      - images/default/lib-project-engine-capability.sh
+      - images/default/lua/project-engine-capability.lua
+    depends_on: []
+    context: |
+      D3.6 extends the approved forge-lua-helpers change (umbrella 2048-wu3h) under the operator's 2026-11-25 ruling that
+      images/ shell is ported on its own track and verified in a container on a podman host (openspec/specs/ci-release
+      spec.md, methodology/convergence.yaml carried_obligations.backlogs shell-to-lua batching); approved by the
+      coordinator (macuahuitl-fedora) 2026-11-26. MEASURED pre-port execve in the forge image (strace -f, no network):
+      push-capability 9 (git, upload-pack, sed, awk, sort, tail, 2 cut, sh); project-engine-capability 16 (6 sed, 2 awk,
+      2 head, 2 sort, 2 tr, timeout, tillandsias-plan); expert-capability 24 (next PR, split). Measured and kept shell by
+      D3's own fork-reduction test: lib-lane 0, lib-embed-endpoint 1 (curl), lib-provider-limit 1-5 (date, mkdir; it
+      writes outside the fs root, the D3.4 reason).
+    exit_criteria:
+      - "Each helper's fixture is written red against the shell body first, then green; the existing litmus/fixture pins stay green."
+      - "Post-port execve counts, measured in the forge image on yoga, are lower than the pre-port counts recorded here."
+    verifiable_closure: |
+      litmus:project-engine-capability-verdict-grammar
+    provenance: "coordinator 2026-11-26 (D3.6 approval), yoga"
+    events:
+      - {type: claimed, ts: "2026-11-26T06:58:26Z", host: yoga, summary: "claimed; work ref work/2393-j27x"}

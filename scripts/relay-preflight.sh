@@ -344,7 +344,7 @@ if grep -q '^crates/tillandsias-plan/' <<<"$DIFF_ALL"; then
             printf '%s\n' "$_CAP_OUT" | sed 's/^/  /' >&2
             echo "refused:relay-preflight:check-plan-binary-current"
             _afford "the rebuilt plan binary does not carry the semantics check-plan-binary-current.sh expects" \
-                "read scripts/test-expire-claims-write-is-opt-in.sh's output above, fix it, then re-run"
+                "read scripts/lua/test-expire-claims-write-is-opt-in.lua's output above, fix it, then re-run"
             _restore_clean
             timing_emit relay-preflight relay "$T0" 1
             exit 1
