@@ -20,7 +20,7 @@ description: >
   default home is outside target/, an explicit TILLANDSIAS_CHECK_LOG_INDEX is
   honoured verbatim, a legacy target/ index is adopted exactly once by copy,
   the resolved index is intact after target/ is removed (and after a real
-  `cargo clean` where cargo is on PATH), and check-release-tier-freshness.sh
+  `cargo clean` where cargo is on PATH), and check-release-tier-freshness.lua
   still answers ok about a host's release tier after the sweep — where the
   pre-fix reader answered never:. Hermetic: every arm builds its own tree.
 

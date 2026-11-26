@@ -44,7 +44,7 @@
 #
 # Readers resolve through here too, not only writers: a host that has legacy
 # history but has not written since this change would otherwise answer
-# `never:release-tier` from check-release-tier-freshness.sh about a tier it
+# `never:release-tier` from check-release-tier-freshness.lua about a tier it
 # has exercised — a wrong answer about the very record this row protects.
 set -u
 
