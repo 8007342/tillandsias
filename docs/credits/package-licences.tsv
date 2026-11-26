@@ -1299,7 +1299,10 @@ inference	fedora	libyaml	0.2.5-18.fc44	MIT
 inference	fedora	libzstd	1.5.7-5.fc44	BSD-3-Clause OR GPL-2.0-only
 inference	fedora	llvm-filesystem	22.1.8-4.fc44	Apache-2.0 WITH LLVM-exception OR NCSA
 inference	fedora	llvm-libs	22.1.8-4.fc44	Apache-2.0 WITH LLVM-exception OR NCSA
+inference	fedora	lua	5.4.8-5.fc44	MIT
+inference	fedora	lua-filesystem	1.8.0-16.fc44	MIT
 inference	fedora	lua-libs	5.4.8-5.fc44	MIT
+inference	fedora	lua-lpeg	1.1.0-7.fc44	MIT
 inference	fedora	lz4-libs	1.10.0-4.fc44	GPL-2.0-or-later AND BSD-2-Clause
 inference	fedora	mesa-filesystem	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
 inference	fedora	mesa-vulkan-drivers	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
