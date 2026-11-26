@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-26, on macuahuitl-fedora's direction after yolanda's msys run of #1627.
+packets:
+- packet_id: lua-absoluteness-accepts-drive-paths
+  order: 2402-isab
+  status: implemented
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [windows, portability, fixtures, lua]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 2
+  title: 'No Lua file tests absoluteness by its first character; a C:/ path is absolute'
+  context: >-
+    On native Windows fixture.plan_binary() returns C:/.... A `p:sub(1, 1) ~= "/"` test read it as relative and
+    prefixed the repo root, so the path pointed nowhere. yolanda's msys run of #1627 measured two reds from it:
+    podman-sync-budgets never spawned the plan binary (rc=nil), and pretooluse-command-policy handed its hook stub an
+    unrunnable TILLANDSIAS_PLAN_BIN, which allowed everything unchecked. #1627 fixed its own three files. This sweep
+    fixes the 14 others: 12 fixtures use fixture.is_abs; test-groundtruth-regime-fails-closed and shadow-intake.lua
+    (which do not load common.fixture) take the inline drive test. A new guard, check-lua-posix-only-absolute.lua,
+    refuses the shape unless the same line accepts a drive path. It was red on the unswept trunk with exactly the 14
+    (violation:lua-posix-only-absolute:14). Its fixture, gate step 152, plants the shape and its controls and reads
+    the corpus.
+  exit_criteria:
+  - 'check-lua-posix-only-absolute is red on the unswept tree and green after the sweep.'
+  - 'The swept fixtures stay green on darwin and Linux, and go green on msys (yolanda).'
+  verifiable_closure: 'scripts/lua/test-lua-posix-only-absolute.lua (gate step 152): 8 arms, including the corpus arm.'
+  next_action: 'Implemented. yolanda to rerun the swept fixtures on msys.'
+  provenance: 'tlatoanis-macbook-air 2026-11-26; root cause from #1627''s msys reds.'
+  related: [2400-prg4]
+  events:
+  - {type: filed, ts: '2026-11-26T09:10:16Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}

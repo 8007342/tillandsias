@@ -1,0 +1,15 @@
+# Gate step — data, not code (order 1072-b7eq). Wired by 2402-isab.
+#
+# A first-character absoluteness test (`p:sub(1, 1) ~= "/"`) reads a native Windows
+# path C:/x as relative. yolanda's msys run of #1627 found two port reds from it.
+# The fixture plants the shape and its controls, and arm 7 reads the whole
+# scripts/lua + lib/lua corpus, so this one step runs the guard and pins it.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking no Lua file tests absoluteness by its first character"
+STEP_LUA="scripts/lua/test-lua-posix-only-absolute.lua"
+STEP_ERROR="a Lua file reads a Windows drive path as relative (2402-isab)"
+STEP_OK="Lua absoluteness tests accept drive paths"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-26 darwin ok:lua-posix-only-absolute-fixture:8 arms (work/2402-isab @ 1bdd940bf)"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY.
+STEP_READS="lib/lua/** scripts/lua/** scripts/lua/check-lua-posix-only-absolute.lua scripts/lua/test-lua-posix-only-absolute.lua"

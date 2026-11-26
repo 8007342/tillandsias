@@ -24,7 +24,7 @@ local T = fixture.new("resumable-claim-dirt")
 local ROOT, SH = fixture.repo_root(), fixture.posix_shell()
 local PLAN = fixture.plan_binary()
 if PLAN == "" then T:refuse("no-plan-binary", "build one: cargo build --release -p tillandsias-plan") end
-if PLAN:sub(1, 1) ~= "/" then PLAN = ROOT .. "/" .. PLAN:gsub("^%./", "") end
+if not fixture.is_abs(PLAN) then PLAN = ROOT .. "/" .. PLAN:gsub("^%./", "") end
 -- The detector and what it sources (859-b2zc: agent-identity.sh joined its dependencies).
 local SHIPPED = { "check-resumable-claim-dirt.sh", "plan-binary-probe.sh", "agent-identity.sh" }
 
