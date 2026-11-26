@@ -15,7 +15,7 @@
 #   on-exit  after a forge exits, read its record and publish it as a NEW plan
 #            fragment on the plan-only lane, detached and bounded by the caller;
 #            a failed push leaves one deferred line that `retry` (run from the
-#            slot's check-fleet-membership.sh todo) pushes later. Never delays
+#            slot's check-fleet-membership.lua todo) pushes later. Never delays
 #            the exit: the tray spawns this and does not wait.
 #   seed-env at launch, OFFLINE: fold the local plan copy's limit events and
 #            print the live ones as the TILLANDSIAS_PROVIDER_LIMIT_SHARED value

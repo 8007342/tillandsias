@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: fixture-kit-run-lets-a-door-refusal-read-as-done
+    field: status
+    value: implemented
+    ts: "2026-11-26T06:44:13Z"
+    host: yoga
+events:
+  - packet_id: fixture-kit-run-lets-a-door-refusal-read-as-done
+    event: {type: implemented, ts: "2026-11-26T06:44:13Z", host: yoga, summary: "implemented on work/2392-2gm8: T:run/T:must refuse door-refused by name unless refusal_ok; red first (the child carried on, ok:child:0 arms), green 7 arms; the 8 fixtures that read refusals still green"}

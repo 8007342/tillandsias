@@ -98,7 +98,7 @@ assert() {
 # red on real fragments (masked in the release gate until the plan-binary path
 # stopped being relative).
 run_guard() {
-    env -u TILLANDSIAS_REPO_ROOT -u PROJECT_ROOT -u TILLANDSIAS_PLAN_BIN \
+    env -u TILLANDSIAS_REPO_ROOT -u TILLANDSIAS_PLAN_BIN \
         "$REAL_PLAN" script run "$GUARD" -- --plan "$PWD/target/release/tillandsias-plan"
 }
 
