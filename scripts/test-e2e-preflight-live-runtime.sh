@@ -32,6 +32,13 @@ fi
 exit 0
 EOF
     chmod +x "$FAKE_BIN/podman"
+    # 2376-dcir: every case here is the PODMAN branch's logic. On Darwin the
+    # preflight never asks podman: it asks lsof whether the operator's VM image
+    # is held, so the verdict followed the real VM (measured 2026-11-26: case 3
+    # red with the VM up, case 1 red with it down). Pin the branch under test;
+    # the Darwin VZ branch has its own self-test (723-fndi).
+    printf '#!/bin/sh\n[ "${1:-}" = "-s" ] && { echo Linux; exit 0; }\necho Linux\n' >"$FAKE_BIN/uname"
+    chmod +x "$FAKE_BIN/uname"
 }
 
 # --- Case 1: a live forge is running -> must refuse -------------------------

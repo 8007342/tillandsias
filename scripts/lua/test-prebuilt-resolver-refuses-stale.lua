@@ -72,7 +72,17 @@ end
 
 -- 1 STALE: the binary predates its sources.
 local s = tree("stale")
-proc.run({ argv = { "touch", "-d", "2020-01-01", s .. "/target/debug/tillandsias-podman-cli" } })
+-- POSIX `touch -t`, never GNU `touch -d 2020-01-01`: BSD touch refuses that date
+-- (rc 1, mtime unchanged), and the stale arm then ran a fresh binary (2376-dcir).
+local function backdate(...)
+    local argv = { "touch", "-t", "202001010000" }
+    for _, p in ipairs({ ... }) do argv[#argv + 1] = p end
+    local t = proc.run({ argv = argv, timeout_ms = 10000 })
+    if t.status ~= "exited" or t.code ~= 0 then
+        verdict.could_not_run("prebuilt-resolver", "touch -t could not backdate: " .. (t.stderr or ""))
+    end
+end
+backdate(s .. "/target/debug/tillandsias-podman-cli")
 local r = run(s)
 local err = r.stderr or ""
 arm("1 STALE a prebuilt older than its sources is refused by name and never runs",
@@ -84,8 +94,7 @@ arm("1 STALE a prebuilt older than its sources is refused by name and never runs
 
 -- 2 FRESH: the sources predate the binary.
 local f = tree("fresh")
-proc.run({ argv = { "touch", "-d", "2020-01-01",
-    f .. "/crates/tillandsias-podman-cli/src/lib.rs", f .. "/crates/tillandsias-podman/src/lib.rs" } })
+backdate(f .. "/crates/tillandsias-podman-cli/src/lib.rs", f .. "/crates/tillandsias-podman/src/lib.rs")
 r = run(f)
 arm("2 FRESH a prebuilt newer than its sources runs",
     r.code == 0 and (r.stdout or ""):find("ran:prebuilt", 1, true) ~= nil

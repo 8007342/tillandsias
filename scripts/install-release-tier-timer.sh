@@ -17,7 +17,7 @@
 # moment to discover it, and the reason a block is always a surprise.
 #
 # Measured on yoga 2026-09-15, months into daily attested cycles:
-#   scripts/check-release-tier-freshness.sh
+#   scripts/lua/check-release-tier-freshness.lua
 #     -> never:release-tier: no FULL-tier run in check-logs.jsonl
 #   35 records present, every one of them phase-only.
 # Not "the tier failed quietly". The tier has never been answered here.

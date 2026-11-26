@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: family-d-ports-close-two-known-shell-fixture-holes
+    order: "2411-tqdz"
+    status: ready
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, fixtures, review]
+    estimated_hours: 1
+    owned_files: [scripts/lua/test-spawn-failure-names-program.lua, scripts/lua/test-if-not-pipeline-guard.lua]
+    title: "Family D's ports of spawn-failure and if-not-pipeline-guard close the two holes their .sh had"
+    context: |
+      A CHECK on landing #1150-#1157, not a merge (coordinator 2026-11-26). yoga's obsoleted batch 2410-g5vq
+      ported both and found:
+      (1) test-spawn-failure-names-program: an arm whose --exact filter matches no test (a renamed fn) exits
+          rc=0. MUTANT: rename fn only_a_real_spawn_miss_is_collapsible in crates/tillandsias-headless/src/main.rs;
+          a correct port fails that arm (it must require "test result: ok. 1 passed", not rc=0).
+      (2) test-if-not-pipeline-guard: arm 1 reads ANY non-zero exit of check-no-spawn-in-if-not.lua as a refusal,
+          so a guard that cannot run passes. MUTANT: set SINGLE_PIPE to a never-matching pattern; a correct port
+          fails arm 1 (it must read the refused:no-spawn-in-if-not: verdict, not the exit code).
+      Reference implementations: local ref work/2410-g5vq on yoga (unpushed), commit 249bbb502.
+    exit_criteria:
+      - "Each Family D port of these two fixtures, at the head that lands, fails its arm under the named mutant (run and recorded on this row)."
+    unscoreable: "a review check on another ref's fixture; the evidence is the two mutant runs"
+    provenance: "coordinator 2026-11-26, from yoga's 2410-g5vq"
+    related: [2410-g5vq]

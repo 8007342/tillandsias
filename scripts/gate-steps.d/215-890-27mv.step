@@ -1,6 +1,6 @@
 # Gate step 890-27mv — data, not code.
 #
-# Binds the FIXTURE, not the guard. check-release-tier-freshness.sh reports
+# Binds the FIXTURE, not the guard. check-release-tier-freshness.lua reports
 # whether the release tier has been exercised on THIS host, and on most hosts
 # the honest answer is "never" — wiring the guard itself here would red the
 # inner loop everywhere for a condition 890-27mv exists to MEASURE, not to
@@ -8,16 +8,16 @@
 # The fixture is hermetic and offline: it builds its own check-logs.jsonl in a
 # temp dir and asserts nothing about this host.
 #
-# STEP_SCRIPT is a LITERAL path (1063-nraf).
+# STEP_LUA is a LITERAL path (1063-nraf).
 STEP_DESC="Checking a host reports when the release tier last ran, and never claims it passed when it never ran (890-27mv)"
-STEP_SCRIPT="scripts/test-release-tier-freshness.sh"
+STEP_LUA="scripts/lua/test-release-tier-freshness.lua"
 STEP_ERROR="the release-tier freshness guard regressed (890-27mv) — a non-green outcome may have started reading as pass; see the verdict line above"
 STEP_OK="Release-tier freshness check passed"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"
+STEP_SECOND_REGIME="yolanda 2026-11-26 msys ok:release-tier-freshness:20 arms"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="drives podman"
 STEP_LANES="podman"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/check-release-tier-freshness.sh scripts/convergence-log-path.sh scripts/local-ci.sh scripts/test-release-tier-freshness.sh"
+STEP_READS="scripts/lua/check-release-tier-freshness.lua scripts/convergence-log-path.sh scripts/local-ci.sh scripts/lua/test-release-tier-freshness.lua"

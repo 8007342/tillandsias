@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: shell-fixtures-ported-to-lua-batch-7
+    field: status
+    value: obsoleted
+    ts: "2026-11-26T19:15:16Z"
+    host: yoga
+events:
+  - packet_id: shell-fixtures-ported-to-lua-batch-7
+    event: {type: note, ts: "2026-11-26T19:15:16Z", host: yoga, summary: "obsoleted (coordinator 2026-11-26): every port in it is already on a Family D ref (#1150 network-isolation/localization/remote-control; #1152-#1157 src-budget, crashloop, env-lock, spawn-failure, if-not). Local ref work/2410-g5vq kept, never pushed. Two holes it closed are filed as 2411-tqdz for whoever lands Family D."}

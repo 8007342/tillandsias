@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed and fixed by doris-windows 2026-11-26, first root cause of macuahuitl's msys queue.
+packets:
+  - packet_id: lua-fixtures-read-a-drive-letter-plan-binary-as-relative-and-join-it-to-root-on-msys
+    order: 2410-3j3t
+    status: implemented
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, msys, fixture, paths]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-credential-cold-state-probe.lua
+      - scripts/lua/test-groundtruth-regime-fails-closed.lua
+      - scripts/lua/test-ledger-prose-roundtrip.lua
+      - scripts/lua/test-litmus-binding-truth.lua
+      - scripts/lua/test-litmus-parse-instruments-agree.lua
+      - scripts/lua/test-script-run-verb.lua
+    related: [2392-9zcp]
+    title: |
+      Six Lua fixtures treat a C:/ plan binary as relative (`x:sub(1, 1) ~= "/"`), join it to ROOT, and spawn "C:/root/C:/..." on msys (os error 123)
+    context: |
+      fixture.plan_binary() returns a drive-letter path on Windows. These fixtures absolutize with
+      `if X:sub(1, 1) ~= "/" then X = ROOT .. "/" .. X end`, so the spawn fails with os error 123
+      ("filename, directory name, or volume label syntax is incorrect") and every arm built on it is red or
+      skipped. Siblings (test-litmus-budget-tally, test-door-serial-lua-declaration, test-fixture-scratch-git-added)
+      already add `and not X:match("^%a:[/\\]")`; the same guard is applied here. Linux is unchanged: a
+      Unix path never matches ^%a:.
+    verifiable_closure: |
+      Measured on doris (msys), before -> after: ledger-prose-roundtrip FAIL arm 1 (os error 123) -> ok 6 arms;
+      litmus-binding-truth skip:no-script-runner -> ok 4 arms; litmus-parse-instruments-agree FAIL arm 2 ->
+      ok 3 arms; script-run-verb arms 1-4 FAIL (os error 123) -> ok. Distinct causes NOT closed here:
+      script-run-verb arm 5 (./build.sh spawned natively, os error 193), credential-cold-state-probe arms 3/4
+      (probe reports no-secret-service not no-busctl), groundtruth-regime-fails-closed line 101 (nil SET).
+    unscoreable: "the closure is the fixtures themselves; no separate litmus pin"
+    next_action: >
+      Implemented. The remaining msys reds listed in verifiable_closure each get their own packet.
+status:
+  - packet_id: lua-fixtures-read-a-drive-letter-plan-binary-as-relative-and-join-it-to-root-on-msys
+    field: status
+    value: implemented
+    ts: "2026-11-26T18:59:58Z"
+    host: doris

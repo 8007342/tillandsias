@@ -1,7 +1,7 @@
 -- @env PATH HOME
 -- @trace spec:meta-orchestration, order:1247-omqr, order:1247-amcu, order:1435-ebcx, order:2314-ktxt
 --
--- test-claims-affordance.lua — every refusal of check-claims-across-branches.sh says WHY and
+-- test-claims-affordance.lua — every refusal of check-claims-across-branches.lua says WHY and
 -- WHAT would make it not a refusal ("  why: …", "  remedy: …" on stderr), beside an unchanged
 -- stdout token. Ported from the .sh of the same name (2314-ktxt); same eight arms.
 --
@@ -23,7 +23,9 @@
 local fixture = require "common.fixture"
 local T = fixture.new("claims-affordance")
 local SH = fixture.posix_shell()
-local CHECK = fs.read("scripts/check-claims-across-branches.sh")
+local CHECK = fs.read("scripts/lua/check-claims-across-branches.lua")
+local RUNNER = fixture.plan_binary()
+if RUNNER == "" then T:refuse("no-plan-binary", "the decider is Lua; build tillandsias-plan to run it") end
 local PROBE = fs.read("scripts/plan-binary-probe.sh")
 
 local bin = T:scratch("bin")
@@ -41,8 +43,8 @@ local UNKNOWN, FREE = stub("unknown", "", "OTHER-PKT\n"), stub("free", "ready", 
 
 local function checkout()
     local d = T:git_repo()
-    fs.mkdir(d.rel .. "/scripts"); fs.mkdir(d.rel .. "/plan/index.d")
-    fs.write(d.rel .. "/scripts/check-claims-across-branches.sh", CHECK)
+    fs.mkdir(d.rel .. "/scripts/lua"); fs.mkdir(d.rel .. "/plan/index.d")
+    fs.write(d.rel .. "/scripts/lua/check-claims-across-branches.lua", CHECK)
     fs.write(d.rel .. "/scripts/plan-binary-probe.sh", PROBE)
     fs.write(d.rel .. "/plan/index.yaml", "packets: []\n")
     -- Tracked, or `git archive plan/index.d` fails and the check folds nothing.
@@ -53,7 +55,7 @@ local function checkout()
     return d
 end
 local function run(d, plan, ...)
-    local r = proc.run{ argv = { SH, "scripts/check-claims-across-branches.sh", ... }, cwd = d.abs, timeout_ms = 60000,
+    local r = proc.run{ argv = { RUNNER, "script", "run", "scripts/lua/check-claims-across-branches.lua", "--", ... }, cwd = d.abs, timeout_ms = 300000,
         env = { PATH = env.get("PATH"), HOME = env.get("HOME"), TILLANDSIAS_PLAN_BIN = plan, TILLANDSIAS_XBRANCH_ANCESTOR_SKIP = "0",
             TILLANDSIAS_XBRANCH_CLAIM_HOST = "some-other-host" }, env_unset = { "TILLANDSIAS_*", "CARGO_TARGET_DIR" } }
     local o, e = (r.stdout or ""):gsub("\r", ""), "\n" .. (r.stderr or ""):gsub("\r", "")
@@ -128,15 +130,27 @@ x, y = run(some, HOLD, "SOME-PKT", "--no-fetch"), run(some, HOLD, "--batch", "SO
 T:arm("13 CONTROL a claim on the folded sibling is still claimed-elsewhere, in both modes", x.rc == 1 and x.first == "claimed-elsewhere:SOME-PKT:linux-next"
     and y.rc == 1 and y.first == "claimed-elsewhere:SOME-PKT:linux-next", x.why .. " then " .. y.why)
 
+-- STATIC, in the Lua shape (2392-9zcp): a refusal is a verdict.emit of blocked:/claimed-elsewhere:/
+-- unknown-packet:, or a blocked(...) / no_siblings(...) call. blocked() itself must call afford(),
+-- and every other site must sit within six lines of an afford( call.
 local lines, sites, bare = {}, 0, {}
 for l in (CHECK .. "\n"):gmatch("([^\n]*)\n") do lines[#lines + 1] = l end
+local helper_affords = false
 for i, l in ipairs(lines) do
-    if text.contains(l, 'echo "blocked:') or text.contains(l, 'echo "claimed-elsewhere:') or text.contains(l, 'echo "unknown-packet:') then
+    if l:find("^local function blocked%(") then
+        for j = i, math.min(#lines, i + 5) do if text.contains(lines[j], "afford(why, remedy)") then helper_affords = true end end
+    end
+end
+for i, l in ipairs(lines) do
+    local emit = l:find('verdict.emit("blocked:', 1, true) or l:find('verdict.emit("claimed-elsewhere:', 1, true) or l:find('verdict.emit("unknown-packet:', 1, true)
+    local call = (l:find("%f[%w_]blocked%(") and not l:find("^local function")) or l:find("no_siblings%(") and not l:find("^local function")
+    if emit or call then
         sites = sites + 1
         local found = false
-        for j = math.max(1, i - 6), math.min(#lines, i + 6) do if text.contains(lines[j], "_afford ") then found = true end end
+        if call and helper_affords then found = true end
+        for j = math.max(1, i - 6), math.min(#lines, i + 6) do if text.contains(lines[j], "afford(") then found = true end end
         if not found then bare[#bare + 1] = i .. ": " .. l end
     end
 end
-T:arm("8 every refusal site sits beside an _afford call", sites > 0 and #bare == 0, sites .. " sites; " .. table.concat(bare, " | "))
+T:arm("8 every refusal site sits beside an afford call", sites > 0 and helper_affords and #bare == 0, sites .. " sites; helper=" .. tostring(helper_affords) .. "; " .. table.concat(bare, " | "))
 T:finish()

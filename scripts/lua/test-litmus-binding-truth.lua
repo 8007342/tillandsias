@@ -25,7 +25,7 @@ local CHECKER_REL = "scripts/lua/check-litmus-bindings.lua"
 if not fs.exists(CHECKER_REL) then T:refuse("checker-not-found", CHECKER_REL) end
 local PLAN = fixture.plan_binary()
 if PLAN == "" then T:skip("no-script-runner") end
-if PLAN:sub(1, 1) ~= "/" then PLAN = ROOT .. "/" .. PLAN:gsub("^%./", "") end
+if PLAN:sub(1, 1) ~= "/" and not PLAN:match("^%a:[/\\]") then PLAN = ROOT .. "/" .. PLAN:gsub("^%./", "") end
 local caps = T:run{ PLAN, "capabilities", timeout_ms = 30000 }
 if not ("\n" .. (caps.stdout or "") .. "\n"):find("\nscript\n", 1, true) then T:skip("no-script-runner") end
 

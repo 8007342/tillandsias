@@ -288,6 +288,15 @@ fn no_symlinked_ancestor(path: &Path) -> Option<()> {
 mod tests {
     use super::*;
 
+    /// ORDER 2392-t29z. Every absolute Windows path begins with a `Component::Prefix`
+    /// (`C:`, or `\\?\C:` from canonicalize), and `normalise` refuses a Prefix, so on
+    /// Windows every target fails closed and `hook_allow` never answers allow. That is
+    /// deliberate: `SafeRoots::forge()` is the Linux container layout, and no forge
+    /// runs natively on Windows, so widening an allow path there would be the wrong
+    /// direction. These tests pin the fail-closed answer on Windows. Accepting a
+    /// Prefix is a later row, if a native Windows forge ever exists.
+    const WINDOWS_PREFIX_FAILS_CLOSED: bool = cfg!(windows);
+
     fn roots(base: &Path) -> SafeRoots {
         SafeRoots {
             src: base.join("src"),
@@ -332,10 +341,17 @@ mod tests {
             format!("rm -rf {}", r.work_tmp.join("x").display()),
             "rm -rf -- ./build".to_string(),
         ] {
-            assert!(
-                safe_root_removal(&cmd, &proj, &r).is_some(),
-                "{cmd} should be a safe-root removal"
-            );
+            if WINDOWS_PREFIX_FAILS_CLOSED {
+                assert!(
+                    safe_root_removal(&cmd, &proj, &r).is_none(),
+                    "{cmd}: a Windows path has a Prefix, which normalise refuses, so this must fail closed"
+                );
+            } else {
+                assert!(
+                    safe_root_removal(&cmd, &proj, &r).is_some(),
+                    "{cmd} should be a safe-root removal"
+                );
+            }
         }
     }
 
@@ -397,8 +413,13 @@ mod tests {
     fn only_a_forge_answers_allow() {
         use crate::command_policy::HostKind;
         let (_d, r, proj) = fixture();
-        let a = hook_allow(HostKind::Forge, "rm -rf .dart_tool", &proj, &r).unwrap();
-        assert_eq!(a["hookSpecificOutput"]["permissionDecision"], "allow");
+        if WINDOWS_PREFIX_FAILS_CLOSED {
+            // No allow on Windows, even for a forge: see WINDOWS_PREFIX_FAILS_CLOSED.
+            assert!(hook_allow(HostKind::Forge, "rm -rf .dart_tool", &proj, &r).is_none());
+        } else {
+            let a = hook_allow(HostKind::Forge, "rm -rf .dart_tool", &proj, &r).unwrap();
+            assert_eq!(a["hookSpecificOutput"]["permissionDecision"], "allow");
+        }
         for k in [HostKind::BareMetal, HostKind::Ci] {
             assert!(hook_allow(k, "rm -rf .dart_tool", &proj, &r).is_none());
         }

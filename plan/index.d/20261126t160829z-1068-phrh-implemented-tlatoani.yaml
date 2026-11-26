@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: the-default-install-path-skips-verification-three-ways-and-never-consumes-the-published-signature
+    field: status
+    value: implemented
+    ts: "2026-11-26T16:08:29Z"
+    host: tlatoanis-macbook-air
+events:
+  - packet_id: the-default-install-path-skips-verification-three-ways-and-never-consumes-the-published-signature
+    event: {type: implemented, ts: "2026-11-26T16:08:29Z", host: tlatoanis-macbook-air, summary: "install.sh refuses an unverified asset in all three paths; shasum fallback; 9-arm fixture red 6/9 on trunk first; cosign stays with 2080-8mc8"}
