@@ -349,7 +349,6 @@ scripts scripts/check-credential-channel.sh 15
 scripts scripts/check-daily-maintenance.sh 2
 scripts scripts/check-dead-env-branches.sh 41
 scripts scripts/check-deslop-due.sh 5
-scripts scripts/check-deslop-sweep-health.sh 4
 scripts scripts/check-enclave-network-internal.sh 5
 scripts scripts/check-enclave-service-health.sh 16
 scripts scripts/check-forge-findings-persisted.sh 3

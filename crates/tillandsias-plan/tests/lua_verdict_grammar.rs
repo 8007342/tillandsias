@@ -103,6 +103,7 @@ const LEGACY: &[(&str, &[i32])] = &[
     ("never:", &[1]),
     ("drift:", &[1]),
     ("missing:", &[0, 1]),
+    ("unknown:", &[2]),
 ];
 
 #[test]
