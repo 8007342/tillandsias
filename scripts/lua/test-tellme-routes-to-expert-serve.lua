@@ -68,7 +68,10 @@ local function load_tellme(path, e, args)
         tonumber = tonumber, tostring = tostring, type = type,
         arg = { [0] = path, table.unpack(args) },
         io = { stdout = sink(so), stderr = sink(so), popen = function(c)
-            local r = proc.run({ argv = { SH, "-s" }, stdin = c .. "\n", env = e, timeout_ms = 60000 })
+            -- The shim goes first on PATH inside the shell, in its own spelling (msys turns
+            -- a PATH passed through env into Windows form, and the real curl ran).
+            local r = proc.run({ argv = { SH, "-s" }, stdin = 'PATH="$(cd "$SHIM_BIN" && pwd):$PATH"; export PATH\n' .. c .. "\n",
+                env = e, timeout_ms = 60000 })
             local s = r.stdout or ""
             return { read = function() local x = s; s = ""; return x end,
                 close = function() return r.code == 0 or nil, "exit", r.code end }
@@ -87,7 +90,7 @@ local function tellme(args, o)
     local dir = W.rel .. "/" .. tag
     fs.mkdir(dir)
     if o.down then fs.write(dir .. "/expert.down", "") end
-    local e = { PATH = W.abs .. "/bin:" .. (env.get("PATH") or "/usr/bin:/bin"), HOME = W.abs, SHIM_DIR = W.abs .. "/" .. tag,
+    local e = { PATH = env.get("PATH") or "/usr/bin:/bin", SHIM_BIN = W.abs .. "/bin", HOME = W.abs, SHIM_DIR = W.abs .. "/" .. tag,
         SHIM_EXPERT = EXPERT, SHIM_INFER = INFER, TELLME_EXPERT_URL = EXPERT, TILLANDSIAS_CHEATSHEETS = W.abs .. "/cheatsheets",
         TILLANDSIAS_INFERENCE_URL = INFER, TELLME_PLAN_BIN = PLAN, TILLANDSIAS_INFERENCE_MODEL = o.model,
         TILLANDSIAS_EXPERT_CONTEXT_PACK = o.pack and (W.abs .. "/" .. o.pack) or nil }
