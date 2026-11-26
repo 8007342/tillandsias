@@ -17,7 +17,7 @@ local fixture = require "common.fixture"
 local T = fixture.new("build-step-timing-attribution")
 local SH, ROOT = fixture.posix_shell(), fixture.repo_root()
 local src, got, lost = "\n" .. fs.read("build.sh"):gsub("\r", ""), {}, {}
-for _, f in ipairs{ "_now_ms", "_phase_close", "_step", "_phase_emit_timing", "_run" } do
+for _, f in ipairs{ "_now_ms", "_cpu_children_now", "_phase_close", "_step", "_phase_emit_timing", "_run" } do
     local body = src:match("\n(" .. f .. "%(%)%s*{\n.-\n})\n")
     if body then got[#got + 1] = body else lost[#lost + 1] = f end
 end
