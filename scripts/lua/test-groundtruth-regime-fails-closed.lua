@@ -70,9 +70,10 @@ proc.run{ argv = { "chmod", "+x", W .. "/plan" } }
 
 -- The first set in `ls` order (byte order under the runner's C locale).
 local sets = {}
-for _, l in ipairs(text.lines(proc.run{ argv = { "find", "openspec/litmus-tests/groundtruth",
-        "-maxdepth", "1", "-name", "*.yaml" } }.stdout or "")) do
-    sets[#sets + 1] = l:match("([^/]+)$")
+-- fs.list, not a spawned find (2415-zwjm): an msys program started by a native parent globs its own
+-- argv, so `-name *.yaml` reached find as the repo root's *.yaml files and SET was nil.
+for _, f in ipairs(fs.list("openspec/litmus-tests/groundtruth")) do
+    if f:match("%.yaml$") then sets[#sets + 1] = f:match("([^/]+)$") end
 end
 table.sort(sets)
 local SET = sets[1]

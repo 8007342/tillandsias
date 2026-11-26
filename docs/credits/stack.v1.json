@@ -10344,6 +10344,24 @@
       "from": "image:git",
       "kind": "package",
       "optional": false,
+      "to": "pkg:alpine:lua5.4"
+    },
+    {
+      "from": "image:git",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-filesystem"
+    },
+    {
+      "from": "image:git",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-lpeg"
+    },
+    {
+      "from": "image:git",
+      "kind": "package",
+      "optional": false,
       "to": "pkg:alpine:openssh-client"
     },
     {
@@ -57873,13 +57891,14 @@
       "name": "lua5.4",
       "optional": false,
       "pulled_by": [
+        "image:git",
         "image:proxy",
         "image:router",
         "image:vault",
         "image:web"
       ],
-      "source": "images/proxy/Containerfile",
-      "version": "5.4.7-r0"
+      "source": "images/git/Containerfile",
+      "version": "5.4.6-r1"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=lua5.4-filesystem",
@@ -57893,12 +57912,13 @@
       "name": "lua5.4-filesystem",
       "optional": false,
       "pulled_by": [
+        "image:git",
         "image:proxy",
         "image:router",
         "image:vault",
         "image:web"
       ],
-      "source": "images/proxy/Containerfile",
+      "source": "images/git/Containerfile",
       "version": "1.8.0-r4"
     },
     {
@@ -57913,13 +57933,14 @@
       "name": "lua5.4-lpeg",
       "optional": false,
       "pulled_by": [
+        "image:git",
         "image:proxy",
         "image:router",
         "image:vault",
         "image:web"
       ],
-      "source": "images/proxy/Containerfile",
-      "version": "1.1.0-r0"
+      "source": "images/git/Containerfile",
+      "version": "1.0.2-r3"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=nss-tools",
@@ -61123,7 +61144,7 @@
   "schema": "tillandsias-stack/v1",
   "summary": {
     "components": 57,
-    "edges": 3125,
+    "edges": 3128,
     "license_families": {
       "model": 7,
       "permissive": 1715,
