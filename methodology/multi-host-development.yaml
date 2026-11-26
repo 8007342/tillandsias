@@ -589,7 +589,7 @@ multi_host_development:
     stranded_plan_write_triage: >
       ASK THE FOLD, NEVER REASON FROM TIMESTAMPS (order 1232-av4p). A plan
       fragment that exists only on a salvage/* or work/* ref is triaged with
-      scripts/check-stranded-plan-writes.sh, which folds it into a scratch copy
+      scripts/lua/check-stranded-plan-writes.lua, which folds it into a scratch copy
       of trunk's ledger with the plan binary and says would-change or
       superseded. The status fold is RANK-AWARE, not (ts, host) LWW:
       status_entry_wins (crates/tillandsias-plan/src/fragments.rs) treats

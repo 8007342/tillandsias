@@ -12,7 +12,6 @@ scripts/check-containers-conf-proxy-env.sh
 scripts/check-credential-channel.sh
 scripts/check-daily-maintenance.sh
 scripts/check-dead-env-branches.sh
-scripts/check-decider-retirement.sh
 scripts/check-deslop-due.sh
 scripts/check-deslop-sweep-health.sh
 scripts/check-enclave-ca-consistency.sh
@@ -37,7 +36,6 @@ scripts/check-no-competing-gate.sh
 scripts/check-pickup-role-grammar.sh
 scripts/check-plan-binary-current.sh
 scripts/check-plan-binary-probe-usage.sh
-scripts/check-purge-clears-vault-credentials.sh
 scripts/check-refusal-affordance-added.sh
 scripts/check-release-asset-integrity.sh
 scripts/check-release-tier-freshness.sh
@@ -51,7 +49,6 @@ scripts/check-skill-canonicalization.sh
 scripts/check-skills-single-source.sh
 scripts/check-spec-index-resolution-agreement.sh
 scripts/check-stranded-in-progress.sh
-scripts/check-stranded-plan-writes.sh
 scripts/check-test-baseline.sh
 scripts/check-yaml-reader-availability.sh
 scripts/test-awk-float-lc-numeric.sh
