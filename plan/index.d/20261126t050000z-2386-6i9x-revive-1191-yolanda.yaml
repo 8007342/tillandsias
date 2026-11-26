@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: revive-1191-two-check-deciders
+    order: "2386-6i9x"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, gate]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/check-no-tracked-binaries.lua
+      - scripts/lua/check-unrunnable-platform-arms.lua
+    title: "land lenovinha's stale draft #1191 (2118-9mk4): check-no-tracked-binaries and check-unrunnable-platform-arms to Lua"
+    context: |
+      Coordinator 2026-11-26: a finished port in a stale draft should land, not be redone. #1191 (work/2118-9mk4,
+      lenovinha) is rebuilt as one fresh commit on linux-next carrying its Lua unchanged, in a new PR on
+      work/2386-6i9x; the old PR is closed with a tombstone naming the new one. Neither .sh had changed on trunk
+      since the draft's base.
+    exit_criteria:
+      - "The draft's two Lua deciders land on linux-next with their callers repointed and the .sh files deleted; #1191 is closed naming the new PR."
+    unscoreable: "fixture-scored: the deciders' own verdicts, step 150, local-ci, land-on-platform-branch and two fixtures"
+    provenance: "coordinator 2026-11-26 (revive #1191 and #1238), yolanda"
+    related: [2118-9mk4, 1087-h2z9]
+    events:
+      - {type: claimed, ts: "2026-11-26T01:58:28Z", host: yolanda, summary: "claimed; work ref work/2386-6i9x"}

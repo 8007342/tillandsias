@@ -245,7 +245,7 @@ CHECKSUM_ONE="$TMPDIR_TILLANDSIAS/SHA256SUMS.$ASSET"
 say "Downloading $ASSET..."
 # ORDER 1420-jmp4: --progress-bar draws one clean # bar instead of curl's raw
 # 12-column meter, the way install-macos.sh already does. The markers around
-# this block are cut and run by scripts/test-installers-quiet-progress.sh.
+# this block are cut and run by scripts/lua/test-installers-quiet-progress.lua.
 curl -fL --progress-bar --retry 3 --retry-delay 2 -o "$BINARY_TMP" "$RELEASE_BASE/$ASSET"
 # END-ASSET-DOWNLOAD
 

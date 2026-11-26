@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: three-cloudflare-fixtures-ported-to-lua
+    field: status
+    value: implemented
+    ts: "2026-11-25T22:43:02Z"
+    host: yoga
+events:
+  - packet_id: three-cloudflare-fixtures-ported-to-lua
+    event: {type: implemented, ts: "2026-11-25T22:43:02Z", host: yoga, summary: "implemented on work/2382-ubmc"}

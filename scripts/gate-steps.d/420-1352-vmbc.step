@@ -19,7 +19,7 @@
 # about the tree.
 #
 # THE TREE ALREADY KNEW THIS PLATFORM LACKS setsid, which is what made it a
-# defect rather than a platform limit: scripts/test-dispatch-reap.sh:99 probes
+# defect rather than a platform limit: scripts/lua/test-dispatch-reap.lua probes
 # `command -v setsid` and emits a named skip under 1141-vf9w ("NOT the same as
 # passing"). One caller asked and one did not.
 #

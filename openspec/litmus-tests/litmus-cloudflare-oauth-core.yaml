@@ -20,7 +20,7 @@ description: >
 severity: high
 size: quick
 
-# scripts/test-cloudflare-oauth-core.sh runs the five #[ignore]d tests in
+# scripts/lua/test-cloudflare-oauth-core.lua runs the five #[ignore]d tests in
 # crates/tillandsias-headless/src/cloudflare_oauth.rs's `loopback_tests`
 # module with --nocapture, so begin()'s eprintln! note reaches the script's
 # own captured log rather than libtest's normally-swallowed buffer. See the
@@ -33,21 +33,21 @@ size: quick
 preconditions:
   - workspace contains crates/tillandsias-headless/src/cloudflare_oauth.rs
   - workspace contains crates/tillandsias-headless/src/bin/tillandsias-fake-cloudflare.rs
-  - workspace contains scripts/test-cloudflare-oauth-core.sh
+  - workspace contains scripts/lua/test-cloudflare-oauth-core.lua
   - cargo is available in PATH
 
 critical_path:
   - step: "cloudflare_oauth's begin/exchange/refresh/revoke complete a real PKCE login over loopback against tillandsias-fake-cloudflare, a tampered state is refused before any token request, and the device-grant note prints when discovery lists it"
-    command: "bash scripts/test-cloudflare-oauth-core.sh 2>&1 | tail -8 | grep -E '^ok:cloudflare-oauth-core:5/5\\+note$'"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-cloudflare-oauth-core.lua 2>&1"
     timeout_ms: 300000
-    expected_behavior: "ok:cloudflare-oauth-core:5/5+note"
+    expected_behavior: "ok:cloudflare-oauth-core:"
 
 observability:
   traces:
     - "@trace order:1505-kyx8"
     - "@trace openspec/changes/cloudflare-login-and-fleet-vpn/design.md#decision-1"
     - "@trace openspec/changes/cloudflare-login-and-fleet-vpn/specs/cloudflare-auth/spec.md"
-  expected_log: "ok:cloudflare-oauth-core:5/5+note"
+  expected_log: "ok:cloudflare-oauth-core:"
   log_fields:
     spec: "ci-release"
     test: "cloudflare-oauth-core"
@@ -58,7 +58,7 @@ rollback:
     A named arm failed, the device-grant note was not printed, or the
     state-mismatch arm's ledger showed a /oauth2/token request (meaning the
     client-side state check moved after the network call, or was removed).
-    Re-run `bash scripts/test-cloudflare-oauth-core.sh` locally and read the
+    Re-run `tillandsias-plan script run scripts/lua/test-cloudflare-oauth-core.lua` locally and read the
     FAIL lines it prints per arm; do not weaken the state check or the PKCE
     verifier construction to make a fixture pass.
-  command: "bash scripts/test-cloudflare-oauth-core.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-cloudflare-oauth-core.lua 2>&1"

@@ -47,12 +47,12 @@ T:arm("3 NC a listed packet that is not multi_cycle: allowed", rc == 0 and n > 0
 rc, o, n, why = flip(MC, MC, "in_progress", "--host", "fixturehost")
 T:arm("4 NC a non-terminal flip on a listed packet: allowed", rc == 0 and n > 0, why)
 -- A RUN, not a mention: another step names the script in a comment and its STEP_READS.
-local runs = fs.read("build.sh"):find('_run bash "[^"\n]*/scripts/check%-long%-running%-view%.sh"') ~= nil
+local runs = fs.read("build.sh"):find('_run_lua_decider "scripts/lua/check%-long%-running%-view%.lua"') ~= nil
 for _, f in ipairs(fs.list("scripts/gate-steps.d")) do
     local name = f:match("([^/]+%.step)$")
-    if name and text.contains("\n" .. fs.read("scripts/gate-steps.d/" .. name), '\nSTEP_SCRIPT="scripts/check-long-running-view.sh"') then runs = true end
+    if name and text.contains("\n" .. fs.read("scripts/gate-steps.d/" .. name), '\nSTEP_LUA="scripts/lua/check-long-running-view.lua"') then runs = true end
 end
-T:arm("5 the land-time check still runs in the gate", runs, "no build.sh call or gate step runs check-long-running-view.sh")
-T:arm("6 the refusal and the checker name the same moment", text.contains(fs.read("scripts/check-long-running-view.sh"), "commit as the change that moved it")
+T:arm("5 the land-time check still runs in the gate", runs, "no build.sh call or gate step runs check-long-running-view.lua")
+T:arm("6 the refusal and the checker name the same moment", text.contains(fs.read("scripts/lua/check-long-running-view.lua"), "commit as the change that moved it")
     and text.contains(fs.read("crates/tillandsias-plan/src/main.rs"), "SAME COMMIT as this status change"), "one side no longer names the commit")
 T:finish()

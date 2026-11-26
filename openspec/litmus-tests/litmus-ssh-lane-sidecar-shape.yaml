@@ -12,7 +12,7 @@ inputs:
   - images/default/lib-common.sh
   - scripts/build-image.sh
   - scripts/common.sh
-  - scripts/test-ssh-lane-sidecar.sh
+  - scripts/lua/test-ssh-lane-sidecar.lua
 severity: critical
 description: >
   Order 749-6uby (design T8+T10 — plan/issues/ssh-ca-forge-mirror-push-design-2026-07-31.md):
@@ -33,7 +33,7 @@ description: >
 
 preconditions:
   - workspace contains images/git/ssh-lane-sidecar.sh
-  - workspace contains scripts/test-ssh-lane-sidecar.sh
+  - workspace contains scripts/lua/test-ssh-lane-sidecar.lua
   - podman is available on the host
 
 critical_path:
@@ -43,9 +43,9 @@ critical_path:
     expected_behavior: "ok: sidecar-parses"
 
   - step: "all sidecar scenarios pass in the real container (ready+fingerprint+agent-serving, negative cert controls, renewal, M2 exact-path 403 against a real Vault)"
-    command: "bash scripts/test-ssh-lane-sidecar.sh all 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-ssh-lane-sidecar.lua 2>&1"
     timeout_ms: 420000
-    expected_behavior: "ok: all ssh-lane-sidecar scenarios passed"
+    expected_behavior: "ok:ssh-lane-sidecar:"
 
   - step: "the Containerfile ships the sidecar entrypoint (same image as the mirror — no second image to skew)"
     command: "grep -q 'ssh-lane-sidecar.sh /usr/local/bin/ssh-lane-sidecar' images/git/Containerfile && echo 'ok: sidecar-shipped'"

@@ -14,15 +14,15 @@ preconditions:
   - workspace contains images/default/codex-safe-state.sh
   - workspace contains images/default/entrypoint-forge-codex.sh
   - workspace contains images/default/codex-oauth-session.sh
-  - workspace contains scripts/test-codex-safe-state.sh
+  - workspace contains scripts/lua/test-codex-safe-state.lua
   - workspace contains crates/tillandsias-headless/src/main.rs
 
 critical_path:
   - step: "exercise path, permission, provider-auth, worker namespace, direct-state durability shape, and normal-exit fixtures"
-    command: "scripts/test-codex-safe-state.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-codex-safe-state.lua 2>&1"
     timeout_ms: 30000
-    expected_behavior: "PASS: Codex state is explicit, provider-auth-excluding, worker-namespaced, and normally checkpointed"
-    assert_output_contains: "PASS: Codex state is explicit, provider-auth-excluding, worker-namespaced, and normally checkpointed"
+    expected_behavior: "ok:codex-safe-state:"
+    assert_output_contains: "ok:codex-safe-state:"
 
   - step: "ship and initialize the helper before any harness refresh"
     command: "grep -Fq 'COPY codex-safe-state.sh /usr/local/lib/tillandsias/codex-safe-state.sh' images/default/Containerfile && awk '/codex_safe_state_setup/{setup=NR} /ensure_forge_harnesses/{harness=NR} END{exit !(setup && harness && setup < harness)}' images/default/entrypoint-forge-codex.sh && echo 'ok: safe state precedes refresh'"
@@ -58,4 +58,4 @@ rollback:
   on_failure: >
     Keep CODEX_HOME fully ephemeral. Do not persist auth.json, config.toml, or
     the whole Codex home as a fallback.
-  command: "scripts/test-codex-safe-state.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-codex-safe-state.lua 2>&1"

@@ -1,0 +1,12 @@
+# Gate step 2373-zter — data, not code (order 1072-b7eq).
+#
+# Nothing ran this fixture: its litmus is bound to a draft spec, which the
+# runner does not select. Native Windows reds are 2371-r2v9; the gate there
+# runs in the Linux builder.
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking a command-policy consent is granted and spent as ruled (2373-zter)"
+STEP_LUA="scripts/lua/test-command-policy-consent.lua"
+STEP_ERROR="a command-policy consent can be minted, reused or granted where it must not be (1443-9f5w) — see the FAIL lines above"
+STEP_OK="command-policy consent fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:command-policy-consent:16 arms"
+STEP_READS="scripts/lua/test-command-policy-consent.lua"

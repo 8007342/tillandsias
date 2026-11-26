@@ -33,12 +33,12 @@ description: >
   apart, so the roster differs by checkout and a fixed number would be red on
   one host and green on another.
 preconditions:
-  - workspace contains scripts/test-preflight-verdict-categories.sh
+  - workspace contains scripts/lua/test-preflight-verdict-categories.lua
   - build.sh accepts --preflight
 
 critical_path:
   - step: "the verdict names its categories, sums them, and reports partial: rather than ok: when a guard did not answer"
-    command: "bash scripts/test-preflight-verdict-categories.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-preflight-verdict-categories.lua"
     timeout_ms: 60000
     expected_behavior: "ok:preflight-verdict-categories"
     # size: instant because six of the seven arms read build.sh's scoring

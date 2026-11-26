@@ -5,7 +5,7 @@ phase: pre-build
 size: instant
 severity: medium
 description: >
-  Every refusal of scripts/check-tracked-files-unwritten.sh (the gate's
+  Every refusal of scripts/lua/check-tracked-files-unwritten.lua (the gate's
   "the gate must not write into the checkout it measures" guard) says WHY it
   refused and WHAT would make it not a refusal (1247-amcu): labelled
   "  why:" / "  remedy:" stderr lines beside its unchanged one-line stdout
@@ -14,7 +14,7 @@ description: >
   statically: a verdict site added later without an affordance fails.
 
 preconditions:
-  - workspace contains scripts/check-tracked-files-unwritten.sh
+  - workspace contains scripts/lua/check-tracked-files-unwritten.lua
   - workspace contains scripts/lua/test-tracked-files-unwritten-affordances.lua
 
 critical_path:
@@ -32,4 +32,4 @@ observability:
     test: "tracked-files-unwritten-refusals-carry-affordance"
 
 failure_modes:
-  - "a new refusal in check-tracked-files-unwritten.sh ships without why/remedy"
+  - "a new refusal in check-tracked-files-unwritten.lua ships without why/remedy"

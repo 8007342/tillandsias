@@ -80,6 +80,13 @@ row.
 > Delta: on 2026-11-17 the 2081 design required `--network none`, which
 > exists only for a container, and so excluded Metal and the Windows-side
 > NPU and integrated GPU.
+>
+> Ruling recorded for macOS, 2026-11-25 (2381-778w): the operator approved host-native inference as the
+> macOS default ("I approve your suggestions on what we should reconsider", tlatoanis-macbook-air session).
+> On macOS the host-judge row MAY therefore be taken, served by the same sandboxed host service as
+> `inference-engine-slots` SLOT-10, and only while every condition above holds: no network, no TCP
+> port, empty environment, no credential store, reachable by the tray only. Its residency is admitted
+> under `job-admission-queue` (2381-zueb). No ruling is recorded yet for Windows.
 
 #### Scenario: The host judge cannot connect out
 - **WHEN** a connection to any address is attempted from inside the host judge process

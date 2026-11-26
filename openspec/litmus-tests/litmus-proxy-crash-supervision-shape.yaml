@@ -38,7 +38,7 @@ size: instant
 
 preconditions:
   - workspace contains images/proxy/squid-supervisor.sh
-  - workspace contains scripts/test-squid-supervisor.sh
+  - workspace contains scripts/lua/test-squid-supervisor.lua
   - bash, grep, pkill available in PATH
 
 critical_path:
@@ -53,6 +53,6 @@ critical_path:
     expected_behavior: "ok:bash-dialect-clean"
 
   - step: "hermetic fixture suite passes (counted crash + bounded restart, exit-time teardown named and normalised to 0, flap-cap giveup with truthful rc, silent happy path, silent ordered shutdown, usage refusal, wiring with its stripped-copy negative control)"
-    command: "bash scripts/test-squid-supervisor.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-squid-supervisor.lua"
     timeout_ms: 60000
-    expected_behavior: "ok: all squid-supervisor scenarios passed"
+    expected_behavior: "ok:squid-supervisor:8 arms"

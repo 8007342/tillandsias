@@ -395,7 +395,7 @@ _CLASS_SET_MEMO=""      # computed once per run; empty until first asked
 # by scripts/lua/scan-cargo-test-repo-roots.lua --list (headless + its path-dep
 # closure), and gate step 954 runs that scanner's --check so a new embedded or
 # read path cannot be missed here. Every uncertainty in the scan WIDENS this.
-_CARGO_FEATURE_TEST_INPUTS="rust path:Cargo.toml path:Cargo.lock path:rust-toolchain.toml path:.cargo/** path:.claude/CLAUDE.md path:.claude/CLAUDE.md/** path:.codex path:.codex/** path:.config path:.config/** path:.gemini/GEMINI.md path:.gemini/GEMINI.md/** path:.tillandsias path:.tillandsias/** path:assets path:assets/** path:cloud path:cloud/** path:docs/cheatsheets/github-credential-tools.md path:images path:images/** path:lib/chart.umd.js path:lib/chart.umd.js/** path:lib/highlight.min.css path:lib/highlight.min.css/** path:lib/highlight.min.js path:lib/highlight.min.js/** path:licences/acknowledgements/adefossez-htdemucs.yaml path:licences/acknowledgements/cc-by-4-0--google-deepmind-representations4d.yaml path:licences/acknowledgements/corridor-key-licence-2-0--nikopueringer-corridorkey2-0.yaml path:licences/acknowledgements/mit--ruicheng-moge-2-vitb-normal.yaml path:licences/acknowledgements/nvidia-open-model-license--nvidia-c-radiov4-so400m.yaml path:locales path:locales/** path:observatorium path:observatorium/** path:openspec/changes/studio-asset-pipeline/contract/examples/gatekeeper-v3.character-frames.json path:research path:research/** path:scripts/build-image.sh path:scripts/build-macos-tray.sh path:scripts/check-credential-channel.sh path:scripts/forge-swap/50-tillandsias-swap.rules path:scripts/forge-swap/swap.conf path:scripts/forge-swap/tillandsias-swap path:scripts/forge-swap/tillandsias-swap-gc.service path:scripts/forge-swap/tillandsias-swap-gc.timer path:scripts/forge-swap/tillandsias-swap@.service path:scripts/generate-repo-key.sh path:scripts/manage-cache.sh path:scripts/materialize-macos-tar-to-img.sh path:scripts/nix-cache-service.sh path:scripts/provider-limit-relay.sh path:scripts/run-observatorium.sh path:scripts/test-cloudflare-login.sh path:scripts/test-cloudflare-oauth-core.sh path:scripts/test-cloudflare-token-rotation.sh path:scripts/test-support/podman-mock.sh path:scripts/test-support/secret-tool-fake.sh path:skills path:skills/** path:tests/fixtures/recipe-basic/Recipefile path:tests/fixtures/recipe-basic/Recipefile/** path:tests/fixtures/recipe-basic/manifest.toml path:tests/fixtures/recipe-basic/manifest.toml/** path:tools path:tools/**"
+_CARGO_FEATURE_TEST_INPUTS="rust path:Cargo.toml path:Cargo.lock path:rust-toolchain.toml path:.cargo/** path:.claude/CLAUDE.md path:.claude/CLAUDE.md/** path:.codex path:.codex/** path:.config path:.config/** path:.gemini/GEMINI.md path:.gemini/GEMINI.md/** path:.tillandsias path:.tillandsias/** path:assets path:assets/** path:cloud path:cloud/** path:docs/cheatsheets/github-credential-tools.md path:images path:images/** path:lib/chart.umd.js path:lib/chart.umd.js/** path:lib/highlight.min.css path:lib/highlight.min.css/** path:lib/highlight.min.js path:lib/highlight.min.js/** path:licences/acknowledgements/adefossez-htdemucs.yaml path:licences/acknowledgements/cc-by-4-0--google-deepmind-representations4d.yaml path:licences/acknowledgements/corridor-key-licence-2-0--nikopueringer-corridorkey2-0.yaml path:licences/acknowledgements/mit--ruicheng-moge-2-vitb-normal.yaml path:licences/acknowledgements/nvidia-open-model-license--nvidia-c-radiov4-so400m.yaml path:locales path:locales/** path:observatorium path:observatorium/** path:openspec/changes/studio-asset-pipeline/contract/examples/gatekeeper-v3.character-frames.json path:research path:research/** path:scripts/build-image.sh path:scripts/build-macos-tray.sh path:scripts/check-credential-channel.sh path:scripts/forge-swap/50-tillandsias-swap.rules path:scripts/forge-swap/swap.conf path:scripts/forge-swap/tillandsias-swap path:scripts/forge-swap/tillandsias-swap-gc.service path:scripts/forge-swap/tillandsias-swap-gc.timer path:scripts/forge-swap/tillandsias-swap@.service path:scripts/generate-repo-key.sh path:scripts/manage-cache.sh path:scripts/materialize-macos-tar-to-img.sh path:scripts/nix-cache-service.sh path:scripts/provider-limit-relay.sh path:scripts/run-observatorium.sh path:scripts/lua/test-cloudflare-login.lua path:lib/lua/common/*.lua path:scripts/lua/test-cloudflare-oauth-core.lua path:scripts/lua/test-cloudflare-token-rotation.lua path:scripts/test-support/podman-mock.sh path:scripts/test-support/secret-tool-fake.sh path:skills path:skills/** path:tests/fixtures/recipe-basic/Recipefile path:tests/fixtures/recipe-basic/Recipefile/** path:tests/fixtures/recipe-basic/manifest.toml path:tests/fixtures/recipe-basic/manifest.toml/** path:tools path:tools/**"
 
 _class_set_once() {
     [ -n "$_CLASS_SET_MEMO" ] && return 0
@@ -1072,7 +1072,7 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, 
     # NONE launched, and 108 identical launch failures are indistinguishable
     # from 108 real refusals to anyone reading the summary.
     #
-    # THE TREE ALREADY KNEW: scripts/test-dispatch-reap.sh:99 probes
+    # THE TREE ALREADY KNEW: scripts/lua/test-dispatch-reap.lua probes
     # `command -v setsid` and emits a named skip under 1141-vf9w ("NOT the same
     # as passing"). One caller asked and one did not.
     #
@@ -1437,7 +1437,7 @@ _preflight_preconditions() {
     cat <<'PRECONDS'
 check-no-python-scripts.lua|policy-binary|compiles before it resolves (its first command is `cargo build -p tillandsias-policy`); runs only when that binary already exists
 check-no-competing-gate.sh|gate-context|answers about a RUNNING gate's dispatch, not about the tree; it has no subject outside one
-check-tracked-files-unwritten.sh|gate-context|compares against a snapshot the gate takes at its own start; outside a gate there is nothing to compare
+check-tracked-files-unwritten.lua|gate-context|compares against a snapshot the gate takes at its own start; outside a gate there is nothing to compare
 PRECONDS
 }
 
@@ -3908,7 +3908,7 @@ _write_gate_stamp() {
     # that lets it push.
     if [ -n "${_TRACKED_STATE:-}" ]; then
         _step "Checking the gate did not write into the checkout (1063-363b)..."
-        if ! _run bash "$SCRIPT_DIR/scripts/check-tracked-files-unwritten.sh" verify "$_TRACKED_STATE" 2>&1; then
+        if ! _run_lua_decider "scripts/lua/check-tracked-files-unwritten.lua" verify "$_TRACKED_STATE" 2>&1; then
             _error "the gate modified tracked files while measuring them (1063-363b) — every verdict after the write is suspect; restore with 'git checkout --' and see the named paths above"
             exit 1
         fi
@@ -4551,7 +4551,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # after the write measured something other than the tree under test, and
     # said so confidently. 61ms against a 254s gate.
     _TRACKED_STATE="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-tracked-baseline"
-    bash "$SCRIPT_DIR/scripts/check-tracked-files-unwritten.sh" snapshot "$_TRACKED_STATE" >/dev/null 2>&1 || true
+    _run_lua_decider "scripts/lua/check-tracked-files-unwritten.lua" snapshot "$_TRACKED_STATE" >/dev/null 2>&1 || true
 
     _step "Fast refusals: sub-second deciders before any compile (1009-gccx)..."
 
@@ -4669,7 +4669,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # ORDER 1313-w78k — the same check the plan-only lane runs, here so a GATED
     # land cannot carry what the cheap lane refuses. Tree-only, sub-second,
     # diff-scoped against the base ref.
-    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-ts-skew.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-fragment-ts-skew.lua" 2>&1; then
         _error "a ledger fragment carries a ts AHEAD of this host's clock — a future timestamp is not a backfill, it is an invented time (1313-w78k); see the verdict line above"
         exit 1
     fi
@@ -5222,7 +5222,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # on two hosts an hour apart as `in_progress=1` with zero rows. The arm that
     # matters is the fresh-unclaimed one; it fails against the pre-fix binary.
     _step "Checking expire-claims --list-live names what it counts (905-wjfj)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-expire-claims-list-live-rows.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-expire-claims-list-live-rows.lua"; then
         _error "--list-live is counting in_progress packets it will not name — the sibling-overlap step built on it is blind again"
         exit 1
     fi
@@ -5329,7 +5329,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # or the /opt fixtures prints "skip: ..." and exits 0; the skip is the
     # point, not the gate.
     _step "Checking populate_hot_paths silent-failure regression (920-tqhs)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-populate-hot-paths-negative-control.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-populate-hot-paths-negative-control.lua" 2>&1; then
         _error "populate_hot_paths silence regressed — an unwritable hot mount could break tellme with a success trace again"
         exit 1
     fi
@@ -5359,7 +5359,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # because scripts/test-*.sh is not globbed and a fixture reaching the gate
     # by neither route is a file, not a gate.
     _step "Checking the probe refuses a stale candidate (1172-dyvd)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-probe-refuses-stale-candidate.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-probe-refuses-stale-candidate.lua" 2>&1; then
         _error "host-capability-probe.sh would publish a capability row from a binary it cannot show is current — the matrix routes on that row"
         exit 1
     fi
@@ -6983,7 +6983,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # part of 1005-m6rz's closure. It compiles nothing and touches no real
     # toolchain: every arm is hermetic in a scratch tree.
     _step "Checking cargo resolution, git identity and the cargo-site registry (876-irn7, 1005-m6rz)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-cycle-preflight-cargo-resolution.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-cycle-preflight-cargo-resolution.lua" 2>&1; then
         _error "a preamble host-readiness arm regressed (876-irn7, 1005-m6rz) — see the verdict line above"
         exit 1
     fi
@@ -7117,7 +7117,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # a comparison that drops paths with spaces, or reads a missing baseline as
     # a clean tree, would be worse than none.
     _step "Checking the tracked-file guard still detects a write (1063-363b)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-tracked-files-unwritten-guard.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-tracked-files-unwritten-guard.lua" 2>&1; then
         _error "the tracked-file guard lost an arm (1063-363b) — see the verdict line above"
         exit 1
     fi
@@ -7225,17 +7225,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Requirement-id check passed"
 
     _step "Verifying the requirement-id generator stays idempotent (976-suab)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-requirement-ids.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-requirement-ids.lua" 2>&1; then
         _error "the requirement-id generator/validator fixture regressed (976-suab) — see the failing case above"
         exit 1
     fi
     _info "Requirement-id fixture passed"
 
-    # ORDER 2118-9kqp: test-credential-verdict-script.sh (995-srbf) runs ONCE, in
+    # ORDER 2118-9kqp: test-credential-verdict-script.lua (995-srbf) runs ONCE, in
     # gate step 350-1903-djsq, under the sentinel session bus.
 
     _step "Checking the freshness budget is regime-named and still catches a regression (1038-d7vw)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-freshness-regime-budget.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-freshness-regime-budget.lua" 2>&1; then
         _error "the freshness budget stopped discriminating by filesystem regime, or drifted outside the measurements that derived it (1038-d7vw) — one global number cannot serve 725ms on ext4 and 13.8s over drvfs, and a remote budget raised past the 25.2s pre-fix cost would stay green through a full quadratic regression"
         exit 1
     fi
@@ -7294,8 +7294,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     # test-guest-unit-hardening moved to gate step 924-2262-bke7 (Lua).
     _step "Checking test-release-freeze-audit (1255-s4im)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-release-freeze-audit.sh" 2>&1; then
-        _error "scripts/test-release-freeze-audit.sh failed — the server-visible freeze audit may no longer name a breach, or the release preflight may no longer refuse one (1255-s4im); read the fixture output above"
+    if ! _run_lua_decider "scripts/lua/test-release-freeze-audit.lua" 2>&1; then
+        _error "scripts/lua/test-release-freeze-audit.lua failed — the server-visible freeze audit may no longer name a breach, or the release preflight may no longer refuse one (1255-s4im); read the fixture output above"
         exit 1
     fi
     _step "Checking test-litmus-steps-can-fail (1063-nraf; 38ms)..."
@@ -7324,8 +7324,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _step "Checking test-scorable-obligation-gate (1063-nraf; 580ms)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-scorable-obligation-gate.sh" 2>&1; then
-        _error "scripts/test-scorable-obligation-gate.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+    if ! _run_lua_decider "scripts/lua/test-scorable-obligation-gate.lua" 2>&1; then
+        _error "scripts/lua/test-scorable-obligation-gate.lua failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
         exit 1
     fi
     _step "Checking the held-claim report (1115-srfr)..."
@@ -7334,8 +7334,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _step "Checking test-subdomain-routing (1063-nraf; 14ms)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-subdomain-routing.sh" 2>&1; then
-        _error "scripts/test-subdomain-routing.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+    if ! _run_lua_decider "scripts/lua/test-subdomain-routing.lua" 2>&1; then
+        _error "scripts/lua/test-subdomain-routing.lua failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
         exit 1
     fi
     _info "Ten formerly-orphaned fixtures passed (1063-nraf)"
@@ -7426,7 +7426,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # guard is here rather than a third careful edit because "one copy fixed, one
     # copy missed" is the defect this project repeats most.
     _step "Checking every guest-destroying purge clears the host vault credentials (803-49re)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-purge-clears-vault-credentials.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-purge-clears-vault-credentials.lua" 2>&1; then
         _error "a script unregisters the tillandsias distro without clearing the host's copy of that guest's Vault identity (803-49re) — call Clear-TillandsiasVaultHostCredentials from scripts/clear-vault-host-credentials.ps1"
         exit 1
     fi

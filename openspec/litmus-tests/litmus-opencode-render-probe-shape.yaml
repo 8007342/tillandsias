@@ -19,11 +19,11 @@ size: instant
 # inputs: see order 765-mza8.
 inputs:
   - images/default/**
-  - scripts/test-opencode-render-probe.sh
+  - scripts/lua/test-opencode-render-probe.lua
 
 preconditions:
   - workspace contains images/default/lib-common.sh
-  - workspace contains scripts/test-opencode-render-probe.sh
+  - workspace contains scripts/lua/test-opencode-render-probe.lua
 
 critical_path:
   - step: "BEHAVIOUR: the render contract refuses a non-rendering binary and accepts a rendering one"
@@ -31,9 +31,9 @@ critical_path:
     # flag greps but never renders must FAIL, and a stub that emits the marker
     # must PASS. Without the second, the first would pass even if the probe
     # rejected everything.
-    command: "scripts/test-opencode-render-probe.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-opencode-render-probe.lua 2>&1"
     timeout_ms: 120000
-    success_pattern: "PASS: opencode render-probe fixture"
+    success_pattern: "ok:opencode-render-probe:9 arms"
     failure_pattern: "FAIL:"
 
   - step: "Req: the gate is wired where every consumer reaches it"

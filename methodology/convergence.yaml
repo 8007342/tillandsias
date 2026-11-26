@@ -112,7 +112,7 @@ drift_control:
           record is a STEP_SECOND_REGIME variable in the .step file itself
           ("<host> <YYYY-MM-DD> <darwin|msys> <verdict>"), kept beside the step
           rather than in a sidecar so it cannot drift from its subject, and
-          enforced by scripts/check-gate-step-regimes.sh. A step that genuinely
+          enforced by scripts/lua/check-gate-step-regimes.lua. A step that genuinely
           cannot run off Linux records a NAMED SKIP as its verdict and that
           COUNTS (965-sxec): what is required is an observation from the other
           regime, not a green one. Recording a Linux host in that field does not
@@ -706,7 +706,7 @@ carried_obligations:
       The counter reaches the backlog's floor of things that stay (for
       shell-to-lua, scripts/portability/bootstrap-shell-allowlist.txt). The
       obligation is removed from the table; the ratchet stays as the growth
-      refusal, and check-decider-retirement.sh says when its deciders retire.
+      refusal, and scripts/lua/check-decider-retirement.lua says when its deciders retire.
   governance: >
     A trigger obliges the coordinator to PROPOSE the move, as one plain ask in
     the operator queue carrying the window's numbers (paid, waived, silent,

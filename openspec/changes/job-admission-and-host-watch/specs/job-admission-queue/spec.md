@@ -57,6 +57,35 @@ pressure event, and MUST NOT be re-evaluated on a periodic timer.
 - **WHEN** no job is queued or running for 30 minutes of fixture time
 - **THEN** the queue records no admission evaluation
 
+### Requirement: Every model on a host is admitted against one memory budget
+
+Loading a model MUST be admitted like a job, against the same snapshot and the same host floor. This
+applies to every model: one in a container slot, one in a host-native inference service, and the
+watchdog's judge. A model's reserve MUST be its measured resident size for that engine and quantisation,
+recorded as data. A resident model's reserve MUST stay subtracted until it unloads. On a host where a
+guest VM and host processes share one physical memory pool (Apple unified memory), the guest's
+allocation and the host service's residency MUST be counted against that one pool, never as two budgets.
+A refused load MUST name the reason `memory`. The caller MUST fall to a smaller tier or to rules-only,
+and MUST NOT wait unboundedly. Small models on the host and in containers are complements: the queue
+MUST NOT let one tier's residency starve the jobs the others are watching.
+
+> Delta: operator ruling 2381-778w, 2026-11-25, quoted verbatim: "our fleet leader ... is also planning on
+> using small models to run babysitter jobs on the metal, and inside the containers, all of these need to
+> be resource-aware and plan-aware, they all play together, and should compliment each other." Before it,
+> a model load was outside admission, and on a Mac the guest and a host service could each believe the
+> same memory was free.
+
+@trace order:2381-zueb, order:2381-778w, spec:inference-engine-slots
+
+#### Scenario: A host service model and a guest model share one budget on a Mac
+- **WHEN** the guest holds 8 GiB on a 16 GiB Mac and a host-service model with a 3 GiB reserve is requested
+- **THEN** admission counts the guest's 8 GiB and the host floor against the same 16 GiB
+- **AND** the load is refused with reason `memory` when the remainder does not cover 3 GiB
+
+#### Scenario: A refused judge falls to a smaller tier, not to waiting
+- **WHEN** the judge's tier is refused for memory
+- **THEN** the watchdog takes the next smaller tier, or rules only, at once
+
 ### Requirement: Lanes take turns and a large job is not starved
 
 Lanes with a waiting job MUST be served round-robin, one admission per lane

@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-25, on macuahuitl-fedora's request after #1578 landed (run 83).
+packets:
+- packet_id: lua-kit-children-that-reenter-build-sh-keep-what-lets-them-inherit
+  order: 2384-svqx
+  status: implemented
+  kind: fix
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [shell-to-lua, fixtures, lua-kit, gate]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 1
+  title: 'Lua kit rule: a fixture that strips TILLANDSIAS_* and runs build.sh must carry the toolbox and shared-target inheritance variables (fixture.gate_inherit)'
+  context: >-
+    #1578 (2375-psb9) was evicted twice on Linux only, on the same arm. Land run 79: the nested build.sh lost
+    TOOLBOX_PATH, container and TILLANDSIAS_SKIP_TOOLBOX and re-exec'd into a fresh toolbox ("TOOLBOX_PATH not set").
+    Land run 82: it lost TILLANDSIAS_SHARED_TARGET_HELD and waited on its own parent's shared-target flock until its
+    300 s timeout (diagnosed by a status line naming status=timed_out). The fix landed in run 83. macOS has neither the
+    toolbox nor flock, so no darwin run can show either. The rule now lives in lib/lua/common/fixture.lua as
+    M.GATE_INHERIT plus M.gate_inherit(env). A caller must declare all six names in -- @env, and an undeclared
+    one is an error naming it, never a silent skip. test-script-run-verb.lua is its first user.
+  exit_criteria:
+  - 'fixture.gate_inherit carries every set GATE_INHERIT name into a child env, and errors naming any undeclared one.'
+  - 'test-script-run-verb.lua uses it, and stays green bare and with the variables set.'
+  verifiable_closure: 'tillandsias-plan script run scripts/lua/test-script-run-verb.lua'
+  unscoreable: 'the Linux-only failure it prevents needs the real gate; darwin shows only the carried values (probed in this session: container=oci held=c|r|9)'
+  next_action: 'Implemented. Port authors: grep a .sh for build.sh children before porting and call fixture.gate_inherit.'
+  provenance: 'tlatoanis-macbook-air 2026-11-25; #1578 evictions in land runs 79 and 82, landed in 83.'
+  related: [2375-psb9, 2305-zm8j]
+  events:
+  - {type: filed, ts: '2026-11-26T00:51:52Z', host: tlatoanis-macbook-air, summary: 'kit rule and helper, with its first user'}
