@@ -12,7 +12,7 @@ Packet `1798-khw6`.
 ## 2. Promotion
 
 - [x] 2.1 `scripts/promote-stable.sh` step 4 on promote and demote; dry-run names it.
-- [x] 2.2 `scripts/test-promote-stable-evidence-gate.sh`: a promotion advances
+- [x] 2.2 `scripts/lua/test-promote-stable-evidence-gate.lua`: a promotion advances
       the ref; a refused advance is not a promotion (30/30).
 - [x] 2.3 `litmus:stable-channel-shape`: promotion is the only writer of the ref.
 

@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-26. Release and push guards, per macuahuitl 2026-11-26.
+packets:
+- packet_id: port-release-push-guards
+  order: 2404-grd6
+  status: implemented
+  kind: chore
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [shell-to-lua, macos, fixtures, portability, release]
+  size: M
+  implementer_tier: opus
+  estimated_hours: 6
+  title: 'Port two release/push guards to Lua with full mutant parity; front-door port parked'
+  ports: [scripts/test-pre-push-honours-a-live-freeze.sh, scripts/test-promote-stable-evidence-gate.sh]
+  context: >-
+    pre-push-honours-a-live-freeze is 23 arms (the .sh's arms plus a deletion pushed beside a new branch and a
+    work/ slashed-branch push); 19 mutants are red in both the .lua and the .sh. promote-stable-evidence-gate is 46
+    arms (the .sh's 39 minus the online dry-run arm, plus seven new ones); 21 mutants are red in both, and the
+    demote verify-after mutant is caught by neither. Callers: step 075 (STEP_LUA, fresh darwin regime), build.sh's
+    promote-stable decider, two litmus tests, two prose pointers and the floor lines. The preflight-front-door port
+    has mutant parity too (10 of 11 caught by both; the serial return 12 is caught by neither) but is held back:
+    test-preflight-regime-budget.lua (step 465) executes the .sh's judge_budget and settle helpers, so the .sh
+    cannot be deleted until those move.
+  exit_criteria:
+  - 'Each .lua gives the same verdict as its .sh on the trunk tree, and the same red arms under each mutant.'
+  - 'Every caller runs the .lua; both .sh files and their floor lines are gone.'
+  verifiable_closure: 'Mutant tables in the PR; step 075, the build.sh decider and both litmus tests green on darwin and in the Linux land gate.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the mutant parity is the deliverable.'
+  next_action: 'Implemented. Follow-up: move the budget/settle helpers out of test-preflight-front-door.sh so step 465 stops executing it, then land the front-door port.'
+  provenance: 'tlatoanis-macbook-air 2026-11-26, on macuahuitl-fedora''s direction.'
+  related: [2401-prg5, 2400-prg4]
+  events:
+  - {type: filed, ts: '2026-11-26T11:30:39Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}
