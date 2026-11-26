@@ -111,6 +111,16 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: cleaned"
 
+  - step: "Req: every mf_holds variant finds a present match on a large haystack under pipefail, so no mf_lacks passes vacuously"
+    # ORDER 2400-az2b. The primitives were `printf "$v" | grep -q`; grep -q exits on the first
+    # match and, under pipefail, printf's write into the closed pipe became the verdict: a 5 MB
+    # haystack whose first line was the needle read not-found 40 times in 40. Red against that
+    # body, green on the here-string one.
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-stdlib-holds-large-haystack.lua 2>&1"
+    timeout_ms: 300000
+    assert_exit: 0
+    assert_output_contains: "ok:litmus-stdlib-holds-large-haystack:3 arms"
+
 observability:
   traces:
     - "@trace spec:spec-traceability"

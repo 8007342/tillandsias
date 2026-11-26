@@ -249,7 +249,7 @@ fi
 have_kind() { # $1=kind $2=name
     case "$1" in
         rustup-target)
-            printf '%s\n' "$_installed_targets" | grep -qx -- "$2"
+            grep -qx -- "$2" <<<"$_installed_targets"
             ;;
         *)
             have "$2"
