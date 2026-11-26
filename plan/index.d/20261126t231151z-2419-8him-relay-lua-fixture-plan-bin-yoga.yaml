@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: relay-preflight-lua-fixtures-get-the-plan-binary
+    order: "2419-8him"
+    status: in_progress
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [relay, fixtures, gate]
+    estimated_hours: 1
+    owned_files: [scripts/relay-preflight.sh, scripts/lua/test-relay-preflight-selects-lua-fixtures.lua]
+    title: "relay-preflight hands a Lua fixture TILLANDSIAS_PLAN_BIN; 2415-ea3h left 175 fixtures red by construction"
+    context: |
+      My regression in 2415-ea3h (#1671, landed run 97). Phase 5 runs a .lua fixture as "<plan> script run <f>"
+      without TILLANDSIAS_PLAN_BIN / TILLANDSIAS_SCRIPT_RUNNER_BIN, and 175 scripts/lua/test-*.lua read one of
+      them; each then refuses could-not-run ("no plan binary named") and relay-preflight reports it red.
+      MEASURED: #1424's relay-preflight on yoga reddened on test-bare-mktemp.lua in 8 ms; the same fixture with
+      TILLANDSIAS_PLAN_BIN set is ok:bare-mktemp-fixture:7 arms. Every relay touching such a fixture is blocked.
+    exit_criteria:
+      - "A .lua fixture run by phase 5 sees TILLANDSIAS_PLAN_BIN and TILLANDSIAS_SCRIPT_RUNNER_BIN naming the runner (fixture arm, red first)."
+      - "#1424's relay-preflight runs test-bare-mktemp.lua green."
+    unscoreable: "fixture-scored: test-relay-preflight-selects-lua-fixtures.lua"
+    provenance: "yoga, found reviving #1424, 2026-11-26"
+    related: [2415-ea3h]
+    events:
+      - {type: claimed, ts: "2026-11-26T23:11:51Z", host: yoga, summary: "claimed; work ref work/2419-8him"}
