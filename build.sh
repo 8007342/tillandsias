@@ -6020,7 +6020,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # advisory can RUN — a broken checkout is a build break; a ledger finding is
     # not.
     _step "Checking the base ledger for completions the fold hides (751-i9mb, advisory)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-base-ledger-status-loss.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-base-ledger-status-loss.lua" 2>&1; then
         _error "the base-ledger status-loss advisory could not run — that is a broken checkout, not a clean ledger"
         exit 1
     fi

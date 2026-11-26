@@ -3,7 +3,6 @@ scripts/check-added-test-is-referenced.sh
 scripts/check-append-vs-origin-fold.sh
 scripts/check-archive-answerability.sh
 scripts/check-arrival-routing.sh
-scripts/check-base-ledger-status-loss.sh
 scripts/check-build-cache-sweep.sh
 scripts/check-capability-row.sh
 scripts/check-carry-forward.sh
@@ -26,7 +25,6 @@ scripts/check-mcp-expert-health.sh
 scripts/check-mcp-live-build.sh
 scripts/check-mcp-surface.sh
 scripts/check-mo-full-attestations.sh
-scripts/check-must-ship-rows.sh
 scripts/check-native-lint-attested.sh
 scripts/check-nix-builder-e2e.sh
 scripts/check-nix-deps-stability.sh

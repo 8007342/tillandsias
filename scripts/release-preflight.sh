@@ -399,8 +399,11 @@ fi
 # closes is that NOBODY WAS TOLD (1211-34v6 missed a cut with nothing reporting
 # it); it was never that someone overrode a warning. `|| true` is belt and
 # braces over a script that already exits 0 on every verdict.
-if [[ -x "$REPO_ROOT/scripts/check-must-ship-rows.sh" ]]; then
-    bash "$REPO_ROOT/scripts/check-must-ship-rows.sh" --cut-ref HEAD >&2 || true
+# Lua since 2390-byz6, on the plan binary resolved above.
+if [[ -n "$_plan_bin" ]]; then
+    "$_plan_bin" script run "$REPO_ROOT/scripts/lua/check-must-ship-rows.lua" -- --cut-ref HEAD >&2 || true
+else
+    echo "could-not-run:must-ship:no-plan-binary" >&2
 fi
 
 # ADVISORY, order 914-nkc4, and a sibling of the one above in every respect —

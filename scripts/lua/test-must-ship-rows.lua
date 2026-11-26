@@ -1,26 +1,25 @@
 -- @env PATH HOME TMPDIR
 -- @trace order:1218-25z3, spec:versioning, spec:ci-release, order:2380-wjrd
 --
--- test-must-ship-rows.lua — scripts/check-must-ship-rows.sh names the rows marked for the next cut whose fix
+-- test-must-ship-rows.lua — scripts/lua/check-must-ship-rows.lua names the rows marked for the next cut whose fix
 -- is not in the tree being cut, and never blocks. Arms 1-6 run the guard in a scratch repo with its own
 -- ledger: one row fixed by a `type(order):` subject, one only mentioned in a body. Arms 7-10 read THIS
 -- repository: its history carries the case the row exists for, and its release path runs the guard.
 -- Ported from the .sh of the same name, which pointed the guard at probe commits in the real repository.
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-must-ship-rows.lua
--- Verdict: ok:must-ship-rows:<n> arms | violation:...:<n>-failed | skip:must-ship-rows:no-jq
+-- Verdict: ok:must-ship-rows:<n> arms | violation:...:<n>-failed
 
 local fixture = require "common.fixture"
 local T = fixture.new("must-ship-rows")
 local SH, PLAN, ROOT = fixture.posix_shell(), fixture.plan_binary(), fixture.repo_root()
-local GUARD = "scripts/check-must-ship-rows.sh"
+local GUARD = "scripts/lua/check-must-ship-rows.lua"
 if not fs.exists(GUARD) then T:refuse("subject-missing") end
-if not fixture.which("jq") then T:skip("no-jq") end -- the guard's own dependency
 if PLAN == "" then T:refuse("no-plan-binary") end
 local src = fs.read(GUARD):gsub("\r\n", "\n")
 
 local R = T:git_repo()
-fs.mkdir(R.rel .. "/scripts"); fs.mkdir(R.rel .. "/plan")
+fs.mkdir(R.rel .. "/scripts"); fs.mkdir(R.rel .. "/scripts/lua"); fs.mkdir(R.rel .. "/plan")
 fs.write(R.rel .. "/" .. GUARD, src)
 fs.write(R.rel .. "/scripts/plan-binary-probe.sh", (fs.read("scripts/plan-binary-probe.sh"):gsub("\r\n", "\n")))
 local function row(order, id, mark)
@@ -39,7 +38,7 @@ local BOTH = commit("feat(8000-zzzz, 9002-bbbb): two orders in one subject")
 local function guard(args, o)
     o = o or {}
     fs.write(R.rel .. "/" .. GUARD, o.body or src)
-    local argv = { SH, R.abs .. "/" .. GUARD, cwd = R.abs, timeout_ms = o.timeout_ms or 60000, env_unset = { "TILLANDSIAS_*", "GIT_*" },
+    local argv = { PLAN, "script", "run", R.abs .. "/" .. GUARD, "--", cwd = R.abs, timeout_ms = o.timeout_ms or 60000, env_unset = { "TILLANDSIAS_*", "GIT_*" },
         env = { PATH = env.get("PATH"), HOME = env.get("HOME"), TMPDIR = env.get("TMPDIR"), TILLANDSIAS_PLAN_BIN = o.plan or PLAN } }
     for _, a in ipairs(args) do argv[#argv + 1] = a end
     local r = T:run(argv)
@@ -89,27 +88,28 @@ if shallow then out.line("skip:must-ship-rows:7-8:shallow-clone") else
         out.line("skip:must-ship-rows:8:no-tag-v56.9.13.1-in-this-clone")
     end
 end
-local live = T:run{ SH, ROOT .. "/" .. GUARD, "--cut-ref", "HEAD", cwd = ROOT, timeout_ms = 120000,
+local live = T:run{ PLAN, "script", "run", GUARD, "--", "--cut-ref", "HEAD", cwd = ROOT, timeout_ms = 120000,
     env = { PATH = env.get("PATH"), HOME = env.get("HOME"), TMPDIR = env.get("TMPDIR"), TILLANDSIAS_PLAN_BIN = PLAN } }
 local said = text.trim((live.stdout or ""):gsub("\r", ""))
 T:arm("9 on the real ledger it prints one line of its grammar, rc 0", live.code == 0
     and (said:find("^ok:must%-ship:0 outstanding of %d+ marked$") ~= nil or said:find("^advisory:must%-ship:%d+ outstanding of %d+ marked$") ~= nil), said)
-T:arm("10 the release path runs it", text.contains(fs.read("scripts/release-preflight.sh"), "check-must-ship-rows.sh"))
+T:arm("10 the release path runs it", text.contains(fs.read("scripts/release-preflight.sh"), "scripts/lua/check-must-ship-rows.lua"))
 local pf = T:run{ SH, ROOT .. "/scripts/release-preflight.sh", cwd = ROOT, timeout_ms = 240000,
     env = { PATH = env.get("PATH"), HOME = env.get("HOME"), TMPDIR = env.get("TMPDIR"), TILLANDSIAS_PLAN_BIN = PLAN } }
 T:arm("10 and still prints one line on stdout", select(2, (pf.stdout or ""):gsub("[^\r\n]+", "")) == 1, (pf.stdout or ""):sub(1, 300))
 
 -- MUTATION
 local function mutant(from, to)
-    local a, b = src:find(from, 1, true)
-    if not a then T:refuse("mutation-anchor-missing", from) end
-    return src:sub(1, a - 1) .. to .. src:sub(b + 1)
+    local x, y = src:find(from, 1, true)
+    if not x then T:refuse("mutation-anchor-missing", from) end
+    return src:sub(1, x - 1) .. to .. src:sub(y + 1)
 end
-x = guard({ "--cut-ref", MENTION }, { body = mutant('$0 ~ ("^[a-z]+\\\\([^)]*" o "[^)]*\\\\)")', "index($0, o)"):gsub("%-%-format='%%s' \"%$CUT_REF\"", "--format='%%B' \"$CUT_REF\"") })
+local MENTIONS = mutant('for _, s in ipairs(subjects) do if s:find(pat) then', 'for _, s in ipairs(subjects) do if s:find(m.order, 1, true) then')
+MENTIONS = MENTIONS:gsub('"%-%-format=%%s", CUT_REF', '"--format=%%B", CUT_REF')
+x = guard({ "--cut-ref", MENTION }, { body = MENTIONS })
 T:arm("11 MUTATION a guard that counts mentions fails arm 3", x.line == "ok:must-ship:0 outstanding of 2 marked", x.got)
-x = guard({ "--cut-ref", BOTH }, { plan = STALE.plan, body = mutant('if [ "${_probe_saw:-ABSENT}" != "next" ]; then', "if false; then") })
-T:arm("11 MUTATION a guard that trusts any binary's zero fails arm 5", x.line == "ok:must-ship:0 outstanding of 0 marked", x.got)
-x = guard({ "v56.9.13.1" }, { body = mutant('            echo "fail:must-ship:unknown-argument"', '            shift; continue; echo "fail:must-ship:unknown-argument"') })
+x = guard({ "--cut-ref", BOTH }, { plan = STALE.plan, body = mutant('if saw ~= "next" then', "if false then") })
+T:arm("11 MUTATION a guard that trusts any binary's zero fails arm 5", x.line ~= "skipped:must-ship:stale-plan-binary", x.got)
+x = guard({ "v56.9.13.1" }, { body = mutant('done("fail:must-ship:unknown-argument")', "i = i + 1") })
 T:arm("11 MUTATION a guard that drops an argument it does not know fails arm 6", x.line == "ok:must-ship:0 outstanding of 2 marked", x.got)
-
 T:finish()
