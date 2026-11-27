@@ -79,12 +79,11 @@ end
 local _, pe = plan{ "policy", "eval", "--", STUB, "--reset-state" }
 if pe ~= "consent:policy:soft-reset" then T:refuse("premise", "the stub argv left the soft-reset class ([" .. pe .. "])") end
 
--- A forge is a container of the forge IMAGE (the policy's own evidence); a toolbox is not one. The
--- record is outside fs's scope, so cat reads it.
-local rec = T:run{ "cat", "/run/.containerenv", timeout_ms = 10000 }
-local image = rec.code == 0 and ("\n" .. (rec.stdout or "")):match('\nimage="([^"\n]*)"') or ""
-local base = image:match("([^/]*)$")
-if base == "tillandsias-forge" or base:match("^tillandsias%-forge[:@]") then
+-- A forge is a container whose image carries the root-owned forge marker (the policy's own
+-- evidence since 2354-5biy; the image name alone no longer is). The marker is outside fs's scope,
+-- so cat reads it.
+local rec = T:run{ "cat", "/etc/tillandsias/forge", timeout_ms = 10000 }
+if rec.code == 0 and ("\n" .. (rec.stdout or "")):match("\nkind=forge\n") then
     out.line("skip: 2, 3, 4 the container record names the forge image; run on bare metal")
     T:finish()
 end
