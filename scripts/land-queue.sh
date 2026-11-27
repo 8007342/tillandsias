@@ -627,16 +627,30 @@ daily_proof() { # <base sha> -> sets _daily_proof="<epoch> <sha>", or rc 1 with 
 # gate_env_for <base sha> — exports what the gate's class selector reads, and
 # sets _daily_note. With no proof the marker points at a file that does not
 # exist, so the selector reads "never" and skips nothing (fail closed).
+# _ungated_paths <proof sha> <base sha> — the paths changed by trunk commits since the
+# proof that ran NO gate: the single-parent first-parent ones (the plan-only lane). A land
+# is a merge the queue made after gating its own diff, so its paths need no re-judging.
+_ungated_paths() {
+    local _c
+    for _c in $(git rev-list --first-parent --no-merges "$1..$2" 2>/dev/null); do
+        git diff-tree --no-commit-id --name-only -r "$_c" 2>/dev/null
+    done | LC_ALL=C sort -u
+}
 gate_env_for() {
     local _p
     if daily_proof "$1"; then
         _p="$_daily_proof"
         printf '%s\n' "${_p%% *}" > "$_RUNDIR/daily-full-marker"
-        export TILLANDSIAS_CLASS_BASE="${_p#* }" TILLANDSIAS_FULL_GATE_MARKER="$_RUNDIR/daily-full-marker"
-        _daily_note="against daily proof ${_p#* }"
+        # ORDER 2429-u3rp: the changed set is the CANDIDATE's diff against the trunk it is
+        # gated on, plus what reached trunk ungated since the proof. Diffing against the
+        # proof itself counted every land of the day (436 paths, every class, measured
+        # 2026-11-27), so the scoped tier never skipped a step.
+        _ungated_paths "${_p#* }" "$1" > "$_RUNDIR/ungated-paths"
+        export TILLANDSIAS_CLASS_BASE="$1" TILLANDSIAS_CLASS_UNGATED_PATHS="$_RUNDIR/ungated-paths" TILLANDSIAS_FULL_GATE_MARKER="$_RUNDIR/daily-full-marker"
+        _daily_note="against $TRUNK ${1:0:9} + $(grep -c . "$_RUNDIR/ungated-paths") ungated path(s) since daily proof ${_p#* }"
     else
         rm -f "$_RUNDIR/no-daily-proof"
-        unset TILLANDSIAS_CLASS_BASE
+        unset TILLANDSIAS_CLASS_BASE TILLANDSIAS_CLASS_UNGATED_PATHS
         export TILLANDSIAS_FULL_GATE_MARKER="$_RUNDIR/no-daily-proof"
         _daily_note="full: $_daily_why"
     fi
