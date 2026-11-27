@@ -10734,6 +10734,24 @@
       "from": "image:imagegen-studio",
       "kind": "package",
       "optional": false,
+      "to": "pkg:debian:lua-filesystem"
+    },
+    {
+      "from": "image:imagegen-studio",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-lpeg"
+    },
+    {
+      "from": "image:imagegen-studio",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua5.4"
+    },
+    {
+      "from": "image:imagegen-studio",
+      "kind": "package",
+      "optional": false,
       "to": "pypi:requirements:imagegen-studio"
     },
     {
@@ -58390,7 +58408,7 @@
         "image:imagegen-studio"
       ],
       "source": "images/imagegen-corridorkey/Containerfile",
-      "version": "1.7.0-1build1"
+      "version": "1.6.0-1"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=libglib2.0-0",
@@ -58400,7 +58418,7 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "libglib2.0-0",
       "optional": true,
       "pulled_by": [
@@ -58408,7 +58426,7 @@
         "image:imagegen-studio"
       ],
       "source": "images/imagegen-corridorkey/Containerfile",
-      "version": "unknown"
+      "version": "2.74.6-2+deb12u9"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=libgomp1",
@@ -58458,6 +58476,7 @@
       "pulled_by": [
         "image:flutter",
         "image:imagegen-cuda",
+        "image:imagegen-studio",
         "image:web-wrangler",
         "image:webkit"
       ],
@@ -58478,6 +58497,7 @@
       "pulled_by": [
         "image:flutter",
         "image:imagegen-cuda",
+        "image:imagegen-studio",
         "image:web-wrangler",
         "image:webkit"
       ],
@@ -58498,6 +58518,7 @@
       "pulled_by": [
         "image:flutter",
         "image:imagegen-cuda",
+        "image:imagegen-studio",
         "image:web-wrangler",
         "image:webkit"
       ],
@@ -61360,7 +61381,7 @@
   "schema": "tillandsias-stack/v1",
   "summary": {
     "components": 57,
-    "edges": 3149,
+    "edges": 3155,
     "license_families": {
       "model": 7,
       "permissive": 1720,
