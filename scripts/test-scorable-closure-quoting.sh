@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# inputs: plan/index.yaml README.md scripts/check-scorable-obligation-added.sh scripts/gate-steps.d/165-1087-h2z9.step scripts/lua/check-cheatsheet-refs.lua scripts/test-gate-step-skip-exit.sh lib/lua/common/ crates/tillandsias-plan/
 # ORDER 1139-ipqt. A closure is judged on WHAT IT NAMES, not on how YAML quoted
 # it.
 #

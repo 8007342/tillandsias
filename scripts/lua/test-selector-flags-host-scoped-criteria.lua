@@ -1,4 +1,5 @@
 -- @trace order:1199-aw6m, spec:ci-release, order:2380-psba
+-- inputs: methodology/convergence.yaml methodology/distributed-work.yaml plan/index.yaml scripts/agent-identity.sh scripts/build-image.sh scripts/derive-host-identity.sh scripts/lib/tool-dispatch.sh scripts/lua/check-claims-across-branches.lua scripts/lua/test-capability-routing.lua scripts/lua/test-claims-across-branches.lua scripts/nix-toolbox.sh scripts/plan-binary-probe.sh scripts/select-work-batch.sh lib/lua/common/ crates/tillandsias-plan/
 -- @env PATH HOME
 --
 -- test-selector-flags-host-scoped-criteria.lua — an offer must carry the constraint the

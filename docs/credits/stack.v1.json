@@ -9588,6 +9588,24 @@
       "from": "image:chromium-core",
       "kind": "package",
       "optional": false,
+      "to": "pkg:fedora:lua"
+    },
+    {
+      "from": "image:chromium-core",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:fedora:lua-filesystem"
+    },
+    {
+      "from": "image:chromium-core",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:fedora:lua-lpeg"
+    },
+    {
+      "from": "image:chromium-core",
+      "kind": "package",
+      "optional": false,
       "to": "pkg:fedora:mesa-dri-drivers"
     },
     {
@@ -18871,6 +18889,24 @@
       "kind": "package",
       "optional": false,
       "to": "pkg:debian:fonts-noto-core"
+    },
+    {
+      "from": "image:webkit",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-filesystem"
+    },
+    {
+      "from": "image:webkit",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-lpeg"
+    },
+    {
+      "from": "image:webkit",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua5.4"
     },
     {
       "from": "image:webkit",
@@ -58165,14 +58201,14 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "fonts-liberation",
       "optional": true,
       "pulled_by": [
         "image:webkit"
       ],
       "source": "images/webkit/Containerfile",
-      "version": "unknown"
+      "version": "1:2.1.5-3"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=fonts-noto-cjk",
@@ -58182,14 +58218,14 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "fonts-noto-cjk",
       "optional": true,
       "pulled_by": [
         "image:webkit"
       ],
       "source": "images/webkit/Containerfile",
-      "version": "unknown"
+      "version": "1:20230817+repack1-3"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=fonts-noto-color-emoji",
@@ -58199,14 +58235,14 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "fonts-noto-color-emoji",
       "optional": true,
       "pulled_by": [
         "image:webkit"
       ],
       "source": "images/webkit/Containerfile",
-      "version": "unknown"
+      "version": "2.047-0ubuntu0.24.04.1"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=fonts-noto-core",
@@ -58216,14 +58252,14 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "fonts-noto-core",
       "optional": true,
       "pulled_by": [
         "image:webkit"
       ],
       "source": "images/webkit/Containerfile",
-      "version": "unknown"
+      "version": "20201225-2"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=git",
@@ -58253,7 +58289,7 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "libgl1",
       "optional": true,
       "pulled_by": [
@@ -58261,7 +58297,7 @@
         "image:imagegen-studio"
       ],
       "source": "images/imagegen-corridorkey/Containerfile",
-      "version": "unknown"
+      "version": "1.7.0-1build1"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=libglib2.0-0",
@@ -58289,14 +58325,14 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "libgomp1",
       "optional": true,
       "pulled_by": [
         "image:imagegen-cuda"
       ],
       "source": "images/imagegen/Containerfile.cuda",
-      "version": "unknown"
+      "version": "14.2.0-4ubuntu2~24.04.1"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=libsndfile1",
@@ -58306,14 +58342,65 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "libsndfile1",
       "optional": true,
       "pulled_by": [
         "image:audio-studio"
       ],
       "source": "images/audio-studio/Containerfile",
-      "version": "unknown"
+      "version": "1.2.2-1ubuntu5.24.04.1"
+    },
+    {
+      "homepage": "https://packages.debian.org/search?keywords=lua-filesystem",
+      "homepage_kind": "package-index",
+      "id": "pkg:debian:lua-filesystem",
+      "license": "unknown",
+      "license_family": "unknown",
+      "license_source": "none",
+      "link": "container-image",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
+      "name": "lua-filesystem",
+      "optional": true,
+      "pulled_by": [
+        "image:webkit"
+      ],
+      "source": "images/webkit/Containerfile",
+      "version": "1.8.0-3"
+    },
+    {
+      "homepage": "https://packages.debian.org/search?keywords=lua-lpeg",
+      "homepage_kind": "package-index",
+      "id": "pkg:debian:lua-lpeg",
+      "license": "unknown",
+      "license_family": "unknown",
+      "license_source": "none",
+      "link": "container-image",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
+      "name": "lua-lpeg",
+      "optional": true,
+      "pulled_by": [
+        "image:webkit"
+      ],
+      "source": "images/webkit/Containerfile",
+      "version": "1.0.2-2"
+    },
+    {
+      "homepage": "https://packages.debian.org/search?keywords=lua5.4",
+      "homepage_kind": "package-index",
+      "id": "pkg:debian:lua5.4",
+      "license": "unknown",
+      "license_family": "unknown",
+      "license_source": "none",
+      "link": "container-image",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
+      "name": "lua5.4",
+      "optional": true,
+      "pulled_by": [
+        "image:webkit"
+      ],
+      "source": "images/webkit/Containerfile",
+      "version": "5.4.6-3build2"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=ninja-build",
@@ -58340,14 +58427,14 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "pulseaudio",
       "optional": true,
       "pulled_by": [
         "image:webkit"
       ],
       "source": "images/webkit/Containerfile",
-      "version": "unknown"
+      "version": "1:16.1+dfsg1-2ubuntu10.1"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=pulseaudio-utils",
@@ -58357,14 +58444,14 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "pulseaudio-utils",
       "optional": true,
       "pulled_by": [
         "image:webkit"
       ],
       "source": "images/webkit/Containerfile",
-      "version": "unknown"
+      "version": "1:16.1+dfsg1-2ubuntu10.1"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=rubberband-cli",
@@ -59494,10 +59581,11 @@
       "name": "lua",
       "optional": false,
       "pulled_by": [
+        "image:chromium-core",
         "image:default-base",
         "image:inference"
       ],
-      "source": "images/default/Containerfile.base",
+      "source": "images/chromium/Containerfile.core",
       "version": "5.4.8-5.fc44"
     },
     {
@@ -59512,10 +59600,11 @@
       "name": "lua-filesystem",
       "optional": false,
       "pulled_by": [
+        "image:chromium-core",
         "image:default-base",
         "image:inference"
       ],
-      "source": "images/default/Containerfile.base",
+      "source": "images/chromium/Containerfile.core",
       "version": "1.8.0-16.fc44"
     },
     {
@@ -59530,10 +59619,11 @@
       "name": "lua-lpeg",
       "optional": false,
       "pulled_by": [
+        "image:chromium-core",
         "image:default-base",
         "image:inference"
       ],
-      "source": "images/default/Containerfile.base",
+      "source": "images/chromium/Containerfile.core",
       "version": "1.1.0-7.fc44"
     },
     {
@@ -61165,15 +61255,15 @@
   "schema": "tillandsias-stack/v1",
   "summary": {
     "components": 57,
-    "edges": 3131,
+    "edges": 3134,
     "license_families": {
       "model": 7,
       "permissive": 1718,
       "service": 15,
       "strong-copyleft": 26,
-      "unknown": 158,
+      "unknown": 161,
       "weak-copyleft": 20
     },
-    "nodes": 1944
+    "nodes": 1947
   }
 }
