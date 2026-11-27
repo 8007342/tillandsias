@@ -9588,6 +9588,24 @@
       "from": "image:chromium-core",
       "kind": "package",
       "optional": false,
+      "to": "pkg:fedora:lua"
+    },
+    {
+      "from": "image:chromium-core",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:fedora:lua-filesystem"
+    },
+    {
+      "from": "image:chromium-core",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:fedora:lua-lpeg"
+    },
+    {
+      "from": "image:chromium-core",
+      "kind": "package",
+      "optional": false,
       "to": "pkg:fedora:mesa-dri-drivers"
     },
     {
@@ -59494,10 +59512,11 @@
       "name": "lua",
       "optional": false,
       "pulled_by": [
+        "image:chromium-core",
         "image:default-base",
         "image:inference"
       ],
-      "source": "images/default/Containerfile.base",
+      "source": "images/chromium/Containerfile.core",
       "version": "5.4.8-5.fc44"
     },
     {
@@ -59512,10 +59531,11 @@
       "name": "lua-filesystem",
       "optional": false,
       "pulled_by": [
+        "image:chromium-core",
         "image:default-base",
         "image:inference"
       ],
-      "source": "images/default/Containerfile.base",
+      "source": "images/chromium/Containerfile.core",
       "version": "1.8.0-16.fc44"
     },
     {
@@ -59530,10 +59550,11 @@
       "name": "lua-lpeg",
       "optional": false,
       "pulled_by": [
+        "image:chromium-core",
         "image:default-base",
         "image:inference"
       ],
-      "source": "images/default/Containerfile.base",
+      "source": "images/chromium/Containerfile.core",
       "version": "1.1.0-7.fc44"
     },
     {
@@ -61165,7 +61186,7 @@
   "schema": "tillandsias-stack/v1",
   "summary": {
     "components": 57,
-    "edges": 3131,
+    "edges": 3134,
     "license_families": {
       "model": 7,
       "permissive": 1718,

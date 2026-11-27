@@ -240,7 +240,10 @@ chromium-core	fedora	lmdb-libs	0.9.34-2.fc44	OLDAP-2.8
 chromium-core	fedora	logrotate	3.22.0-5.fc44	GPL-2.0-or-later
 chromium-core	fedora	lpcnetfreedv	0.5-10.fc44	LicenseRef-Callaway-BSD
 chromium-core	fedora	lttng-ust	2.14.0-5.fc44	LGPL-2.1-only AND MIT AND GPL-2.0-only AND BSD-3-Clause AND BSD-2-Clause
+chromium-core	fedora	lua	5.4.8-5.fc44	MIT
+chromium-core	fedora	lua-filesystem	1.8.0-16.fc44	MIT
 chromium-core	fedora	lua-libs	5.4.8-5.fc44	MIT
+chromium-core	fedora	lua-lpeg	1.1.0-7.fc44	MIT
 chromium-core	fedora	lz4-libs	1.10.0-4.fc44	GPL-2.0-or-later AND BSD-2-Clause
 chromium-core	fedora	lzo	2.10-16.fc44	gpl-2.0-or-later
 chromium-core	fedora	mesa-dri-drivers	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
@@ -686,7 +689,10 @@ chromium-framework	fedora	localsearch	3.11.2-1.fc44	GPL-2.0-or-later AND LGPL-2.
 chromium-framework	fedora	logrotate	3.22.0-5.fc44	GPL-2.0-or-later
 chromium-framework	fedora	lpcnetfreedv	0.5-10.fc44	LicenseRef-Callaway-BSD
 chromium-framework	fedora	lttng-ust	2.14.0-5.fc44	LGPL-2.1-only AND MIT AND GPL-2.0-only AND BSD-3-Clause AND BSD-2-Clause
+chromium-framework	fedora	lua	5.4.8-5.fc44	MIT
+chromium-framework	fedora	lua-filesystem	1.8.0-16.fc44	MIT
 chromium-framework	fedora	lua-libs	5.4.8-5.fc44	MIT
+chromium-framework	fedora	lua-lpeg	1.1.0-7.fc44	MIT
 chromium-framework	fedora	lz4-libs	1.10.0-4.fc44	GPL-2.0-or-later AND BSD-2-Clause
 chromium-framework	fedora	lzo	2.10-16.fc44	gpl-2.0-or-later
 chromium-framework	fedora	mesa-dri-drivers	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0

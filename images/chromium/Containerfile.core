@@ -14,6 +14,9 @@ LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 # chromium-headless brings most dependencies; add only necessary extras
 RUN microdnf install -y --nogpgcheck \
     glibc-langpack-en \
+    lua \
+    lua-filesystem \
+    lua-lpeg \
     chromium-headless \
     mesa-dri-drivers \
     libglvnd \
