@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# inputs: methodology/convergence.yaml methodology/multi-host-development.yaml scripts/allocate-gate-step-prefix.sh scripts/attest-native-lint.sh scripts/build-sidecar.sh scripts/change-class.sh scripts/check-native-lint-attested.sh scripts/check-plan-binary-current.sh scripts/check-refusal-affordance-added.sh scripts/gate-changed.sh scripts/gate-stamp.sh scripts/land-on-platform-branch.sh scripts/land-queue.sh scripts/lib-freeze-paths.sh scripts/lua/check-carried-obligations.lua scripts/lua/land-queue-host-door.lua scripts/lua/shadow-intake.lua scripts/lua/test-land-queue-eviction-comment.lua scripts/plan-binary-probe.sh scripts/release-freeze.sh scripts/test-support/scratch-git.sh lib/lua/common/ crates/tillandsias-plan/
 # @trace order:1470-v67y, spec:methodology-accountability
 #
 # Fixture for scripts/check-refusal-affordance-added.sh (1470-v67y, the guard

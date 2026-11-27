@@ -1,4 +1,5 @@
 -- @env PATH HOME
+-- inputs: plan/index.yaml plan/loop_status.md scripts/diagnose-macos-enclave.sh scripts/lua/check-promote-gate.lua scripts/promote-stable.sh scripts/release-website-marker.sh VERSION lib/lua/common/ crates/tillandsias-plan/ plan/index.d/ plan/issues/ plan/loop_status.d/
 -- @trace spec:ci-release, order:864-8tqv, order:1061-zd83, order:2296-pn45, order:2404-grd6
 --
 -- test-promote-stable-evidence-gate.lua — pin promote-stable.sh's gates. Ported from

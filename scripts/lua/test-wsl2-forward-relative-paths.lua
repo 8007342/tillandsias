@@ -1,4 +1,5 @@
 -- @env PATH HOME
+-- inputs: build.sh scripts/build-guest-binaries.sh scripts/check-plan-binary-current.sh scripts/check-stranded-in-progress.sh scripts/gate-stamp.sh scripts/hooks/pre-push-local-gate.sh scripts/lib-env-forward.sh scripts/lib-wsl-capture.sh scripts/local-ci.sh scripts/lua/check-cross-target-build.lua scripts/lua/test-wsl2-src-mirror-default.lua scripts/plan-binary-probe.sh scripts/run-litmus-test.sh scripts/with-tillandsias-builder.sh scripts/with-wsl2-builder.sh scripts/wsl2-build-memory-cap.sh scripts/wsl2-build-target-prune.sh scripts/wsl2-src-mirror.sh scripts/wsl-guest-session.sh VERSION lib/lua/common/ crates/tillandsias-plan/
 -- @trace order:2415-gntr
 --
 -- test-wsl2-forward-relative-paths.lua — with-wsl2-builder.sh's two path-relating lines (_W2_SESSION,
