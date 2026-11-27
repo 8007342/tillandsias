@@ -15,11 +15,19 @@
 # consent:policy:soft-reset):
 #   1  a planted `.forge-startup-context.md` in the cwd is ignored     (host)
 #   2  same marker: the bridge asks, and a grant is not refused as a forge
-#   3  a /run/.containerenv naming the forge image reads forge   (namespace)
+#   3  the forge marker (/etc/tillandsias/forge, root, 0444) with a record
+#      naming the forge image reads forge                         (namespace)
+#   3b the forge image named WITHOUT the marker is not a forge (2354-5biy)
+#   3c the marker alone, no container record (podman exec, queue.submit),
+#      reads forge; a writable (0644) marker does not
 #   4  one naming the toolbox image, or the forge-base stage, does not
 #   5  no /run/.containerenv at all reads bare metal             (namespace)
 #   6  the REAL builder toolbox reads not-forge            (when it exists)
-# Arms 3-5 put a tmpfs over /run inside `unshare -rm`, so they run on any
+# Operator ruling 2026-11-27 (2354-5biy): the marker decides, the image name
+# alone no longer does.
+# Arms 3-5 put a tmpfs over /run (and over /etc for the marker; the namespace
+# root owns what it writes there, as the image's root does) inside
+# `unshare -rm`, so they run on any
 # Linux host that allows unprivileged user namespaces; elsewhere they are a
 # NAMED skip. Arms 1-2 need a host that is not itself a forge.
 #
@@ -52,8 +60,9 @@ cd "$C" || exit 1
 
 # This host's own regime, by the same rule the binary applies.
 in_forge=0
-[ -r /run/.containerenv ] &&
-    /usr/bin/grep -qE '^image="([^"]*/)?tillandsias-forge(:[^"@]*)?(@[^"]*)?"$' /run/.containerenv &&
+[ -f /etc/tillandsias/forge ] && [ ! -L /etc/tillandsias/forge ] &&
+    [ "$(stat -c %u /etc/tillandsias/forge 2>/dev/null)" = 0 ] &&
+    /usr/bin/grep -qx 'kind=forge' /etc/tillandsias/forge &&
     in_forge=1
 
 # ── 1, 2 ────────────────────────────────────────────────────────────────────
@@ -77,18 +86,31 @@ fi
 NS="$W/ns.sh"
 cat >"$NS" <<'NSEOF'
 mount -t tmpfs none /run || exit 97
+if [ -n "$4" ]; then
+    mount -t tmpfs none /etc || exit 96
+    mkdir -p /etc/tillandsias && printf 'kind=forge\n' >/etc/tillandsias/forge &&
+        chmod "$4" /etc/tillandsias/forge || exit 95
+fi
 [ -n "$3" ] && printf 'engine="podman-5"\nname="x"\nimage="%s"\nrootless=1\n' "$3" >/run/.containerenv
 cd "$2" || exit 98
 exec "$1" policy eval -- tillandsias --reset-state
 NSEOF
-ns_eval() { unshare -rm bash "$NS" "$PLAN" "$C" "$1" 2>/dev/null; }
+ns_eval() { unshare -rm bash "$NS" "$PLAN" "$C" "$1" "${2:-}" 2>/dev/null; }
 probe="$(ns_eval "")"; prc=$?
-if [ "$prc" -ge 97 ] || [ -z "$probe" ]; then
+if [ "$prc" -ge 95 ] || [ -z "$probe" ]; then
     skip "arms 3, 4, 5: unprivileged user namespaces with a /run tmpfs are unavailable here (rc=$prc)"
 else
+    out="$(ns_eval "localhost/tillandsias-forge:v0.5.1" 0444)"
+    [ "$out" = "$FORGE_ANS" ] && ok "arm 3: the marker with the forge image reads forge" ||
+        bad "arm 3: marked forge image answered [$out]"
     out="$(ns_eval "localhost/tillandsias-forge:v0.5.1")"
-    [ "$out" = "$FORGE_ANS" ] && ok "arm 3: a record naming the forge image reads forge" ||
-        bad "arm 3: forge image answered [$out]"
+    [ "$out" = "$BARE_ANS" ] && ok "arm 3b: the forge image named without the marker is not a forge" ||
+        bad "arm 3b: unmarked forge image answered [$out] (the image name alone made a forge)"
+    o_m="$(ns_eval "" 0444)"
+    o_w="$(ns_eval "" 0644)"
+    [ "$o_m" = "$FORGE_ANS" ] && [ "$o_w" = "$BARE_ANS" ] &&
+        ok "arm 3c: the marker alone reads forge; a writable marker does not" ||
+        bad "arm 3c: marker alone [$o_m] (want forge), writable marker [$o_w] (want bare)"
     o_tb="$(ns_eval "registry.fedoraproject.org/fedora-toolbox:44")"
     o_base="$(ns_eval "localhost/tillandsias-forge-base:v1")"
     o_imp="$(ns_eval "docker.io/evil/not-tillandsias-forge:v1")"
