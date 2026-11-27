@@ -61,7 +61,7 @@ cd "$C" || exit 1
 # This host's own regime, by the same rule the binary applies.
 in_forge=0
 [ -f /etc/tillandsias/forge ] && [ ! -L /etc/tillandsias/forge ] &&
-    [ "$(stat -c %u /etc/tillandsias/forge 2>/dev/null)" = 0 ] &&
+    [ "$(stat -c %u /etc/tillandsias/forge 2>/dev/null || stat -f %u /etc/tillandsias/forge 2>/dev/null)" = 0 ] &&
     /usr/bin/grep -qx 'kind=forge' /etc/tillandsias/forge &&
     in_forge=1
 
