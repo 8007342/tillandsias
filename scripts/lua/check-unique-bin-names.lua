@@ -31,9 +31,10 @@ end
 table.sort(manifests)
 
 local entries = {} -- { name, manifest } in manifest order, as the .sh's TMP file
+local SRC = require("common.listed_read").read_all("unique-bin-names", manifests)
 for _, m in ipairs(manifests) do
-    local ok, src = pcall(fs.read, m)
-    if ok and src then
+    local src = SRC[m]
+    if src then
         local inbin = false
         for _, line in ipairs(text.lines(src)) do
             if line:match("^%[%[bin%]%]") then

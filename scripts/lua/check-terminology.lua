@@ -108,10 +108,11 @@ for _, p in ipairs(walked) do
 end
 table.sort(files)
 
+local SRC = require("common.listed_read").read_all("terminology", files, function(name) return LOCALE_DIR .. "/" .. name end)
 local violations, nfiles = 0, 0
 for _, name in ipairs(files) do
-    local okr, body = pcall(fs.read, LOCALE_DIR .. "/" .. name)
-    if okr and type(body) == "string" then
+    local body = SRC[LOCALE_DIR .. "/" .. name]
+    if type(body) == "string" then
         nfiles = nfiles + 1
         for _, line in ipairs(text.lines(body)) do
             -- VALUES ONLY: the right-hand side of `key = "value"`. Keys are

@@ -92,10 +92,11 @@ end
 
 local checked, bad, und = 0, 0, 0
 local mismatches = {}
+local function spec_of(e) return path("openspec/specs/" .. e.id .. "/spec.md") end
+local SPECS = require("common.listed_read").read_all("spec-registry-status", entries, spec_of)
 for _, e in ipairs(entries) do
-    local f = path("openspec/specs/" .. e.id .. "/spec.md")
-    local ok_f, _ = pcall(fs.read, f)
-    if ok_f then
+    local f = spec_of(e)
+    if SPECS[f] then
         checked = checked + 1
         local spec = spec_status_of(f)
         if spec ~= e.reg then

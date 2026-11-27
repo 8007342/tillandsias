@@ -370,7 +370,8 @@ FAMILIES["file-grep"] = function(name, argv)
         if fs.exists(p) then
             -- a regular file reads; a directory does not, and walks instead
             local okr = pcall(fs.read, p)
-            if okr then
+            if okr or not pcall(fs.list, p) then
+                -- a file, or a path that neither reads nor lists: read_all below names it (2417-jzhh)
                 files[#files + 1] = p
             else
                 local okw, walked = pcall(fs.walk, p, suffix and { suffix = suffix } or nil)
@@ -384,10 +385,11 @@ FAMILIES["file-grep"] = function(name, argv)
         remedy("check the path(s) exist on this tree; a moved file must move here too")
         verdict.emit(L, 3, "no files")
     end
+    local SRC = require("common.listed_read").read_all(name, files)
     local total, first = 0, nil
     for _, f in ipairs(files) do
-        local okr, body = pcall(fs.read, f)
-        if okr then
+        local body = SRC[f]
+        if body then
             local c = text.count_lines(body, pat)
             if c > 0 and not first then
                 local ln = 0

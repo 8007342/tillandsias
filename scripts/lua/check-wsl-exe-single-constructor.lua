@@ -33,9 +33,10 @@ local COMMENT_LINE = [=[^//]=]
 local files = fs.walk("crates", { suffix = ".rs" })
 local scanned = 0
 local violations = {}
+local SRC = require("common.listed_read").read_all("wsl-single-constructor", files)
 for _, f in ipairs(files) do
-    local ok, src = pcall(fs.read, f)
-    if ok then
+    local src = SRC[f]
+    if src then
         if text.is_match(src, ANY_CTOR) then scanned = scanned + 1 end
         if f ~= OWNER then
             for _, l in ipairs(text.lines(src)) do

@@ -36,11 +36,15 @@ local EXCLUDE = {
 local count = 0
 local ok_walk, files = pcall(fs.walk, "crates", { suffix = ".rs" })
 if ok_walk then
+    local listed = {}
     for _, f in ipairs(files) do
-        local base = f:match("([^/]+)$")
-        if not EXCLUDE[base] then
-            local ok_read, content = pcall(fs.read, f)
-            if ok_read then
+        if not EXCLUDE[f:match("([^/]+)$")] then listed[#listed + 1] = f end
+    end
+    local SRC = require("common.listed_read").read_all("state-root-literals", listed)
+    for _, f in ipairs(listed) do
+        do
+            local content = SRC[f]
+            if content then
                 for _, line in ipairs(text.lines(content)) do
                     if text.contains(line, LITERAL) then
                         local trimmed = line:match("^%s*(.*)$")

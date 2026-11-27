@@ -1,0 +1,15 @@
+# Gate step 2417-jzhh batch 5 — data, not code.
+#
+# Nine more scripts that read a listing must block (exit 2, naming the file)
+# when a listed file cannot be read, never count it clean. Each arm plants a
+# chmod 000 file in a scratch tree; its control makes it readable again.
+# litmus-decide file-grep gets two arms: a file found by walking a --path
+# directory, and the same file named directly by --path.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking nine listing scripts block on an unreadable listed file (2417-jzhh batch 5)"
+STEP_LUA="scripts/lua/test-listed-read-blocks-batch5.lua"
+STEP_ERROR="a listing checker read ok over a file it could not read (2417-jzhh) — see the FAIL lines above"
+STEP_OK="batch-5 listing scripts block on unreadable files"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-27 darwin ok:listed-read-blocks-batch5:20 arms at 732138c0e (red 10/10 on the trunk scripts first)"
+STEP_READS="scripts/lua/test-listed-read-blocks-batch5.lua lib/lua/common/listed_read.lua scripts/lua/check-source-slice-bounds.lua scripts/lua/check-spec-registry-status.lua scripts/lua/check-state-root-literals.lua scripts/lua/check-terminology.lua scripts/lua/check-unique-bin-names.lua scripts/lua/check-windows-tray-clippy.lua scripts/lua/check-wsl-exe-single-constructor.lua scripts/lua/check-wt-reparse-workarounds-deleted.lua scripts/lua/litmus-decide.lua"
