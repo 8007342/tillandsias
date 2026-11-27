@@ -43,10 +43,10 @@ local SYMBOLS = { "argv_survives_wt_reparse", "wt_safe_title" }
 local ok_w, walked = pcall(fs.walk, SCAN_DIR, { suffix = ".rs" })
 local files = ok_w and walked or {}
 
+local SRC = require("common.listed_read").read_all("wt-reparse-workarounds-deleted", files)
 local bodies = {}
 for _, f in ipairs(files) do
-    local ok_r, body = pcall(fs.read, f)
-    if ok_r and body then bodies[#bodies + 1] = { path = f, lines = text.lines(body) } end
+    if SRC[f] then bodies[#bodies + 1] = { path = f, lines = text.lines(SRC[f]) } end
 end
 
 local live = {}

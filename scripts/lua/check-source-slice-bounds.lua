@@ -81,6 +81,7 @@ end
 local sources = {}
 for _, p in ipairs(walked) do sources[#sources + 1] = full(p) end
 table.sort(sources)
+local SRC = require("common.listed_read").read_all("source-slice-bounds", sources)
 
 local STOP = dirname(ROOT_DIR)
 local function crate_of(rs)
@@ -99,8 +100,8 @@ local function lines_of(crate)
     local all = {}
     for _, rs in ipairs(sources) do
         if rs:sub(1, #crate + 1) == crate .. "/" then
-            local okr, body = pcall(fs.read, rs)
-            if okr and type(body) == "string" then
+            local body = SRC[rs]
+            if type(body) == "string" then
                 for _, line in ipairs(text.lines(body)) do all[#all + 1] = line end
             end
         end
@@ -133,8 +134,8 @@ end
 
 local checked, violations = 0, {}
 for _, rs in ipairs(sources) do
-    local okr, body = pcall(fs.read, rs)
-    if okr and type(body) == "string" then
+    local body = SRC[rs]
+    if type(body) == "string" then
         local crate = nil
         for _, line in ipairs(text.lines(body)) do
             for lit in line:gmatch('%.split%("([^"]*)"%)') do

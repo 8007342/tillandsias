@@ -53,9 +53,11 @@ if not nonempty(crates_root) then crates_root = "crates" end
 -- cfg(target_os = "windows") or cfg(windows)
 local function has_windows_cfg(d)
     if not fs.exists(d .. "/src") then return false end
-    for _, f in ipairs(fs.walk(d .. "/src", { suffix = ".rs" }) or {}) do
-        local ok, body = pcall(fs.read, f)
-        if ok and body then
+    local listed = fs.walk(d .. "/src", { suffix = ".rs" }) or {}
+    local SRC = require("common.listed_read").read_all("windows-tray-clippy", listed)
+    for _, f in ipairs(listed) do
+        local body = SRC[f]
+        if body then
             for line in (body .. "\n"):gmatch("([^\n]*)\n") do
                 local code = line:gsub("//.*$", "")
                 if code:find('cfg%(target_os *= *"windows"') or code:find("cfg%(windows") then return true end
