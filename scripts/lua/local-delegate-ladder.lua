@@ -95,9 +95,10 @@ end
 
 local function scan(files)
     local groups, keys = {}, {}
+    local SRC = require("common.listed_read").read_all(PROG, files)
     for _, f in ipairs(files) do
-        local okr, text = pcall(fs.read, f)
-        if okr and type(text) == "string" then
+        local text = SRC[f]
+        if type(text) == "string" then
             for line in (text .. "\n"):gmatch("([^\n]*)\n") do
                 local pos = 1
                 while true do
