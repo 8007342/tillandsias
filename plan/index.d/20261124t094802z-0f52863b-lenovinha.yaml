@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: port-plan-field-get-and-resolve-open-pr-fixtures-to-lua
+    field: status
+    value: blocked
+    ts: "2026-11-24T09:48:02Z"
+    host: lenovinha
+
+events:
+  - packet_id: port-plan-field-get-and-resolve-open-pr-fixtures-to-lua
+    event:
+      type: note
+      ts: "2026-11-24T09:48:02Z"
+      host: lenovinha
+      summary: |-
+        both fixtures are deleted by open refs 2107-q3vn (#1152) and 2109-r8wd; resolve-open-pr port is on work/2292-62a5 f41675646 with no PR; waits for the coordinator ruling on the 2107..2114 series

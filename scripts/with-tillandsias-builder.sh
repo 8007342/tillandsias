@@ -182,7 +182,7 @@ fi
 # THIS DELIBERATELY DOES NOT WIDEN THE RULING. The refusal below is what an
 # owned Linux fleet gets, and a bare-metal Linux builder without toolbox still
 # fails exactly as hard — pinned by the negative control in
-# scripts/test-toolbox-refusal-wsl-exception.sh, not by review. What changes is
+# scripts/lua/test-toolbox-refusal-wsl-exception.lua, not by review. What changes is
 # only that a WSL2 distro stops being mistaken for one: it is not a host
 # escaping its container, it is the container the Windows lane sanctions, and
 # scripts/with-wsl2-builder.sh is the thing that put us inside it.
@@ -525,7 +525,7 @@ PWD_QUOTED="$(printf '%q' "$(pwd)")"
 # live child still writing a test transcript. SIGTERM to the STRAY did nothing
 # 8s later; SIGKILL to it and its child reaped it. pirria saw one still running
 # 12 minutes after its launcher was "stopped", with
-# test-archiver-ruby-could-not-run.sh as its live child, concurrent with a
+# test-archiver-ruby-could-not-run.lua as its live child, concurrent with a
 # second gate — which is how a gate refuses on this host and passes on the
 # relaunch with nothing changed (1132-r4mt arm 4's race). The same defect is
 # the env-forwarding lesson one axis over: that boundary did not carry FLAGS

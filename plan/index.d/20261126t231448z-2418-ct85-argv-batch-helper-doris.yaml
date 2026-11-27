@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed and fixed by doris-windows 2026-11-26 at macuahuitl's request (argv length as a pattern, after 2418-kvdz).
+packets:
+  - packet_id: whole-list-argv-spawns-pass-the-windows-command-line-limit-and-read-as-nothing
+    order: 2418-ct85
+    status: implemented
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, argv, deciders, lua, fail-closed]
+    estimated_hours: 3
+    owned_files:
+      - lib/lua/common/argv_batch.lua
+      - scripts/lua/check-all-fragments-intact.lua
+      - scripts/lua/test-argv-batch.lua
+    related: [2418-kvdz]
+    title: |
+      check-all-fragments-intact reports every ledger fragment damaged on Windows: its validate-yaml argv names all 7 820 (past the 32 767-character limit), and the validator is a shell script spawned natively
+    context: |
+      Measured on doris at trunk: blocked:all-fragments-intact:7820 damaged, with nothing damaged. Two causes,
+      each enough alone: one argv naming every fragment, about 470 000 characters, far past Windows'
+      32 767-character limit (spawn failed, os error 206); and scripts/tillandsias-policy is a #!/usr/bin/env bash
+      script, which a native spawn cannot run (os error 193). Fixed with a shared helper,
+      lib/lua/common/argv_batch.lua: batches to a 24 000-character budget, output concatenated in order, worst
+      exit kept, and code nil when any batch did not exit. On Windows the validator now runs through Git's bash;
+      Unix keeps the direct exec, and the batched result is the same there.
+      Survey: check-order-citations-resolve passes only ./*.sh at the repo top plus four roots (bounded). The
+      Lua argv-append sites in lib/lua/common append fixed option lists (bounded). No Rust site passes a file
+      list to .args() (git grep). 2418-kvdz's local batch in test-litmus-parse-only-duplicate-key can move to the
+      helper once both land.
+    verifiable_closure: |
+      On doris: check-all-fragments-intact at trunk read blocked:...:7820 damaged; with the helper alone, or the
+      bash route alone, it is still 7820 damaged; with both it reads ok:all-fragments-intact:8508 checked.
+      test-argv-batch.lua (step 969): ok, 4 arms (order kept across batches, the one-argv premise fails on
+      Windows, a spawn failure is code nil, an empty list is a clean no-op).
+    unscoreable: "pinned by test-argv-batch.lua and the check itself; no litmus"
+    next_action: >
+      Implemented. Move 2418-kvdz's local batching onto common/argv_batch after both land.
+status:
+  - packet_id: whole-list-argv-spawns-pass-the-windows-command-line-limit-and-read-as-nothing
+    field: status
+    value: implemented
+    ts: "2026-11-26T23:14:48Z"
+    host: doris

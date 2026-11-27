@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-log-cache-sweep-litmus-reds-in-a-worktree-under-a-target-directory
+    event:
+      type: note
+      ts: "2026-11-26T04:29:33Z"
+      agent_id: linux-lenovinha-claude-20261126t042933z
+      host: lenovinha
+      summary: |-
+        lenovinha host note: litmus:scorable-obligation-splitter is killed at its 60s budget here (60.2s wall on trunk 43ee0f33b, and twice in relay-preflight for work/2388-bvnd) while it takes 21.8s on macuahuitl. A slow-host budget, not a trunk red; the test is unchanged.

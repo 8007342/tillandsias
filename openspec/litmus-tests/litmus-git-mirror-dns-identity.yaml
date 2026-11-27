@@ -18,13 +18,13 @@ description: >
   These steps pin the code shape. The LIVE negative fixture — two containers
   carrying the product's exact alias/hostname args, one A record per
   project-unique name, NXDOMAIN for the shared aliases — is
-  scripts/test-git-mirror-dns-identity.sh (podman required, so it is not an
+  scripts/lua/test-git-mirror-dns-identity.lua (podman required, so it is not an
   instant pre-build step; run it on runtime-capable hosts).
 
 preconditions:
   - workspace contains crates/tillandsias-headless/src/main.rs
   - workspace contains images/default/lib-common.sh
-  - workspace contains scripts/test-git-mirror-dns-identity.sh
+  - workspace contains scripts/lua/test-git-mirror-dns-identity.lua
 
 critical_path:
   - step: "the launcher never assigns the retired shared aliases to a mirror"
@@ -43,7 +43,7 @@ critical_path:
     expected_behavior: "ok: clients address the per-project name"
 
   - step: "the live two-mirror fixture exists, probes with getent (never nslookup), and asserts the shared aliases are NXDOMAIN"
-    command: "test -x scripts/test-git-mirror-dns-identity.sh && grep -Fq 'getent ahostsv4' scripts/test-git-mirror-dns-identity.sh && ! grep -Eq '^[^#]*nslookup' scripts/test-git-mirror-dns-identity.sh && grep -Fq 'tillandsias-git git-service' scripts/test-git-mirror-dns-identity.sh && echo 'ok: live negative fixture encoded'"
+    command: "grep -Fq 'getent ahostsv4' scripts/lua/test-git-mirror-dns-identity.lua && ! grep -Eq '^[^#]*nslookup' scripts/lua/test-git-mirror-dns-identity.lua && grep -Fq 'tillandsias-git git-service' scripts/lua/test-git-mirror-dns-identity.lua && echo 'ok: live negative fixture encoded'"
     timeout_ms: 5000
     expected_behavior: "ok: live negative fixture encoded"
 

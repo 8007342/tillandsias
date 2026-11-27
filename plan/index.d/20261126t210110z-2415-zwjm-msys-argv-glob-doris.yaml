@@ -1,0 +1,84 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by doris-windows 2026-11-26, msys queue item groundtruth-regime-fails-closed line 101.
+packets:
+  - packet_id: groundtruth-regime-fixture-spawns-find-with-a-quoted-glob-that-msys-expands-so-set-is-nil
+    order: 2415-zwjm
+    status: implemented
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, msys, fixture, argv, glob]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-groundtruth-regime-fails-closed.lua
+    related: [2415-fbyd, 2410-3j3t]
+    title: |
+      test-groundtruth-regime-fails-closed dies at line 101 (nil SET) on msys: find, started by the native runner, globs its own argv, so -name '*.yaml' becomes the repo root's *.yaml files
+    context: |
+      An msys program started by a non-msys parent expands glob patterns in its own command line. Measured
+      on doris: proc.run{ "find", "openspec/litmus-tests/groundtruth", "-maxdepth", "1", "-name", "*.yaml" }
+      gives rc=1 and "find: paths must precede expression: methodology.yaml", so no set is listed, SET is nil,
+      and line 101 raises "attempt to concatenate a nil value". The fixture now lists the directory with
+      fs.list, which spawns nothing; Linux reads the same set.
+    verifiable_closure: |
+      On doris: before, refused:script-error at line 101; after, ok:groundtruth-regime-fails-closed:3
+      (control 30 cases, killed grade fails closed, failing case is a divergence).
+    unscoreable: "the closure is the fixture itself; no separate litmus pin"
+    next_action: >
+      Implemented. The same argv-glob hazard at the other spawn sites is 2415-fbyd.
+  - packet_id: lua-spawns-of-msys-tools-with-quoted-glob-args-are-expanded-by-msys-and-silently-mis-scope
+    order: 2415-fbyd
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, msys, argv, glob, deciders]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/check-claim-confirmed.lua
+      - scripts/lua/check-order-citations-resolve.lua
+      - scripts/lua/check-podman-sync-budgets.lua
+      - scripts/lua/local-delegate.lua
+      - scripts/lua/test-embed-endpoint-derivation.lua
+      - scripts/lua/test-enclave-proxy-lib.lua
+      - scripts/lua/test-fleet-run.lua
+      - scripts/lua/test-lane-instrument-vs-ledger.lua
+      - scripts/lua/test-plan-binary-freshness.lua
+      - scripts/lua/test-plan-binary-remedy-names-only-a-runnable-binary.lua
+      - scripts/lua/test-pre-push-issue-capture-lane.lua
+      - scripts/lua/test-pre-push-plan-lane-after-merge.lua
+      - scripts/lua/test-shell-ratchet.lua
+      - scripts/lua/test-studio-puck.lua
+    related: [2415-zwjm]
+    title: |
+      Lua checkers and fixtures pass quoted glob patterns (-name '*.sh', '*.rs', ...) to spawned msys tools, which expand them against the cwd on Windows, so the tool errors or searches the wrong set
+    context: |
+      Measured in 2415-zwjm: an msys program started by the native runner globs its own argv. At least 16 sites
+      in scripts/lua and lib/lua pass such patterns (git grep '"-name", *"[^"]*\*'), including production
+      checkers: check-order-citations-resolve (find . -name '*.sh'), and check-podman-sync-budgets
+      (find -H root -name '*.rs'). Where a match exists in the cwd, the pattern is replaced silently and the
+      checker can report ok over the wrong set; where none exists, the pattern survives, so the bug is
+      cwd-dependent.
+    exit_criteria:
+      - RED FIRST, per site or in a shared fixture, a cwd holding a matching file changes what the spawned tool sees on msys.
+      - Each site lists through fs.list or fs.walk, or passes MSYS_NO_GLOB-equivalent quoting, and Linux behaviour is unchanged.
+      - A guard (or a widened check-lua-posix-only-absolute sibling) refuses a new quoted glob in a proc.run argv.
+    verifiable_closure: |
+      The guard reports 0 sites, and on msys check-podman-sync-budgets and check-order-citations-resolve
+      read the same file set as on Linux.
+    unscoreable: "no litmus or fixture scores this yet; the guard named in exit_criteria becomes the pin"
+    next_action: >
+      Confirm the expansion with a cwd-planted file, then sweep the sites, smallest blast radius first.
+status:
+  - packet_id: groundtruth-regime-fixture-spawns-find-with-a-quoted-glob-that-msys-expands-so-set-is-nil
+    field: status
+    value: implemented
+    ts: "2026-11-26T21:01:10Z"
+    host: doris
+  - packet_id: lua-spawns-of-msys-tools-with-quoted-glob-args-are-expanded-by-msys-and-silently-mis-scope
+    field: status
+    value: ready
+    ts: "2026-11-26T21:01:10Z"
+    host: doris

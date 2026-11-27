@@ -31,24 +31,19 @@ severity: high
 size: long
 
 preconditions:
-  - workspace contains images/studio/Containerfile.tina and scripts/test-studio-tina.sh
+  - workspace contains images/studio/Containerfile.tina and scripts/lua/test-studio-tina.lua
   - a local localhost/tillandsias-forge image
 
 critical_path:
-  - step: "the suite parses and carries its exec bit"
-    command: "bash -n scripts/test-studio-tina.sh && test -x scripts/test-studio-tina.sh && echo 'ok: studio-tina-suite-parses'"
-    timeout_ms: 3000
-    expected_behavior: "ok: studio-tina-suite-parses"
-
   - step: "a document saved through local GraphQL is committed by the front, loopback only, no egress"
-    command: "bash scripts/test-studio-tina.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run --timeout 14m scripts/lua/test-studio-tina.lua 2>&1"
     timeout_ms: 900000
-    expected_behavior: "PASS: the Tina lane commits a document saved through local GraphQL via the front, loopback only, no egress"
+    expected_behavior: "ok:studio-tina:8 arms"
 
 observability:
   traces:
     - "@trace spec:local-web-preview"
-  expected_log: "PASS: the Tina lane commits a document saved through local GraphQL via the front, loopback only, no egress"
+  expected_log: "ok:studio-tina:8 arms"
   log_fields:
     spec: local-web-preview
     test: studio-tina-commits-a-document-through-the-front

@@ -1,6 +1,6 @@
 ---
 name: join-the-fleet
-description: Idempotent onboarding for a worker agent, on bare metal or inside a forge — the requirements to join the Tillandsias fleet, the scheduled work, the work-ref and landing flow, the attestation rules, and how to join the work session. Verified by scripts/check-fleet-membership.sh, which reports what is left and never installs.
+description: Idempotent onboarding for a worker agent, on bare metal or inside a forge — the requirements to join the Tillandsias fleet, the scheduled work, the work-ref and landing flow, the attestation rules, and how to join the work session. Verified by scripts/lua/check-fleet-membership.lua, which reports what is left and never installs.
 license: MIT
 metadata:
   author: tillandsias
@@ -23,7 +23,7 @@ is ensure-shaped: a second run changes nothing and reports the same verdict.
 The skill DOES; the checker only SAYS WHAT IS LEFT:
 
 ```bash
-scripts/check-fleet-membership.sh     # ok:join-the-fleet:<host>:<regime>:ran=<n> skipped=<m>  → you are in
+tillandsias-plan script run scripts/lua/check-fleet-membership.lua   # ok:join-the-fleet:<host>:<regime>:ran=<n> skipped=<m>  → you are in
                                       # todo:join-the-fleet:<host>:<regime>:todos=<k> …        → do the todo: lines, re-run
 ```
 
@@ -177,7 +177,7 @@ there.
   limited to one full cycle per 4 hours per host
   (`scripts/forge-e2e-rate-limit.sh`).
 - **A worker's slot** is two commands, in this order:
-  `scripts/check-fleet-membership.sh` (the daily-maintenance and credential
+  `scripts/lua/check-fleet-membership.lua` (the daily-maintenance and credential
   checks come out as `todo:` lines; on `due:*` run the Start Of Day gate in
   skills/meta-orchestration once), then `/advance-work-from-plan`, which
   claims, works, lands and hands off. `/meta-orchestration` in full mode is
@@ -246,8 +246,19 @@ there.
      hundred. Treat that warning as a STOP, not noise: merge trunk, re-run,
      and only when the two-dot and three-dot diffs agree does the check mean
      what it says.
-     THEN, still before `gh pr ready`, run the gate's own deciders on
-     the MERGED work ref: `./build.sh --preflight` (order 1305-udgs;
+     THEN, still before `gh pr ready`, run the REQUIRED local check on the
+     MERGED work ref: `./build.sh --floor` (order 2130-fl0r; operator
+     2026-11-20: it REPLACES the worker-side `--preflight` requirement for
+     work/* refs, because the landing queue runs the full preflight and
+     gate on arrival and evicts with the log). Under two minutes, no build,
+     native on Windows: `cargo fmt --check` when a .rs changed, every
+     changed .lua parses, and the packet's own litmus (`litmus:<name>` in
+     its row) plus every litmus file the diff touches; a size:long one is
+     skipped BY NAME for the queue. It prints `ok:floor:…` or
+     `violation:floor:<what>`; push only on `ok:floor`.
+     The full preflight below remains available and is still the right
+     tool where memory allows, to catch a red before the queue does:
+     `./build.sh --preflight` (order 1305-udgs;
      every guard that can refuse a push, in seconds, no build; `--full`
      for the whole roster). Read BOTH its exit status and its verdict
      line: a non-zero exit beside `refused=0` is the door itself failing,
@@ -477,7 +488,7 @@ there.
    ```text
    worker host (every host except the coordinator):
      cron "<slot-minute> <slot-hours> * * *"
-     prompt: Run scripts/check-fleet-membership.sh and resolve every todo:
+     prompt: Run tillandsias-plan script run scripts/lua/check-fleet-membership.lua and resolve every todo:
              line (on due:* run the Start Of Day gate in
              skills/meta-orchestration once), then use the
              /advance-work-from-plan skill.
@@ -504,9 +515,10 @@ there.
 ## 6 — Verify
 
 ```bash
-scripts/check-fleet-membership.sh            # the verdict, with counts
-scripts/test-join-the-fleet-idempotent.sh    # ok:join-the-fleet-idempotent:6/6
-./build.sh --preflight                       # the front door (1305-udgs): every guard roster, ≤150 s
+tillandsias-plan script run scripts/lua/check-fleet-membership.lua   # the verdict, with counts
+tillandsias-plan script run scripts/lua/test-join-the-fleet-idempotent.lua   # ok:join-the-fleet-idempotent:<n> arms
+./build.sh --floor                           # REQUIRED before a work/* push (2130-fl0r, operator 2026-11-20): fmt, Lua parse, packet litmus, <120 s
+./build.sh --preflight                       # optional where memory allows (1305-udgs): every guard roster, ≤150 s
 ```
 
 The fixture pins: two runs print the same verdict and leave `git status`

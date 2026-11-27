@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: fixture-kit-run-lets-a-door-refusal-read-as-done
+    order: 2392-2gm8
+    status: in_progress
+    kind: fix
+    title: "a fixture's T:run of a command the door refuses (rm -rf outside the workspace) returns quietly, so an unchecked cleanup reads as done"
+    capability_tags: [linux, tooling]
+    owned_files:
+      - lib/lua/common/fixture.lua
+      - scripts/lua/test-fixture-run-refusal-is-loud.lua
+    depends_on: []
+    context: |
+      MEASURED on yoga 2026-11-26: proc.run{rm -rf <path outside the workspace>} returns status=policy_consent_required,
+      ok=false, code=nil, why/remedy set, and spawns nothing; no error is raised. A fixture that runs its cleanup through
+      T:run and does not read the result therefore carries on as if the path were gone. It happened in a port during
+      2387-b6v2: the gate-stamp-memoization port's snapshot rm under the worktree's git dir (outside the workspace) was
+      refused, the run was green, and the checkout's gate stamp read stale:fixture-borrowed-stamp for ~15 minutes.
+      The door's contract that a denial is a RESULT, not an error, is pinned by test-command-policy-evaluator (5a),
+      test-run-verb-agent-door (4, 8) and test-mcp-run-command-tool (3), so the fix is in the fixture kit:
+      T:run and T:must turn a policy refusal into a refused: verdict naming the command, the rule and the remedy,
+      unless the caller says refusal_ok = true (a fixture whose SUBJECT is the refusal).
+    exit_criteria:
+      - "A fixture shows the current behaviour first: T:run of a refused rm returns and the script carries on (red), then the kit refuses by name (green)."
+      - "A caller passing refusal_ok = true still receives the refusal as a result."
+    verifiable_closure: |
+      tillandsias-plan script run scripts/lua/test-fixture-run-refusal-is-loud.lua
+    unscoreable: "fixture-scored: scripts/lua/test-fixture-run-refusal-is-loud.lua"
+    provenance: "macuahuitl-fedora 2026-11-26 (kit bug from 2387-b6v2), yoga"
+    events:
+      - {type: claimed, ts: "2026-11-26T06:41:34Z", host: yoga, summary: "claimed; work ref work/2392-2gm8"}

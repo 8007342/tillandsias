@@ -13,13 +13,13 @@
 # attempt, an exit-2 tray provisions nothing. Pre-fix: arms 1-2 FAIL
 # (provisions=2). Without PowerShell and cmd.exe (a Linux gate) it skips by name.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking one Windows install provisions the guest once, through the SOFT reset (1565-qtuk)"
-STEP_SCRIPT="scripts/test-installer-provisions-once.sh"
+STEP_LUA="scripts/lua/test-installer-provisions-once.lua"
 STEP_ERROR="install-windows.ps1 again provisions the guest more than once per install, skips the SOFT reset, or Dies on a tray that predates --reset-state (1565-qtuk); see which arm failed above"
 STEP_OK="one install, one provisioning, and it is the SOFT reset"
-STEP_SECOND_REGIME="yolanda-windows 2026-10-09 msys ok:provisions-once-fixture:3"
+STEP_SECOND_REGIME="yolanda 2026-11-25 msys ok:provisions-once-fixture:6 arms"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/install-windows.ps1 scripts/test-installer-provisions-once.sh"
+STEP_READS="scripts/install-windows.ps1 scripts/lua/test-installer-provisions-once.lua"

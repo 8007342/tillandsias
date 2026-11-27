@@ -1,0 +1,410 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: images-audio-studio-has-no-lua-runtime
+    order: "2413-ucx2"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [images, lua-everywhere]
+    estimated_hours: 2
+    owned_paths: [images/audio-studio/]
+    title: "images/audio-studio: no Lua runtime in the image (operator ruling 2026-11-26: Lua, then Rust, then Go in every container)"
+    context: |
+      Survey plan/issues/lua-in-every-image-survey-2026-11-26.md. Final base python:3.12.16-slim-bookworm; containerfiles: Containerfile; in-image scripts: no shell scripts; 1 .py.
+      Python app image; Lua would sit beside it for any glue, the app stays Python (interop).
+      Choose the distro Lua (matching the forge's lua-filesystem/lua-lpeg) or the static tillandsias-plan, and say why. Runtime only:
+      porting this image's scripts is a later row.
+    exit_criteria:
+      - "the built image runs a Lua one-liner (lua -e or tillandsias-plan script run) inside the container; the image size before and after is recorded on this row"
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is an image change measured by a build."
+    next_action: "pick the runtime, add it, build, measure."
+    provenance: filed by lenovinha from the survey; asked by macuahuitl 2026-11-26.
+    related: [2374-wy4f]
+    events:
+      - {type: filed, ts: '2026-11-26T20:18:35Z', host: lenovinha, summary: images/audio-studio lacks a Lua runtime}
+  - packet_id: images-builder-has-no-lua-runtime
+    order: "2413-gq2n"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [images, lua-everywhere]
+    estimated_hours: 2
+    owned_paths: [images/builder/]
+    title: "images/builder: no Lua runtime in the image (operator ruling 2026-11-26: Lua, then Rust, then Go in every container)"
+    context: |
+      Survey plan/issues/lua-in-every-image-survey-2026-11-26.md. Final base fedora-minimal:44; containerfiles: Containerfile; in-image scripts: none.
+      dnf base: the lua package (and lua-filesystem/lua-lpeg as the forge base has) is one install line.
+      Choose the distro Lua (matching the forge's lua-filesystem/lua-lpeg) or the static tillandsias-plan, and say why. Runtime only:
+      porting this image's scripts is a later row.
+    exit_criteria:
+      - "the built image runs a Lua one-liner (lua -e or tillandsias-plan script run) inside the container; the image size before and after is recorded on this row"
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is an image change measured by a build."
+    next_action: "pick the runtime, add it, build, measure."
+    provenance: filed by lenovinha from the survey; asked by macuahuitl 2026-11-26.
+    related: [2374-wy4f]
+    events:
+      - {type: filed, ts: '2026-11-26T20:18:35Z', host: lenovinha, summary: images/builder lacks a Lua runtime}
+  - packet_id: images-chromium-has-no-lua-runtime
+    order: "2413-prwd"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [images, lua-everywhere]
+    estimated_hours: 2
+    owned_paths: [images/chromium/]
+    title: "images/chromium: no Lua runtime in the image (operator ruling 2026-11-26: Lua, then Rust, then Go in every container)"
+    context: |
+      Survey plan/issues/lua-in-every-image-survey-2026-11-26.md. Final base fedora-minimal:44; containerfiles: Containerfile.core, Containerfile.framework (FROM core); in-image scripts: 2.
+      One packet for both: framework inherits core, so the runtime goes in core.
+      Choose the distro Lua (matching the forge's lua-filesystem/lua-lpeg) or the static tillandsias-plan, and say why. Runtime only:
+      porting this image's scripts is a later row.
+    exit_criteria:
+      - "the built image runs a Lua one-liner (lua -e or tillandsias-plan script run) inside the container; the image size before and after is recorded on this row"
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is an image change measured by a build."
+    next_action: "pick the runtime, add it, build, measure."
+    provenance: filed by lenovinha from the survey; asked by macuahuitl 2026-11-26.
+    related: [2374-wy4f]
+    events:
+      - {type: filed, ts: '2026-11-26T20:18:35Z', host: lenovinha, summary: images/chromium lacks a Lua runtime}
+  - packet_id: images-enclave-fetch-has-no-lua-runtime
+    order: "2413-dvmn"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [images, lua-everywhere]
+    estimated_hours: 2
+    owned_paths: [images/enclave-fetch/]
+    title: "images/enclave-fetch: no Lua runtime in the image (operator ruling 2026-11-26: Lua, then Rust, then Go in every container)"
+    context: |
+      Survey plan/issues/lua-in-every-image-survey-2026-11-26.md. Final base alpine:3.22; containerfiles: Containerfile; in-image scripts: none.
+      apk lua5.4 is small; or the static musl tillandsias-plan.
+      Choose the distro Lua (matching the forge's lua-filesystem/lua-lpeg) or the static tillandsias-plan, and say why. Runtime only:
+      porting this image's scripts is a later row.
+    exit_criteria:
+      - "the built image runs a Lua one-liner (lua -e or tillandsias-plan script run) inside the container; the image size before and after is recorded on this row"
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is an image change measured by a build."
+    next_action: "pick the runtime, add it, build, measure."
+    provenance: filed by lenovinha from the survey; asked by macuahuitl 2026-11-26.
+    related: [2374-wy4f]
+    events:
+      - {type: filed, ts: '2026-11-26T20:18:35Z', host: lenovinha, summary: images/enclave-fetch lacks a Lua runtime}
+  - packet_id: images-flutter-has-no-lua-runtime
+    order: "2413-3bc5"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [images, lua-everywhere]
+    estimated_hours: 2
+    owned_paths: [images/flutter/]
+    title: "images/flutter: no Lua runtime in the image (operator ruling 2026-11-26: Lua, then Rust, then Go in every container)"
+    context: |
+      Survey plan/issues/lua-in-every-image-survey-2026-11-26.md. Final base debian:bookworm-slim (pinned digest); containerfiles: Containerfile; in-image scripts: none.
+      apt lua5.4.
+      Choose the distro Lua (matching the forge's lua-filesystem/lua-lpeg) or the static tillandsias-plan, and say why. Runtime only:
+      porting this image's scripts is a later row.
+    exit_criteria:
+      - "the built image runs a Lua one-liner (lua -e or tillandsias-plan script run) inside the container; the image size before and after is recorded on this row"
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is an image change measured by a build."
+    next_action: "pick the runtime, add it, build, measure."
+    provenance: filed by lenovinha from the survey; asked by macuahuitl 2026-11-26.
+    related: [2374-wy4f]
+    events:
+      - {type: filed, ts: '2026-11-26T20:18:35Z', host: lenovinha, summary: images/flutter lacks a Lua runtime}
+  - packet_id: images-git-has-no-lua-runtime
+    order: "2413-thcz"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [images, lua-everywhere]
+    estimated_hours: 2
+    owned_paths: [images/git/]
+    title: "images/git: no Lua runtime in the image (operator ruling 2026-11-26: Lua, then Rust, then Go in every container)"
+    context: |
+      Survey plan/issues/lua-in-every-image-survey-2026-11-26.md. Final base alpine:3.20; containerfiles: Containerfile (vault stage + alpine:3.20 final); in-image scripts: 18 .sh (entrypoint, receive hooks, relay, seed, vault-agent).
+      Largest shell surface outside the forge; the 2374-wy4f question named git and inference together. Ships ports only after the runtime lands.
+      Choose the distro Lua (matching the forge's lua-filesystem/lua-lpeg) or the static tillandsias-plan, and say why. Runtime only:
+      porting this image's scripts is a later row.
+    exit_criteria:
+      - "the built image runs a Lua one-liner (lua -e or tillandsias-plan script run) inside the container; the image size before and after is recorded on this row"
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is an image change measured by a build."
+    next_action: "pick the runtime, add it, build, measure."
+    provenance: filed by lenovinha from the survey; asked by macuahuitl 2026-11-26.
+    related: [2374-wy4f]
+    events:
+      - {type: filed, ts: '2026-11-26T20:18:35Z', host: lenovinha, summary: images/git lacks a Lua runtime}
+  - packet_id: images-imagegen-corridorkey-has-no-lua-runtime
+    order: "2413-yu6p"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [images, lua-everywhere]
+    estimated_hours: 2
+    owned_paths: [images/imagegen-corridorkey/]
+    title: "images/imagegen-corridorkey: no Lua runtime in the image (operator ruling 2026-11-26: Lua, then Rust, then Go in every container)"
+    context: |
+      Survey plan/issues/lua-in-every-image-survey-2026-11-26.md. Final base python:3.12.16-slim-bookworm; containerfiles: Containerfile; in-image scripts: none.
+      Python app image (interop); Lua for glue only.
+      Choose the distro Lua (matching the forge's lua-filesystem/lua-lpeg) or the static tillandsias-plan, and say why. Runtime only:
+      porting this image's scripts is a later row.
+    exit_criteria:
+      - "the built image runs a Lua one-liner (lua -e or tillandsias-plan script run) inside the container; the image size before and after is recorded on this row"
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is an image change measured by a build."
+    next_action: "pick the runtime, add it, build, measure."
+    provenance: filed by lenovinha from the survey; asked by macuahuitl 2026-11-26.
+    related: [2374-wy4f]
+    events:
+      - {type: filed, ts: '2026-11-26T20:18:35Z', host: lenovinha, summary: images/imagegen-corridorkey lacks a Lua runtime}
+  - packet_id: images-imagegen-studio-has-no-lua-runtime
+    order: "2413-y9jz"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [images, lua-everywhere]
+    estimated_hours: 2
+    owned_paths: [images/imagegen-studio/]
+    title: "images/imagegen-studio: no Lua runtime in the image (operator ruling 2026-11-26: Lua, then Rust, then Go in every container)"
+    context: |
+      Survey plan/issues/lua-in-every-image-survey-2026-11-26.md. Final base python:3.12.16-slim-bookworm; containerfiles: Containerfile; in-image scripts: none; 7 .py.
+      Python app image (ComfyUI custom nodes are interop-forced Python).
+      Choose the distro Lua (matching the forge's lua-filesystem/lua-lpeg) or the static tillandsias-plan, and say why. Runtime only:
+      porting this image's scripts is a later row.
+    exit_criteria:
+      - "the built image runs a Lua one-liner (lua -e or tillandsias-plan script run) inside the container; the image size before and after is recorded on this row"
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is an image change measured by a build."
+    next_action: "pick the runtime, add it, build, measure."
+    provenance: filed by lenovinha from the survey; asked by macuahuitl 2026-11-26.
+    related: [2374-wy4f]
+    events:
+      - {type: filed, ts: '2026-11-26T20:18:35Z', host: lenovinha, summary: images/imagegen-studio lacks a Lua runtime}
+  - packet_id: images-imagegen-has-no-lua-runtime
+    order: "2413-pg82"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [images, lua-everywhere]
+    estimated_hours: 2
+    owned_paths: [images/imagegen/]
+    title: "images/imagegen: no Lua runtime in the image (operator ruling 2026-11-26: Lua, then Rust, then Go in every container)"
+    context: |
+      Survey plan/issues/lua-in-every-image-survey-2026-11-26.md. Final base fedora:44 / cuda ubuntu24.04; containerfiles: Containerfile (fedora:44), Containerfile.cuda (nvidia/cuda:13.3.1 ubuntu24.04 runtime); in-image scripts: none.
+      Two bases, one packet: dnf lua and apt lua5.4.
+      Choose the distro Lua (matching the forge's lua-filesystem/lua-lpeg) or the static tillandsias-plan, and say why. Runtime only:
+      porting this image's scripts is a later row.
+    exit_criteria:
+      - "the built image runs a Lua one-liner (lua -e or tillandsias-plan script run) inside the container; the image size before and after is recorded on this row"
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is an image change measured by a build."
+    next_action: "pick the runtime, add it, build, measure."
+    provenance: filed by lenovinha from the survey; asked by macuahuitl 2026-11-26.
+    related: [2374-wy4f]
+    events:
+      - {type: filed, ts: '2026-11-26T20:18:35Z', host: lenovinha, summary: images/imagegen lacks a Lua runtime}
+  - packet_id: images-inference-has-no-lua-runtime
+    order: "2413-jprz"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [images, lua-everywhere]
+    estimated_hours: 2
+    owned_paths: [images/inference/]
+    title: "images/inference: no Lua runtime in the image (operator ruling 2026-11-26: Lua, then Rust, then Go in every container)"
+    context: |
+      Survey plan/issues/lua-in-every-image-survey-2026-11-26.md. Final base fedora-minimal:44; containerfiles: Containerfile; in-image scripts: 9 .sh.
+      2374-wy4f lists the nine and which are portable; the operator's ruling today answers its question.
+      Choose the distro Lua (matching the forge's lua-filesystem/lua-lpeg) or the static tillandsias-plan, and say why. Runtime only:
+      porting this image's scripts is a later row.
+    exit_criteria:
+      - "the built image runs a Lua one-liner (lua -e or tillandsias-plan script run) inside the container; the image size before and after is recorded on this row"
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is an image change measured by a build."
+    next_action: "pick the runtime, add it, build, measure."
+    provenance: filed by lenovinha from the survey; asked by macuahuitl 2026-11-26.
+    related: [2374-wy4f]
+    events:
+      - {type: filed, ts: '2026-11-26T20:18:35Z', host: lenovinha, summary: images/inference lacks a Lua runtime}
+  - packet_id: images-proxy-has-no-lua-runtime
+    order: "2413-2wnc"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [images, lua-everywhere]
+    estimated_hours: 2
+    owned_paths: [images/proxy/]
+    title: "images/proxy: no Lua runtime in the image (operator ruling 2026-11-26: Lua, then Rust, then Go in every container)"
+    context: |
+      Survey plan/issues/lua-in-every-image-survey-2026-11-26.md. Final base alpine:3.22; containerfiles: Containerfile; in-image scripts: 2 .sh (entrypoint, squid-supervisor).
+      Lua mentions in it are build-time scripts/lua/*, not an in-image runtime.
+      Choose the distro Lua (matching the forge's lua-filesystem/lua-lpeg) or the static tillandsias-plan, and say why. Runtime only:
+      porting this image's scripts is a later row.
+    exit_criteria:
+      - "the built image runs a Lua one-liner (lua -e or tillandsias-plan script run) inside the container; the image size before and after is recorded on this row"
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is an image change measured by a build."
+    next_action: "pick the runtime, add it, build, measure."
+    provenance: filed by lenovinha from the survey; asked by macuahuitl 2026-11-26.
+    related: [2374-wy4f]
+    events:
+      - {type: filed, ts: '2026-11-26T20:18:35Z', host: lenovinha, summary: images/proxy lacks a Lua runtime}
+  - packet_id: images-router-has-no-lua-runtime
+    order: "2413-i8j7"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [images, lua-everywhere]
+    estimated_hours: 2
+    owned_paths: [images/router/]
+    title: "images/router: no Lua runtime in the image (operator ruling 2026-11-26: Lua, then Rust, then Go in every container)"
+    context: |
+      Survey plan/issues/lua-in-every-image-survey-2026-11-26.md. Final base caddy:2-alpine; containerfiles: Containerfile; in-image scripts: 2 .sh (entrypoint, router-reload).
+      apk lua5.4 on the caddy alpine base.
+      Choose the distro Lua (matching the forge's lua-filesystem/lua-lpeg) or the static tillandsias-plan, and say why. Runtime only:
+      porting this image's scripts is a later row.
+    exit_criteria:
+      - "the built image runs a Lua one-liner (lua -e or tillandsias-plan script run) inside the container; the image size before and after is recorded on this row"
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is an image change measured by a build."
+    next_action: "pick the runtime, add it, build, measure."
+    provenance: filed by lenovinha from the survey; asked by macuahuitl 2026-11-26.
+    related: [2374-wy4f]
+    events:
+      - {type: filed, ts: '2026-11-26T20:18:35Z', host: lenovinha, summary: images/router lacks a Lua runtime}
+  - packet_id: images-vault-has-no-lua-runtime
+    order: "2413-qewe"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [images, lua-everywhere]
+    estimated_hours: 2
+    owned_paths: [images/vault/]
+    title: "images/vault: no Lua runtime in the image (operator ruling 2026-11-26: Lua, then Rust, then Go in every container)"
+    context: |
+      Survey plan/issues/lua-in-every-image-survey-2026-11-26.md. Final base hashicorp/vault:1.18; containerfiles: Containerfile; in-image scripts: 1 .sh (entrypoint).
+      Upstream vault image (alpine-based); security boundary: keep the addition minimal and say what it adds.
+      Choose the distro Lua (matching the forge's lua-filesystem/lua-lpeg) or the static tillandsias-plan, and say why. Runtime only:
+      porting this image's scripts is a later row.
+    exit_criteria:
+      - "the built image runs a Lua one-liner (lua -e or tillandsias-plan script run) inside the container; the image size before and after is recorded on this row"
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is an image change measured by a build."
+    next_action: "pick the runtime, add it, build, measure."
+    provenance: filed by lenovinha from the survey; asked by macuahuitl 2026-11-26.
+    related: [2374-wy4f]
+    events:
+      - {type: filed, ts: '2026-11-26T20:18:35Z', host: lenovinha, summary: images/vault lacks a Lua runtime}
+  - packet_id: images-warp-has-no-lua-runtime
+    order: "2413-jvhh"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [images, lua-everywhere]
+    estimated_hours: 2
+    owned_paths: [images/warp/]
+    title: "images/warp: no Lua runtime in the image (operator ruling 2026-11-26: Lua, then Rust, then Go in every container)"
+    context: |
+      Survey plan/issues/lua-in-every-image-survey-2026-11-26.md. Final base debian:bookworm-slim; containerfiles: Containerfile; in-image scripts: 1.
+      apt lua5.4.
+      Choose the distro Lua (matching the forge's lua-filesystem/lua-lpeg) or the static tillandsias-plan, and say why. Runtime only:
+      porting this image's scripts is a later row.
+    exit_criteria:
+      - "the built image runs a Lua one-liner (lua -e or tillandsias-plan script run) inside the container; the image size before and after is recorded on this row"
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is an image change measured by a build."
+    next_action: "pick the runtime, add it, build, measure."
+    provenance: filed by lenovinha from the survey; asked by macuahuitl 2026-11-26.
+    related: [2374-wy4f]
+    events:
+      - {type: filed, ts: '2026-11-26T20:18:35Z', host: lenovinha, summary: images/warp lacks a Lua runtime}
+  - packet_id: images-web-wrangler-has-no-lua-runtime
+    order: "2413-wb7i"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [images, lua-everywhere]
+    estimated_hours: 2
+    owned_paths: [images/web-wrangler/]
+    title: "images/web-wrangler: no Lua runtime in the image (operator ruling 2026-11-26: Lua, then Rust, then Go in every container)"
+    context: |
+      Survey plan/issues/lua-in-every-image-survey-2026-11-26.md. Final base node:22.19.0-bookworm-slim (pinned digest); containerfiles: Containerfile; in-image scripts: 1.
+      Node app image; apt lua5.4 for glue.
+      Choose the distro Lua (matching the forge's lua-filesystem/lua-lpeg) or the static tillandsias-plan, and say why. Runtime only:
+      porting this image's scripts is a later row.
+    exit_criteria:
+      - "the built image runs a Lua one-liner (lua -e or tillandsias-plan script run) inside the container; the image size before and after is recorded on this row"
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is an image change measured by a build."
+    next_action: "pick the runtime, add it, build, measure."
+    provenance: filed by lenovinha from the survey; asked by macuahuitl 2026-11-26.
+    related: [2374-wy4f]
+    events:
+      - {type: filed, ts: '2026-11-26T20:18:35Z', host: lenovinha, summary: images/web-wrangler lacks a Lua runtime}
+  - packet_id: images-web-has-no-lua-runtime
+    order: "2413-kmv8"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [images, lua-everywhere]
+    estimated_hours: 2
+    owned_paths: [images/web/]
+    title: "images/web: no Lua runtime in the image (operator ruling 2026-11-26: Lua, then Rust, then Go in every container)"
+    context: |
+      Survey plan/issues/lua-in-every-image-survey-2026-11-26.md. Final base alpine:3.20; containerfiles: Containerfile; in-image scripts: 1 .sh (entrypoint).
+      apk lua5.4.
+      Choose the distro Lua (matching the forge's lua-filesystem/lua-lpeg) or the static tillandsias-plan, and say why. Runtime only:
+      porting this image's scripts is a later row.
+    exit_criteria:
+      - "the built image runs a Lua one-liner (lua -e or tillandsias-plan script run) inside the container; the image size before and after is recorded on this row"
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is an image change measured by a build."
+    next_action: "pick the runtime, add it, build, measure."
+    provenance: filed by lenovinha from the survey; asked by macuahuitl 2026-11-26.
+    related: [2374-wy4f]
+    events:
+      - {type: filed, ts: '2026-11-26T20:18:35Z', host: lenovinha, summary: images/web lacks a Lua runtime}
+  - packet_id: images-webkit-has-no-lua-runtime
+    order: "2413-fbzp"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [images, lua-everywhere]
+    estimated_hours: 2
+    owned_paths: [images/webkit/]
+    title: "images/webkit: no Lua runtime in the image (operator ruling 2026-11-26: Lua, then Rust, then Go in every container)"
+    context: |
+      Survey plan/issues/lua-in-every-image-survey-2026-11-26.md. Final base ubuntu:24.04 (pinned digest); containerfiles: Containerfile; in-image scripts: 2.
+      apt lua5.4.
+      Choose the distro Lua (matching the forge's lua-filesystem/lua-lpeg) or the static tillandsias-plan, and say why. Runtime only:
+      porting this image's scripts is a later row.
+    exit_criteria:
+      - "the built image runs a Lua one-liner (lua -e or tillandsias-plan script run) inside the container; the image size before and after is recorded on this row"
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is an image change measured by a build."
+    next_action: "pick the runtime, add it, build, measure."
+    provenance: filed by lenovinha from the survey; asked by macuahuitl 2026-11-26.
+    related: [2374-wy4f]
+    events:
+      - {type: filed, ts: '2026-11-26T20:18:35Z', host: lenovinha, summary: images/webkit lacks a Lua runtime}

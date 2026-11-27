@@ -218,6 +218,75 @@ mod tests {
         );
     }
 
+    /// The paths an HCL policy names.
+    fn policy_paths(hcl: &str) -> Vec<String> {
+        hcl.lines()
+            .filter_map(|l| l.trim().strip_prefix("path \"")?.split('"').next())
+            .map(str::to_owned)
+            .collect()
+    }
+
+    /// Vault's path match: a trailing `*` is a prefix, a `+` is one segment.
+    fn path_covers(pattern: &str, path: &str) -> bool {
+        let (pat, prefix) = match pattern.strip_suffix('*') {
+            Some(p) => (p, true),
+            None => (pattern, false),
+        };
+        let (want, have): (Vec<_>, Vec<_>) = (pat.split('/').collect(), path.split('/').collect());
+        if have.len() < want.len() || (!prefix && have.len() != want.len()) {
+            return false;
+        }
+        want.iter().enumerate().all(|(i, seg)| {
+            *seg == "+"
+                || *seg == have[i]
+                || (prefix && i + 1 == want.len() && have[i].starts_with(seg))
+        })
+    }
+
+    fn reaches_github_token(hcl: &str) -> bool {
+        policy_paths(hcl).iter().any(|p| {
+            path_covers(p, "secret/data/github/token")
+                || path_covers(p, "secret/metadata/github/token")
+        })
+    }
+
+    /// Order 2357-5quw. The text test above reads only for the literal path, so a
+    /// `secret/*` grant, which names no token, passed it. The behavioural half
+    /// asks a real vault: litmus:vault-policy-forge-cannot-read-github-token.
+    #[test]
+    fn no_forge_lane_policy_covers_the_github_token() {
+        for planted in [
+            "secret/*",
+            "*",
+            "secret/data/git*",
+            "secret/data/+/token",
+            "secret/metadata/github/token",
+        ] {
+            let hcl = format!("path \"{planted}\" {{\n  capabilities = [\"read\"]\n}}\n");
+            assert!(reaches_github_token(&hcl), "planted {planted} was not seen");
+        }
+        for other in [
+            "secret/data/ca/proxy-cert",
+            "secret/data/github",
+            "secret/data/+",
+        ] {
+            let hcl = format!("path \"{other}\" {{\n  capabilities = [\"read\"]\n}}\n");
+            assert!(!reaches_github_token(&hcl), "{other} does not cover it");
+        }
+        assert!(reaches_github_token(Policy::GitMirror.hcl()), "control");
+        let mut lanes = 0;
+        for p in Policy::all() {
+            if p.name() == "forge-policy" || p.name().ends_with("-forge-policy") {
+                lanes += 1;
+                assert!(
+                    !reaches_github_token(p.hcl()),
+                    "{p:?} covers the GitHub token"
+                );
+            }
+        }
+        assert!(lanes >= 6, "only {lanes} forge lanes were read");
+    }
+
     #[test]
     fn codex_forge_policy_is_session_write_capable_and_provider_scoped() {
         let hcl = Policy::CodexForge.hcl();

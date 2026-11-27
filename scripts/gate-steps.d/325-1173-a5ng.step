@@ -13,15 +13,15 @@
 #
 # STEP_SCRIPT is a LITERAL path (1063-nraf).
 STEP_DESC="Checking the salvage ledger consults trunk before calling a deleted ref an outstanding rescue (1173-a5ng)"
-STEP_SCRIPT="scripts/test-salvage-refs-ledger.sh"
+STEP_LUA="scripts/lua/test-salvage-refs-ledger.lua"
 STEP_ERROR="the salvage-ledger trunk fallback regressed (1173-a5ng) — either a behind tree is again refused for a line trunk already marked (which refuses every in-flight gate in the fleet the moment a ref is deleted), or the fallback has widened and a genuinely outstanding rescue is being forgiven; see the verdict line above"
 STEP_OK="salvage-refs ledger trunk fallback check passed"
 # Exit 3 means the checker is absent — nothing was examined, and the fixture
 # says so by name rather than passing.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="scripts/check-salvage-refs-ledger.sh is absent, so the fallback could not be exercised"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   sweep-salvage-refs.sh states the one-pass-after-the-marker deletion rule"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:salvage-refs-ledger-fixture:7 arms (work/2380-psba @ 9943432f7)"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="plan/salvage-refs.d/** scripts/check-salvage-refs-ledger.sh scripts/sweep-salvage-refs.sh scripts/test-salvage-refs-ledger.sh"
+STEP_READS="plan/salvage-refs.d/** scripts/check-salvage-refs-ledger.sh scripts/sweep-salvage-refs.sh scripts/lua/test-salvage-refs-ledger.lua"

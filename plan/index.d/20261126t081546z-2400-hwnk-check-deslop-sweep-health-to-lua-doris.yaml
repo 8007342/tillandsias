@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-check-deslop-sweep-health-to-lua-and-bind-its-self-test
+    order: 2400-hwnk
+    status: implemented
+    kind: refactor
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua-port, deslop, decider]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/check-deslop-sweep-health.lua
+      - scripts/check-deslop-sweep-health.sh
+      - scripts/lua/test-deslop-sweep-health.lua
+      - scripts/gate-steps.d/957-2400-hwnk.step
+    title: |
+      Port scripts/check-deslop-sweep-health.sh to Lua, and bind its --self-test arms as a gated fixture (handed to doris by yolanda, 2026-11-26)
+    context: |
+      Pure Lua: the decider parses plan/deslop-sweeps.d itself, so no awk/grep pipelines remain, which
+      also retires the SIGPIPE-shaped lines stale draft #1215 rewrote (#1209 has no change to this
+      file). The verdict and exit on the real ledger are identical to the .sh on doris (msys). Widens
+      the verdict grammar: unknown:[2] joins LEGACY_VERDICT_WORDS in script_run.rs. Callers repointed:
+      the local-ci-landed-guards.lua roster entry (runtime lua), gate-divergence-declared.txt,
+      skills/deslop-sweep/SKILL.md, the floors. The .sh's 15 --self-test checks were never run by any
+      gate; they are now scripts/lua/test-deslop-sweep-health.lua, bound by gate step 957.
+    verifiable_closure: |
+      tillandsias-plan script run scripts/lua/test-deslop-sweep-health.lua prints
+      ok:deslop-sweep-health:13 arms. Measured on doris (msys): 13 arms.
+    unscoreable: "the closure is the fixture, bound by gate step 957-2400-hwnk; no separate litmus pin"
+status:
+  - packet_id: port-check-deslop-sweep-health-to-lua-and-bind-its-self-test
+    field: status
+    value: implemented
+    ts: "2026-11-26T08:15:46Z"
+    host: doris

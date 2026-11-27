@@ -11,7 +11,7 @@
 -- `status:` prefix is ignored, and so is an annotation after the word) must
 -- equal the entry's `status:`. A spec with no `## Status` is a mismatch.
 --
--- TILLANDSIAS_SPEC_ROOT is a TEST SEAM (scripts/test-spec-registry-status.sh
+-- TILLANDSIAS_SPEC_ROOT is a TEST SEAM (scripts/lua/test-spec-registry-status.lua
 -- points it at a fake openspec tree, outside the repo); production never sets
 -- it. WHAT THE PORT MAKES SLIGHTLY DIFFERENT: the .sh distinguished `cd`
 -- failing on a wholly missing SPEC_ROOT (`no-root`) from a present root with

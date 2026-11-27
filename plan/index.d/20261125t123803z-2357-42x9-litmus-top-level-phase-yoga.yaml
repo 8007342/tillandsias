@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-litmus-top-level-phase-outside-the-readmes-four-is-refused
+    order: "2357-42x9"
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, lua]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/check-litmus-step-phase.lua
+    title: "fourteen litmus files have a top-level phase outside pre-build, post-build, runtime and retired, so no phase run selects them"
+    context: |
+      Counted on 2026-11-25: numeric 2 (three files), 4 (two), 5, 6, 6.5; integration (three); active, instant, pre-release,
+      source-analysis one each. Ten files have none and run as runtime.
+    exit_criteria:
+      - "A check refuses a top-level phase outside the README's four. Pre-fix result: FAILS, no such check."
+      - "NEGATIVE CONTROL: red on a planted file, green on the corpus once each file has a phase its commands can run in, or is retired with a reason."
+    unscoreable: "unpinnable-until-the-guard-exists: the check is the deliverable"
+    next_action: "After 2357-5quw; not taken yet."
+    provenance: "coordinator macuahuitl-fedora 2026-11-25, from yoga's 2349-b3u2"
+    related: [2349-b3u2]
+    events:
+      - {type: filed, ts: "2026-11-25T12:38:03Z", host: yoga, summary: "filed on the request of the coordinator"}
+  - packet_id: three-spec-bound-litmus-that-no-phase-run-selects-run-somewhere-named
+    order: "2357-5quw"
+    status: in_progress
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [litmus, vault, security]
+    estimated_hours: 4
+    owned_files:
+      - scripts/lua/test-forge-policies-cannot-read-github-token.lua
+      - openspec/litmus-tests/litmus-vault-policy-forge-cannot-read-github-token.yaml
+      - openspec/litmus-tests/litmus-vsock-handshake.yaml
+      - openspec/litmus-tests/litmus-vault-auto-unseal-no-prompt.yaml
+    title: "vault-auto-unseal-no-prompt, vault-policy-forge-cannot-read-github-token and vsock-handshake are bound to specs and no phase run selects them"
+    context: |
+      Their top-level phases are 6.5, 6 and 2. Read on 2026-11-25: both vault files run cargo examples of tillandsias-host-shell
+      (vm-exec, start-vm-headless, wait-vm-ready, replay-audit-log) and that crate has no examples directory, so a real phase alone
+      makes them red. The policy file also writes a fixture over secret/github/token in the live vault. What guards the rule that a
+      forge never gets the GitHub token today is a unit test on the text of forge.hcl, which a `secret/*` read path would pass.
+    exit_criteria:
+      - "A named run selects each of the three, or the row says why one cannot run. Pre-fix result: FAILS, no phase run selects any."
+      - "The policy litmus asks a real vault, in a throwaway container, with every forge lane policy; NEGATIVE CONTROL: a policy that grants the path, and one that grants secret/*, are red."
+      - "No test writes to a live vault."
+    unscoreable: "fixture-scored: the litmus are the deliverable"
+    provenance: "coordinator macuahuitl-fedora 2026-11-25"
+    related: [2349-b3u2, 1252-znbn, 2172-7n62]
+    events:
+      - {type: claimed, ts: "2026-11-25T12:38:03Z", host: yoga, summary: "claimed; work ref work/2357-5quw"}

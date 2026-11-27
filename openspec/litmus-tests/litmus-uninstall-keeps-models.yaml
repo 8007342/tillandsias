@@ -18,15 +18,15 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-uninstall-keeps-models.sh
+  - workspace contains scripts/lua/test-uninstall-keeps-models.lua
 
 critical_path:
   - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-uninstall-keeps-models.sh && test -x scripts/test-uninstall-keeps-models.sh && echo 'ok: uninstall-keeps-models-fixture-parses'"
+    command: "test -f scripts/lua/test-uninstall-keeps-models.lua && ! test -e scripts/test-uninstall-keeps-models.sh && echo 'ok: uninstall-keeps-models-fixture-parses'"
     timeout_ms: 3000
     expected_behavior: "ok: uninstall-keeps-models-fixture-parses"
 
   - step: "flag set spares models/ and names it; flag unset destroys everything; the stripped mutant destroys models under the flag"
-    command: "bash scripts/test-uninstall-keeps-models.sh | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-uninstall-keeps-models.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "PASS: uninstall-keeps-models"
+    expected_behavior: "ok:uninstall-keeps-models:7 arms"

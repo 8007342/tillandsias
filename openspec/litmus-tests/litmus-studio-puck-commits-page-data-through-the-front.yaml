@@ -33,24 +33,19 @@ severity: high
 size: long
 
 preconditions:
-  - workspace contains images/studio/Containerfile.puck and scripts/test-studio-puck.sh
+  - workspace contains images/studio/Containerfile.puck and scripts/lua/test-studio-puck.lua
   - a local localhost/tillandsias-forge image
 
 critical_path:
-  - step: "the suite parses and carries its exec bit"
-    command: "bash -n scripts/test-studio-puck.sh && test -x scripts/test-studio-puck.sh && echo 'ok: studio-puck-suite-parses'"
-    timeout_ms: 3000
-    expected_behavior: "ok: studio-puck-suite-parses"
-
   - step: "page data committed through the front under the allowlist only, no build-time leftovers, no egress"
-    command: "bash scripts/test-studio-puck.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run --timeout 14m scripts/lua/test-studio-puck.lua 2>&1"
     timeout_ms: 900000
-    expected_behavior: "PASS: the Puck lane commits page data through the front under its allowlist only, refused elsewhere, no esbuild in the final image, no egress"
+    expected_behavior: "ok:studio-puck:17 arms"
 
 observability:
   traces:
     - "@trace spec:local-web-preview"
-  expected_log: "PASS: the Puck lane commits page data through the front under its allowlist only, refused elsewhere, no esbuild in the final image, no egress"
+  expected_log: "ok:studio-puck:17 arms"
   log_fields:
     spec: local-web-preview
     test: studio-puck-commits-page-data-through-the-front

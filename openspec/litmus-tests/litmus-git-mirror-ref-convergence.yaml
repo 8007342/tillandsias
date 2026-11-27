@@ -20,15 +20,15 @@ size: instant
 phase: pre-build
 
 preconditions:
-  - workspace contains scripts/test-git-mirror-ref-convergence.sh
+  - workspace contains scripts/lua/test-git-mirror-ref-convergence.lua
   - workspace contains images/git/entrypoint.sh
   - workspace contains images/git/relay-refs.sh
 
 critical_path:
   - step: "ref-convergence fixture passes all three cases (safe converges, unsafe controls reproduce the bug)"
-    command: "scripts/test-git-mirror-ref-convergence.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-git-mirror-ref-convergence.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "PASS: git mirror ref-convergence fixtures (order 301)"
+    expected_behavior: "ok:git-mirror-ref-convergence:8 arms"
 
   - step: "entrypoint fetches upstream into remote-tracking refs, not exported heads"
     command: "grep -Fq 'config remote.origin.fetch \"+refs/heads/*:refs/remotes/origin/*\"' images/git/entrypoint.sh && grep -Fq 'config remote.origin.tagOpt \"--no-tags\"' images/git/entrypoint.sh && echo 'ok: safe reconcile refspec configured'"
@@ -64,5 +64,5 @@ rollback:
     Inspect images/git/entrypoint.sh remote.origin.fetch/tagOpt config and the
     empty-mirror seed refspec; a reconcile fetch mapped onto refs/heads/* will
     clobber just-received branches (order 301). Re-run
-    scripts/test-git-mirror-ref-convergence.sh for the offline reproduction.
-  command: "scripts/test-git-mirror-ref-convergence.sh"
+    scripts/lua/test-git-mirror-ref-convergence.lua for the offline reproduction.
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-git-mirror-ref-convergence.lua 2>&1"

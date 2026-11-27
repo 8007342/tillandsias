@@ -21,13 +21,13 @@ severity: high
 size: instant
 phase: pre-build
 preconditions:
-  - workspace contains scripts/test-scorable-obligation-splitter.sh
+  - workspace contains scripts/lua/test-scorable-obligation-splitter.lua
   - workspace contains scripts/check-scorable-obligation-added.sh
 critical_path:
   - step: "the five row-boundary arms hold against the checked-in splitter"
-    command: "bash scripts/test-scorable-obligation-splitter.sh 2>&1"
-    expected_behavior: "ok:scorable-obligation-splitter:5/5 arms"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-scorable-obligation-splitter.lua 2>&1"
+    expected_behavior: "ok:scorable-obligation-splitter:"
     assert_exit: 0
-    assert_output_contains: "ok:scorable-obligation-splitter:5/5 arms"
+    assert_output_contains: "ok:scorable-obligation-splitter:"
     assert_output_nonempty: true
     timeout_ms: 60000

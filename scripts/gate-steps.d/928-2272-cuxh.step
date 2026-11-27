@@ -1,0 +1,14 @@
+# Gate step 2272-cuxh — the preflight front door's own fixture. No gate ran it,
+# so it rotted unseen and evicted whichever PR touched it (#1358). It takes ~14
+# min on a mid-tier host: the --daily-full gate runs it
+# (TILLANDSIAS_FRONT_DOOR_LIVE=1, scripts/land-queue.sh); a normal gate prints
+# not-run:preflight-front-door.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the preflight front door's own fixture (1305-udgs, daily-full only: 2272-cuxh)..."
+STEP_LUA="scripts/lua/test-preflight-front-door.lua"
+STEP_ERROR="the preflight front door's fixture is red — see the FAIL lines above"
+STEP_OK="preflight front-door fixture passed, or named not-run"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-26 darwin ok:preflight-front-door:22 arms at 0fbb910b6 (live, taskpolicy -b; budget judged door=3 297s <= 450s darwin-background, benched=123; a normal gate prints not-run)"
+STEP_SERIAL="runs the preflight door several times; a busy pool skews its deadlines and its wall-clock arm"
+STEP_READS="build.sh scripts/** lib/lua/common/preflight_judge.lua"

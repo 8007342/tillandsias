@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed and fixed by doris-windows 2026-11-26 (one of three Windows lib-red packets, ruled by macuahuitl).
+packets:
+  - packet_id: coordinator-client-pid-marker-test-asserts-unix-liveness-on-windows
+    order: 2402-tjpr
+    status: implemented
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, rust-test, coordinator, lane-marker]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-plan/src/coordinator_client.rs
+    title: |
+      coordinator_client::tests::a_pid_marker_is_held_only_while_its_process_lives fails on native Windows, where pid_alive answers true by design
+    context: |
+      Measured on doris (native Windows) 2026-11-26, cargo test --release -p tillandsias-plan --lib, origin/linux-next:
+        panicked at coordinator_client.rs:523:9: "a finished gate's marker must not hold the lane"
+      The assertion `!lane_marker_held(dir, now)` after writing a reaped child's pid. Actual: true.
+      Cause: pid_alive has `#[cfg(not(unix))] { true }`. That is deliberate, because the markers on
+      Windows are written by Git Bash's build.sh with MSYS pids, which no Windows process query can
+      judge, so a fresh marker holds the lane until MARKER_STALE_AFTER. The test asserted the Unix
+      behaviour everywhere.
+    verifiable_closure: |
+      cargo test -p tillandsias-plan --lib coordinator_client::tests passes on native Windows (13/13 on
+      doris) and on Linux, where the dead-pid assertion is unchanged.
+    unscoreable: "the closure is the existing Rust unit test, run on both platforms; no litmus pin"
+    next_action: >
+      Implemented: the dead-pid assertion is #[cfg(unix)]; off Unix the test pins the conservative
+      answer (a fresh pid marker holds the lane), so changing it is a decision. No logic change.
+status:
+  - packet_id: coordinator-client-pid-marker-test-asserts-unix-liveness-on-windows
+    field: status
+    value: implemented
+    ts: "2026-11-26T09:09:30Z"
+    host: doris

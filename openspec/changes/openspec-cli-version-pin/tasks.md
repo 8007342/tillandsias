@@ -13,7 +13,7 @@
 - [x] 3.2 meta-orchestration "Mutable Linux Coordinator Duties" step 6
 
 ## 4. Prove it
-- [x] 4.1 `scripts/test-openspec-pin.sh` (hermetic: stub npm and stub CLI; fails on the pre-fix tree)
+- [x] 4.1 `scripts/lua/test-openspec-pin.lua` (hermetic: stub npm and stub CLI; fails on the pre-fix tree)
 - [x] 4.2 `litmus:openspec-cli-pin-shape`, bound to `meta-orchestration`
 - [ ] 4.3 the re-levelling commit made BY the step (`bump --to 1.13.2`), after which `drift` is ok on the live tree
 - [ ] 4.4 after landing and an image rebuild: a fresh forge launch runs openspec at the pin and `git status --porcelain` is empty at t=0 (host-side check)

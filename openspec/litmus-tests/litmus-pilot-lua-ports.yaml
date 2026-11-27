@@ -19,16 +19,16 @@ severity: high
 size: quick
 
 preconditions:
-  - workspace contains scripts/test-pilot-lua-ports.sh
+  - workspace contains scripts/lua/test-pilot-lua-ports.lua
   - a runnable tillandsias-plan that knows `script`, or the fixture answers could-not-run
 
 critical_path:
   - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-pilot-lua-ports.sh && test -x scripts/test-pilot-lua-ports.sh && echo 'ok: pilot-lua-ports-parses'"
+    command: "test -f scripts/lua/test-pilot-lua-ports.lua && echo 'ok: pilot-lua-ports-parses'"
     timeout_ms: 5000
     expected_behavior: "ok: pilot-lua-ports-parses"
 
   - step: "the five arms hold"
-    command: "bash scripts/test-pilot-lua-ports.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-pilot-lua-ports.lua"
     timeout_ms: 600000
-    expected_behavior: "pilot-lua-ports: 5 passed, 0 failed"
+    expected_behavior: "ok:pilot-lua-ports:5 arms"

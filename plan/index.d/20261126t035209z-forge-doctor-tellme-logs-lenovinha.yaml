@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: forge-doctor-tellme-and-logs-to-lua
+    order: "2389-8rmy"
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge]
+    estimated_hours: 6
+    title: "Forge commands tillandsias-doctor and tellme to Lua; tillandsias-logs installed or dead"
+    context: |
+      Second images/default/cli/ batch after 2380-ds8v. tillandsias-doctor and tellme become stock Lua 5.4 commands in place, same name,
+      output and exit codes, verified in a forge container. tillandsias-logs is not COPYed by images/default/Containerfile; whether it is
+      installed some other way (flake.nix, lib-common.sh) or dead is decided on evidence.
+      ports: images/default/cli/tillandsias-doctor images/default/cli/tellme
+    exit_criteria:
+      - "both commands give the same text and exit codes as the shell versions on the same stubbed inputs, in a container"
+      - "tillandsias-logs is either ported, or deleted with every reference to it, with the evidence on the row"
+    unscoreable: "unpinnable-until-the-guard-exists: output parity is the deliverable."
+    next_action: "port, verify in a container, PR."
+    provenance: filed by lenovinha; order agreed with macuahuitl 2026-11-25.
+    related: [2380-ds8v]
+    events:
+      - {type: filed, ts: '2026-11-26T03:52:09Z', host: lenovinha, summary: forge cli batch 2}

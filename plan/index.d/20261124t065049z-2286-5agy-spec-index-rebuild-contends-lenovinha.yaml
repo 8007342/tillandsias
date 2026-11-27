@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-post-commit-spec-index-rebuild-runs-unpriced-beside-gates-and-preflight
+    order: 2286-5agy
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [hooks, performance]
+    estimated_hours: 2
+    title: |
+      A commit on a host with no spec index starts a cold CPU rebuild that holds about 8 cores for over an hour, beside whatever gate or preflight runs, and the hook's text says 12 minutes.
+    context: |
+      Measured on lenovinha (16 cores, TILLANDSIAS_INFERENCE_TIER=cpu) 2026-11-24: started by a commit at 21:34 local after the v56.11.23.1 smoke reset wiped the tillandsias-spec-index volume; 34,099 chunks, 28,544 embedded after 75 minutes; llama-server about 790 % cpu. A preflight beside it read contention foreign:55-65 %, and #1443's budget arm was not-judged because of it. scripts/hooks/post-commit-expert-refresh.sh records 12m19s for 9,909 chunks on yoga and 43 s on a GPU host; the corpus has grown about 3.4 times since. The build is durable and shared, so killing it only restarts it.
+    exit_criteria:
+      - "the hook's cost text carries the 2026-11-24 measurement and the chunk count it is for"
+      - "a rebuild yields to a running gate or preflight on the same host (pauses or runs at idle priority), shown with a contention reading beside one, or the row records why that is not worth it"
+    unscoreable: "unpinnable-until-the-guard-exists: the reading beside a gate is the deliverable."
+    next_action: "Try idle scheduling for the dev inference container during a hook-started build (nice on the hook does not reach it), and read contention= beside a door."
+    provenance: coordinator direction (macuahuitl-fedora, 2026-11-24); filed by lenovinha.
+    related: [2280-vzsr, 2272-cuxh, 801-a2by]
+    events:
+      - {type: filed, ts: '2026-11-24T06:50:49Z', host: lenovinha, summary: spec-index rebuild contends with gates}

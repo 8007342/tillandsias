@@ -57,14 +57,15 @@
 # variable is invisible to every name-based scan, including the
 # bound-or-retired guard (1063-nraf). Keep it a plain string.
 STEP_DESC="Checking a structured litmus assertion makes the prose beside it inert (1252-znbn)"
-STEP_SCRIPT="scripts/test-litmus-structured-assert.sh"
+STEP_LUA="scripts/lua/test-litmus-structured-assert.lua"
 STEP_ERROR="a litmus step's English sentence can still change the rule that decides its verdict (1252-znbn) — read which arm failed above; ARM 0 failing means the pre-fix control could not reach the subject and arms 1-2 prove nothing"
 STEP_OK="Structured litmus assertions decide their own verdicts"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:litmus-structured-assert:9/9"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:litmus-structured-assert:10 arms (work/2386-lrg1 @ 8126c0fa5)"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:litmus-structured-assert:10 arms (work/2386-lrg1 @ 8126c0fa5)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="runs the litmus runner (it wipes its runtime dirs)"
 STEP_LANES="litmus"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="openspec/litmus-bindings.yaml openspec/litmus-tests/** scripts/run-litmus-test.sh scripts/test-litmus-structured-assert.sh"
+STEP_READS="openspec/litmus-bindings.yaml openspec/litmus-tests/** scripts/run-litmus-test.sh scripts/lua/test-litmus-structured-assert.lua"

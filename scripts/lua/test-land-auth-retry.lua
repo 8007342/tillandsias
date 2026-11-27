@@ -58,7 +58,11 @@ if [ "${1:-}" = "push" ]; then
     left=$(cat "@D@/auth-failures-left")
     if [ "$left" -gt 0 ]; then
         echo $((left - 1)) > "@D@/auth-failures-left"
-        echo "fatal: Authentication failed for 'https://github.com/example/repo.git/'" >&2
+        if [ -e "@D@/french" ] && [ "${LANGUAGE:-}" != en ]; then
+            echo "fatal : Échec d'authentification pour 'https://github.com/example/repo.git/'" >&2
+        else
+            echo "fatal: Authentication failed for 'https://github.com/example/repo.git/'" >&2
+        fi
         exit 128
     fi
 fi
@@ -117,6 +121,16 @@ else bad("1025-a896 text missing") end
 if count_lines_with(o, "auth-failed once, retrying") == 1 then ok("exactly one retry before refusing")
 else bad("retry count wrong") end
 if calls == "" then ok("NEGATIVE CONTROL: no gh command even when refusing") else bad("gh was invoked while refusing") end
+cleanup(d)
+
+-- ARM 3 (2281-amjg): a git that speaks French unless told LANGUAGE=en is still
+-- read as the auth signature: retried once, lands.
+d, rel = scratch(1)
+fs.write(rel .. "/french", "")
+r = run_land(d)
+if has_line_prefix(r.stdout or "", "ok:land:") and (r.stdout or ""):find("auth-failed once, retrying", 1, true) then
+    ok("a French git's auth failure is retried and lands")
+else bad("French git: rc=" .. tostring(r.code) .. " " .. tail2(r.stderr or "")) end
 cleanup(d)
 
 out.line("land-auth-retry fixture: " .. passes .. " passed, " .. fails .. " failed")

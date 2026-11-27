@@ -1,0 +1,14 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: checkout-writers-scan-counts-lua-writers
+    field: status
+    value: implemented
+    ts: "2026-11-24T08:19:55Z"
+    host: yoga
+events:
+  - packet_id: checkout-writers-scan-counts-lua-writers
+    event:
+      type: implemented
+      ts: "2026-11-24T08:19:55Z"
+      host: yoga
+      summary: "implemented on work/2287-mg7v; test-checkout-writers 21 arms, the three pre-fix writers counted and a mutant that does not follow locals reds arm 17. The scan also named two real writers (test-cheatsheet-source-anchors, test-ghost-trace-yaml-anchoring): declared with artifacts= globs, because their subjects read the live dirs."

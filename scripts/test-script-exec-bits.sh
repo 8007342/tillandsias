@@ -93,7 +93,7 @@ scenario() {
 
     local rc=0 out
     out="$(cd "$repo" && bash scripts/check-script-exec-bits.sh 2>/dev/null)" || rc=$?
-    if [ "$rc" = "$want_rc" ] && printf '%s' "$out" | grep -q "$want"; then
+    if [ "$rc" = "$want_rc" ] && grep -q <<<"$out" "$want"; then
         echo "PASS  $name"
         ran+=("$name")
     else
@@ -226,7 +226,7 @@ git -C "$repo" add -A >/dev/null 2>&1
 git -C "$repo" update-index --chmod=-x scripts/target.sh
 rc=0
 out="$(cd "$repo" && bash scripts/check-script-exec-bits.sh 2>/dev/null)" || rc=$?
-if [ "$rc" = 2 ] && printf '%s' "$out" | grep -q "violation:script-not-executable:0"; then
+if [ "$rc" = 2 ] && grep -q <<<"$out" "violation:script-not-executable:0"; then
     echo "PASS  missing-helper-refuses"
     ran+=("missing-helper-refuses")
 else

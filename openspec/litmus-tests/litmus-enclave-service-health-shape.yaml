@@ -56,7 +56,7 @@ size: instant
 
 preconditions:
   - workspace contains scripts/check-enclave-service-health.sh
-  - workspace contains scripts/test-enclave-service-health.sh
+  - workspace contains scripts/lua/test-enclave-service-health.lua
   - bash, sed, tr available in PATH
 
 critical_path:
@@ -71,7 +71,7 @@ critical_path:
     expected_behavior: "ok:bash-dialect-clean"
 
   - step: "hermetic fixture suite passes (no-podman blocked, all-up ok, exited names rc+signal+age, origin annotates product-built vs merely-prefixed WITHOUT filtering either out, the stale-healthy corpse, the healthy-running cross-control, declared-absent, foreign container ignored, --strict gate, unreadable-not-healthy, and the stale-healthy mutation control)"
-    command: "bash scripts/test-enclave-service-health.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-enclave-service-health.lua 2>&1"
     timeout_ms: 60000
     expected_behavior: "ok: all enclave-service-health scenarios passed"
 
@@ -93,7 +93,7 @@ critical_path:
     # concatenation, so the contiguous string stopped existing in the source and
     # this step went red while the BEHAVIOUR was unchanged — cycle-preflight
     # emits the full vocabulary on every run, and the behavioural fixture
-    # scripts/test-enclave-service-health.sh covers the assembled output.
+    # scripts/lua/test-enclave-service-health.lua covers the assembled output.
     #
     # A text pin broken by a correct refactor. The step now pins the VOCABULARY
     # TOKEN in both surfaces, which is what "one vocabulary, both surfaces"

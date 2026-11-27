@@ -89,7 +89,7 @@ pub(crate) const LWW_CHANNELS: &[&str] = &["fields", "status"];
 /// the one that looks for an omission, which reported a missing next_action on
 /// a packet whose next_action had been set. The canonical list existed and was
 /// not canonical, because nothing forced a consumer to use it.
-/// `scripts/test-lww-channel-consumers.sh` now refuses a fragment-channel read
+/// `scripts/lua/test-lww-channel-consumers.lua` now refuses a fragment-channel read
 /// written anywhere but here, so a fourth consumer cannot reintroduce it.
 ///
 /// The const above and this `pub` are two halves of one guarantee and arrived
@@ -3449,7 +3449,7 @@ packets:
         // It must delete BY NAME, never by glob: a fragment written by another
         // host mid-compaction has not been folded, and globbing it away would
         // silently destroy filed work.
-        let dir = std::env::temp_dir().join(format!("tilland-frag-{}", std::process::id()));
+        let dir = crate::test_scratch::path(format!("tilland-frag-{}", std::process::id()));
         let d = dir.join("plan");
         std::fs::create_dir_all(d.join("index.d")).expect("mkdir");
         let index = d.join("index.yaml");
@@ -3480,7 +3480,7 @@ packets:
     /// got `ok:` twice and a ledger that had ignored them.
     #[test]
     fn compaction_refuses_a_rung_lowering_status_write_and_says_so() {
-        let dir = std::env::temp_dir().join(format!("tilland-k3mq-{}", std::process::id()));
+        let dir = crate::test_scratch::path(format!("tilland-k3mq-{}", std::process::id()));
         let d = dir.join("plan");
         std::fs::create_dir_all(d.join("index.d")).expect("mkdir");
         let index = d.join("index.yaml");
@@ -3542,7 +3542,7 @@ packets:
     /// (650-dq6u). So the ladder must keep its teeth in BOTH directions.
     #[test]
     fn compaction_keeps_the_ladder_teeth_an_older_higher_rung_still_wins() {
-        let dir = std::env::temp_dir().join(format!("tilland-k3mq-neg-{}", std::process::id()));
+        let dir = crate::test_scratch::path(format!("tilland-k3mq-neg-{}", std::process::id()));
         let d = dir.join("plan");
         std::fs::create_dir_all(d.join("index.d")).expect("mkdir");
         let index = d.join("index.yaml");
@@ -3587,7 +3587,7 @@ packets:
     /// the warning that matters.
     #[test]
     fn compaction_does_not_report_a_status_write_that_changes_nothing() {
-        let dir = std::env::temp_dir().join(format!("tilland-k3mq-noop-{}", std::process::id()));
+        let dir = crate::test_scratch::path(format!("tilland-k3mq-noop-{}", std::process::id()));
         let d = dir.join("plan");
         std::fs::create_dir_all(d.join("index.d")).expect("mkdir");
         let index = d.join("index.yaml");
@@ -3624,7 +3624,7 @@ packets:
 
     #[test]
     fn a_malformed_fragment_is_skipped_but_reported_never_silently_dropped() {
-        let dir = std::env::temp_dir().join(format!("tilland-bad-{}", std::process::id()));
+        let dir = crate::test_scratch::path(format!("tilland-bad-{}", std::process::id()));
         let d = dir.join("plan");
         std::fs::create_dir_all(d.join("index.d")).expect("mkdir");
         let index = d.join("index.yaml");
@@ -3828,7 +3828,7 @@ plan_index:
 ";
 
     fn scratch(tag: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("tilland-overlay-{tag}-{}", std::process::id()));
+        let d = crate::test_scratch::path(format!("tilland-overlay-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("plan/index.d")).expect("mkdir");
         std::fs::write(d.join("plan/index.yaml"), BASE_FILE).expect("write base");
@@ -4428,7 +4428,7 @@ plan_index:
 ";
 
     fn scratch(tag: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("tilland-ctext-{tag}-{}", std::process::id()));
+        let d = crate::test_scratch::path(format!("tilland-ctext-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("plan/index.d")).expect("mkdir");
         std::fs::write(d.join("plan/index.yaml"), COMMITTED).expect("write base");
@@ -5886,7 +5886,7 @@ plan_index:
 ";
 
     fn scratch(tag: &str, fragment: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("tilland-ocg-{tag}-{}", std::process::id()));
+        let d = crate::test_scratch::path(format!("tilland-ocg-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("plan/index.d")).expect("mkdir");
         std::fs::write(d.join("plan/index.yaml"), BASE).expect("write base");
@@ -6056,7 +6056,7 @@ events:
 ";
 
     fn scratch(tag: &str, fragment: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("tilland-ladder-{tag}-{}", std::process::id()));
+        let d = crate::test_scratch::path(format!("tilland-ladder-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("plan/index.d")).expect("mkdir");
         std::fs::write(d.join("plan/index.yaml"), BASE).expect("base");
@@ -6150,7 +6150,7 @@ mod list_replace_tests {
     }
 
     fn scratch(tag: &str, frags: &[(&str, String)]) -> std::path::PathBuf {
-        let d = std::env::temp_dir().join(format!("tilland-398e-{tag}-{}", std::process::id()));
+        let d = crate::test_scratch::path(format!("tilland-398e-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("plan/index.d")).expect("mkdir");
         std::fs::write(d.join("plan/index.yaml"), BASE).expect("base");

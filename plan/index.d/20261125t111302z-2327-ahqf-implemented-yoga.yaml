@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: decide-whether-litmus-forge-as-only-runtime-runs-before-a-build
+    field: status
+    value: implemented
+    ts: "2026-11-25T11:13:02Z"
+    host: yoga
+events:
+  - packet_id: decide-whether-litmus-forge-as-only-runtime-runs-before-a-build
+    event: {type: implemented, ts: "2026-11-25T11:13:02Z", host: yoga, summary: "taken on the coordinator's word; split: the image check is post-build at the top level, the source check is litmus forge-no-raw-podman, pre-build"}

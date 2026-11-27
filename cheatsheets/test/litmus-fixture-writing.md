@@ -842,7 +842,7 @@ trunk clean afterwards). Rules:
 
 1. Anything that can PUSH is exercised only in a scratch clone whose origin
    is a scratch bare repo (`git init --bare "$W/origin.git"`), never in the
-   real checkout, whatever the override. test-land-discipline-probe.sh
+   real checkout, whatever the override. test-land-discipline-probe.lua
    builds exactly that, and it fabricates `refs/remotes/origin/*` with
    `update-ref` when the tool must OBSERVE a remote it never contacts.
 2. No config override "disables" a multi-valued key: `remote.<n>.url`,

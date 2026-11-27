@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: five-fixtures-green-on-linux-red-on-native-windows
+    order: "2371-r2v9"
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, msys, fixtures, command-policies]
+    estimated_hours: 3
+    owned_files:
+      - scripts/test-command-policy-consent.sh
+      - scripts/test-pretooluse-command-policy.sh
+      - scripts/test-run-verb-agent-door.sh
+      - scripts/test-pre-push-work-ref-lane.sh
+      - scripts/lua/test-land-auth-retry.lua
+    title: "five fixtures pass on Linux and not on native Windows; each red is attributed and fixed or a named skip"
+    context: |
+      Measured on yolanda (msys) 2026-11-25; the first four pass on macuahuitl the same day.
+      test-command-policy-consent 6/9: arm 1 reads mode 644 on the consent token.
+      test-pretooluse-command-policy 36/40: failing arms not read yet.
+      test-run-verb-agent-door 31/32: arm 1 signal is status spawn_failed on an msys temp path.
+      test-pre-push-work-ref-lane: not finished in 100 s.
+      test-land-auth-retry: could-not-run:land-auth-retry-fixture:no-git, with git installed; Linux not asked.
+      No cause is established beyond the lines above.
+    exit_criteria:
+      - "Each of the five answers ok on msys, or skips by name the arm whose condition cannot be constructed there."
+      - "A real Windows defect in the command policy, as opposed to a fixture artefact, has a row of its own."
+    unscoreable: "fixture-scored: the fixtures' own verdict lines are the score"
+    provenance: "coordinator 2026-11-25 (asked for an msys row), yolanda"
+    related: [2371-knda]
+    events: []

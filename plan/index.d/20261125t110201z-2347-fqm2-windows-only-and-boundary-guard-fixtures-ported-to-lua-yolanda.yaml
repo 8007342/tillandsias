@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: windows-only-sources-and-worktree-boundary-guard-fixtures-ported-to-lua
+    order: "2347-fqm2"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/test-windows-only-sources-verified.lua
+      - scripts/lua/test-worktree-boundary-guard.lua
+    title: "two shell fixtures ported to Lua: windows-only sources verified, worktree boundary guard"
+    context: |
+      ports: test-windows-only-sources-verified, test-worktree-boundary-guard.
+      Claimed by yolanda in the coordinator's test-[w-z]* range. Left in that range: test-wsl-builder-kill-reaches-guest,
+      whose subject is shell job control and signals to a live builder run.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its subject is mutated; callers run the .lua; the two .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by three litmus tests"
+    provenance: "coordinator 2026-11-25 (test-[w-z]* range), yolanda"
+    related: [716-f5kc, 717-3bvv]
+    events:
+      - {type: claimed, ts: "2026-11-25T11:02:01Z", host: yolanda, summary: "claimed; work ref work/2347-fqm2"}

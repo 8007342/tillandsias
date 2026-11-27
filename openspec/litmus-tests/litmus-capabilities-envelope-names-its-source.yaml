@@ -36,16 +36,11 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-capabilities-envelope-names-its-source.sh
+  - workspace contains scripts/lua/test-capabilities-envelope-names-its-source.lua
   - target/debug/tillandsias is built (or TILLANDSIAS_BIN names a current binary)
 
 critical_path:
-  - step: "the suite parses and carries its exec bit"
-    command: "bash -n scripts/test-capabilities-envelope-names-its-source.sh && test -x scripts/test-capabilities-envelope-names-its-source.sh && echo 'ok: envelope-source-suite-parses'"
-    timeout_ms: 3000
-    expected_behavior: "ok: envelope-source-suite-parses"
-
   - step: "cold run measured, warm run served, envelopes otherwise identical, source key last on the line"
-    command: "bash scripts/test-capabilities-envelope-names-its-source.sh | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-capabilities-envelope-names-its-source.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "PASS: capabilities-envelope-names-its-source"
+    expected_behavior: "ok:capabilities-envelope-names-its-source:6 arms"

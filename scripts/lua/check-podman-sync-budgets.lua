@@ -46,6 +46,19 @@ if root:sub(1, 1) == "/" then
     if not listed.ok then verdict.emit("blocked:podman-sync-bounded:search-root-unreadable:" .. root, 2) end
     files = {}
     for _, file in ipairs(text.lines(listed.stdout or "")) do files[#files + 1] = file end
+    -- ORDER 2416-pscn: on Windows find is an msys tool and prints /tmp/... or /c/... paths, which
+    -- this native reader cannot open. Where cygpath answers, map the listing to the C:/ spelling
+    -- in one argv-only call; elsewhere (Linux) nothing changes.
+    if #files > 0 then
+        local probe = proc.run({ argv = { "cygpath", "-m", "/" }, timeout_ms = 10000 })
+        if probe.ok and text.trim(probe.stdout or ""):match("^%a:/") then
+            local argv = { "cygpath", "-m" }
+            for _, f in ipairs(files) do argv[#argv + 1] = f end
+            local mapped = proc.run({ argv = argv, timeout_ms = 30000 })
+            if not mapped.ok then verdict.emit("blocked:podman-sync-bounded:search-root-unreadable:" .. root, 2) end
+            files = text.lines(mapped.stdout or "")
+        end
+    end
 else
     files = fs.walk(root, { suffix = ".rs" })
 end
@@ -55,12 +68,27 @@ local function raw_lines(s)
     if s:sub(-1) == "\n" then out[#out] = nil end
     return out
 end
+-- ORDER 2416-pscn: READ EVERY LISTED FILE ONCE, UP FRONT. lines_matching used to wrap each read in
+-- pcall and drop a failure, so a file it could not open counted as zero matches and the check could
+-- say ok over files it never read (measured on doris: a real violation under an unreadable listing
+-- read ok:podman-sync-bounded:0). A listed file that cannot be read now blocks, by name.
+local sources, unreadable = {}, {}
+for _, file in ipairs(files) do
+    local ok, source = pcall(fs.read, file)
+    if ok then sources[file] = source else unreadable[#unreadable + 1] = file end
+end
+if #unreadable > 0 then
+    for _, f in ipairs(unreadable) do log.raw("unreadable: " .. f) end
+    verdict.emit("blocked:podman-sync-bounded:unreadable:" .. #unreadable, 2,
+        "  why: the listing named files this check could not read, so it cannot say they are clean (2416-pscn)\n"
+        .. "  remedy: make them readable, or point PODMAN_SYNC_SEARCH_ROOT at a root this reader can open")
+end
 local function lines_matching(pattern, filter, include_tests)
     local matches = {}
     for _, file in ipairs(files) do
         if include_tests or not text.is_match(file, [[/tests?/]]) then
-            local ok, source = pcall(fs.read, file)
-            if ok then
+            local source = sources[file]
+            if source then
                 local normalized, raw = text.lines(source), raw_lines(source)
                 for n, line in ipairs(normalized) do
                     if text.is_match(line, pattern) and (not filter or filter(file, line)) then

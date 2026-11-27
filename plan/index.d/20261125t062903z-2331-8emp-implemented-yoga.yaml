@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: land-tool-mirror-and-long-running-view-fixtures-ported-to-lua
+    field: status
+    value: implemented
+    ts: "2026-11-25T06:29:03Z"
+    host: yoga
+events:
+  - packet_id: land-tool-mirror-and-long-running-view-fixtures-ported-to-lua
+    event: {type: implemented, ts: "2026-11-25T06:29:03Z", host: yoga, summary: "implemented on work/2331-8emp"}

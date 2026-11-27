@@ -201,7 +201,7 @@ critical_path:
     # behaviour by running its unit test (it fails on a capped budget).
     command: "cargo test -q -p tillandsias-core --lib forge_budget::tests::a_forge_budget_is_uncapped 2>&1"
     timeout_ms: 300000
-    expected_behavior: "1 passed"
+    expected_behavior: "test result: ok. 1 passed"
 
   - step: "Req 3 tmpfs size parser: parse_tmpfs_size_mb extracts size=Nm"
     # Pure parser for the canonical forge tmpfs format

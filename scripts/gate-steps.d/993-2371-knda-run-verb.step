@@ -1,0 +1,11 @@
+# Gate step 2371-knda — data, not code (order 1072-b7eq).
+#
+# Nothing ran this fixture: its litmus is bound to a draft spec, which the runner does not select.
+# Native Windows reds are 2371-r2v9; the gate there runs in the Linux builder.
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the run verb answers through its agent door (2371-knda)"
+STEP_LUA="scripts/lua/test-run-verb-agent-door.lua"
+STEP_ERROR="tillandsias-plan run no longer answers, refuses or audits as pinned (1443-8pur) — see the FAIL lines above"
+STEP_OK="run-verb-agent-door fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:rc0-no-verdict-line"
+STEP_READS="crates/tillandsias-plan/src/run_verb.rs scripts/plan-binary-probe.sh scripts/lua/test-run-verb-agent-door.lua"

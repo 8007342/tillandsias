@@ -24,6 +24,15 @@
 --   4 EXPLICIT MERGE    the same token, the step writing `2>&1` itself -> PASSES
 --   5 NAMED ON FAILURE  a failing step's [FAIL] detail carries stderr=<path>,
 --                       and that file holds what the step wrote to stderr
+--   6 EXIT              (2309-fa7q) a step that prints its expected_behavior and
+--                       exits 1 FAILS, and is told how to declare the exit
+--   7 EXIT CONTROL      a text match that exits 0, and one that declares
+--                       assert_exit 1, pass and are not in the census
+--   8 CENSUS            a success_pattern match that exits 1 passes and is named
+--   9 MUTATION          arm 6's step passes in a runner without the exit rule
+--  10 LOOSE             "1" is not "10"; `test result: ok` with 0 tests FAILS; the
+--                       right number and a run that passed a test PASS
+--  11 MUTATION          arm 10's failing steps pass in a runner without the rules
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-litmus-verdict-reads-stdout-only.lua
 
@@ -62,13 +71,29 @@ write_case("fx87-explicit", "{ printf 'ok: from-stderr\\\\n' >&2; } 2>&1",
 write_case("fx87-named", "printf 'not the token\\\\n'; printf 'the-reason-is-here\\\\n' >&2; exit 1",
     "    expected_behavior: \"ok: never-printed\"\n")
 
+write_case("fa7q-nonzero", "printf 'ok: token\\\\n'; exit 1", "    expected_behavior: \"ok: token\"\n")
+write_case("fa7q-pattern", "printf 'ok: token\\n'; exit 1", "    success_pattern: \"^ok: token$\"\n")
+write_case("fa7q-declared", "printf 'ok: token\\\\n'; exit 1",
+    "    assert_exit: 1\n    assert_output_contains: \"ok: token\"\n")
+
+-- 2309-fa7q, the two expectations containment cannot judge.
+local JUDGED = {
+    { "fa7q-number-ten", "echo 10", "1", false },
+    { "fa7q-number-one", "echo ' 1'", "1", true },
+    { "fa7q-zero-tests", "echo 'test result: ok. 0 passed; 0 failed'", "test result: ok", false },
+    { "fa7q-some-tests", "echo 'test result: ok. 0 passed'; echo 'test result: ok. 12 passed; 0 failed'", "test result: ok", true },
+}
+for _, j in ipairs(JUDGED) do write_case(j[1], j[2], "    expected_behavior: \"" .. j[3] .. "\"\n") end
+
 -- The bindings are half of the seam (1252-znbn): `--test` runs a test through
 -- the spec that binds it, so the throwaway corpus carries its own.
 local bind = "version: '1.0'\ndescription: throwaway bindings for the 1268-fx87 fixture\nspecs:\n"
     .. "- spec_id: fx87-probe\n  status: active\n  litmus_tests:\n"
-for _, nm in ipairs({ "fx87-contam", "fx87-stderr-only", "fx87-explicit", "fx87-named" }) do
+for _, nm in ipairs({ "fx87-contam", "fx87-stderr-only", "fx87-explicit", "fx87-named",
+    "fa7q-nonzero", "fa7q-declared", "fa7q-pattern" }) do
     bind = bind .. "  - " .. LIT .. ":" .. nm .. "\n"
 end
+for _, j in ipairs(JUDGED) do bind = bind .. "  - " .. LIT .. ":" .. j[1] .. "\n" end
 bind = bind .. "  coverage_ratio: 100\n"
 fs.write(REL .. "/bindings.yaml", bind)
 
@@ -95,8 +120,8 @@ local RUNNER = ROOT .. "/scripts/run-litmus-test.sh"
 local rc, o = litmus(RUNNER, "fx87-contam")
 check("1 a stderr contaminant does not decide a stdout verdict", rc == 0, "rc=" .. rc .. " " .. short(o))
 
--- 2 MUTATION: the merged capture restored, in a copy beside the original so
--- its PROJECT_ROOT and stdlib resolve the same way.
+-- 2 MUTATION: the merged capture restored, in a SCRATCH copy whose PROJECT_ROOT line is
+-- pinned to the real root, so stdlib resolves the same way (2288-s2na: it sat in scripts/).
 local src = fs.read("scripts/run-litmus-test.sh")
 local NEEDLE = [[>"$step_capture" 2>"$step_errcap" || exit_code=$?]]
 local n = 0
@@ -104,13 +129,14 @@ for _ in string.gmatch(src, (NEEDLE:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")))
 if n ~= 1 then
     check("2 the mutation lands exactly once", false, "the capture line occurs " .. n .. " times")
 else
-    local mutant_rel = "scripts/.fx87-mutant-runner-" .. tostring(math.random(100000, 999999)) .. ".sh"
+    local mutant_rel = REL .. "/fx87-mutant-runner.sh"
     local s, e = string.find(src, NEEDLE, 1, true)
-    fs.write(mutant_rel, src:sub(1, s - 1) .. [[>"$step_capture" 2>&1 || exit_code=$?]] .. src:sub(e + 1))
+    local body, pinned = (src:sub(1, s - 1) .. [[>"$step_capture" 2>&1 || exit_code=$?]] .. src:sub(e + 1))
+        :gsub("\nreadonly PROJECT_ROOT=[^\n]*", function() return "\nreadonly PROJECT_ROOT=\"" .. ROOT .. "\"" end, 1)
+    fs.write(mutant_rel, body)
     rc, o = litmus(ROOT .. "/" .. mutant_rel, "fx87-contam")
-    run({ "rm", "-f", ROOT .. "/" .. mutant_rel })
     check("2 with the merged capture restored, the contaminant IS the verdict (control is not vacuous)",
-        rc == 1 and text.contains(o, "[FAIL]"), "rc=" .. rc .. " " .. short(o))
+        pinned == 1 and rc == 1 and text.contains(o, "[FAIL]"), "pinned=" .. pinned .. " rc=" .. rc .. " " .. short(o))
 end
 
 -- 3 STDOUT ONLY
@@ -136,6 +162,56 @@ if path then
 end
 check("5 a failing step names its stderr log, and the log holds the stderr",
     rc == 1 and path ~= nil and held, "rc=" .. rc .. " path=" .. tostring(path) .. " held=" .. tostring(held))
+
+-- 6 EXIT, 7 its controls, 8 CENSUS, 9 MUTATION
+local CENSUS = "census:nonzero-text-match "
+rc, o = litmus(RUNNER, "fa7q-nonzero")
+check("6 an expected text at a nonzero exit fails, and names assert_exit",
+    rc == 1 and text.contains(o, "[FAIL]") and text.contains(o, "declare assert_exit: 1"), "rc=" .. rc .. " " .. short(o))
+for _, name in ipairs({ "fx87-explicit", "fa7q-declared" }) do
+    rc, o = litmus(RUNNER, name)
+    check("7 " .. name .. " passes and is not in the census",
+        rc == 0 and text.contains(o, "[OK]") and not text.contains(o, CENSUS), "rc=" .. rc .. " " .. short(o))
+end
+
+rc, o = litmus(RUNNER, "fa7q-pattern")
+check("8 a nonzero success_pattern match passes and is in the census",
+    rc == 0 and text.contains(o, CENSUS .. LIT .. ":fa7q-pattern#1 rc=1 success_pattern"), "rc=" .. rc .. " " .. short(o))
+local RULE = 'elif [[ -n "$step_expected" && "$exit_code" -ne 0 ]]; then'
+local rs, re = src:find(RULE, 1, true)
+if rs == nil or src:find(RULE, re + 1, true) then
+    check("9 the exit rule is there exactly once", false, "rule line moved")
+else
+    local body, pinned = (src:sub(1, rs - 1) .. "elif false; then" .. src:sub(re + 1))
+        :gsub("\nreadonly PROJECT_ROOT=[^\n]*", function() return "\nreadonly PROJECT_ROOT=\"" .. ROOT .. "\"" end, 1)
+    fs.write(REL .. "/fa7q-mutant-runner.sh", body)
+    rc, o = litmus(W .. "/fa7q-mutant-runner.sh", "fa7q-nonzero")
+    check("9 without the exit rule the same step passes", pinned == 1 and rc == 0 and text.contains(o, "[OK]"),
+        "pinned=" .. pinned .. " rc=" .. rc .. " " .. short(o))
+end
+
+-- 10 LOOSE: red on the mutant value, green on the right one; 11 MUTATION
+for _, j in ipairs(JUDGED) do
+    rc, o = litmus(RUNNER, j[1])
+    check("10 " .. j[1] .. (j[4] and " passes" or " fails"),
+        rc == (j[4] and 0 or 1) and text.contains(o, j[4] and "[OK]" or "[FAIL]"), "rc=" .. rc .. " " .. short(o))
+end
+local ls = src:find('case "$expected_lc" in', 1, true)
+local le = ls and src:find('if grep -Fqi "$expected"', ls, true)
+if le == nil then
+    check("11 the two rules are there", false, "rule lines moved")
+else
+    local body, pinned = (src:sub(1, ls - 1) .. src:sub(le))
+        :gsub("\nreadonly PROJECT_ROOT=[^\n]*", function() return "\nreadonly PROJECT_ROOT=\"" .. ROOT .. "\"" end, 1)
+    fs.write(REL .. "/fa7q-loose-runner.sh", body)
+    for _, j in ipairs(JUDGED) do
+        if not j[4] then
+            rc, o = litmus(W .. "/fa7q-loose-runner.sh", j[1])
+            check("11 without the rules " .. j[1] .. " passes", pinned == 1 and rc == 0 and text.contains(o, "[OK]"),
+                "pinned=" .. pinned .. " rc=" .. rc .. " " .. short(o))
+        end
+    end
+end
 
 run({ "rm", "-rf", W })
 if failed > 0 then

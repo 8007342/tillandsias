@@ -1,0 +1,10 @@
+# Gate step 2415-gntr — data, not code (order 1072-b7eq).
+#
+# with-wsl2-builder.sh relates a C:/-spelled pwd to a /c/-spelled script dir; an
+# absolute result breaks every build.sh forward into the WSL2 guest (rc=127).
+STEP_DESC="Checking the WSL2 forward hands the guest relative paths (2415-gntr)"
+STEP_LUA="scripts/lua/test-wsl2-forward-relative-paths.lua"
+STEP_ERROR="with-wsl2-builder.sh produced an absolute msys path for the guest, so build.sh forwards exit 127 (2415-gntr) — see the FAIL lines above"
+STEP_OK="WSL2 forward relative paths passed"
+STEP_SECOND_REGIME="doris 2026-11-26 msys ok:wsl2-forward-relative-paths:2 arms (skip:not-msys elsewhere)"
+STEP_READS="scripts/with-wsl2-builder.sh scripts/lua/test-wsl2-forward-relative-paths.lua"

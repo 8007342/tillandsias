@@ -224,6 +224,19 @@ while IFS= read -r -d '' _aa_ign; do
     fi
 done < <(git -C "$REPO_ROOT" ls-files -z -o -i --exclude-standard --directory 2>/dev/null)
 
+# ORDER 2390-kivc. .git/objects is NOT copied: the copy reads the live object store
+# through objects/info/alternates instead. The budget counted it, loose objects and
+# all, so whether a host had last run `git gc` decided the verdict for every change:
+# #1599 was evicted at 1049356 KB against 1048576 KB on a host whose .git was 851 MB,
+# 532 MB of it loose. git only READS an alternate; anything the copy writes lands in
+# its own objects/, so the live store is untouched and gitref.rs still sees all of
+# history. A .git that is a FILE (a linked worktree) is copied as before.
+_aa_alt=""
+if [ -d "$REPO_ROOT/.git/objects" ]; then
+    _aa_alt="$(cd "$REPO_ROOT/.git/objects" && pwd -P)"
+    TAR_PRUNE+=(--exclude=./.git/objects)
+fi
+
 BUDGET_KB=$(( 1024 * 1024 ))   # 1 GiB
 # du must be asked from INSIDE the root with `.` as the operand, exactly as tar
 # is. The patterns are `./target`-shaped, and those match the member names du
@@ -275,6 +288,15 @@ if cp --reflink=auto --help >/dev/null 2>&1 || cp --help 2>/dev/null | grep -q -
                 [ "${_aa_p#--exclude=./}" = "$_aa_entry" ] && { _aa_skip=1; break; }
             done
             [ "$_aa_skip" = 1 ] && continue
+            # The prune list matches top-level names; .git/objects is one level down.
+            if [ "$_aa_entry" = .git ] && [ -n "$_aa_alt" ]; then
+                mkdir -p "$TREE/.git" || exit 1
+                for _aa_g in .git/*; do
+                    [ "$_aa_g" = .git/objects ] && continue
+                    cp -a --reflink=auto "$_aa_g" "$TREE/.git/" || exit 1
+                done
+                continue
+            fi
             cp -a --reflink=auto "$_aa_entry" "$TREE/" || exit 1
         done
     ) 2>"$LOG/copy.err" || _aa_copy_ok=0
@@ -286,6 +308,15 @@ if [ "$_aa_copy_ok" != 1 ]; then
     if ! tar -C "$REPO_ROOT" "${TAR_PRUNE[@]}" -cf - . 2>>"$LOG/copy.err" \
          | tar -C "$TREE" -xf - 2>>"$LOG/copy.err"; then
         echo "fail:${NAME}:tree-copy-failed:see-$LOG/copy.err"
+        KEEP=1
+        exit 1
+    fi
+fi
+# The copy's object store: empty, with the live one as its alternate (2390-kivc).
+if [ -n "$_aa_alt" ]; then
+    if ! mkdir -p "$TREE/.git/objects/info" "$TREE/.git/objects/pack" \
+         || ! printf '%s\n' "$_aa_alt" > "$TREE/.git/objects/info/alternates"; then
+        echo "fail:${NAME}:tree-copy-failed:cannot-write-the-object-alternate"
         KEEP=1
         exit 1
     fi

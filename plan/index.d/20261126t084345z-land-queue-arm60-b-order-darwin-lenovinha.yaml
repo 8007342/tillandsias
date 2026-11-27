@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: land-queue-arm60-b-order-red-on-darwin
+    order: "2401-mrdx"
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos]
+    estimated_hours: 1
+    title: "land-queue ARM 60 b-order is red on darwin, in the .sh on trunk and in its Lua port alike"
+    context: |
+      macbookair 2026-11-26: trunk's scripts/test-land-queue.sh and test-land-queue-trains.lua at 1d37addfb (2398-zvug) both red ARM 60
+      sub-check b-order on darwin; every other arm is green. b-order counts seen-lines "gates=3 nice=<n> clean shared=off", where <n> is the
+      fixture's own nice plus 10. On darwin the seen line read "nice=" (empty): the shadow stub's bare nice printed nothing.
+      Hypothesis, not verified: BSD nice without a command prints no niceness (GNU prints it). The fix is probably the stub's and the
+      fixture's way of reading niceness (ps -o nice= -p PID). Step 293's darwin record names this red.
+    exit_criteria:
+      - "ARM 60 b-order green on darwin, with the cause recorded; step 293's darwin record re-measured ok"
+    unscoreable: "unpinnable-until-the-guard-exists: one darwin arm."
+    next_action: "a mac reads the shadow stub's nice on darwin and fixes the measure."
+    provenance: filed by lenovinha from macbookair's darwin runs.
+    related: [2398-zvug]
+    events:
+      - {type: filed, ts: '2026-11-26T08:43:45Z', host: lenovinha, summary: darwin b-order red}

@@ -25,13 +25,13 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-litmus-binding-truth.sh
+  - workspace contains scripts/lua/test-litmus-binding-truth.lua
   - workspace contains scripts/lua/check-litmus-bindings.lua and a tillandsias-plan with `script run` (else the fixture skips by name)
   - git is available, or the fixture skips by name
 
 critical_path:
   - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-litmus-binding-truth.sh && test -x scripts/test-litmus-binding-truth.sh && echo 'ok: binding-truth-fixture-parses'"
+    command: "test -f scripts/lua/test-litmus-binding-truth.lua && echo 'ok: binding-truth-fixture-parses'"
     expected_behavior: "ok: binding-truth-fixture-parses"
     assert_exit: 0
     timeout_ms: 5000
@@ -45,8 +45,8 @@ critical_path:
   # diff-scoped against a base ref, so a tree with no git cannot answer the
   # question and must say so rather than pass.
   - step: "both criteria hold and both mutations red their arms"
-    command: "bash scripts/test-litmus-binding-truth.sh 2>&1 | tail -1 | grep -E '^(ok:litmus-binding-truth:4/4|skip:no-git)$'"
-    expected_behavior: "ok:litmus-binding-truth:4/4 (or skip:no-git)"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-binding-truth.lua"
+    expected_behavior: "ok:litmus-binding-truth:4 arms"
     assert_exit: 0
     assert_output_nonempty: true
     timeout_ms: 300000

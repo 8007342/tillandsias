@@ -139,7 +139,7 @@ branch moving on.
 ### Which PACKETS are stranded — the same refs, read as ledger writes
 
 ```bash
-scripts/check-stranded-plan-writes.sh       # or --from <saved salvage-audit transcript>
+tillandsias-plan script run scripts/lua/check-stranded-plan-writes.lua   # or -- --from <saved salvage-audit transcript>
 ```
 
 Order 1232-av4p. The audit above lists FILES; the dangerous subset is invisible
@@ -203,7 +203,7 @@ In every hourly pass, the orchestrator MUST actively analyze concurrent work and
 
 **Establish blast radius before broadcasting a land-blocker.** Where a failure
 was found is not where it bites: a guard shipped in 68d404947 failed
-`test-cycle-flow-emit-idempotency.sh`, and the coordinator relayed a
+`test-cycle-flow-emit-idempotency.lua`, and the coordinator relayed a
 land-blocker reading to six hosts before checking that the fixture's only
 caller is a litmus test outside both `--check` and the land path — no host
 was actually blocked, and the alarm had to be un-told within the hour. Before
@@ -295,6 +295,36 @@ burndown:<backlog>:count=<n>:stage=<s>:window=<k>:paid=<p>:waived=<v>:silent=<q>
   proposed next stage. If most waivers cite `blocked-by:`, propose promoting
   those rows instead (`triggers.gentle_to_enforced`). Never edit `stage:`
   yourself: a stage move is a bar raise (`governance`).
+
+### Shell-to-Lua queue sizes (operator 2026-11-25)
+
+Canonical: `methodology/convergence.yaml` → `shell-to-lua` → `batching`.
+When you queue porting hosts:
+
+- **Fixtures (`scripts/test-*.sh`):** give each host a row of 30 ports from
+  its letter range, as three PRs of 8–10. Mutants run on each fixture's main
+  assertions only (2–3 per fixture), and survivors are named in the PR. The
+  host counts the free fixtures before promising 30.
+- **"Free" means no open ref ports it, not only "no .lua on trunk":**
+  filter candidates against every `origin/work/*` ref that deletes the `.sh`
+  and every open PR touching it BEFORE claiming. On 2026-11-26 all eight of
+  a batch's approved ports turned out to be on Family D refs (#1150–#1157),
+  and only `check-carried-obligations` caught it, one overlap per run (2412-ewmt).
+- **Fixtures held by stale drafts:** a fixture held by a draft with no
+  commits for 3+ days, whose edit a port makes moot, is ported anyway. The
+  draft is listed in the port PR and closed with a tombstone after the port
+  lands.
+- **Libraries, hooks, tools and gate deciders:** keep these at 3–4 ports
+  per PR with full mutants.
+- **`images/**`:** its own podman-host track, verified in a container (no
+  sudo, no layering), never mixed into fixture batches.
+- **Retire first:** sweep tests that never run and retire them, with the
+  reason in the file, instead of porting them.
+- **Darwin lines:** relay each ported step number to a macOS host, and
+  forward its verdict to the author for the next PR.
+
+Report the daily `.sh` drop each pass. The rule pays off if it rises above
+about 60 a day, the plateau measured on 2026-11-25.
 
 ---
 

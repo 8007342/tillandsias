@@ -39,7 +39,7 @@ critical_path:
     expected_behavior: "ok: launcher-branch-and-gate"
 
   - step: "offline fixture reproduces the empty-clone break and proves the repair (preferred branch + upstream-default fallback + unseeded no-op)"
-    command: "scripts/test-git-mirror-unborn-head.sh >/dev/null && echo 'ok: unborn-head-fixture-pass'"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-git-mirror-unborn-head.lua >/dev/null && echo 'ok: unborn-head-fixture-pass'"
     timeout_ms: 30000
     expected_behavior: "ok: unborn-head-fixture-pass"
 

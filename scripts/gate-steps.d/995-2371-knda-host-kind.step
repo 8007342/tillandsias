@@ -1,0 +1,12 @@
+# Gate step 2371-knda — data, not code (order 1072-b7eq).
+#
+# Nothing ran this fixture: its litmus is bound to a draft spec, which the runner does not select.
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the host kind is not read from workspace content (2371-knda)"
+STEP_SCRIPT="scripts/test-host-kind-evidence-not-from-workspace.sh"
+STEP_ERROR="workspace content can again decide which host kind a command policy applies to — see the FAIL lines above"
+STEP_OK="host-kind-evidence-not-from-workspace fixture passed"
+STEP_SECOND_REGIME="yolanda 2026-11-25 msys ok:rc0-no-verdict-line"
+STEP_READS="scripts/plan-binary-probe.sh scripts/test-host-kind-evidence-not-from-workspace.sh"
+STEP_SERIAL="drives podman on a Linux host with a builder toolbox"
+STEP_LANES="podman"

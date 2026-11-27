@@ -34,4 +34,4 @@ observability:
 
 rollback:
   on_failure: "read the FAIL lines; publish/seed live in scripts/provider-limit-relay.sh, the refusal in images/default/lib-provider-limit.sh, the tray hooks in crates/tillandsias-headless/src/provider_limit_relay.rs"
-  command: "grep -n 'provider_limit_relay\\|provider-limit-relay' crates/tillandsias-headless/src/main.rs scripts/check-fleet-membership.sh"
+  command: "grep -n 'provider_limit_relay\\|provider-limit-relay' crates/tillandsias-headless/src/main.rs scripts/lua/check-fleet-membership.lua"

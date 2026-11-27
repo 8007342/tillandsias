@@ -79,7 +79,7 @@ CTLDIR="$(mktemp -d)"
   printf '}\n'
 } > "$CTLDIR/ctl.rs"
 CTL="$(scan_reads "$CTLDIR")"
-if [ -n "$CTL" ] && ! printf '%s' "$CTL" | grep -q 'must not exist'; then
+if [ -n "$CTL" ] && ! grep -q <<<"$CTL" 'must not exist'; then
     ok "ARM2b POSITIVE CONTROL — a real read is caught and the comment beside it is not"
 else bad "ARM2b the comment-stripping arm cannot discriminate: got '$CTL'"; fi
 rm -rf "$CTLDIR"

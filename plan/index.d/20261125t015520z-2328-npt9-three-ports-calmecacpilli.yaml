@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: timing-supervisor-uninstall-path-verify-closure-to-lua
+    order: 2328-npt9
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [shell-to-lua, gate]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-timing-supervisor-lost.lua
+      - scripts/lua/test-uninstall-path-block.lua
+      - scripts/lua/test-verify-closure.lua
+    title: "Port test-timing-supervisor-lost.sh, test-uninstall-path-block.sh and test-verify-closure.sh to Lua"
+    context: |
+      On common.fixture, at their existing callers (step 005 and two litmus). test-uninstall-path-block now runs the
+      function cut from uninstall.sh; the shell version ran a copy of its own, so a bug in the shipped one passed.
+    exit_criteria:
+      - "the three ports green on Linux; step 005's second regime re-recorded"
+      - "mutants red: a live writer reaped, a lost record under the real name, only the first block removed, an END that never ends, a drifted marker, a skip accepted, uncovered-criterion renamed"
+    unscoreable: "fixture-scored: the three ports are the pin"
+    provenance: "coordinator macuahuitl-fedora queue 2026-11-25, item 2 (t-v range)"
+    ports: [test-timing-supervisor-lost.sh, test-uninstall-path-block.sh, test-verify-closure.sh]
+    related: [1026-ps4n, 1443-qwpj]
+    events:
+      - {type: claimed, ts: '2026-11-25T01:55:20Z', host: calmecacpilli, summary: three shell fixtures to Lua}

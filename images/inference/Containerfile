@@ -19,7 +19,16 @@ LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 # DISTRO: microdnf (Fedora Minimal), NOT apk (Alpine) or dnf (standard Fedora)
 # DISTRO: wget intentionally omitted — curl is the HTTP tool here.
 #         Rust health checks (handlers.rs) MUST use curl, not wget.
+# Order 2413-jprz: lua + lua-filesystem + lua-lpeg are the image's Lua runtime
+# (operator ruling 2026-11-26: Lua, then Rust, then Go in every container). The
+# distro Lua, as chosen for images/git (2413-thcz), and the same packages as the
+# forge base (images/default/Containerfile.base), not the 10.9 MB static
+# tillandsias-plan. They go in THIS install, not a layer of their own: a separate
+# microdnf layer re-copies the whole rpm database (measured 7.4 MB for the layer,
+# about 1 MB of it Lua). Runtime only: porting this image's 9 scripts is later
+# work (2374-wy4f lists which are portable).
 RUN microdnf install -y bash curl ca-certificates zstd tar gzip pciutils \
+        lua lua-filesystem lua-lpeg \
     && microdnf clean all
 
 # -- Vulkan userspace for the AMD GPU lane --

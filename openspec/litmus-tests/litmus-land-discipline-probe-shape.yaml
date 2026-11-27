@@ -17,18 +17,18 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-land-discipline-probe.sh
+  - workspace contains scripts/lua/test-land-discipline-probe.lua
 
 critical_path:
   - step: "fixture parses and is executable"
-    command: "bash -n scripts/test-land-discipline-probe.sh && test -x scripts/test-land-discipline-probe.sh && echo 'ok: parse'"
+    command: "test -f scripts/lua/test-land-discipline-probe.lua && echo 'ok: parse'"
     timeout_ms: 2000
     expected_behavior: "ok: parse"
 
   - step: "protected default refused before fetch, level-0 floor, seed-named target, mirror digest compare, grammar refusal, probe-unavailable fallback"
-    command: "bash scripts/test-land-discipline-probe.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-land-discipline-probe.lua"
     timeout_ms: 180000
-    expected_behavior: "PASS: land-discipline-probe"
+    expected_behavior: "ok:land-discipline-probe:10 arms"
 
 observability:
   traces:
@@ -45,4 +45,4 @@ rollback:
     default branch, or learns a protected branch only from the remote after
     the gate is the defect: restore the probe's order (target, check-ref,
     mirror digest) ahead of the attempt loop.
-  command: "bash scripts/test-land-discipline-probe.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-land-discipline-probe.lua"

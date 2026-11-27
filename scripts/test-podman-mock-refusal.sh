@@ -5,7 +5,7 @@
 #
 # 97cb255a9 made the top-level `case` in scripts/test-support/podman-mock.sh
 # fail closed and put the packet's negative control in
-# scripts/test-litmus-fake-podman-hermetic.sh. That closed the outer hole. It
+# scripts/test-litmus-fake-podman-hermetic.sh (now scripts/lua/test-litmus-fake-podman-hermetic.lua). That closed the outer hole. It
 # did not close the class: the SAME fall-through was reachable one level down,
 # from an inner `case` that matched nothing, left its arm with no output, and
 # landed on the file's trailing `exit 0`. `podman image ls`, `podman secret
@@ -126,10 +126,10 @@ run_mock absurd_b beta-not-a-podman-verb
 b_rc=$rc
 b_line="$(refused_line "$err_file")"
 if [ "$a_rc" -eq "$REFUSAL_EXIT" ] && [ "$b_rc" -eq "$REFUSAL_EXIT" ] \
-   && printf '%s' "$a_line" | grep -q 'alpha-not-a-podman-verb' \
-   && ! printf '%s' "$a_line" | grep -q 'beta-not-a-podman-verb' \
-   && printf '%s' "$b_line" | grep -q 'beta-not-a-podman-verb' \
-   && ! printf '%s' "$b_line" | grep -q 'alpha-not-a-podman-verb'; then
+   && grep -q <<<"$a_line" 'alpha-not-a-podman-verb' \
+   && ! grep -q <<<"$a_line" 'beta-not-a-podman-verb' \
+   && grep -q <<<"$b_line" 'beta-not-a-podman-verb' \
+   && ! grep -q <<<"$b_line" 'alpha-not-a-podman-verb'; then
     pass "diagnostic-subject-is-interpolated-not-canned"
 else
     bad "the REFUSED line does not distinguish two different subcommands" \

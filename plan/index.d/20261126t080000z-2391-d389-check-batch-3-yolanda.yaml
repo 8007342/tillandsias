@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: check-batch-3-spec-index-resolution-agreement-to-lua
+    order: "2391-d389"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, gate]
+    estimated_hours: 1.5
+    owned_files:
+      - scripts/lua/check-spec-index-resolution-agreement.lua
+      - scripts/lua/test-spec-index-resolution-agreement.lua
+    title: "check-* batch 3: check-spec-index-resolution-agreement ported to Lua, with a mutating fixture"
+    context: |
+      Coordinator ruling 2026-11-26 (a): a prose or comment mention is not a caller. #1170 and #1202 do not reach
+      either batch-3 candidate's call site. check-claims-across-branches (448 lines; select-work-batch.sh runs it by
+      path with its exit-code contract) is left for its own PR.
+    exit_criteria:
+      - "The decider gives the .sh's verdict on one tree, its main assertions are mutated, callers run the .lua, and the .sh is deleted."
+    unscoreable: "fixture-scored: test-spec-index-resolution-agreement, step 135, the landed-guards roster and litmus:forge-experts-ephemerality-shape"
+    provenance: "coordinator 2026-11-26 (check-* batch 3, ruling a), yolanda"
+    related: [801-a2by, 2390-byz6]
+    events:
+      - {type: claimed, ts: "2026-11-26T05:13:50Z", host: yolanda, summary: "claimed; work ref work/2391-d389"}

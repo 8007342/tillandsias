@@ -69,14 +69,14 @@ use tracing::{debug, error, info, warn};
 
 use serde::{Deserialize, Serialize};
 
+mod bringup_progress;
 /// ORDER 626-w3fn (b). User-facing bring-up progress, on the DEFAULT path.
 /// UNCONDITIONAL: the packet's whole point is that this reaches users without
 /// --debug and on every platform, so it must not sit behind a feature gate.
-mod bringup_progress;
-mod egress;
-mod fs_stall;
 // 1991-dovl: dev-build overlay over the compiled-in studio tables.
 mod dev_overlay;
+mod egress;
+mod fs_stall;
 // 1984-pexe: this binary's path, robust to an upgrade replacing it on disk.
 mod bringup_timer;
 mod device_poll_view;
@@ -86,6 +86,7 @@ mod image_build_scope;
 mod memory_protection;
 mod self_exe;
 // @trace order:1874-b9tg: where an sd.cpp run placed the model.
+mod gpu_fallback;
 #[cfg(feature = "host-services")]
 mod imagegen_consent;
 mod imagegen_models;
@@ -7710,6 +7711,10 @@ fn detect_inference_tier() -> &'static str {
 // @trace spec:accel-capability-probe
 // @trace spec:inference-policy-router: Hardware-aware tier routing and fallback chain.
 fn effective_inference_tier() -> &'static str {
+    // 2283-u8m6: a GPU podman could not hand over is not delivered.
+    if inference_gpu_withheld() {
+        return "cpu";
+    }
     let hardware = detect_inference_tier();
     let delivered = match hardware {
         "gpu-cuda" if !nvidia_cdi_available() => "cpu",
@@ -7721,6 +7726,103 @@ fn effective_inference_tier() -> &'static str {
         Path::new("/dev/dxg").exists(),
         Path::new(WSL_HOST_TREE).exists(),
     )
+}
+
+/// ORDER 2283-u8m6. Set once in this process when the inference container could
+/// not START with a GPU device attached; every later argv, tier report and forge
+/// env then says CPU. Process-scoped on purpose: the next launch tries the GPU
+/// again, so a repaired driver needs no reset.
+#[cfg(not(test))]
+static INFERENCE_GPU_WITHHELD: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+// Tests run beside each other in one process; each sees only its own flag.
+#[cfg(test)]
+thread_local! {
+    static TEST_INFERENCE_GPU_WITHHELD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+fn inference_gpu_withheld() -> bool {
+    #[cfg(test)]
+    return TEST_INFERENCE_GPU_WITHHELD.with(std::cell::Cell::get);
+    #[cfg(not(test))]
+    INFERENCE_GPU_WITHHELD.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+fn withhold_inference_gpu() {
+    #[cfg(test)]
+    TEST_INFERENCE_GPU_WITHHELD.with(|f| f.set(true));
+    #[cfg(not(test))]
+    INFERENCE_GPU_WITHHELD.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Does this argv hand the container an accelerator? `--device <gpu>` in any of
+/// the forms build_inference_run_args emits.
+fn argv_carries_gpu(args: &[String]) -> bool {
+    args.iter().any(|a| {
+        let d = a.strip_prefix("--device=").unwrap_or(a);
+        d.starts_with("nvidia.com/gpu")
+            || d.starts_with("/dev/kfd")
+            || d.starts_with("/dev/dri")
+            || d.starts_with("/dev/dxg")
+    })
+}
+
+/// The one line of a launch failure that names its cause.
+fn launch_failure_cause(err: &str) -> &str {
+    err.lines()
+        .map(str::trim)
+        .find_map(|l| l.strip_prefix("stderr:"))
+        .or_else(|| err.lines().next())
+        .unwrap_or("")
+        .trim()
+}
+
+/// ORDER 2283-u8m6 (coordinator p0, 2026-11-24). Start inference; when it fails
+/// with a GPU device attached, retry ONCE without it and say so in one line.
+/// v56.11.23.1 on lenovinha: crun refused a CDI mount under --userns=keep-id and
+/// the whole lane exited 1 for an optional accelerator. A failure with no GPU in
+/// the argv is returned as it always was. `build` is called again for the retry
+/// so the tier, the engine library and the device agree.
+async fn start_inference_with<B, R, F>(build: B, mut run: R) -> Result<String, String>
+where
+    B: Fn() -> Vec<String>,
+    R: FnMut(Vec<String>) -> F,
+    F: std::future::Future<Output = Result<String, String>>,
+{
+    let args = build();
+    let gpu = argv_carries_gpu(&args);
+    match run(args).await {
+        Err(err) if gpu => {
+            withhold_inference_gpu();
+            eprintln!(
+                "[tillandsias] inference could not start with the GPU ({}); running it on CPU for this session",
+                launch_failure_cause(&err)
+            );
+            run(build()).await.map_err(|cpu_err| {
+                format!(
+                    "{cpu_err}\n(first attempt, with the GPU: {})",
+                    launch_failure_cause(&err)
+                )
+            })
+        }
+        other => other,
+    }
+}
+
+async fn start_inference_container(
+    client: &PodmanClient,
+    stage: &str,
+    container_name: &str,
+    build: impl Fn() -> Vec<String>,
+    debug: bool,
+) -> Result<String, String> {
+    start_inference_with(build, |args| async move {
+        client
+            .run_container_observed(stage, container_name, &args, debug)
+            .await
+    })
+    .await
 }
 
 /// ORDER 793-a8e7: the operator opt-in that turns a WSL2 paravirtual GPU into
@@ -8351,7 +8453,7 @@ pub(crate) fn vsock_forward_dir() -> PathBuf {
             .chars()
             .filter(char::is_ascii_alphanumeric)
             .collect::<String>();
-        std::env::temp_dir().join(format!(
+        tillandsias_core::test_scratch::path(format!(
             "tillandsias-vsock-forward-test-{}-{thread}",
             std::process::id()
         ))
@@ -8738,7 +8840,13 @@ fn build_inference_run_args(
     // detect_inference_tier(); deliverability is gated separately (CDI for
     // cuda), and a GPU host without CDI degrades to CPU with a LOUD remedy
     // rather than a silent cpu-tier-in-gpu-clothing.
-    let tier = detect_inference_tier();
+    // 2283-u8m6: once a GPU start has failed, nothing below delivers one.
+    let gpu_withheld = inference_gpu_withheld();
+    let tier = if gpu_withheld {
+        "cpu"
+    } else {
+        detect_inference_tier()
+    };
     match tier {
         "gpu-cuda" => {
             if nvidia_cdi_available() {
@@ -8780,7 +8888,7 @@ fn build_inference_run_args(
     // delivery is orthogonal to the tier, so it is decided on its own
     // evidence.
     args.extend(wsl2_dxg_container_args(
-        Path::new("/dev/dxg").exists(),
+        !gpu_withheld && Path::new("/dev/dxg").exists(),
         Path::new(WSL_HOST_TREE).exists(),
     ));
 
@@ -8832,11 +8940,12 @@ fn build_inference_run_args(
     if let Some(note) = engine_note {
         eprintln!("[tillandsias] WARNING: {note}");
     }
-    let (usable_nodes, unusable_nodes) = if engine == engine_slots::EngineKind::LlamaServer {
-        engine_slots::usable_render_nodes(Path::new("/dev/dri"))
-    } else {
-        (Vec::new(), Vec::new())
-    };
+    let (usable_nodes, unusable_nodes) =
+        if engine == engine_slots::EngineKind::LlamaServer && !gpu_withheld {
+            engine_slots::usable_render_nodes(Path::new("/dev/dri"))
+        } else {
+            (Vec::new(), Vec::new())
+        };
     for node in &unusable_nodes {
         eprintln!(
             "[tillandsias] llama-server slot: render node {} is not readable+writable by this user — not delivered; the slot runs on CPU unless another node is usable (SLOT-5)",
@@ -14844,13 +14953,13 @@ fn run_status_check(debug: bool) -> Result<(), String> {
             // Host-native lane took it. The forwarder claims the `inference`
             // alias, so the container below must NOT also run (830-xsk2).
         } else {
-            client
-                .run_container_observed(
-                    "status-inference",
-                    "tillandsias-inference",
-                    &build_inference_run_args(&certs_dir, &inference_image, true),
-                    debug,
-                )
+            start_inference_container(
+                &client,
+                "status-inference",
+                "tillandsias-inference",
+                || build_inference_run_args(&certs_dir, &inference_image, true),
+                debug,
+            )
                 .await
                 .map_err(|e| e.to_string())?;
         }
@@ -18992,17 +19101,13 @@ fn run_opencode_mode(
         } else if keep_inference {
             // 1968-psy9: the healthy, current one checked above keeps serving.
         } else {
-            client
-                .run_container_observed(
-                    "opencode-inference",
-                    "tillandsias-inference",
-                    &build_inference_run_args(
-                        &certs_dir,
-                        &versioned_image_tag("inference", version),
-                        false,
-                    ),
-                    debug,
-                )
+            start_inference_container(
+                &client,
+                "opencode-inference",
+                "tillandsias-inference",
+                || build_inference_run_args(&certs_dir, &versioned_image_tag("inference", version), false),
+                debug,
+            )
                 .await
                 .map_err(|e| format!("[OpenCode] failed to start inference: {e}"))?;
         }
@@ -20935,19 +21040,21 @@ pub(crate) fn run_opencode_web_mode(
             // Host-native lane took it. The forwarder claims the `inference`
             // alias, so the container below must NOT also run (830-xsk2).
         } else {
-            client
-                .run_container_observed(
-                    "opencode-web-inference",
-                    "tillandsias-inference",
-                    &build_inference_run_args(
+            start_inference_container(
+                &client,
+                "opencode-web-inference",
+                "tillandsias-inference",
+                || {
+                    build_inference_run_args(
                         &certs_dir,
                         &versioned_image_tag("inference", version),
                         false,
-                    ),
-                    debug,
-                )
-                .await
-                .map_err(|e| format!("[OpenCode Web] failed to start inference: {e}"))?;
+                    )
+                },
+                debug,
+            )
+            .await
+            .map_err(|e| format!("[OpenCode Web] failed to start inference: {e}"))?;
             emit_opencode_web_event(
                 project_name,
                 "inference",
@@ -21917,19 +22024,21 @@ async fn ensure_inference_for_launch(
         // Host-native lane took it. The forwarder claims the `inference`
         // alias, so the container below must NOT also run (830-xsk2).
     } else {
-        client
-            .run_container_observed(
-                "forge-launch-inference",
-                "tillandsias-inference",
-                &build_inference_run_args(
+        start_inference_container(
+            client,
+            "forge-launch-inference",
+            "tillandsias-inference",
+            || {
+                build_inference_run_args(
                     certs_dir,
                     &versioned_image_tag("inference", version),
                     false,
-                ),
-                debug,
-            )
-            .await
-            .map_err(|e| format!("[forge-launch] failed to start inference: {e}"))?;
+                )
+            },
+            debug,
+        )
+        .await
+        .map_err(|e| format!("[forge-launch] failed to start inference: {e}"))?;
     }
     Ok(())
 }
@@ -24321,9 +24430,7 @@ async fn run_headless_async(
     tokio::task::spawn_blocking(run_disk_usage_check);
 
     // Wave 21a Gap ON-009: Check and refresh GitHub token if expired
-    // Wave 21b Gap ON-010: Check for missing project dependencies before forge launch
-    // @trace gap:ON-010, spec:forge-environment-discoverability
-    // run_dependency_check();
+    // Wave 21b Gap ON-010 retired (2399-vzkf): run_dependency_check, #[allow(dead_code)] and never called, ran /opt/cheatsheets/dependency-resolver.sh, a path the image never wrote; both are gone.
 
     let metrics_handle = spawn_metrics_sampler();
 
@@ -24811,88 +24918,6 @@ fn run_disk_usage_check() {
                 gap = "TR-006",
                 error = %e,
                 "failed to invoke disk usage check (non-blocking)"
-            );
-        }
-    }
-}
-
-/// Check for missing project dependencies before forge launch.
-///
-/// This implements gap:ON-010. Scans the current project for dependency files
-/// (Cargo.toml, package.json, requirements.txt, etc.) and checks if required
-/// tools (rustc, cargo, node, npm, python3, etc.) are available in PATH.
-///
-/// Output: Displays missing dependencies as a formatted list to stderr.
-/// Non-blocking: If dependency check fails, startup continues.
-///
-/// @trace gap:ON-010, spec:forge-environment-discoverability
-#[allow(dead_code)]
-fn run_dependency_check() {
-    use std::process::Command;
-
-    let project_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-
-    // Call the dependency-resolver.sh script to scan for missing dependencies
-    let resolver_script = "/opt/cheatsheets/dependency-resolver.sh";
-
-    // Check if the script exists; if not, skip silently (may be running in environment without it)
-    if !Path::new(resolver_script).exists() {
-        debug!(
-            gap = "ON-010",
-            "dependency-resolver.sh not found; skipping dependency check"
-        );
-        return;
-    }
-
-    match Command::new("bash")
-        .arg(resolver_script)
-        .arg(&project_dir)
-        .output()
-    {
-        Ok(output) => {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-
-            // Parse JSON output
-            if let Ok(missing_deps) = serde_json::from_str::<Vec<serde_json::Value>>(&stdout) {
-                if !missing_deps.is_empty() {
-                    // Display missing dependencies to user
-                    eprintln!("\n[dependency resolver] Missing project dependencies:");
-                    for dep in &missing_deps {
-                        if let (Some(tool), Some(install_hint)) =
-                            (dep.get("tool"), dep.get("install"))
-                        {
-                            eprintln!(
-                                "  - {} (install: {})",
-                                tool.as_str().unwrap_or("unknown"),
-                                install_hint.as_str().unwrap_or("see docs")
-                            );
-                        }
-                    }
-                    eprintln!("  → You can continue, but some tools may not work as expected.\n");
-
-                    // Log structured event for observability
-                    tracing::info!(
-                        gap = "ON-010",
-                        spec = "forge-environment-discoverability",
-                        missing_count = missing_deps.len(),
-                        "project dependencies check completed"
-                    );
-                } else {
-                    debug!(gap = "ON-010", "all project dependencies available");
-                }
-            } else {
-                debug!(
-                    gap = "ON-010",
-                    "failed to parse dependency resolver output; skipping"
-                );
-            }
-        }
-        Err(e) => {
-            // Non-critical error; don't fail startup
-            tracing::warn!(
-                gap = "ON-010",
-                error = %e,
-                "dependency check failed (non-blocking)"
             );
         }
     }
@@ -25434,7 +25459,7 @@ pub(crate) async fn service_stop(
 fn test_cache_root() -> std::path::PathBuf {
     use std::sync::atomic::{AtomicU64, Ordering};
     static SEQ: AtomicU64 = AtomicU64::new(0);
-    let dir = std::env::temp_dir().join(format!(
+    let dir = tillandsias_core::test_scratch::path(format!(
         "tillandsias-test-cache-{}-{}",
         std::process::id(),
         SEQ.fetch_add(1, Ordering::Relaxed)
@@ -25597,7 +25622,8 @@ mod tests {
         }
         use std::process::Command;
 
-        let root = std::env::temp_dir().join(format!("tz-checkout-{}", std::process::id()));
+        let root =
+            tillandsias_core::test_scratch::path(format!("tz-checkout-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("temp root");
 
@@ -26438,7 +26464,9 @@ mod tests {
             // container_running() checks name the container too.
             let window_start = idx.saturating_sub(400);
             let preceding = &source[window_start..idx];
-            if !preceding.contains("run_container_observed(") {
+            if !preceding.contains("run_container_observed(")
+                && !preceding.contains("start_inference_container(")
+            {
                 continue;
             }
             sites += 1;
@@ -26491,6 +26519,133 @@ mod tests {
         }
         assert_eq!(sites, 1, "the fixture must present one start site");
         assert_eq!(ungated, 1, "an unguarded site must be detected as ungated");
+    }
+
+    /// ORDER 2283-u8m6: an argv like the builder's, GPU unless withheld.
+    fn fake_inference_argv() -> Vec<String> {
+        let mut a: Vec<String> = vec!["--userns=keep-id".into()];
+        if !inference_gpu_withheld() {
+            a.extend(["--device".into(), "nvidia.com/gpu=all".into()]);
+        }
+        a.push("img".into());
+        a
+    }
+
+    const CRUN_REFUSAL: &str = "stage 'x-inference' failed\nstderr: Error: crun: mount_setattr `/run/nvidia-persistenced/socket`: Operation not permitted: OCI permission denied\nstate: created";
+
+    /// Pre-fix: the first failure was the lane's exit 1 (v56.11.23.1, lenovinha).
+    #[tokio::test]
+    async fn a_gpu_that_cannot_start_falls_back_to_cpu_once() {
+        let calls = std::sync::Mutex::new(Vec::new());
+        let out = start_inference_with(fake_inference_argv, |args| {
+            calls.lock().unwrap().push(args.clone());
+            async move {
+                if argv_carries_gpu(&args) {
+                    Err(CRUN_REFUSAL.to_string())
+                } else {
+                    Ok("id".to_string())
+                }
+            }
+        })
+        .await;
+        assert_eq!(out.as_deref(), Ok("id"));
+        let calls = calls.into_inner().unwrap();
+        assert_eq!(calls.len(), 2, "one retry: {calls:?}");
+        assert!(argv_carries_gpu(&calls[0]) && !argv_carries_gpu(&calls[1]));
+        assert_eq!(effective_inference_tier(), "cpu");
+    }
+
+    #[tokio::test]
+    async fn a_start_that_fails_without_a_gpu_is_returned_untouched() {
+        let mut n = 0;
+        let out = start_inference_with(
+            || vec!["img".to_string()],
+            |_| {
+                n += 1;
+                async { Err::<String, _>("no such image".to_string()) }
+            },
+        )
+        .await;
+        assert_eq!(out, Err("no such image".to_string()));
+        assert_eq!(n, 1, "nothing to fall back to: no retry");
+        assert!(!inference_gpu_withheld());
+    }
+
+    #[tokio::test]
+    async fn a_gpu_that_starts_is_not_withheld_and_both_failures_are_named() {
+        let mut n = 0;
+        let ok = start_inference_with(fake_inference_argv, |_| {
+            n += 1;
+            async { Ok::<_, String>("id".to_string()) }
+        })
+        .await;
+        assert_eq!((ok.as_deref(), n), (Ok("id"), 1));
+        assert!(!inference_gpu_withheld());
+        let err = start_inference_with(fake_inference_argv, |args| async move {
+            Err::<String, _>(if argv_carries_gpu(&args) {
+                CRUN_REFUSAL.to_string()
+            } else {
+                "cpu start failed too".to_string()
+            })
+        })
+        .await
+        .unwrap_err();
+        assert!(
+            err.contains("cpu start failed too") && err.contains("crun: mount_setattr"),
+            "{err}"
+        );
+    }
+
+    /// The REAL builder, withheld: no accelerator, and the tier it states (the
+    /// last --env wins) is cpu, with no cuda library pinned.
+    #[test]
+    fn a_withheld_gpu_leaves_no_trace_in_the_real_argv() {
+        withhold_inference_gpu();
+        let args = build_inference_run_args(Path::new("/tmp/ca"), "i:v1", false);
+        assert!(!argv_carries_gpu(&args), "{args:?}");
+        assert!(!args.iter().any(|a| a.contains("cuda")), "{args:?}");
+        assert_eq!(
+            args.iter()
+                .rfind(|a| a.starts_with("TILLANDSIAS_INFERENCE_TIER="))
+                .map(String::as_str),
+            Some("TILLANDSIAS_INFERENCE_TIER=cpu")
+        );
+    }
+
+    /// (sites through the fallback helper, lines that start inference directly).
+    fn inference_start_sites(code: &str) -> (usize, Vec<usize>) {
+        let (mut helped, mut direct) = (0, Vec::new());
+        for (idx, _) in code.match_indices("\"tillandsias-inference\",") {
+            let before: String = code[..idx].chars().rev().take(160).collect();
+            let before: String = before.chars().rev().collect();
+            if before.contains("run_container_observed(") {
+                direct.push(code[..idx].matches('\n').count() + 1);
+            } else if before.contains("start_inference_container(") {
+                helped += 1;
+            }
+        }
+        (helped, direct)
+    }
+
+    /// A start site that bypasses the helper brings the exit 1 back. The source
+    /// is the subject: the failure mode is an ADDED site no unit test calls.
+    #[test]
+    fn every_inference_start_goes_through_the_gpu_fallback() {
+        let dir = std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR");
+        let source = std::fs::read_to_string(Path::new(&dir).join("src/main.rs")).unwrap();
+        let code = source.split("#[cfg(test)]\nmod tests").next().unwrap();
+        let (helped, direct) = inference_start_sites(code);
+        assert!(direct.is_empty(), "direct inference starts at {direct:?}");
+        assert_eq!(helped, 4, "status, OpenCode, OpenCode Web and forge launch");
+    }
+
+    /// NEGATIVE CONTROL: the scan finds a site that bypasses the helper.
+    #[test]
+    fn the_gpu_fallback_scan_can_actually_fail() {
+        let bypass = "client\n    .run_container_observed(\n        \"x\",\n        \"tillandsias-inference\",\n";
+        assert_eq!(inference_start_sites(bypass), (0, vec![4]));
+        let helped = "start_inference_container(\n    &client,\n    \"x\",\n    \"tillandsias-inference\",\n";
+        assert_eq!(inference_start_sites(helped), (1, Vec::new()));
     }
 
     #[test]

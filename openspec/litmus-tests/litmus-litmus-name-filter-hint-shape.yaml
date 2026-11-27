@@ -44,9 +44,9 @@ critical_path:
     expected_behavior: "ok: bare typo fails loud with no spurious hint"
 
   - step: "ORDER 1465-ijv3: the EXPLICIT --test flag runs exactly one bound test, refuses an unbound name, and leaves the positional contract above untouched"
-    command: "bash scripts/test-litmus-test-selector.sh 2>&1 | tail -n 1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-test-selector.lua 2>&1 | tail -n 1"
     timeout_ms: 300000
-    expected_behavior: "PASS: litmus-test-selector"
+    expected_behavior: "ok:litmus-test-selector:6 arms"
 
 observability:
   traces:

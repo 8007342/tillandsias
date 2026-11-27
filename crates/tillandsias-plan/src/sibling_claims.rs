@@ -2,7 +2,7 @@
 //!
 //! lenovinha 2026-11-01: plan_next offered 776-jcf3 as claimable while a
 //! sibling platform branch held it in_progress under another host's claim;
-//! only scripts/check-claims-across-branches.sh, run afterwards, said so. The
+//! only scripts/lua/check-claims-across-branches.lua, run afterwards, said so. The
 //! ledger is a G-Set of fragments, so a sibling's view is this checkout's
 //! corpus plus the fragments that sibling has and HEAD lacks. Folding those
 //! and reading each READY row's status there answers "does a sibling hold

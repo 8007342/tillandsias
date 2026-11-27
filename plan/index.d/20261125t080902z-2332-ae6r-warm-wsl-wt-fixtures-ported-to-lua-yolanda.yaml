@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: warm-tier-wsl-exec-channel-and-wt-reparse-fixtures-ported-to-lua
+    order: "2332-ae6r"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/test-warm-tier-model.lua
+      - scripts/lua/test-wsl-exec-channel-carries-exit-status.lua
+      - scripts/lua/test-wt-reparse-scan.lua
+    title: "three shell fixtures ported to Lua: warm-tier model, wsl exec channel, wt-reparse scan"
+    context: |
+      ports: test-warm-tier-model, test-wsl-exec-channel-carries-exit-status, test-wt-reparse-scan.
+      Claimed by yolanda in the coordinator's test-[w-z]* range.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its subject is mutated; callers run the .lua; the three .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by build.sh and a gate step"
+    provenance: "coordinator queue 2026-11-24 (test-[w-z]* range), yolanda"
+    related: [965-hz3f, 1155-jurn, 823-u5zf]
+    events:
+      - {type: claimed, ts: "2026-11-25T08:09:02Z", host: yolanda, summary: "claimed; work ref work/2332-ae6r"}

@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: forge-cli-python-commands-migration-scope
+    order: "2395-3zw7"
+    status: ready
+    kind: decision
+    priority: p3
+    desired_release: v0.5
+    pickup_role: operator
+    capability_tags: [forge]
+    estimated_hours: 1
+    title: "Operator decision: do the six python3 forge commands in images/default/cli/ belong in the shell->Lua->Rust->Go migration?"
+    context: |
+      After 2389-8rmy, 2392-kww7 and 2394-4iwp, images/default/cli/ holds no bash. Six user-facing commands are python3; the operator's
+      migration order names shell, Lua, Rust, Go, not Python, and check-no-python-scripts does not reach images/. NOT PORTED (macuahuitl 2026-11-26).
+      - flutter-lane (283 lines; json os select signal socket sys time): MCP-socket client asking the host to run flutter. Needs unix
+        sockets + select + signal forwarding: stock Lua cannot (no luasocket in the image); a Rust/Go helper, or the plan binary's runtime.
+      - tillandsias-cache (402; hashlib json shutil): content-addressed stage cache. Needs sha256 and JSON: Lua only via shelling to
+        sha256sum/jq, or Rust.
+      - tillandsias-impact (275; json subprocess): change blast-radius dry run. Lua-portable with jq.
+      - tillandsias-listen (156; html json subprocess urllib.parse): builds an audio listening page. Lua-portable (escaping by hand).
+      - tillandsias-room (131; json os): tmpfs fullness report. Lua-portable (df/du via shell).
+      - tillandsias-trust (147; os subprocess): refreshes forge TLS trust to the enclave CA. Touches the trust store: security boundary.
+    exit_criteria:
+      - "the operator records in or out of scope; if in, one follow-up row per command with its target language"
+    unscoreable: "unpinnable-until-the-guard-exists: an operator scope decision."
+    next_action: "operator decides scope."
+    provenance: filed by lenovinha at macuahuitl's request 2026-11-26.
+    related: [2394-4iwp]
+    events:
+      - {type: filed, ts: '2026-11-26T07:02:19Z', host: lenovinha, summary: python forge commands scope question}

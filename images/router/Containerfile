@@ -44,7 +44,12 @@ LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 # operator's user-scope NSS stores when the host has no certutil of its own
 # (measured on lenovinha, 2026-10-17: Fedora Atomic ships none, and no other
 # Tillandsias image did). The router itself never runs it.
-RUN apk add --no-cache curl libcap nss-tools
+# Order 2413-i8j7: lua5.4 + lua5.4-filesystem + lua5.4-lpeg are this image's Lua
+# runtime (operator ruling 2026-11-26: Lua, then Rust, then Go in every container),
+# and /usr/bin/lua names it as in the forge. This is the distro Lua chosen for
+# images/git (2413-thcz), not the static tillandsias-plan. Runtime only.
+RUN apk add --no-cache curl libcap nss-tools lua5.4 lua5.4-filesystem lua5.4-lpeg \
+    && ln -sf lua5.4 /usr/bin/lua
 
 # @trace spec:subdomain-routing-via-reverse-proxy
 # CRITICAL: strip the cap_net_bind_service file capability from the

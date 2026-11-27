@@ -274,7 +274,7 @@ DELTA_JSON="$SIGNATURE_DIR/centicolon-delta.json"
 RUNTIME_STATUS_FILE="$SIGNATURE_DIR/runtime-phase.status"
 CHECK_LOG_DIR="$SIGNATURE_DIR/check-logs"
 # ORDER 1174-6r4k — THE WRITER HONOURS THE SAME OVERRIDE THE READER DOES.
-# check-release-tier-freshness.sh has always read
+# check-release-tier-freshness.lua has always read
 # ${TILLANDSIAS_CHECK_LOG_INDEX:-target/convergence/check-logs.jsonl}, but this
 # path was fixed — so a diagnostic run could not be pointed away from the record
 # the daily exercise reads, and every `--phase pre-build` reproduction polluted
@@ -295,7 +295,7 @@ CHECK_LOG_INDEX="$("$REPO_ROOT/scripts/convergence-log-path.sh")" || { echo "cou
 VERSION_VALUE="$(cat VERSION 2>/dev/null || echo "0.0.0.0")"
 SOURCE_COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || echo "unknown")"
 # ORDER 1185-9qx6 — THE RUN ID IS THE CORRELATION KEY, SO IT MUST BE SHAREABLE.
-# check-release-tier-freshness.sh groups check-log records by ci_run_id and
+# check-release-tier-freshness.lua groups check-log records by ci_run_id and
 # calls a run FULL-tier when its phases cover pre-build, post-build and runtime.
 # `./build.sh --ci-full` drives the pre-build phase through THIS script and the
 # other two itself, so those records can only join this run if the caller can
@@ -1088,8 +1088,8 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
 
     # ============================================================================
     log_section "CentiColon Grader (1395-88tp)"
-    if [[ -f "scripts/test-centicolon-grade.sh" ]]; then
-        if bash scripts/test-centicolon-grade.sh > /tmp/test-centicolon-grade.log 2>&1; then
+    if [[ -f "scripts/lua/test-centicolon-grade.lua" ]]; then
+        if "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" script run scripts/lua/test-centicolon-grade.lua > /tmp/test-centicolon-grade.log 2>&1; then
             log_pass "CentiColon Grader holds"
             archive_check_log "centicolon-grade" "pass" /tmp/test-centicolon-grade.log
         else
@@ -1098,13 +1098,13 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "centicolon-grade" "fail" /tmp/test-centicolon-grade.log
         fi
     else
-        log_fail_missing_guard "centicolon-grade" "scripts/test-centicolon-grade.sh"
+        log_fail_missing_guard "centicolon-grade" "scripts/lua/test-centicolon-grade.lua"
     fi
 
     # ============================================================================
     log_section "CentiColon Advisory R Line (1395-ue3i)"
-    if [[ -f "scripts/test-centicolon-ratchet.sh" ]]; then
-        if bash scripts/test-centicolon-ratchet.sh > /tmp/test-centicolon-ratchet.log 2>&1; then
+    if [[ -f "scripts/lua/test-centicolon-ratchet.lua" ]]; then
+        if "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" script run scripts/lua/test-centicolon-ratchet.lua > /tmp/test-centicolon-ratchet.log 2>&1; then
             log_pass "CentiColon Advisory R Line holds"
             archive_check_log "centicolon-ratchet" "pass" /tmp/test-centicolon-ratchet.log
         else
@@ -1113,7 +1113,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "centicolon-ratchet" "fail" /tmp/test-centicolon-ratchet.log
         fi
     else
-        log_fail_missing_guard "centicolon-ratchet" "scripts/test-centicolon-ratchet.sh"
+        log_fail_missing_guard "centicolon-ratchet" "scripts/lua/test-centicolon-ratchet.lua"
     fi
 
     # ============================================================================
@@ -1434,8 +1434,11 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # allowlist inside the guard.
 
     log_section "No Tracked Binaries"
-    if [[ -f "scripts/check-no-tracked-binaries.sh" ]]; then
-        if bash scripts/check-no-tracked-binaries.sh 2>&1 | tee /tmp/no-tracked-binaries.log; then
+    # ORDER 2118-9mk4: the guard is scripts/lua/check-no-tracked-binaries.lua.
+    _ntb_bin="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _ntb_bin=""
+    case "$_ntb_bin" in ./*) _ntb_bin="$REPO_ROOT/${_ntb_bin#./}" ;; esac
+    if [[ -f "scripts/lua/check-no-tracked-binaries.lua" && -n "$_ntb_bin" ]]; then
+        if "$_ntb_bin" script run scripts/lua/check-no-tracked-binaries.lua 2>&1 | tee /tmp/no-tracked-binaries.log; then
             log_pass "No tracked build artifacts outside the image-asset allowlist"
             archive_check_log "no-tracked-binaries" "pass" /tmp/no-tracked-binaries.log
         else
@@ -1444,7 +1447,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "no-tracked-binaries" "fail" /tmp/no-tracked-binaries.log
         fi
     else
-        log_fail_missing_guard "no-tracked-binaries" "scripts/check-no-tracked-binaries.sh"
+        log_fail_missing_guard "no-tracked-binaries" "scripts/lua/check-no-tracked-binaries.lua (or a plan binary to run it)"
         archive_check_log "no-tracked-binaries" "skipped"
     fi
 
@@ -1637,7 +1640,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
 
     # Sub-check 8a2: probe-usage guard determinism over the WHOLE corpus
     # (order 1130-qk7d). The BREADTH arm. Its cheap sibling,
-    # test-plan-binary-probe-usage-determinism.sh, runs on every --check against
+    # lua/test-plan-binary-probe-usage-determinism.lua, runs on every --check against
     # a two-file tree and pins the SIGPIPE mechanism in ~200 ms. This one asks
     # the question that arm cannot: is the guard deterministic across the whole
     # repository, including files nobody has identified? ~66 s here, ~99 s on a

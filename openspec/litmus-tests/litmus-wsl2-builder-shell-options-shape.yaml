@@ -34,24 +34,23 @@ size: instant
 
 inputs:
   - scripts/with-wsl2-builder.sh
-  - scripts/test-wsl2-builder-shell-options.sh
+  - scripts/lua/test-wsl2-builder-shell-options.lua
 
 preconditions:
   - workspace contains scripts/with-wsl2-builder.sh
-  - workspace contains scripts/test-wsl2-builder-shell-options.sh
-  - bash is available (the fixture reads $- and [[ -o pipefail ]] in-shell)
+  - workspace contains scripts/lua/test-wsl2-builder-shell-options.lua
 
 critical_path:
-  - step: "four-case fixture: no-options caller keeps none, full-options caller keeps all, mixed caller preserved exactly, no bookkeeping leak"
-    command: "bash scripts/test-wsl2-builder-shell-options.sh"
+  - step: "at every sourced return site: no-options caller keeps none, full-options caller keeps all, mixed caller preserved exactly, no bookkeeping leak"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-wsl2-builder-shell-options.lua"
     timeout_ms: 60000
-    success_pattern: "ok:wsl2-builder-shell-options:4 cases"
-    failure_pattern: "fail:wsl2-builder-shell-options:"
+    success_pattern: "ok:wsl2-builder-shell-options:15 arms"
+    failure_pattern: "violation:wsl2-builder-shell-options:"
 
 observability:
   traces:
     - "@trace spec:dev-build"
-  expected_log: "ok:wsl2-builder-shell-options:4 cases"
+  expected_log: "ok:wsl2-builder-shell-options:15 arms"
   log_fields:
     spec: "dev-build"
     test: "wsl2-builder-shell-options-shape"

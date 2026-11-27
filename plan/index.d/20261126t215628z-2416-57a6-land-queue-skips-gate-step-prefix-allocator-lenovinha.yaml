@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: land-queue-skips-gate-step-prefix-allocator
+    order: "2416-57a6"
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [land-queue, gate-steps]
+    estimated_hours: 3
+    owned_paths: [scripts/land-queue.sh, scripts/allocate-gate-step-prefix.sh]
+    title: "the land queue never runs allocate-gate-step-prefix.sh, so two refs adding the same gate-step prefix collide at landing"
+    context: |
+      Read on lenovinha 2026-11-26 at trunk 4f9d52c5e. allocate-gate-step-prefix.sh (1162-qbrx) moves a newly added
+      .step whose prefix is taken to a free slot after the integrate and before the gate, but its only caller is
+      scripts/land-on-platform-branch.sh (line 285). scripts/land-queue.sh, now the path most landings take,
+      singly or as a land-train, never calls it. check-gate-step-prefix-across-refs.lua (1512-3afc) only warns
+      authors about rival unlanded refs, and only refs pushed inside its window. Measured: prefixes collided twice
+      on 2026-11-26 (960, plus three steps doris renumbered pre-emptively), costing renames and relaunches.
+      Fix: land-queue runs the allocator on each candidate's merged tree (and on a train's union, moving every
+      member's step except the first) before the gate, committing the rename into the landing.
+    exit_criteria:
+      - "a land-queue fixture, red first: two work refs each adding scripts/gate-steps.d/NNN-*.step with the same NNN land (singly in sequence, and as one train) and trunk ends with distinct prefixes, both steps present, and test-gate-step-append-no-conflict arm 7 green"
+    unscoreable: "no-litmus-yet: the fixture this row adds is its closure, pinned when it lands."
+    next_action: "write the red land-queue fixture (two refs, same prefix, both land), then call the allocator from land-queue.sh after the merge."
+    provenance: filed by lenovinha at macuahuitl's request; diagnosis from reading land-queue.sh and land-on-platform-branch.sh.
+    related: [1162-qbrx, 1512-3afc]
+    events:
+      - {type: filed, ts: '2026-11-26T21:56:28Z', host: lenovinha, summary: land queue skips the gate-step prefix allocator}

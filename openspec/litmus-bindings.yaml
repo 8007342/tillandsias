@@ -179,6 +179,7 @@ specs:
   - litmus:plan-binary-rebuild-while-running
   - litmus:gate-step-declared-inputs-are-mutation-proven
   - litmus:release-is-one-cloud-build
+  - litmus:build-floor
   - litmus:common-fixture
   - litmus:gate-step-private-metrics-fallback
   - litmus:prebuilt-resolver-refuses-stale
@@ -198,6 +199,7 @@ specs:
   - litmus:scorable-obligation-splitter
   - litmus:census-enforced-reachability-split
   - litmus:added-test-is-referenced-shape
+  - litmus:unreferenced-slow-and-regime-fixtures-run
   - litmus:unreferenced-lane-fixtures-run
   - litmus:unreferenced-guard-fixtures-run
   - litmus:verify-closure-shape
@@ -468,6 +470,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-as-only-runtime
+  - litmus:forge-no-raw-podman
   - litmus:container-start-health
   - litmus:launch-artifacts-untracked
   - litmus:forge-agent-result-format
@@ -999,8 +1002,6 @@ specs:
   - litmus:podman-idiomatic-storage-isolation
   - litmus:podman-idiomatic-events-no-polling
   - litmus:no-polling-noops
-  - litmus:podman-idiomatic-event-driven
-  - litmus:podman-idiomatic-storage-isolation-runtime
   - litmus:podman-idiomatic-error-discrimination
   - litmus:podman-idiomatic-launch-routing
   - litmus:headless-init-status-check-source-built
@@ -1373,7 +1374,6 @@ specs:
   - litmus:no-credentials-at-rest
   - litmus:antigravity-lane-tty-takes-keystrokes
   - litmus:vault-audit-persistence-shape
-  - litmus:vault-auto-unseal-no-prompt
   - litmus:codex-api-key-env-var
   - litmus:vault-cli-verifies-tls
   - litmus:default-vault-cli-security

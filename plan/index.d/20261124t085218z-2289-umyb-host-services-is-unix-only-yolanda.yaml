@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: host-services-feature-names-itself-unix-only
+    order: "2289-umyb"
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, build, headless, features]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-headless/build.rs
+      - scripts/lua/test-headless-host-services-unix-only.lua
+    title: "building tillandsias-headless with host-services for a non-unix target fails with one error that says unix-only, not 26 unrelated ones"
+    context: |
+      Measured on yolanda 2026-11-24, x86_64-pc-windows-msvc, rustc 1.99.0, at f874adf32 and at its merge base bf909254f
+      alike: cargo check -p tillandsias-headless --features host-services gives 26 errors (53 with --all-targets), all
+      std::os::unix, std::os::fd, nix or libc. Default features build clean there.
+      DECISION: host-services is unix-only by design. Cargo.toml's own comment places it in the Linux tray or the VM
+      guest, only tray and listen-vsock enable it, and the guest is a linux-musl build even when a Windows or macOS
+      host stages it. On Windows the forge runs in the WSL2 guest, so a native port would have no process to live in.
+      A compile_error! in main.rs would be a 27th error beside the 26. The build script runs before rustc sees the
+      crate, so refusing there is the one error. It must read CARGO_CFG_UNIX (the target), not cfg!(unix) (the host).
+    exit_criteria:
+      - "cargo check -p tillandsias-headless --features host-services on native Windows prints one crate error naming the feature and unix-only, and no E0433."
+      - "Default features still build on native Windows, and host-services still builds on a unix target."
+      - "The decision is the target's: the build script refuses with CARGO_CFG_UNIX absent and passes with it present, on any host."
+    unscoreable: "unpinnable-until-the-guard-exists: the build-script fixture is the deliverable"
+    next_action: "Add the refusal to build.rs; pin it by compiling and running build.rs under each env."
+    provenance: "coordinator macuahuitl-fedora 2026-11-24, from yolanda's 2284-p6is Windows check"
+    related: [1713-1dnx, 2284-p6is, 701-iu9b]
+    events:
+      - {type: filed, ts: "2026-11-24T08:52:18Z", host: yolanda, summary: "filed on the coordinator's request; yolanda takes it"}

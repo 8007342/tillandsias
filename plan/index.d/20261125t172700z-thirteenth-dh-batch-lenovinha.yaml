@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-eight-remaining-free-d-to-h-fixtures-to-lua
+    order: "2370-euvb"
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, podman]
+    estimated_hours: 6
+    title: |
+      Eight whole-file shell-to-Lua ports: the d-h fixtures no open ref holds, after 2368-efqj.
+    context: |
+      Coordinator queue 2026-11-25 (PR 2 of 3), 8-10 ports per PR, 2-3 mutants per fixture.
+      ports: scripts/test-fleet-msg-same-host.sh scripts/test-dispatch-reap.sh scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh scripts/test-gate-stamp-memoization.sh scripts/test-harness-byte-cheap.sh scripts/test-git-mirror-existing-volume-hardening.sh scripts/test-ensure-toolbox-properties.sh scripts/test-fake-cloudflare.sh
+      No origin/work/* ref modifies or deletes any of the eight (checked against every ref, 2026-11-25).
+    exit_criteria:
+      - "each .lua gives the same verdict as its .sh on the trunk tree, and the same red arm as the .sh under two or three mutants of its main assertions"
+      - "every caller runs the .lua; the ported .sh files are deleted; any fixture dropped from the batch is named with its reason"
+    unscoreable: "unpinnable-until-the-guard-exists: the mutant parity is the deliverable."
+    next_action: "Port, mutants, rewire the callers, delete the .sh."
+    provenance: coordinator queue; filed by lenovinha.
+    related: [2368-efqj]
+    events:
+      - {type: filed, ts: '2026-11-25T17:27:00Z', host: lenovinha, summary: thirteenth d-h batch filed}

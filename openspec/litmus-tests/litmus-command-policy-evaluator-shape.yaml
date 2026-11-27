@@ -15,18 +15,13 @@ severity: critical
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-command-policy-evaluator.sh
+  - workspace contains scripts/lua/test-command-policy-evaluator.lua
   - workspace contains crates/tillandsias-plan/src/command_policy.rs
   - workspace contains .tillandsias/command-policies.yaml
   - a built tillandsias-plan (resolved by scripts/plan-binary-probe.sh)
 
 critical_path:
-  - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-command-policy-evaluator.sh && test -x scripts/test-command-policy-evaluator.sh && echo 'ok: policy-fixture-parses'"
-    timeout_ms: 3000
-    expected_behavior: "ok: policy-fixture-parses"
-
   - step: "six arms: credential, shell string, soft/hard reset, seed cannot loosen, proc.run no-spawn, negative control"
-    command: "out=$(bash scripts/test-command-policy-evaluator.sh); rc=$?; case \"$out\" in (*'ok:command-policy-evaluator:6/6'*) [ \"$rc\" = 0 ] && echo 'ok: policy 6/6' ;; (*) printf '%s\\n' \"$out\"; exit 1 ;; esac"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-command-policy-evaluator.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "ok: policy 6/6"
+    expected_behavior: "ok:command-policy-evaluator:13 arms"

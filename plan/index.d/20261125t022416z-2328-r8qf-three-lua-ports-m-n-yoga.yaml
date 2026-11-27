@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: stale-base-mcp-resolver-and-opsx-dirt-fixtures-ported-to-lua
+    order: "2328-r8qf"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/test-no-stale-base-revert.lua
+      - scripts/lua/test-mcp-plan-resolver-pinning.lua
+      - scripts/lua/test-meta-orchestration-opsx-sync-merge.lua
+    title: "three shell fixtures ported to Lua: stale-base revert guard, MCP plan resolver pinning, meta-orchestration opsx dirt"
+    context: |
+      ports: test-no-stale-base-revert, test-mcp-plan-resolver-pinning, test-meta-orchestration-opsx-sync-merge.
+      Claimed by yoga before the work, in the coordinator's test-[i-o]* range.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its subject is mutated; callers run the .lua; the three .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by build.sh and their litmus"
+    provenance: "coordinator queue 2026-11-24 (test-[i-o]* range), yoga"
+    related: [1000-rqmx, 963-pdrp, 1440-w8g8]
+    events:
+      - {type: claimed, ts: "2026-11-25T02:24:16Z", host: yoga, summary: "claimed; work ref work/2328-r8qf"}
