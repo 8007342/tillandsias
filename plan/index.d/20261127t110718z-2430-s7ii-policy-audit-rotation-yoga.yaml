@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: command-policy-audit-log-rotates-by-size-and-keeps-its-window
+    order: "2430-s7ii"
+    status: in_progress
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [policy, metrics, disk]
+    estimated_hours: 3
+    owned_files: [crates/tillandsias-plan/src/command_policy.rs]
+    title: "command-policy-audit.jsonl grows without bound (8.8 GB on macuahuitl); rotate by size, keep the audit window, read every generation"
+    context: |
+      Coordinator queue item 3, 2026-11-27. MEASURED on yoga: 1.9 GB, 687,971 lines (~2.8 KB each) since 2026-09-28,
+      ~32 MB/day; macuahuitl 8.8 GB. audit_append appends forever, and audit_summary (policy audit --since) reads the
+      whole file with read_to_string, so the reader's memory grows with it. The retirement condition it serves
+      (1443-we89: 14 fleet days of zero deny/ask from pretooluse) needs the window kept.
+    exit_criteria:
+      - "Past a size cap (default 256 MiB, TILLANDSIAS_POLICY_AUDIT_MAX_BYTES) the live file is renamed to a timestamped generation beside it; no line is lost and the live file starts empty."
+      - "A generation is removed only when the total exceeds a cap (default 4 GiB) AND it is entirely older than 30 days; the 14-day window can never be pruned."
+      - "policy audit reads the live file and every generation, streaming line by line."
+      - "Red first: unit tests on the rotation function (rotates at the cap, keeps young generations over the total cap, prunes an old one) and on the summary reading a rotated generation."
+    unscoreable: "fixture-scored: command_policy unit tests"
+    provenance: "coordinator queue 2026-11-27 item 3; yoga"
+    related: [1443-w9hf]
+    events:
+      - {type: claimed, ts: "2026-11-27T11:07:18Z", host: yoga, summary: "claimed; work ref work/2430-s7ii"}

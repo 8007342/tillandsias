@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-land-commit-records-the-lane-it-took
+    order: "2431-2yic"
+    status: ready
+    kind: debt
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [land-queue, audit]
+    estimated_hours: 1
+    owned_files: [scripts/land-queue.sh]
+    title: "a land commit names its lane (plan-only | full | train) and tier, so a lane audit needs no host's run logs"
+    context: |
+      2026-11-27: the tiered-landing-lanes design agent counted 14 ledger-only PRs as gated last week; in fact the
+      plan-only lane (2143-z5uj) carried #1704 #1703 #1686 #1680 #1672 #1649 (lane=plan-only in macuahuitl's run logs).
+      Nothing on the land commit or the PR says so, so an audit from any other host or tool reads it wrongly.
+    exit_criteria:
+      - "Every land and land-train commit carries a Lane: trailer (plan-only|full) and, for full, the gate's tier and not-run count; a fixture reads it from a land made by the queue's fixture remote."
+    unscoreable: "fixture-scored: a land-queue fixture arm"
+    provenance: "coordinator 2026-11-27; yoga"
+    related: [2143-z5uj, 2429-u3rp]
