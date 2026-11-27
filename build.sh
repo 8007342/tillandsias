@@ -4908,6 +4908,12 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _error "a cheatsheet anchors an order to a file that does not declare it (1053-a7qr) — see the verdict line above"
         exit 1
     fi
+    # ORDER 2080-kkki: a staged cheatsheet without a Provenance section is refused unless the floor
+    # lists it, and the floor only shrinks (28 of 254 on 2026-11-27).
+    if ! _run_lua_decider "scripts/lua/check-cheatsheet-provenance.lua" 2>&1; then
+        _error "a cheatsheet the forge reads has no Provenance section, or the floor did not shrink (2080-kkki) — the REFUSED lines are above"
+        exit 1
+    fi
 
     _step "Checking the enclave membership list matches the code (245 P8)..."
     # PORTED to Lua (1527-v7cy): scripts/lua/check-enclave-membership-documented.lua.

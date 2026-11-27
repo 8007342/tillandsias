@@ -56,6 +56,23 @@ if serving_note ~= "" then err("tellme: " .. serving_note .. "\n") end
 
 local INDEX_PATH = cheatsheets_dir .. "/INDEX.md"
 
+-- ── a stale cheatsheet says so (order 2080-kkki) ────────────────────────────
+-- The age past which a sheet's `last_verified` reads stale is the OPERATOR's ruling, not yet
+-- made: nil means no stale marking. The ruling is this one line (or the variable, per forge).
+local CHEATSHEET_STALE_DAYS = nil
+local function stale_note(path)
+    local days = tonumber(env("TILLANDSIAS_CHEATSHEET_STALE_DAYS") or "") or CHEATSHEET_STALE_DAYS
+    if not days then return "" end
+    local lv = (sh("awk 'NR == 1 && /^---$/ { fm = 1; next } fm && /^---$/ { exit } "
+        .. "fm && /^last_verified:/ { sub(/^last_verified:[ \"]*/, \"\"); sub(/[\" ].*$/, \"\"); print; exit }' " .. q(path)))
+        :gsub("%s+$", "")
+    if lv == "" then return "[STALE: this cheatsheet records no last_verified date; verify it before relying on it]\n" end
+    -- an unparseable date reads as age-unknown, which is stale: never as fresh
+    local age = tonumber(((sh("t=$(date -u -d " .. q(lv) .. " +%s 2>/dev/null) || t=0; echo $(( ( $(date -u +%s) - t ) / 86400 ))")):gsub("%s+$", "")))
+    if age and age <= days then return "" end
+    return "[STALE: last verified " .. lv .. ", " .. tostring(age or "?") .. " days ago (limit " .. days .. "); verify it before relying on it]\n"
+end
+
 -- ── grounded answers through expert-serve (order 1814-x78v) ────────────────
 -- `howto` and free-form `about` ask expert-serve first: the OpenAI-shaped
 -- loopback front-end over the grounded pipeline (expert_serve.rs `route`,
@@ -241,7 +258,7 @@ local function howto(query)
             local file_content = (sh("head -n 120 " .. q(path)
                 .. " | awk 'NR==1 && /^---$/ { fm=1; next } fm && /^---$/ { fm=0; next } fm { next } { print }' | head -n 100")):gsub("\n+$", "")
             if file_content ~= "" then
-                context = context .. "\n=== Cheatsheet: " .. f .. " ===\n" .. file_content .. "\n"
+                context = context .. "\n=== Cheatsheet: " .. f .. " ===\n" .. stale_note(path) .. file_content .. "\n"
                 count = count + 1
             end
         end
@@ -361,6 +378,7 @@ For enclave services:
         if #unique == 0 then
             err("No cheatsheet found matching '" .. topic .. "'.\n"); os.exit(1)
         elseif #unique == 1 then
+            out(stale_note(unique[1]))
             out((sh("if command -v bat >/dev/null 2>&1; then bat --style=plain " .. q(unique[1]) .. "; else cat " .. q(unique[1]) .. "; fi")))
             os.exit(0)
         else

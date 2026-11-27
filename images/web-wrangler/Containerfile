@@ -22,7 +22,15 @@ COPY package.json package-lock.json wrangler.lock.json ./
 # Wrangler and Miniflare resolve generated state relative to the project cwd,
 # not the Wrangler installation. These symlinks direct it to private /tmp at
 # runtime while leaving selected project source mounts read-only.
-RUN npm ci --omit=dev --no-audit --no-fund \
+# 2413-wb7i: a Lua 5.4 runtime for in-image glue (operator ruling 2026-11-26: Lua, then
+# Rust, then Go in every container). The distro Lua, with the same lfs and lpeg the forge
+# carries, so a script ported for one image runs in the others.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends lua5.4 lua-filesystem lua-lpeg \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf lua5.4 /usr/bin/lua \
+    && lua -e 'require "lfs"; require "lpeg"' \
+    && npm ci --omit=dev --no-audit --no-fund \
     && ./node_modules/.bin/wrangler --version \
     && ln -s /tmp/wrangler-miniflare node_modules/.mf \
     && mkdir -p /srv/preview/node_modules \
