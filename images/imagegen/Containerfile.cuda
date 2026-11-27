@@ -23,7 +23,7 @@ FROM docker.io/nvidia/cuda:13.3.1-runtime-ubuntu24.04
 LABEL org.opencontainers.image.licenses="GPL-3.0-or-later AND LicenseRef-NVIDIA-CUDA-EULA"
 ARG SDCPP_TAG=master-1015-e41fbcf
 LABEL io.tillandsias.imagegen.sdcpp-tag="${SDCPP_TAG}"
-RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 lua5.4 lua-filesystem lua-lpeg \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -u 1001 -m -s /usr/sbin/nologin imagegen
 COPY --from=build /src/build/bin/sd-server /src/build/bin/sd-cli /usr/local/bin/

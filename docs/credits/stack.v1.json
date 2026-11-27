@@ -10638,6 +10638,24 @@
       "from": "image:imagegen-cuda",
       "kind": "package",
       "optional": false,
+      "to": "pkg:debian:lua-filesystem"
+    },
+    {
+      "from": "image:imagegen-cuda",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-lpeg"
+    },
+    {
+      "from": "image:imagegen-cuda",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua5.4"
+    },
+    {
+      "from": "image:imagegen-cuda",
+      "kind": "package",
+      "optional": false,
       "to": "pkg:debian:ninja-build"
     },
     {
@@ -58381,9 +58399,10 @@
       "name": "lua-filesystem",
       "optional": true,
       "pulled_by": [
+        "image:imagegen-cuda",
         "image:webkit"
       ],
-      "source": "images/webkit/Containerfile",
+      "source": "images/imagegen/Containerfile.cuda",
       "version": "1.8.0-3"
     },
     {
@@ -58398,9 +58417,10 @@
       "name": "lua-lpeg",
       "optional": true,
       "pulled_by": [
+        "image:imagegen-cuda",
         "image:webkit"
       ],
-      "source": "images/webkit/Containerfile",
+      "source": "images/imagegen/Containerfile.cuda",
       "version": "1.0.2-2"
     },
     {
@@ -58415,9 +58435,10 @@
       "name": "lua5.4",
       "optional": true,
       "pulled_by": [
+        "image:imagegen-cuda",
         "image:webkit"
       ],
-      "source": "images/webkit/Containerfile",
+      "source": "images/imagegen/Containerfile.cuda",
       "version": "5.4.6-3build2"
     },
     {
@@ -61276,7 +61297,7 @@
   "schema": "tillandsias-stack/v1",
   "summary": {
     "components": 57,
-    "edges": 3140,
+    "edges": 3143,
     "license_families": {
       "model": 7,
       "permissive": 1718,
