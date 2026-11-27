@@ -88,10 +88,15 @@ arm("check-jq-multiline-capture-strips-cr", "jq-multiline-capture-strips-cr",
     { ["s/a.sh"] = "echo a\n", ["s/locked.sh"] = "echo b\n" },
     "s/locked.sh", none, { args_of = function(rel) return { rel .. "/s" } end })
 
+-- the checker asks git about the launch artifacts under its root, so the tree
+-- is its own repository ignoring them; otherwise git climbs to the enclosing
+-- checkout and the arm reads that host's state (run 104 evicted #1693 on it)
 arm("check-launch-artifacts-untracked", "launch-artifacts-untracked",
-    { ["images/default/entrypoint-forge-a.sh"] = "echo a\n", ["images/default/entrypoint-forge-locked.sh"] = "echo b\n",
+    { [".gitignore"] = ".opencode/package-lock.json\n.opencode/node_modules\n.forge-startup-context.md\n",
+      ["images/default/entrypoint-forge-a.sh"] = "echo a\n", ["images/default/entrypoint-forge-locked.sh"] = "echo b\n",
       ["images/default/lib-common.sh"] = "echo c\n" },
-    "images/default/entrypoint-forge-locked.sh", none, { args_of = function(rel) return { rel } end })
+    "images/default/entrypoint-forge-locked.sh", none,
+    { args_of = function(rel) return { rel } end, prep = git_commit{ ".gitignore" } })
 
 arm("check-litmus-expression-pinning-added", "litmus-expression-pinning-added",
     { ["README"] = "x\n", ["openspec/litmus-tests/locked.yaml"] = 'steps:\n  - command: "true"\n' },
