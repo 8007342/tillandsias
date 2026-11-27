@@ -10320,6 +10320,24 @@
       "from": "image:flutter",
       "kind": "package",
       "optional": false,
+      "to": "pkg:debian:lua-filesystem"
+    },
+    {
+      "from": "image:flutter",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-lpeg"
+    },
+    {
+      "from": "image:flutter",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua5.4"
+    },
+    {
+      "from": "image:flutter",
+      "kind": "package",
+      "optional": false,
       "to": "pkg:debian:unzip"
     },
     {
@@ -58438,11 +58456,12 @@
       "name": "lua-filesystem",
       "optional": true,
       "pulled_by": [
+        "image:flutter",
         "image:imagegen-cuda",
         "image:web-wrangler",
         "image:webkit"
       ],
-      "source": "images/imagegen/Containerfile.cuda",
+      "source": "images/flutter/Containerfile",
       "version": "1.8.0-3"
     },
     {
@@ -58457,11 +58476,12 @@
       "name": "lua-lpeg",
       "optional": true,
       "pulled_by": [
+        "image:flutter",
         "image:imagegen-cuda",
         "image:web-wrangler",
         "image:webkit"
       ],
-      "source": "images/imagegen/Containerfile.cuda",
+      "source": "images/flutter/Containerfile",
       "version": "1.0.2-2"
     },
     {
@@ -58476,12 +58496,13 @@
       "name": "lua5.4",
       "optional": true,
       "pulled_by": [
+        "image:flutter",
         "image:imagegen-cuda",
         "image:web-wrangler",
         "image:webkit"
       ],
-      "source": "images/imagegen/Containerfile.cuda",
-      "version": "5.4.6-3build2"
+      "source": "images/flutter/Containerfile",
+      "version": "5.4.4-3+deb12u1"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=ninja-build",

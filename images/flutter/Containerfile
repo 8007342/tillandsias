@@ -32,9 +32,14 @@ LABEL io.tillandsias.flutter.version="${FLUTTER_VERSION}"
 
 # One install layer: git (the SDK is a git checkout and the tool reads its
 # version from it), curl, xz and unzip (the SDK and pub archives), CA roots.
+# 2413-3bc5: plus Lua 5.4 with the forge's lfs and lpeg, for in-image glue (operator
+# ruling 2026-11-26: Lua, then Rust, then Go in every container).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl git unzip xz-utils \
+         lua5.4 lua-filesystem lua-lpeg \
     && rm -rf /var/lib/apt/lists/* \
+    && ln -sf lua5.4 /usr/bin/lua \
+    && lua -e 'require "lfs"; require "lpeg"' \
     && useradd -u 1000 -m -s /bin/bash forge \
     && mkdir -p /opt/flutter && chown forge:forge /opt/flutter
 
