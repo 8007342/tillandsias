@@ -10338,6 +10338,24 @@
       "from": "image:flutter",
       "kind": "package",
       "optional": false,
+      "to": "pkg:debian:lua-filesystem"
+    },
+    {
+      "from": "image:flutter",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-lpeg"
+    },
+    {
+      "from": "image:flutter",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua5.4"
+    },
+    {
+      "from": "image:flutter",
+      "kind": "package",
+      "optional": false,
       "to": "pkg:debian:unzip"
     },
     {
@@ -58457,6 +58475,7 @@
       "optional": true,
       "pulled_by": [
         "image:audio-studio",
+        "image:flutter",
         "image:imagegen-cuda",
         "image:web-wrangler",
         "image:webkit"
@@ -58477,6 +58496,7 @@
       "optional": true,
       "pulled_by": [
         "image:audio-studio",
+        "image:flutter",
         "image:imagegen-cuda",
         "image:web-wrangler",
         "image:webkit"
@@ -58497,6 +58517,7 @@
       "optional": true,
       "pulled_by": [
         "image:audio-studio",
+        "image:flutter",
         "image:imagegen-cuda",
         "image:web-wrangler",
         "image:webkit"
@@ -61360,7 +61381,7 @@
   "schema": "tillandsias-stack/v1",
   "summary": {
     "components": 57,
-    "edges": 3152,
+    "edges": 3155,
     "license_families": {
       "model": 7,
       "permissive": 1720,
