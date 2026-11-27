@@ -475,7 +475,11 @@ impl Command {
     /// resolver (2436-wsbg) so a stub dir the command puts first is searched.
     #[cfg(windows)]
     pub(crate) fn child_path(&self) -> Option<&OsStr> {
-        self.envs.iter().rev().find(|(k, _)| k.eq_ignore_ascii_case("PATH")).map(|(_, v)| v.as_os_str())
+        self.envs
+            .iter()
+            .rev()
+            .find(|(k, _)| k.eq_ignore_ascii_case("PATH"))
+            .map(|(_, v)| v.as_os_str())
     }
 
     /// Build from an argv sequence. `Command::new(["git", "status"])`.
@@ -1111,10 +1115,18 @@ pub(crate) mod win_script {
             if let Some(s) = std::env::var_os("TILLANDSIAS_POSIX_SHELL").filter(|s| !s.is_empty()) {
                 return Some(s);
             }
-            let out = std::process::Command::new("git").arg("--exec-path").output().ok()?;
+            let out = std::process::Command::new("git")
+                .arg("--exec-path")
+                .output()
+                .ok()?;
             let ep = PathBuf::from(String::from_utf8_lossy(&out.stdout).trim());
             // <root>/<mingw64|ucrt64|...>/libexec/git-core -> <root>/bin/bash.exe
-            let bash = ep.parent()?.parent()?.parent()?.join("bin").join("bash.exe");
+            let bash = ep
+                .parent()?
+                .parent()?
+                .parent()?
+                .join("bin")
+                .join("bash.exe");
             bash.is_file().then(|| bash.into_os_string())
         })
         .as_ref()
@@ -1135,9 +1147,14 @@ pub(crate) mod win_script {
             return None; // `x.exe`, `x.cmd`: CreateProcess's own business
         }
         let exts = pathext();
-        let path = path.map(OsStr::to_os_string).or_else(|| std::env::var_os("PATH"))?;
+        let path = path
+            .map(OsStr::to_os_string)
+            .or_else(|| std::env::var_os("PATH"))?;
         for dir in std::env::split_paths(&path) {
-            if exts.iter().any(|e| dir.join(format!("{}{e}", program.to_string_lossy())).is_file()) {
+            if exts.iter().any(|e| {
+                dir.join(format!("{}{e}", program.to_string_lossy()))
+                    .is_file()
+            }) {
                 return None; // a PATHEXT file is found first: unchanged behaviour
             }
             let cand = dir.join(p);
@@ -1150,7 +1167,12 @@ pub(crate) mod win_script {
 
     /// argv for a shebang script: [bash, <script>, rest...]; None leaves the argv alone.
     /// `path`: the PATH the child gets (the command's own, when it sets one).
-    pub(crate) fn rewrite(program: &OsStr, rest: &[OsString], cwd: Option<&Path>, path: Option<&OsStr>) -> Option<Vec<OsString>> {
+    pub(crate) fn rewrite(
+        program: &OsStr,
+        rest: &[OsString],
+        cwd: Option<&Path>,
+        path: Option<&OsStr>,
+    ) -> Option<Vec<OsString>> {
         let script = script_for(program, cwd, path)?;
         let sh = shell()?;
         let mut v = Vec::with_capacity(rest.len() + 2);

@@ -37,7 +37,8 @@ async fn a_shebang_script_found_on_path_runs() {
     let d = tempfile::tempdir().unwrap();
     stub(d.path(), "fake-podman-2436");
     let path = std::env::join_paths(
-        std::iter::once(d.path().to_path_buf()).chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
+        std::iter::once(d.path().to_path_buf())
+            .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
     )
     .unwrap();
     let out = Command::new(["fake-podman-2436", "ps"])
