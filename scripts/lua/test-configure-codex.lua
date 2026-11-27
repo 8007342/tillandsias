@@ -85,12 +85,13 @@ else bad("the mutant launcher was not refused: " .. table.concat(mw, "; ")) end
 -- 3: the retired FAIL: lines, assembled so this file cannot match itself.
 local NEEDLES = { "FA" .. "IL: launcher help did not succeed", "FA" .. "IL: rejected mode did not stop at usage" }
 local SELF = "scripts/lua/test-configure-codex.lua"
+local R = require("common.listed_read").reader("configure-codex-census")
 local searched, hits = 0, {}
 for _, root in ipairs({ "scripts", "openspec/litmus-tests" }) do
     for _, f in ipairs(fs.walk(root)) do
         if f ~= SELF and (f:sub(-3) == ".sh" or f:sub(-4) == ".lua" or f:sub(-5) == ".step" or f:sub(-5) == ".yaml") then
             searched = searched + 1
-            local okr, body = pcall(fs.read, f)
+            local body = R:read(f); local okr = body ~= nil
             if okr and body then
                 for _, n in ipairs(NEEDLES) do
                     if has(body, n) then hits[#hits + 1] = f; break end
@@ -99,6 +100,7 @@ for _, root in ipairs({ "scripts", "openspec/litmus-tests" }) do
         end
     end
 end
+R:done()
 if #hits == 0 and searched > 100 then
     ok("the retired FAIL: lines have 0 readers (" .. searched .. " files searched: scripts/, gate steps, litmus specs)")
 else

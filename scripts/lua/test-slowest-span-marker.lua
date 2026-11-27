@@ -53,16 +53,18 @@ else bad("legacy record changed shape — " .. o) end
 -- 4: the retired failure line, assembled so this file cannot match itself.
 local NEEDLE = "fa" .. "il: slowest-span-marker"
 local SELF = "scripts/lua/test-slowest-span-marker.lua"
+local R = require("common.listed_read").reader("slowest-span-marker-census")
 local searched, hits = 0, {}
 for _, root in ipairs({ "scripts", "openspec/litmus-tests" }) do
     for _, f in ipairs(fs.walk(root)) do
         if f ~= SELF and (f:sub(-3) == ".sh" or f:sub(-4) == ".lua" or f:sub(-5) == ".step" or f:sub(-5) == ".yaml") then
             searched = searched + 1
-            local okr, body = pcall(fs.read, f)
+            local body = R:read(f); local okr = body ~= nil
             if okr and text.contains(body, NEEDLE) then hits[#hits + 1] = f end
         end
     end
 end
+R:done()
 if #hits == 0 and searched > 100 then
     ok("the retired fail: terminal line has 0 readers (" .. searched .. " files searched: scripts/, gate steps, litmus specs)")
 else

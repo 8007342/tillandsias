@@ -150,13 +150,14 @@ local EXEMPT = {
     ["scripts/lua/check-landed-but-open.lua"] = true,
     ["scripts/lua/check-ready-rows-with-landed-work.lua"] = true,
 }
+local R = require("common.listed_read").reader("gate-diff-base-frozen-census")
 local sites, unfrozen, searched = {}, {}, 0
 local function scan(dir, suffix)
     for _, f in ipairs(fs.walk(dir)) do
         local name = f:match("[^/]+$") or f
         if f:sub(-#suffix) == suffix and not name:match("^test%-") and not EXEMPT[f] then
             searched = searched + 1
-            local okr, body = pcall(fs.read, f)
+            local body = R:read(f); local okr = body ~= nil
             if okr and body then
                 local n = 0
                 for line in body:gmatch("[^\n]+") do
@@ -182,6 +183,7 @@ local function scan(dir, suffix)
 end
 scan("scripts", ".sh")
 scan("scripts/lua", ".lua")
+R:done()
 table.sort(sites)
 for _, s in ipairs(sites) do out.line("  diff-base: " .. s) end
 if #sites >= 20 and #unfrozen == 0 then

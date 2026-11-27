@@ -71,16 +71,18 @@ else check("cross-file-bound-not-accused (the edit landed)", 0, 1) end
 -- 4. The retired failure line, assembled so this file cannot match itself.
 local NEEDLE = "FA" .. "IL: source-slice-bounds"
 local SELF = "scripts/lua/test-source-slice-bounds.lua"
+local R = require("common.listed_read").reader("source-slice-bounds-census")
 local searched, hits = 0, {}
 for _, root in ipairs({ "scripts", "openspec/litmus-tests" }) do
     for _, f in ipairs(fs.walk(root)) do
         if f ~= SELF and (f:sub(-3) == ".sh" or f:sub(-4) == ".lua" or f:sub(-5) == ".step" or f:sub(-5) == ".yaml") then
             searched = searched + 1
-            local okr, body = pcall(fs.read, f)
+            local body = R:read(f); local okr = body ~= nil
             if okr and text.contains(body, NEEDLE) then hits[#hits + 1] = f end
         end
     end
 end
+R:done()
 if #hits == 0 and searched > 100 then
     out.line("ok: the retired FAIL: terminal line has 0 readers (" .. searched .. " files searched: scripts/, gate steps, litmus specs)")
     passed = passed + 1
