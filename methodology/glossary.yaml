@@ -5,7 +5,7 @@
 # sense wins over the ledger's; the entries below already apply that rule
 # (tier, lane). A retired sense is not rewritten repo-wide; old lines stay,
 # new lines use the replacement. The phrases under retired_synonyms are what
-# scripts/check-glossary-retired-synonyms.sh flags on ADDED lines only.
+# scripts/lua/check-glossary-retired-synonyms.lua flags on ADDED lines only.
 #
 # Evidence for every sense: plan/issues/glossary-vocabulary-audit-2026-10-28.md.
 # Idea credit: the vocabulary audit in fear-ai/codess (no licence; ideas only).
@@ -53,13 +53,16 @@ glossary:
         - sense: an assertion ("convergence claim", "provenance claim")
           say_instead: assertion
     lane:
+      status: open, awaiting operator ruling
       meaning: >
-        A way a forge runtime is launched or reached, always qualified: studio
-        lane, OpenCode Web lane, bash lane, WSL2 lane. This is the operator's
-        sense (openspec/changes/web-studio-lanes, 1874-4b88).
+        OPEN. Two senses both carry operator approval: a way a forge runtime is
+        launched or reached (studio lane, OpenCode Web lane, bash lane; see
+        openspec/changes/web-studio-lanes, 1874-4b88), and a push or landing path
+        to trunk (the lane/light and lane/bundle landing refs; see
+        openspec/changes/tiered-landing-lanes). Until the operator rules (keep
+        both, qualified as "forge lane" and "landing lane", or rename one),
+        qualify every new use, and neither sense is flagged.
       retired_senses:
-        - sense: a push or landing path to trunk ("plan-only lane", "relay lane", "fast lane")
-          say_instead: push route (plan-only push route, relay push route)
         - sense: a storage pattern ("tmpfs-overlay lane")
           say_instead: storage class
         - sense: a platform team ("Linux lane")
@@ -67,6 +70,7 @@ glossary:
         - sense: a review track
           say_instead: review track
     push_route:
+      status: proposed, depends on the lane ruling
       meaning: A path by which a commit reaches trunk; the plan-only push route carries fragment-only commits, the relay push route carries a work ref through the land queue.
     trunk:
       meaning: linux-next, the integration branch every work ref lands into.
@@ -172,10 +176,6 @@ glossary:
   # enough that the canonical sense never contains it.
   retired_synonyms:
     - {phrase: build stamp, replacement: gate stamp}
-    - {phrase: plan-only lane, replacement: plan-only push route}
-    - {phrase: plan lane, replacement: plan-only push route}
-    - {phrase: relay lane, replacement: relay push route}
-    - {phrase: fast lane, replacement: fast push route}
     - {phrase: tmpfs-overlay lane, replacement: tmpfs-overlay storage class}
     - {phrase: quick tier, replacement: quick check level}
     - {phrase: quick-tier, replacement: quick check level}

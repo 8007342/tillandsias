@@ -577,7 +577,11 @@ fn looks_like_a_yaml_path(question: &str) -> bool {
 /// few fixed question shapes and either names a glossary key or the question
 /// falls through to the table, so it adds no ranking and no fuzzy match.
 fn glossary_term_path(question: &str) -> Option<String> {
-    let q = question.trim().trim_end_matches('?').trim().to_ascii_lowercase();
+    let q = question
+        .trim()
+        .trim_end_matches('?')
+        .trim()
+        .to_ascii_lowercase();
     let term = q
         .strip_prefix("what does ")
         .and_then(|r| r.strip_suffix(" mean"))
@@ -589,13 +593,17 @@ fn glossary_term_path(question: &str) -> Option<String> {
     let words: Vec<&str> = term.split_whitespace().collect();
     if words.is_empty()
         || words.len() > 3
-        || !words
-            .iter()
-            .all(|w| w.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'))
+        || !words.iter().all(|w| {
+            w.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        })
     {
         return None;
     }
-    Some(format!("glossary.terms.{}", words.join("_").replace('-', "_")))
+    Some(format!(
+        "glossary.terms.{}",
+        words.join("_").replace('-', "_")
+    ))
 }
 
 /// Answer a QUESTION: try it as a path when it is shaped like one, otherwise
@@ -1220,7 +1228,12 @@ mod tests {
             );
         }
         let env = answer_question(&corpus, "what does zzqx mean?", None);
-        assert_eq!(env.confidence(), Confidence::Unsupported, "{}", env.answer());
+        assert_eq!(
+            env.confidence(),
+            Confidence::Unsupported,
+            "{}",
+            env.answer()
+        );
     }
 
     /// ORDER 777-amku. The toolbox-first rule must be reachable IN PROSE, not
