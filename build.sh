@@ -594,6 +594,17 @@ _cpu_children_now() {
             for (i = 1; i <= 2; i++) { t = $i; m = t; sub(/m.*/, "", m); sec = t; sub(/^[0-9]+m/, "", sec); sub(/s$/, "", sec); s += m * 60000 + sec * 1000 }
             printf "%d", s }' "$f" 2>/dev/null)" || _CPU_NOW=-1
     [[ "$_CPU_NOW" =~ ^[0-9]+$ ]] || _CPU_NOW=-1
+    # ORDER 2421-mmbq: CPU time cannot tell contention from work it does not see (a podman
+    # container runs under conmon, outside this shell's children). The kernel's CPU
+    # pressure counter can: "some total" is the microseconds at least one task waited for
+    # a CPU. Read with the builtin, no subshell; -1 where there is no PSI (macOS, msys).
+    _PSI_NOW=-1
+    local _k _a _b _c _t
+    if [[ -r "${_PHASE_PSI_FILE:-/proc/pressure/cpu}" ]]; then
+        while read -r _k _a _b _c _t; do
+            if [[ "$_k" == some && "$_t" == total=* ]]; then _PSI_NOW=$(( ${_t#total=} / 1000 )); break; fi
+        done < "${_PHASE_PSI_FILE:-/proc/pressure/cpu}"
+    fi
 }
 
 _phase_close() {
@@ -614,7 +625,13 @@ _phase_close() {
         cpu=$(( _CPU_NOW - _PHASE_CPU0 ))
         [[ "$cpu" -ge 0 ]] || cpu=-1
     fi
-    _PHASE_LOG="${_PHASE_LOG}${elapsed}	${work}	${_PHASE_NAME}	${cpu}
+    # `psi` (2421-mmbq): the CPU-pressure stall during the phase, ms; -1 without PSI.
+    local psi=-1
+    if [[ "${_PHASE_PSI0:--1}" -ge 0 && "$_PSI_NOW" -ge 0 ]]; then
+        psi=$(( _PSI_NOW - _PHASE_PSI0 ))
+        [[ "$psi" -ge 0 ]] || psi=-1
+    fi
+    _PHASE_LOG="${_PHASE_LOG}${elapsed}	${work}	${_PHASE_NAME}	${cpu}	${psi}
 "
     _PHASE_NAME=""
 }
@@ -1470,6 +1487,7 @@ _step()  {
     _PHASE_RAN_WORK=0
     _cpu_children_now
     _PHASE_CPU0="$_CPU_NOW"
+    _PHASE_PSI0="$_PSI_NOW"
     [[ "${FLAG_GRAPHS:-false}" == true ]] || echo -e "${CYAN}[build]${NC} $*"
 }
 
@@ -1484,20 +1502,21 @@ _phase_report() {
     # but when a phase's span materially exceeds the work measured inside it,
     # the difference is time the named step did not spend, and printing it is
     # how the unattributed gap stops hiding inside a step's number.
-    if [[ "${TILLANDSIAS_GATE_PROFILE:-0}" == "1" ]]; then
-        printf '%s' "$_PHASE_LOG" | sort -rn | awk -F'\t' \
-            '{ gap = ($2 >= 0 && $1 - $2 > 250) ? sprintf("   (+%.1fs unattributed)", ($1-$2)/1000) : ""
-               cpu = ($4 != "" && $4 >= 0) ? sprintf("   cpu %.1fs", $4/1000) : ""
-               waited = ($4 != "" && $4 >= 0 && $1 - $4 > 1000 && $1 >= 2 * $4) ? "   (waited: most of this wall clock is not this step using CPU; the host was busy or the step blocked. 839-veey)" : ""
-               printf "  %6.1fs  %s%s%s%s\n", $1/1000, $3, cpu, gap, waited }' >&2
-    else
-        printf '%s' "$_PHASE_LOG" | sort -rn \
-            | awk -F'\t' -v lim="$slow_ms" \
-            '$1 > lim { gap = ($2 >= 0 && $1 - $2 > 250) ? sprintf("   (+%.1fs unattributed)", ($1-$2)/1000) : ""
-                        cpu = ($4 != "" && $4 >= 0) ? sprintf("   cpu %.1fs", $4/1000) : ""
-                        waited = ($4 != "" && $4 >= 0 && $1 - $4 > 1000 && $1 >= 2 * $4) ? "   (waited: most of this wall clock is not this step using CPU; the host was busy or the step blocked. 839-veey)" : ""
-                        printf "  %6.1fs  %s%s%s%s\n", $1/1000, $3, cpu, gap, waited }' >&2
+    # 2421-mmbq: the marks say only what each number shows. off-cpu = wall clock not spent
+    # in this step own processes (839-veey A/B: idle phases whose work ran in containers
+    # read that way, so it is not "the host was busy"). contended = the kernel CPU-pressure
+    # stall was a material share of the wall clock, which IS the host being busy.
+    local lim=-1
+    [[ "${TILLANDSIAS_GATE_PROFILE:-0}" == "1" ]] || lim="$slow_ms"
+    if printf '%s' "$_PHASE_LOG" | awk -F'\t' '$5 == "" || $5 < 0 { f = 1 } END { exit !f }'; then
+        _info "no CPU-pressure counter (/proc/pressure/cpu) on this host: phases are not marked contended, only off-cpu"
     fi
+    printf '%s' "$_PHASE_LOG" | sort -rn | awk -F'\t' -v lim="$lim" \
+        '$1 > lim { gap = ($2 >= 0 && $1 - $2 > 250) ? sprintf("   (+%.1fs unattributed)", ($1-$2)/1000) : ""
+                    cpu = ($4 != "" && $4 >= 0) ? sprintf("   cpu %.1fs", $4/1000) : ""
+                    off = ($4 != "" && $4 >= 0 && $1 - $4 > 1000 && $1 >= 2 * $4) ? sprintf("   (off-cpu %.1fs: not in this step own processes: waiting, contention, or work in containers/daemons it does not count. 2421-mmbq)", ($1-$4)/1000) : ""
+                    hot = ($5 != "" && $5 >= 0 && $5 > 1000 && 4 * $5 >= $1) ? sprintf("   (contended: %.1fs of CPU-pressure stall)", $5/1000) : ""
+                    printf "  %6.1fs  %s%s%s%s%s\n", $1/1000, $3, cpu, gap, off, hot }' >&2
     _info "Gate phases totalled $(( total / 1000 ))s (set TILLANDSIAS_GATE_PROFILE=1 for every phase)"
 }
 
