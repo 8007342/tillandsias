@@ -1,4 +1,5 @@
 -- @trace order:1611-imnj, order:2399-lrg3
+-- inputs: scripts/lua/check-checkout-writers.lua lib/lua/common/ crates/tillandsias-plan/ scripts/lua/test-litmus-step-pipefail.lua
 -- @env PATH TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
 --
 -- test-checkout-writers.lua — both exit criteria of 1611-imnj.

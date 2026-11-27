@@ -1,4 +1,4 @@
--- @trace order:1316-bnzt, order:2152-lqrf, order:2153-trn1, order:2174-dail, order:2398-zvug, spec:ci-release
+-- @trace order:1316-bnzt, order:2152-lqrf, order:2153-trn1, order:2174-dail, order:2398-zvug, order:2416-57a6, spec:ci-release
 -- @env PATH HOME TMPDIR
 --
 -- test-land-queue-trains.lua — scripts/land-queue.sh, arms 40-63 of the former
@@ -588,5 +588,47 @@ L:must("{ printf 'SCRIPT_DIR=\"%s\"; RED=; NC=; _PHASE_WORK_MS=0\\n_require_host
 local o63 = L:sh("bash " .. q(A63 .. "/drv.sh") .. " 2>&1 | tr '\\n' '|'")
 arm("ARM 63: build.sh names a refused script once as red-script:<path>, never an advisory, a could-not-run or a green one",
     o63 == "red-script:scripts/test-s63.sh|[build] refused|[build] second|--|[build] after-green|--|[build] could-not-run|--|", o63)
+
+-- ──────────────────────────────────────────────────────────── ARM 64
+-- ORDER 2416-57a6: TWO REFS ADDING ONE GATE-STEP PREFIX BOTH LAND, ON DISTINCT
+-- PREFIXES. The queue runs allocate-gate-step-prefix.sh (1162-qbrx) on each
+-- merged candidate, and on each train member against the members before it,
+-- so the later step moves to a free slot inside its own landing commit.
+-- MEASURED 2026-11-26: 960 collided on trunk and three steps were renumbered
+-- by hand, because only land-on-platform-branch.sh called the allocator.
+local function steps64(S0)
+    local h = L:rev(S0.REMOTE, "linux-next")
+    local names = L:sh("git -C " .. q(S0.REMOTE) .. " ls-tree --name-only " .. h .. " scripts/gate-steps.d/")
+    local pre, n, dup = {}, 0, false
+    for b in names:gmatch("scripts/gate%-steps%.d/([^\n]+)") do
+        local p = b:match("^(%d+)%-") or ""
+        if pre[p] then dup = true end
+        pre[p] = true; n = n + 1
+    end
+    return n, dup, names
+end
+local function arm64(name, k, files)
+    local S0 = L:scaffold(name)
+    for i, f in ipairs(files) do L:candidate(S0, "106" .. i .. "-st6" .. i, "scripts/gate-steps.d/" .. f, "STEP_DESC=x" .. i) end
+    local list = {}
+    for i = 1, #files do list[#list + 1] = { 160 + i, "work/106" .. i .. "-st6" .. i } end
+    prs_n(S0, list)
+    L:gate(S0, GATED)
+    local o, r = L:run_queue(S0, { BATCH_K = k, HEAVY_MAX = "4", TRAIN_LOG = S0.dir .. "/trains.log" })
+    local n, dup, names = steps64(S0)
+    local fp = text.trim((L:sh("git -C " .. q(S0.REMOTE) .. " log --format=%s linux-next")))
+    return o, r, n, dup, names, fp
+end
+local o64, r64, n64, d64, s64, f64 = arm64("arm64a", "1", { "500-1061-st61.step", "500-1062-st62.step" })
+arm("ARM 64a: two refs adding prefix 500, landed one at a time, both land on distinct prefixes inside their land commits (2416-57a6)",
+    r64 == 0 and landed(o64, "^land:16[12] ") == 2 and n64 == 2 and not d64 and has(s64, "500-1061-st61.step")
+    and not has(f64, "gate-step prefix reallocated"), "rc=" .. tostring(r64) .. " steps=" .. s64 .. " log=" .. f64 .. " " .. o64)
+o64, r64, n64, d64, s64, f64 = arm64("arm64b", "4", { "500-1061-st61.step", "500-1062-st62.step" })
+arm("ARM 64b: the same two refs as one train land on distinct prefixes, the first member keeping 500 (2416-57a6)",
+    r64 == 0 and landed(o64, "^land:16[12] .*train=") == 2 and n64 == 2 and not d64 and has(s64, "500-1061-st61.step"),
+    "rc=" .. tostring(r64) .. " steps=" .. s64 .. " " .. o64)
+o64, r64, n64, d64, s64 = arm64("arm64c", "4", { "500-1061-st61.step", "510-1062-st62.step" })
+arm("ARM 64c (control): distinct prefixes land untouched",
+    r64 == 0 and has(s64, "500-1061-st61.step") and has(s64, "510-1062-st62.step") and n64 == 2, "steps=" .. s64 .. " " .. o64)
 
 T:finish()

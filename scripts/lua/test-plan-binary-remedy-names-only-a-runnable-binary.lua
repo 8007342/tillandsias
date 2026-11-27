@@ -1,4 +1,5 @@
 -- @trace order:1267-uafx, order:2209-jw2t
+-- inputs: scripts/hooks/pre-push-local-gate.sh scripts/plan-binary-probe.sh scripts/gate-stamp.sh scripts/common.sh scripts/check-issue-citation-convention.sh lib/lua/common/ crates/tillandsias-plan/ Cargo.lock plan/index.yaml scripts/lua/check-fragment-status-loss.lua
 --
 -- test-plan-binary-remedy-names-only-a-runnable-binary.lua — PORTED from
 -- test-plan-binary-remedy-names-only-a-runnable-binary.sh (2209-jw2t), same
