@@ -1,4 +1,5 @@
--- @trace order:1834-ujsf, spec:local-coding-delegation
+-- @env TILLANDSIAS_REPO_ROOT
+-- @trace order:1834-ujsf, spec:local-coding-delegation, order:2427-ldrr
 --
 -- local-delegate-ladder.lua — the outcome-token grammar and the rung
 -- aggregator, behind `scripts/delegate-outcome.sh local-record` and called
