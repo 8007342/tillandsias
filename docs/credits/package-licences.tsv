@@ -1166,6 +1166,7 @@ flutter	debian	libpam0g	1.5.2-6+deb12u2	unknown
 flutter	debian	libpcre2-8-0	10.42-1+deb12u2	unknown
 flutter	debian	libperl5.36	5.36.0-7+deb12u4	unknown
 flutter	debian	libpsl5	0.21.2-1	unknown
+flutter	debian	libreadline8	8.2-1.3	unknown
 flutter	debian	librtmp1	2.4+20151223.gitfa8646d.1-2+b2	unknown
 flutter	debian	libsasl2-2	2.1.28+dfsg-10+deb12u1	unknown
 flutter	debian	libsasl2-modules-db	2.1.28+dfsg-10+deb12u1	unknown
@@ -1189,6 +1190,9 @@ flutter	debian	libxxhash0	0.8.1-1	unknown
 flutter	debian	libzstd1	1.5.4+dfsg2-5	unknown
 flutter	debian	login	1:4.13+dfsg1-1+deb12u2	unknown
 flutter	debian	logsave	1.47.0-2+b2	unknown
+flutter	debian	lua-filesystem	1.8.0-3	unknown
+flutter	debian	lua-lpeg	1.0.2-2	unknown
+flutter	debian	lua5.4	5.4.4-3+deb12u1	unknown
 flutter	debian	mawk	1.3.4.20200120-3.1	unknown
 flutter	debian	mount	2.38.1-5+deb12u3	unknown
 flutter	debian	ncurses-base	6.4-4	unknown
@@ -1198,6 +1202,7 @@ flutter	debian	passwd	1:4.13+dfsg1-1+deb12u2	unknown
 flutter	debian	perl	5.36.0-7+deb12u4	unknown
 flutter	debian	perl-base	5.36.0-7+deb12u4	unknown
 flutter	debian	perl-modules-5.36	5.36.0-7+deb12u4	unknown
+flutter	debian	readline-common	8.2-1.3	unknown
 flutter	debian	sed	4.9-1+deb12u1	unknown
 flutter	debian	sysvinit-utils	3.06-4	unknown
 flutter	debian	tar	1.34+dfsg-1.2+deb12u1	unknown
