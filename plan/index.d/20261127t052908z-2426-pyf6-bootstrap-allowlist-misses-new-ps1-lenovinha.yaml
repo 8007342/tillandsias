@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: bootstrap-allowlist-misses-windows-host-capability-query-ps1
+    order: "2426-pyf6"
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [gate, release, portability]
+    estimated_hours: 2
+    owned_paths: [scripts/portability/bootstrap-shell-allowlist.txt, plan/issues/scripting-runtime-lua-no-pipes-design-2026-09-26.md]
+    title: "trunk red: decider-retirement-shape arm 4a — bootstrap-shell-allowlist.txt lacks scripts/windows-host-capability-query.ps1, and --check never runs the arm"
+    context: |
+      Measured on lenovinha 2026-11-27 on a clean trunk checkout at d401c092b: test-decider-retirement.lua arm 4a
+      "the allowlist is the §6.5 table" fails. 2421-7wvs (95f6fa3a6, landed in #1682) added
+      scripts/windows-host-capability-query.ps1; the arm compares the allowlist with git ls-files of scripts/*.ps1,
+      scripts/hooks/*.sh and images/*/entrypoint*.sh. The arm runs only in the ci-release litmus tier, which --check
+      skips, so no gate saw it (diagnosis: macuahuitl). Release blocker.
+    exit_criteria:
+      - "the allowlist (and the §6.5 table) names scripts/windows-host-capability-query.ps1 with a one-line reason, and test-decider-retirement.lua is green on trunk"
+      - "an instant gate check runs arm 4a, so a new .ps1, hook or entrypoint missing from the allowlist fails ./build.sh --check"
+    unscoreable: "no-litmus-yet: closure is decider-retirement-shape green on trunk plus the --check-time arm, pinned when it lands."
+    next_action: "add the .ps1 to the allowlist and §6.5; then wire arm 4a into an instant gate step."
+    provenance: filed by lenovinha at macuahuitl's request; found refusing relay-preflight on #1691.
+    related: [2421-7wvs, 2387-jz8p, 1443-xkwb]
+    events:
+      - {type: filed, ts: '2026-11-27T05:29:08Z', host: lenovinha, summary: bootstrap allowlist misses a new ps1 and --check never runs arm 4a}
