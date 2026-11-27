@@ -1,4 +1,5 @@
 -- @trace order:851-cduu, order:1129-4su6, order:1287-h6qn, order:2212-2m8s
+-- inputs: scripts/hooks/pre-push-local-gate.sh scripts/plan-binary-probe.sh scripts/gate-stamp.sh scripts/common.sh scripts/check-issue-citation-convention.sh lib/lua/common/ crates/tillandsias-plan/ Cargo.lock plan/index.yaml scripts/lua/check-fragment-status-loss.lua scripts/with-wsl2-builder.sh
 --
 -- test-plan-binary-freshness.lua — PORTED from test-plan-binary-freshness.sh
 -- (2212-2m8s), same cases, same lines. Point-of-use instrument freshness.

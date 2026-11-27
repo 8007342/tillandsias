@@ -1,3 +1,4 @@
+-- inputs: scripts/lua/test-salvage-audit.lua scripts/salvage-audit.sh scripts/gate-steps.d/952-1226-jb8y.step VERSION
 -- @env PATH HOME TILLANDSIAS_SALVAGE_AUDIT_LIVE SALVAGE_AUDIT_TIMEOUT_S
 -- @trace order:1226-jb8y, order:1672-8i7t, order:2270-7gp6, order:2386-zxgc
 --

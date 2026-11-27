@@ -67,6 +67,9 @@
 #   gate-changed.sh --run  [base]   run the selection (build.sh --changed)
 #   gate-changed.sh --map           print the derived input map
 #   --intake                        the bundle intake gate (see INTAKE above)
+#   --check-declared                the decider for declared inputs (2261-8gx5):
+#                                   every literal repo file a declaring fixture
+#                                   names must be covered by its declaration
 #   --checks                        only the check-* deciders (see CHECKS above)
 #   --crate-graph                   print the derived path-dependency edges
 #                                   (<crate dir> TAB <dep dir>) and exit; the
@@ -88,14 +91,14 @@ BASE=""
 FILES_FROM=""
 while [ $# -gt 0 ]; do
     case "$1" in
-        --list|--run|--map|--crate-graph) MODE="$1" ;;
+        --list|--run|--map|--crate-graph|--check-declared) MODE="$1" ;;
         --intake) INTAKE=1 ;;
         --checks) CHECKS=1 ;;
         --files) FILES_FROM="${2:-}"; shift ;;
         -h|--help) sed -n '2,75p' "${BASH_SOURCE[0]}"; exit 0 ;;
         -*) echo "refused:gate-changed:unknown-flag:$1" >&2
             echo "  why: an unknown flag would be read as the base ref and diff against nothing meaningful" >&2
-            echo "  remedy: use --list, --run, --map, --crate-graph, --intake, --checks or --files <file>, then an optional base ref (see --help)" >&2
+            echo "  remedy: use --list, --run, --map, --crate-graph, --check-declared, --intake, --checks or --files <file>, then an optional base ref (see --help)" >&2
             exit 2 ;;
         *) BASE="$1" ;;
     esac
@@ -191,7 +194,15 @@ xargs grep -HnE '/|\.(sh|lua|awk|py|yaml|toml|json|txt|tsv|md)' < "$WORK/srcs" 2
 awk -F'\t' -v W="$WORK" '
 function add(f, r, t,   k) { k = f SUBSEP r; if (!(k in E) || (E[k] == "r" && t == "x")) E[k] = t }
 function dirof(p,   q) { q = p; if (q !~ /\//) return ""; sub(/\/[^\/]*$/, "", q); return q }
-function resolve(tok, from,   t, g, i) {
+# 2422-4yak: stripping leading components until a path exists is how "$ROOT/scripts"
+# resolves, but it also turned every UNRESOLVED token ending in a top-level name
+# into that whole directory: Cloudflare API URLs (".../workers/scripts") made
+# tillandsias-headless read all of scripts/, and scratch trees ("$d/scripts",
+# "$WORK/crates") did the same. A strip that lands on a bare top-level directory
+# counts only when the component it dropped last is a repo-root name; anything
+# else resolves to nothing (an unresolved token, never a guess at an input).
+function trusted_root(c) { return c ~ /^(ROOT|REPO_ROOT|REPO|TOP|SCRIPT_DIR|repo|root|\.\.)$/ }
+function resolve(tok, from, ctx,   t, g, i, last) {
     t = tok
     gsub(/[{}]/, "", t)
     if (t ~ /\*/) {                     # glob -> its static prefix directory
@@ -199,10 +210,18 @@ function resolve(tok, from,   t, g, i) {
         if (t == "") return ""
     }
     sub(/\/+$/, "", t)
+    # A token that STARTS with / was cut after its root: ROOT .. "/x" and "$ROOT"/x
+    # tokenise as "/x". ctx is the identifier just before it, so the root is judged too.
+    last = ""
+    if (t ~ /^\//) last = ctx
     for (i = 0; i < 8 && t != ""; i++) {
         if (t in F) return t
-        if (t in D) return t "/"
+        if (t in D) {
+            if (i > 0 && t !~ /\// && !trusted_root(last)) return ""
+            return t "/"
+        }
         if (t !~ /\//) break
+        if (t !~ /^\//) { last = t; sub(/\/.*/, "", last) }
         sub(/^[^\/]*\//, "", t)
     }
     # a bare basename resolves against the referring file directory
@@ -212,6 +231,12 @@ function resolve(tok, from,   t, g, i) {
 FILENAME == W "/files" { F[$0] = 1; n = split($0, c, "/"); p = ""; for (i = 1; i < n; i++) { p = (p == "" ? c[i] : p "/" c[i]); D[p] = 1 } next }
 FILENAME == W "/tokens" {
     line = $0; f = line; sub(/:.*/, "", f); text = line; sub(/^[^:]*:[0-9]+:/, "", text)
+    # 2261-8gx5 (1): a shell `case` ARM is a pattern, not a read. Its text up to
+    # the arm-closing `)` — `scripts/*|build.sh|flake.nix)` — names paths only to
+    # classify one; gate-stamp.sh:174 made all 13 of its executors read the whole
+    # scripts/ directory. A function definition `name()` and a subshell `( … )`
+    # do not match: the arm text may not contain `(`.
+    if (text ~ /^[[:space:]]*[^[:space:];()#]+(\|[^[:space:];()]+)*\)/) sub(/^[[:space:]]*[^[:space:];()#]+(\|[^[:space:];()]+)*\)/, "", text)
     # An EXECUTED or SOURCED script is followed (its inputs become ours); any
     # other named path is a leaf the source reads. Following mere mentions
     # made every fixture reach build.sh and so every script (measured: 347 of
@@ -225,8 +250,16 @@ FILENAME == W "/tokens" {
         for (i = 1; i <= m; i++) if (w[i] in D) { add(f, w[i] "/", "r"); nres++ }
     }
     while (match(text, /[A-Za-z0-9_.@*{}-]*\/[A-Za-z0-9_.\/*@-]+|[A-Za-z0-9_.-]+\.(sh|lua|awk|py|yaml|toml|json|txt|tsv|md)/)) {
+        pre = (RSTART > 1) ? substr(text, RSTART - 1, 1) : ""
+        before = substr(text, 1, RSTART - 1)
         tok = substr(text, RSTART, RLENGTH); text = substr(text, RSTART + RLENGTH)
-        r = resolve(tok, f)
+        # 2422-4yak: the path part of a URL ("https://host/...") is not a repo path.
+        if (pre == ":" || tok ~ /^\/\//) continue
+        # ctx: the identifier just before the token across quotes, $, braces, spaces
+        # and the Lua .. operator (ROOT .. "/x" -> ROOT; d.abs .. "/x" -> abs).
+        ctx = substr(before, 1); sub(/[ "$(){}.]*$/, "", ctx)
+        if (match(ctx, /[A-Za-z_][A-Za-z0-9_]*$/)) ctx = substr(ctx, RSTART); else ctx = ""
+        r = resolve(tok, f, ctx)
         if (r == "" || r == f || r == "/") continue
         nres++
         add(f, r, (ex == "x" && r ~ /\.(sh|lua)$/) ? "x" : "r")
@@ -247,6 +280,49 @@ END {
 }
 ' "$WORK/files" "$WORK/tokens"
 touch "$WORK/edges" "$WORK/allsrc"
+
+# ── 4b. Declared inputs (2261-8gx5 (4)) ─────────────────────────────────────
+# A fixture may DECLARE what it reads, in its first 40 lines:
+#     # inputs: scripts/foo.sh scripts/lua/bar.lua openspec/litmus-tests/
+#     -- inputs: …                         (a Lua fixture)
+# The selector then trusts the declaration over the derived closure. The
+# derived one is conservative on purpose: a dynamic path such as
+# "$ROOT/scripts/${name}.sh" stops at the `$` and reads the WHOLE scripts/
+# directory, which is why ~87 fixtures selected on any script change (measured
+# 2026-11-23). --check-declared holds a declaration honest: every literal repo
+# file the fixture names itself must be covered (exactly, or by a declared
+# directory prefix ending in /).
+: > "$WORK/decl"
+while IFS=$'\t' read -r _did _drun _dpath _drest; do
+    [ -f "$_dpath" ] || continue
+    _dl="$(awk 'NR > 40 { exit } /^(#|--) inputs:/ { sub(/^(#|--) inputs:[[:space:]]*/, ""); print; exit }' "$_dpath" 2>/dev/null)"
+    [ -n "$_dl" ] || continue
+    for _di in $_dl; do printf '%s\t%s\n' "$_dpath" "$_di"; done
+done < "$WORK/pop" >> "$WORK/decl"
+sort -u -o "$WORK/decl" "$WORK/decl"
+if [ "$MODE" = "--check-declared" ]; then
+    awk -F'\t' -v W="$WORK" '
+        FILENAME == W "/decl"  { D[$1] = D[$1] " " $2; next }
+        FILENAME == W "/edges" {
+            if (!($1 in D) || $2 ~ /\/$/ || $2 == "*" || $2 == $1) next
+            n = split(D[$1], d, " "); ok = 0
+            for (i = 1; i <= n; i++) if (d[i] != "" && ($2 == d[i] || (d[i] ~ /\/$/ && index($2, d[i]) == 1))) { ok = 1; break }
+            if (!ok) { print "undeclared:" $1 ":" $2; bad++ }
+            next
+        }
+        END { exit bad > 0 }' "$WORK/decl" "$WORK/edges" > "$WORK/undeclared"
+    _ud=$?
+    _nd="$(cut -f1 "$WORK/decl" | sort -u | grep -c .)"
+    if [ "$_ud" -ne 0 ]; then
+        cat "$WORK/undeclared"
+        echo "violation:gate-changed-declared-inputs:$(wc -l < "$WORK/undeclared" | tr -d ' ') declaring=$_nd"
+        echo "  why: a declared fixture is selected ONLY by its declaration, so a file it reads but does not declare would never select it" >&2
+        echo "  remedy: add each undeclared path (or a directory prefix ending in /) to the fixture's inputs: line" >&2
+        exit 1
+    fi
+    # 2263-6xsp: no exit yet — the on-touch hint below needs the map.
+    _CD_OK="ok:gate-changed-declared-inputs:$_nd declaring"
+fi
 
 # ── 5. Close each fixture and each crate over its inputs ────────────────────
 # Output map lines: <unit> <TAB> <input>  where unit is fx:<path>[ args] or
@@ -271,7 +347,18 @@ function close_over(start, unit,   q, h, t, cur, n, parts, i, x) {
 }
 FILENAME == W "/edges"   { ADJ[$1] = ADJ[$1] "\t" $2; TY[$1 SUBSEP $2] = $3; next }
 FILENAME == W "/allsrc"  { ALLSRC[$1] = 1; next }
-FILENAME == W "/pop"     { u = "fx:" $3 ($4 == "" ? "" : " " $4); close_over($3, u); if ($7 != "") print u "\t" $7; next }
+FILENAME == W "/decl"    { DECL[$1] = DECL[$1] "\t" $2; next }
+FILENAME == W "/pop"     {
+    u = "fx:" $3 ($4 == "" ? "" : " " $4)
+    if ($3 in DECL) {
+        # 2261-8gx5: a declaring fixture reads itself, its declaration and its .step
+        print u "\t" $3
+        n = split(DECL[$3], parts, "\t")
+        for (i = 1; i <= n; i++) if (parts[i] != "") print u "\t" parts[i]
+    } else close_over($3, u)
+    if ($7 != "") print u "\t" $7
+    next
+}
 FILENAME == W "/crates"  {
     unit = "crate:" $1
     print unit "\t" $1 "/"
@@ -283,7 +370,32 @@ FILENAME == W "/crates"  {
     }
     next
 }
-' "$WORK/edges" "$WORK/allsrc" "$WORK/pop" "$WORK/crates" | sort -u > "$WORK/map"
+' "$WORK/edges" "$WORK/allsrc" "$WORK/decl" "$WORK/pop" "$WORK/crates" | sort -u > "$WORK/map"
+
+# ORDER 2263-6xsp — DECLARE ON TOUCH. An ADVISORY, never a refusal: a change
+# that edits a scripts/test-* fixture which reads the WHOLE scripts/ directory
+# and declares nothing gets one hint naming `# inputs:`, so each fixture's
+# owner narrows it when they are already there (2261-8gx5 measured ~5 fixtures,
+# ~13 s of intake on a scripts change, per hand-verified batch). The exit code
+# stays the decider's.
+if [ "$MODE" = "--check-declared" ]; then
+    _hb="${BASE:-${TILLANDSIAS_GATE_DIFF_BASE:-}}"
+    [ -n "$_hb" ] || _hb="$(git merge-base HEAD origin/linux-next 2>/dev/null)" || _hb=""
+    if [ -n "$_hb" ] && git rev-parse --verify -q "$_hb^{commit}" >/dev/null; then
+        { git diff --name-only "$_hb" --; git ls-files --others --exclude-standard; } 2>/dev/null | sort -u |
+            grep -E '^scripts/(lua/)?test-[^/]+\.(sh|lua)$' > "$WORK/hint-changed" || true
+        while IFS= read -r _hf; do
+            [ -f "$_hf" ] || continue
+            grep -q "^$_hf	" "$WORK/decl" && continue
+            if awk -F'\t' -v u="fx:$_hf" '($1 == u || index($1, u " ") == 1) && $2 == "scripts/" { f = 1 } END { exit !f }' "$WORK/map"; then
+                _hs='#'; case "$_hf" in *.lua) _hs='--' ;; esac
+                echo "note:gate-changed-declared-inputs:hint:$_hf reads the whole scripts/ directory and declares nothing — this change touches it, so add \`$_hs inputs: <paths>\` to its header (the decider holds it honest), unless it genuinely scans the live tree (2263-6xsp)"
+            fi
+        done < "$WORK/hint-changed"
+    fi
+    echo "$_CD_OK"
+    exit 0
+fi
 
 if [ "$MODE" = "--map" ]; then
     cat "$WORK/map"

@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: declare-inputs-of-most-selected-fixtures
+    order: "2422-gg77"
+    status: ready
+    kind: improvement
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [gate, build-velocity]
+    estimated_hours: 6
+    owned_paths: [scripts/lua/, scripts/]
+    title: "declare inputs on the 30 undeclared fixtures gate-changed selects most often, in PRs of 10"
+    context: |
+      yoga measured 2026-11-26 that a typical change still selects about 125 of 481 fixtures, mostly undeclared
+      fixtures that match because they name the changed path. The 10 declarations from #1424 (2261-8gx5) cut only 4-8 per
+      change. Rank the undeclared fixtures by how often gate-changed --list --files selects them over the changed
+      files of the last ~100 land commits, then declare the top 30, 10 per PR. Too narrow a declaration skips a fixture
+      that should run, so each batch keeps --check-declared ok and carries one mutant: an undeclared literal input makes
+      --check-declared refuse. Asked by macuahuitl as a priority insert ahead of the chromium, webkit and imagegen rows.
+    exit_criteria:
+      - "30 fixtures declare inputs: lines, gate-changed --check-declared is ok on trunk, and a mutant naming an undeclared input is refused"
+      - "the selected count before and after is reported for merge-floor-driver.sh, check-issue-citation-convention.sh and portability/checkout-writers.txt"
+    unscoreable: "measurement-row: the closure is the before/after selection counts plus --check-declared, named in each PR."
+    next_action: "rank undeclared fixtures by selection frequency over the last ~100 land commits."
+    provenance: filed by lenovinha at macuahuitl's request; yoga's measurement.
+    related: [2261-8gx5]
+    events:
+      - {type: filed, ts: '2026-11-27T02:17:17Z', host: lenovinha, summary: declare inputs on the most-selected undeclared fixtures}

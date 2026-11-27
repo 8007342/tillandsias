@@ -1,4 +1,5 @@
 -- @trace order:1060-6fx7, order:2208-vxb6
+-- inputs: scripts/hooks/pre-push-local-gate.sh scripts/plan-binary-probe.sh scripts/gate-stamp.sh scripts/common.sh scripts/check-issue-citation-convention.sh lib/lua/common/ crates/tillandsias-plan/ README.md plan/index.yaml
 --
 -- test-lane-instrument-vs-ledger.lua — PORTED from
 -- test-lane-instrument-vs-ledger.sh (2208-vxb6), same arms, same lines.

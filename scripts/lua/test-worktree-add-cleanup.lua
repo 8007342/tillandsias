@@ -1,4 +1,5 @@
 -- @trace order:1600-nn5b
+-- inputs: scripts/lua/check-worktree-add-cleanup.lua lib/lua/common/ crates/tillandsias-plan/ build.sh scripts/portability/worktree-add-scan-exempt.txt
 -- @env TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
 --
 -- test-worktree-add-cleanup.lua — both layers of 1600-nn5b.

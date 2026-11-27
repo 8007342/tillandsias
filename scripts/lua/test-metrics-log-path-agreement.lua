@@ -1,3 +1,4 @@
+-- inputs: scripts/lua/test-metrics-log-path-agreement.lua scripts/metrics-log-path.sh scripts/plan-binary-probe.sh scripts/check-mcp-expert-health.sh scripts/check-mcp-surface.sh scripts/cycle-metrics.sh scripts/trace-coverage.sh scripts/gate-steps.d/279-1455-d7hc.step plan/index.yaml openspec/litmus-tests/groundtruth/ crates/tillandsias-plan/
 -- preflight: serial — writes the fixed /tmp/tillandsias-timing.jsonl and counts lines of the fixed /tmp/forge-expert-usage.jsonl before and after a run
 -- @env PATH HOME TMPDIR
 -- @trace order:890-t9pu, order:1125-92xa, order:1209-hkcq, order:1096-p3tn, order:1455-d7hc, order:1807-shtg, order:2006-wahn

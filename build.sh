@@ -5679,6 +5679,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Lua source-agreement production integration passed"
 
+    # ORDER 2261-8gx5 — a fixture that DECLARES its inputs is selected only by
+    # them, so a file it names but does not declare would never select it.
+    # Inline rather than a .step: it passes an argument, and a new .step owes a
+    # second-regime record this host cannot produce.
+    _step "Checking declared fixture inputs cover every path the fixture names (2261-8gx5)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/gate-changed.sh" --check-declared 2>&1; then
+        _error "a fixture's inputs: declaration misses a repo path it names; add it, or a directory prefix ending in / (2261-8gx5)"
+        exit 1
+    fi
+    _info "Declared fixture inputs check passed"
+
     # ORDER 1916-tsel — the shared-timing-log leak check names a step only for
     # records carrying ITS gate's run id; two concurrent writers prove a
     # concurrent gate no longer gets the running step blamed and evicted.
