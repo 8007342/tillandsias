@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# inputs: images/default/lib-common.sh plan/index.yaml README.md scripts/check-plan-binary-current.sh scripts/check-resumable-claim-dirt.sh scripts/check-stranded-in-progress.sh scripts/cycle-preflight.sh scripts/diagnose-macos-provision.sh scripts/lib/tool-dispatch.sh scripts/lua/check-base-ledger-status-loss.lua scripts/lua/check-fragment-status-loss.lua scripts/lua/test-plan-binary-probe-release-over-debug.lua scripts/plan-binary-probe.sh scripts/regenerate-cheatsheet-index.sh scripts/select-work-batch.sh scripts/tray-diagnose.sh scripts/with-tillandsias-builder.sh scripts/with-wsl2-builder.sh scripts/wsl-plan-expert-ensure.sh VERSION lib/lua/common/ crates/tillandsias-plan/
 # ORDER 1085-g52w. A sanctioned reopen must land; an unapplied closure must not.
 #
 # `set-field --reopen-evidence` (650-dq6u) is the prescribed way to reopen a

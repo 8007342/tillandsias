@@ -1,4 +1,5 @@
 -- @trace order:1127-waxf, order:930-i6x4, order:1036-e5w9, order:1142-85zx, order:1276-mugq, order:2373-f26m
+-- inputs: build.sh .cargo/config.toml Cargo.toml methodology.yaml plan/index.yaml README.md rust-toolchain.toml scripts/build-sidecar.sh scripts/check-credential-channel.sh scripts/check-issue-citation-convention.sh scripts/check-litmus-pin-claims.sh scripts/check-script-exec-bits.sh scripts/gate-stamp.sh scripts/hooks/pre-push-local-gate.sh scripts/lua/check-base-ledger-status-loss.lua scripts/lua/check-fragment-status-loss.lua scripts/lua/test-gate-stamp.lua scripts/lua/test-gate-stamp-portable-digest.lua scripts/lua/test-mode-only-regression-887-bz88.lua scripts/plan-binary-probe.sh scripts/test-gate-stamp-memoization.sh lib/lua/common/ crates/tillandsias-plan/
 --
 -- test-gate-stamp-does-not-memoize-guard-owned-paths.lua — the gate memo tells "nothing
 -- moved" from "only the plan ledger moved", so a plan-only commit cannot memoize away the

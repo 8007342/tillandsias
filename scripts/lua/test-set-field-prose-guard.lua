@@ -1,4 +1,5 @@
 -- @trace order:1151-td46, order:642-fedr, order:2380-psba
+-- inputs: plan/index.yaml scripts/plan-binary-probe.sh lib/lua/common/ crates/tillandsias-plan/
 -- @env PATH HOME
 --
 -- test-set-field-prose-guard.lua — `plan set-field` on long-form prose must not silently
