@@ -19,7 +19,7 @@ critical_path:
   - step: "roster shape; gate fail vs report; Lua guard arguments and log; a missing guard; no runner"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-local-ci-landed-guards.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "ok:local-ci-landed-guards:5 arms"
+    expected_behavior: "ok:local-ci-landed-guards:6 arms"
 
 observability:
   traces:
