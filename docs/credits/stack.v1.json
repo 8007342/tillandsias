@@ -9528,6 +9528,24 @@
       "from": "image:audio-studio",
       "kind": "package",
       "optional": false,
+      "to": "pkg:debian:lua-filesystem"
+    },
+    {
+      "from": "image:audio-studio",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-lpeg"
+    },
+    {
+      "from": "image:audio-studio",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua5.4"
+    },
+    {
+      "from": "image:audio-studio",
+      "kind": "package",
+      "optional": false,
       "to": "pkg:debian:rubberband-cli"
     },
     {
@@ -58258,7 +58276,7 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "ffmpeg",
       "optional": true,
       "pulled_by": [
@@ -58266,7 +58284,7 @@
         "image:imagegen-corridorkey"
       ],
       "source": "images/audio-studio/Containerfile",
-      "version": "unknown"
+      "version": "7:5.1.9-0+deb12u1"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=fonts-liberation",
@@ -58372,7 +58390,7 @@
         "image:imagegen-studio"
       ],
       "source": "images/imagegen-corridorkey/Containerfile",
-      "version": "1.7.0-1build1"
+      "version": "1.6.0-1"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=libglib2.0-0",
@@ -58382,7 +58400,7 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "libglib2.0-0",
       "optional": true,
       "pulled_by": [
@@ -58390,7 +58408,7 @@
         "image:imagegen-studio"
       ],
       "source": "images/imagegen-corridorkey/Containerfile",
-      "version": "unknown"
+      "version": "2.74.6-2+deb12u9"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=libgomp1",
@@ -58407,7 +58425,7 @@
         "image:imagegen-cuda"
       ],
       "source": "images/imagegen/Containerfile.cuda",
-      "version": "14.2.0-4ubuntu2~24.04.1"
+      "version": "12.2.0-14+deb12u1"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=libsndfile1",
@@ -58424,7 +58442,7 @@
         "image:audio-studio"
       ],
       "source": "images/audio-studio/Containerfile",
-      "version": "1.2.2-1ubuntu5.24.04.1"
+      "version": "1.2.0-1+deb12u1"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=lua-filesystem",
@@ -58438,11 +58456,12 @@
       "name": "lua-filesystem",
       "optional": true,
       "pulled_by": [
+        "image:audio-studio",
         "image:imagegen-cuda",
         "image:web-wrangler",
         "image:webkit"
       ],
-      "source": "images/imagegen/Containerfile.cuda",
+      "source": "images/audio-studio/Containerfile",
       "version": "1.8.0-3"
     },
     {
@@ -58457,11 +58476,12 @@
       "name": "lua-lpeg",
       "optional": true,
       "pulled_by": [
+        "image:audio-studio",
         "image:imagegen-cuda",
         "image:web-wrangler",
         "image:webkit"
       ],
-      "source": "images/imagegen/Containerfile.cuda",
+      "source": "images/audio-studio/Containerfile",
       "version": "1.0.2-2"
     },
     {
@@ -58476,12 +58496,13 @@
       "name": "lua5.4",
       "optional": true,
       "pulled_by": [
+        "image:audio-studio",
         "image:imagegen-cuda",
         "image:web-wrangler",
         "image:webkit"
       ],
-      "source": "images/imagegen/Containerfile.cuda",
-      "version": "5.4.6-3build2"
+      "source": "images/audio-studio/Containerfile",
+      "version": "5.4.4-3+deb12u1"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=ninja-build",
@@ -58542,14 +58563,14 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "rubberband-cli",
       "optional": true,
       "pulled_by": [
         "image:audio-studio"
       ],
       "source": "images/audio-studio/Containerfile",
-      "version": "unknown"
+      "version": "3.1.2+dfsg0-1"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=sox",
@@ -58559,14 +58580,14 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "sox",
       "optional": true,
       "pulled_by": [
         "image:audio-studio"
       ],
       "source": "images/audio-studio/Containerfile",
-      "version": "unknown"
+      "version": "14.4.2+git20190427-3.5"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=unzip",
@@ -61339,7 +61360,7 @@
   "schema": "tillandsias-stack/v1",
   "summary": {
     "components": 57,
-    "edges": 3149,
+    "edges": 3152,
     "license_families": {
       "model": 7,
       "permissive": 1720,
