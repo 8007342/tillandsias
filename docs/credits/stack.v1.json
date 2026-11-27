@@ -10752,6 +10752,24 @@
       "from": "image:imagegen-studio",
       "kind": "package",
       "optional": false,
+      "to": "pkg:debian:lua-filesystem"
+    },
+    {
+      "from": "image:imagegen-studio",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-lpeg"
+    },
+    {
+      "from": "image:imagegen-studio",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua5.4"
+    },
+    {
+      "from": "image:imagegen-studio",
+      "kind": "package",
+      "optional": false,
       "to": "pypi:requirements:imagegen-studio"
     },
     {
@@ -58477,6 +58495,7 @@
         "image:audio-studio",
         "image:flutter",
         "image:imagegen-cuda",
+        "image:imagegen-studio",
         "image:web-wrangler",
         "image:webkit"
       ],
@@ -58498,6 +58517,7 @@
         "image:audio-studio",
         "image:flutter",
         "image:imagegen-cuda",
+        "image:imagegen-studio",
         "image:web-wrangler",
         "image:webkit"
       ],
@@ -58519,6 +58539,7 @@
         "image:audio-studio",
         "image:flutter",
         "image:imagegen-cuda",
+        "image:imagegen-studio",
         "image:web-wrangler",
         "image:webkit"
       ],
