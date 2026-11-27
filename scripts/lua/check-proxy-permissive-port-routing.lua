@@ -45,12 +45,12 @@ if not fs.exists(CONSUMER_ROOT) then verdict.emit("blocked:consumer-root-missing
 local ok_walk, files = pcall(fs.walk, CONSUMER_ROOT)
 if not ok_walk or type(files) ~= "table" then verdict.emit("blocked:consumer-root-missing:" .. CONSUMER_ROOT, 2) end
 
+local rs = {}
+for _, f in ipairs(files) do if f:sub(-3) == ".rs" then rs[#rs + 1] = f end end
+local SRC = require("common.listed_read").read_all("proxy-permissive-port-routing", rs)
 local consumers = {}
-for _, f in ipairs(files) do
-    if f:sub(-3) == ".rs" then
-        local ok, body = pcall(fs.read, f)
-        if ok and body and body:find("3129", 1, true) then consumers[#consumers + 1] = f end
-    end
+for _, f in ipairs(rs) do
+    if SRC[f] and SRC[f]:find("3129", 1, true) then consumers[#consumers + 1] = f end
 end
 table.sort(consumers)
 

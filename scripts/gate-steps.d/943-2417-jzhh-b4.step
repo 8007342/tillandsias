@@ -1,0 +1,13 @@
+# Gate step 2417-jzhh batch 4 — data, not code.
+#
+# Nine more checkers that read a listing must block (exit 2, naming the file)
+# when a listed file cannot be read, never count it clean. Each arm plants a
+# chmod 000 file in a scratch tree; its control makes it readable again.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking nine listing checkers block on an unreadable listed file (2417-jzhh batch 4)"
+STEP_LUA="scripts/lua/test-listed-read-blocks-batch4.lua"
+STEP_ERROR="a listing checker read ok over a file it could not read (2417-jzhh) — see the FAIL lines above"
+STEP_OK="batch-4 listing checkers block on unreadable files"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-27 darwin ok:listed-read-blocks-batch4:18 arms at 732138c0e (red 9/9 on the trunk checkers first)"
+STEP_READS="scripts/lua/test-listed-read-blocks-batch4.lua lib/lua/common/listed_read.lua scripts/lua/check-no-host-browser-launch.lua scripts/lua/check-no-spawn-in-if-not.lua scripts/lua/check-plan-ledger-readers.lua scripts/lua/local-delegate-ladder.lua scripts/lua/check-portability-idioms.lua scripts/lua/check-proxy-permissive-port-routing.lua scripts/lua/check-requirement-ids.lua scripts/lua/check-secure-wire-single-reader.lua scripts/lua/check-smoke-agent-prompt-is-minimal.lua"
