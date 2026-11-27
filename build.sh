@@ -3578,20 +3578,68 @@ _gs_count_skips() {
 _gs_pool() {
     local _jobs="$1" _d _f _i=0 _n _rc _t0=$SECONDS _total=0 _ran=0
     local -a _ser=()
+    local -a _pool=() _disp=()
+    local _red="" _k _seen _ord _l
     _d="$(mktemp -d "${TMPDIR:-/tmp}/gate-pool.XXXXXX")" || { _error "gate-steps pool: no scratch dir"; exit 1; }
     for _f in "$_gs_root"/scripts/gate-steps.d/*.step; do
         [ -e "$_f" ] || continue
         _total=$((_total + 1))
         if grep -q '^STEP_SERIAL=' "$_f"; then _ser+=("$_f"); continue; fi
+        _pool+=("$_f")
+    done
+    # ORDER 2430-ffst: DISPATCH order is fail-fast — steps named in
+    # TILLANDSIAS_GATE_STEP_ORDER (one step basename per line, most red per
+    # second first; scripts/lua/gate-step-order.lua derives it from the timing
+    # log) start first, the rest follow in filename order. Indices stay the
+    # FILENAME order, so the replay below is unchanged.
+    _ord="${TILLANDSIAS_GATE_STEP_ORDER:-}"
+    if [ -n "$_ord" ] && [ -r "$_ord" ]; then
+        while IFS= read -r _l; do
+            _l="${_l%$'\r'}"; [ -n "$_l" ] || continue
+            _k=0; for _f in ${_pool[@]+"${_pool[@]}"}; do _k=$((_k + 1)); [ "${_f##*/}" = "$_l" ] && _disp+=("$_k"); done
+        done < "$_ord"
+    fi
+    _k=0; for _f in ${_pool[@]+"${_pool[@]}"}; do
+        _k=$((_k + 1)); _seen=0
+        for _i in ${_disp[@]+"${_disp[@]}"}; do [ "$_i" = "$_k" ] && { _seen=1; break; }; done
+        [ "$_seen" = 1 ] || _disp+=("$_k")
+    done
+    _n=${#_pool[@]}
+    for _k in ${_disp[@]+"${_disp[@]}"}; do
+        # ORDER 2430-ffst: the pool used to `wait` for EVERY worker before it
+        # looked at a single rc, so a red PR paid the whole pool before failing.
+        # Without --keep-going, a finished red stops dispatch and the gate ends.
+        if [ "$FLAG_KEEP_GOING" != true ]; then
+            for _i in "$_d"/*.rc; do
+                [ -e "$_i" ] || continue
+                [ "$(cat "$_i" 2>/dev/null)" = 0 ] || { _red="$_i"; break; }
+            done
+            [ -z "$_red" ] || break
+        fi
         while [ "$(jobs -rp | wc -l)" -ge "$_jobs" ]; do sleep 0.2; done
-        _i=$((_i + 1))
-        printf '%s\n' "$_f" > "$_d/$_i.name"
+        _f="${_pool[$((_k - 1))]}"
+        printf '%s\n' "$_f" > "$_d/$_k.name"
         # A worker never inherits the pool size: a fixture that runs a nested
         # gate (--gate-steps on a scratch tree) must run it serially.
-        { ( unset TILLANDSIAS_GATE_STEP_JOBS; _gs_one "$_f" ) > "$_d/$_i.out" 2>&1; echo $? > "$_d/$_i.rc"; } &
+        { ( unset TILLANDSIAS_GATE_STEP_JOBS; _gs_one "$_f" ) > "$_d/$_k.out" 2>&1; echo $? > "$_d/$_k.rc.tmp"; mv -f "$_d/$_k.rc.tmp" "$_d/$_k.rc"; } &
     done
+    if [ -n "$_red" ]; then
+        # Let the running workers finish (killing one mid-step can strand its
+        # scratch state), dispatch nothing more, then name the red.
+        wait
+        _i=0
+        while [ "$_i" -lt "$_n" ]; do
+            _i=$((_i + 1))
+            [ -e "$_d/$_i.rc" ] || continue
+            _rc="$(cat "$_d/$_i.rc" 2>/dev/null)"
+            [ "$_rc" = 0 ] && continue
+            cat "$_d/$_i.out" 2>/dev/null
+            _error "gate-steps pool: $(basename "$(cat "$_d/$_i.name")") refused (rc=${_rc:-none}); fail-fast stopped dispatch (2430-ffst); a step that passes alone and reds here is a missing STEP_SERIAL (2155-gpar)"
+            rm -rf "$_d"; exit 1
+        done
+    fi
     wait
-    _n=$_i; _i=0
+    _i=0
     while [ "$_i" -lt "$_n" ]; do
         _i=$((_i + 1))
         cat "$_d/$_i.out" 2>/dev/null
