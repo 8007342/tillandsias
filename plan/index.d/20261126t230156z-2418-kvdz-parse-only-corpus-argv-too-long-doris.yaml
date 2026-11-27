@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed and fixed by doris-windows 2026-11-26, msys queue item litmus-parse-only-duplicate-key.
+packets:
+  - packet_id: parse-only-duplicate-key-arm-6-names-the-whole-corpus-in-one-argv-past-the-windows-limit
+    order: 2418-kvdz
+    status: implemented
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, fixture, litmus, argv]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-litmus-parse-only-duplicate-key.lua
+    related: [2410-3j3t, 2402-isab]
+    title: |
+      test-litmus-parse-only-duplicate-key arm 6 passes all 648 corpus files in one argv, past Windows' 32 767-character command line (os error 206), so every file reads unaccounted
+    context: |
+      Measured on doris: the corpus call failed with "spawn failed: The filename or extension is too long.
+      (os error 206)", crc=nil and empty stdout, so arm 6 reported every corpus file unaccounted. It was not
+      corpus drift. Arm 6 now runs the corpus in batches of 80, concatenating output and keeping the worst
+      exit; a batch that never ran keeps crc nil, so the arm still fails closed. The verdict is the same on
+      Linux. (Arm 0's earlier premise failure on this host went away with 2410-3j3t and 2402-isab.)
+    verifiable_closure: |
+      On doris: before, violation:litmus-parse-only-duplicate-key:1-failed (arm 6, os error 206); after,
+      ok:litmus-parse-only-duplicate-key:15 arms.
+    unscoreable: "the closure is the fixture itself; no separate litmus pin"
+    next_action: >
+      Implemented.
+status:
+  - packet_id: parse-only-duplicate-key-arm-6-names-the-whole-corpus-in-one-argv-past-the-windows-limit
+    field: status
+    value: implemented
+    ts: "2026-11-26T23:01:56Z"
+    host: doris

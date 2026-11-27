@@ -632,7 +632,9 @@ if [ "$PLAN_MODE" != 1 ]; then
         # (DEC_OUT says why), never a skip.
         _fx_cmd=(bash "$_fx")
         if [ "${_fx%.lua}" != "$_fx" ]; then
-            if _lua_runner "$_name"; then _fx_cmd=("$_lb" script run "$_fx"); else _fx_cmd=(sh -c 'printf "%s\n" "$1"; exit 3' _ "$DEC_OUT"); fi
+            # 2419-8him: 175 Lua fixtures read TILLANDSIAS_PLAN_BIN or ..._SCRIPT_RUNNER_BIN and
+            # refuse without it, so the runner is named to the fixture as well as running it.
+            if _lua_runner "$_name"; then _fx_cmd=(env TILLANDSIAS_PLAN_BIN="$_lb" TILLANDSIAS_SCRIPT_RUNNER_BIN="$_lb" "$_lb" script run "$_fx"); else _fx_cmd=(sh -c 'printf "%s\n" "$1"; exit 3' _ "$DEC_OUT"); fi
         fi
         if _cap "${_fx_cmd[@]}"; then
             _item "$_name" ok "$_t"

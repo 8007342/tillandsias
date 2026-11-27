@@ -171,9 +171,18 @@ if applied then
         if name:match("%.yaml$") then corpus[#corpus + 1] = "openspec/" .. LIT .. "-tests/" .. name end
     end
     table.sort(corpus)
-    local args = { "--parse-only" }
-    for _, f in ipairs(corpus) do args[#args + 1] = f end
-    local crc, co, ce = run_runner(RUNNER, args)
+    -- 2418-kvdz: in batches. One argv naming the whole corpus passed the 32 767-character Windows
+    -- command-line limit (os error 206, spawn failed, every file "unaccounted"). The merged
+    -- verdict is the same on every host: stdout and stderr concatenated, the worst exit kept, and
+    -- a batch that never ran (no exit code) keeps crc nil, so the arm still fails.
+    local crc, co, ce = 0, "", ""
+    for i = 1, #corpus, 80 do
+        local args = { "--parse-only" }
+        for j = i, math.min(i + 79, #corpus) do args[#args + 1] = corpus[j] end
+        local brc, bo, be = run_runner(RUNNER, args)
+        co, ce = co .. bo, ce .. be
+        if brc == nil or crc == nil then crc = nil elseif brc > crc then crc = brc end
+    end
     local acc = accepted_set(co)
     local diag = ce:gsub("\27%[[0-9;]*m", "")
     local dl = {}

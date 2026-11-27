@@ -128,9 +128,13 @@ for _, disp in ipairs(files) do
 end
 
 if #yaml_candidates > 0 then
-    local argv = { POLICY, "validate-yaml" }
-    for _, disp in ipairs(yaml_candidates) do argv[#argv + 1] = disp end
-    local res = proc.run({ argv = argv, cwd = SCAN_ROOT })
+    -- 2418-ct85: in argv batches. One argv naming every fragment (7 820 of them) passed Windows'
+    -- 32 767-character command line, the spawn failed, and every fragment read "damaged".
+    -- On Windows scripts/tillandsias-policy is a shell script, which a native spawn cannot run
+    -- (os error 193), so it goes through Git's bash there; Unix keeps the direct exec.
+    local SH = require("common.fixture").posix_shell()
+    local base = SH ~= "bash" and { SH, POLICY, "validate-yaml" } or { POLICY, "validate-yaml" }
+    local res = require("common.argv_batch").run(base, yaml_candidates, { cwd = SCAN_ROOT })
     local parsed = {}
     if res.status == "exited" then
         for _, l in ipairs(text.lines(res.stdout)) do
