@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# doris-windows: provenance of the NPU bench go, and the one candidate that would not load.
+status:
+  - packet_id: npu-inference-benchmark-on-xdna2-lemonade-flm-vs-cpu-and-igpu
+    field: evidence
+    value: |
+      APPROVAL: the operator told doris directly in its own session, verbatim: "I approve the npu benchmark".
+      Not relayed via macuahuitl (it never reached the coordinator). Received shortly before the run started;
+      the first bench load is in the Lemonade log at 2026-11-27T06:29:49Z (22:29:49 local -08:00), so the go
+      is at about 2026-11-27T06:2xZ. The session gives no exact timestamp for the message itself.
+    ts: "2026-11-27T07:31:35Z"
+    host: doris
+  - packet_id: npu-inference-benchmark-on-xdna2-lemonade-flm-vs-cpu-and-igpu
+    field: finding
+    value: |
+      Qwen2.5-7B-Instruct-NPU (amd/Qwen2.5-7B-Instruct-onnx-ryzenai-npu, snapshot b97a4fa, hash-verified) does
+      not load: "RyzenAI-Server failed to start". ryzenai-server.exe exits within ~3 s, Lemonade retries once and
+      fails again (log 2026-11-27T07:31:06Z and 06:58:14Z). Same ryzenai-llm v1.7.0 loads Llama-3.2-1B,
+      Llama-3.1-8B and gpt-oss-20b NPU builds fine, so it is this model, not the backend or driver. The log has
+      no stderr from ryzenai-server; next: run ryzenai-server.exe by hand on the snapshot dir to get its error,
+      and check for a newer snapshot (log line "Update available" names the same revision).
+    ts: "2026-11-27T07:31:35Z"
+    host: doris

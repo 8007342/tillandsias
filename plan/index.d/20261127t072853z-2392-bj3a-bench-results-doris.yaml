@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# doris-windows: first NPU bench run (operator's go 2026-11-27). Means of 3 runs after a warm-up; 256 output tokens.
+status:
+  - packet_id: npu-inference-benchmark-on-xdna2-lemonade-flm-vs-cpu-and-igpu
+    field: evidence
+    value: |
+      Decode tok/s (short ~70 tok prompt / long ~760 tok), load s. Lemonade 2026.48.3, max one model loaded.
+        Llama-3.2-1B  npu-ryzenai 39.5/43.0 load 6.6
+        qwen3-1.7b    npu-flm 42.6/38.6 load 9.3 | Qwen3-0.6B vulkan 139.6/113.7
+        Qwen3-4B      npu-flm 18.8/18.0 load 12.3 | vulkan 26.5/25.2 load 6.1 | rocm 24.4/23.1 load 89 | cpu 23.3/20.7
+        Qwen3-8B      npu-flm 10.6/10.4 load 17 | vulkan 14.8/14.4 | rocm 13.9/13.6 load 71 | cpu 13.4/12.5
+        Llama-3.1-8B  npu-ryzenai 10.0/10.2 load 12.3
+        Qwen2.5-7B-Instruct-NPU  LOAD FAILED (not yet diagnosed)
+        Gemma-4 E4B   npu-flm 13.9/13.3 | vulkan 19.5/18.8
+        gpt-oss-20b   npu-ryzenai 10.3/9.5 | vulkan 23.2/22.9 | rocm 22.5/22.4
+        qwen3.6-moe-35b-a3b  npu-flm 16.9/16.7 load 29.6, ttft 3.0/6.5 s
+        Qwen3-14B vulkan 9.4/9.2 ; Qwen2.5-Coder-32B vulkan 3.7/3.7
+      Reading: on this host the NPU does not beat the 890M iGPU on decode speed at any size; it is competitive at
+      1-2B and its value is offload (frees iGPU/CPU) and power, which this run did NOT measure. Vulkan >= ROCm
+      everywhere and ROCm loads are 5-15x slower: the vulkan default is the right one. CPU ~ iGPU on dense 4-8B
+      (memory-bandwidth bound). CAVEAT: llamacpp TTFT (0.01-0.3 s) is a prompt-cache hit (same prompt repeated),
+      so TTFT is only comparable across NPU lanes. Next: power draw per lane, distinct prompts per run, fix the
+      Qwen2.5-7B NPU load.
+    ts: "2026-11-27T07:28:53Z"
+    host: doris
