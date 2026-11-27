@@ -55,35 +55,46 @@ notices a READY message. The wait between runs is the 17 minutes.
 **Constraint (standing operator rule).** It must not poll fast: a polling cadence needs operator approval.
 It reuses the existing systemd user unit machinery or flock, and adds no new crons.
 
-**Design.**
+**Correction (2026-11-27).** The first draft of this design said `gh event listen` could watch the
+repository for new PRs. It was checked against `gh event listen --help` on doris, where gh is 2.106.0, and
+that is wrong in two ways:
 
-1. **Event source: `gh event listen`, not a poll.** It holds one subscription and blocks until GitHub sends
-   an event. Listen for `com.github.pull_request.state.changed.v1` (opened, ready_for_review, reopened)
-   and new commits on non-draft PRs into linux-next. It exits on the first event, prints one JSON line, and
-   the loop re-arms it. No request is made while nothing happens. The feature is in preview: gh says
-   "may not be enabled for your account", so step 0 is to check it on macuahuitl's account. If it is not
-   enabled, fall back to (3) only.
-2. **Runner: a systemd user service, `tillandsias-land-queue-listen.service`.**
-   - Built from `packaging/systemd/user/*.service.in`, like `tillandsias-cycle.service`.
-   - Its ExecStart is a small loop: `gh event listen --resource <repo> --event ... --timeout 60m`, then
-     on an event (or the timeout) `scripts/land-queue.sh`.
-   - The queue's own lock already makes a second start a `skip:land-queue:in-flight`. After a run ends,
-     the loop runs the queue once more before re-arming, so a PR that arrived mid-run is not stranded.
-   - `Restart=on-failure`, with `RestartSec` set in minutes.
-3. **Safety net: the `--timeout 60m` above.** The listen returns at least hourly even if an event was
-   missed, and the queue runs once. That is the only time-based trigger. Its cadence (60 min proposed) is
-   the operator's to approve, and so is turning the unit on at all.
-4. **What does not change.** Merge order, the gate, eviction, trains, and "one landing at a time". The
-   coordinator keeps the stop switch: `systemctl --user stop tillandsias-land-queue-listen`. A
-   `TILLANDSIAS_LAND_QUEUE_PAUSED` file the loop checks before each run can hold the queue without
-   stopping the unit.
-5. **Measuring it.** With 2431-lprf-a in place: the median time from READY to landed, before and after.
-   Predicted: the wait between runs (about 17 min per land) falls to the event delay plus whatever run is
-   already in flight.
+- The command is newer than macuahuitl's gh 2.97.0 ("unknown command \"event\"").
+- `--resource` takes ONE pull request URL, so it cannot see a PR that does not exist yet.
+
+Per-PR events it does offer: state.changed (merged, closed, reopened, ready for review, converted to
+draft), head.changed (a push), review, merge-conflict and check-suite. Subscriptions expire after 24 h,
+each account may hold only a limited number, and it is in preview.
+
+**Options for the operator, no-timer options first.**
+
+- **A. Re-run on exit, at a natural boundary.** When a run ends, land-queue lists the non-draft PRs into
+  linux-next once more. If any PR is new or updated since the run's start snapshot, it starts another run
+  under the same lock. That is one check per run, not a timer. It drains everything that arrives while a
+  run is busy, which is where most of the backlog builds. It cannot start an idle queue.
+- **B. Peer-triggered start.** The READY report a worker already sends at the end of a step becomes the
+  trigger: a handler on macuahuitl starts the queue under its lock, with no coordinator turn in between.
+  It is event-driven, and reuses the existing fleet message channel (tillandsias-msg). This is the one
+  option that starts an idle queue without a timer.
+- **C. Per-PR listening for drafts.** For each open draft PR, `gh event listen --resource <pr>
+  --event com.github.pull_request.state.changed.v1` wakes when it is marked ready. This needs gh >= 2.106
+  on macuahuitl, depends on the preview feature, and is capped by the subscription limit and the 24 h
+  expiry. It cannot see brand-new PRs opened as non-draft. It is fragile, so it is not recommended.
+- **D. A slow timer.** A systemd user timer that runs land-queue every N minutes. It is the simplest, but
+  it is the polling cadence the standing rule reserves for the operator. Offered only if A and B are not
+  enough.
+
+**Recommended: A + B.** A covers the busy queue, and B covers the idle queue. Both reuse the existing lock
+(`skip:land-queue:in-flight` on overlap) and add no cron or timer.
+
+**What does not change.** Merge order, the gate, eviction, trains, and "one landing at a time". A
+`TILLANDSIAS_LAND_QUEUE_PAUSED` file, checked before each self-started run, lets the coordinator hold the
+queue.
+
+**Measuring it.** With 2431-lprf in place: the median time from READY to landed, before and after.
 
 **Open questions for the operator.**
 
-- May the listener run unattended on macuahuitl?
-- Is the 60 min safety-net cadence acceptable?
-- Should a run start on a draft leaving draft only, or also on every new push to a non-draft PR? The
-  first is quieter; the second re-gates updated PRs sooner.
+- May A (self re-run at the end of a run) be enabled?
+- May B (a peer's READY message starts a run without the coordinator) be enabled?
+- Is D wanted at all, and at what cadence?
