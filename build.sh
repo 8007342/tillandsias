@@ -6032,6 +6032,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # was green. Only the guest_feature_set_* tests run, so the marginal cost
     # is one more compile of the crate's test binary (58 s cold on a MacBook
     # Air), not a second full suite. Same zero-ran refusal as above.
+    # ORDER 2437-v9vv: skippable against a daily full proof like the pass above. It
+    # tests the same crate closure (tillandsias-headless), and a feature changes which
+    # code compiles, not which repo files the crate reads, so the same scanned input
+    # list judges it. It ran on every land, scripts-only included (run 110).
+    # shellcheck disable=SC2086 — the declared inputs are words by design.
+    if _class_may_skip cargo-guest-feature-tests $_CARGO_FEATURE_TEST_INPUTS; then
+    # shellcheck disable=SC2086
+    _class_skip_line cargo-guest-feature-tests $_CARGO_FEATURE_TEST_INPUTS
+    else
     _step "Running guest-feature-set tests (listen-vsock, no tray) — 1713-1dnx..."
     _gf_transcript="$SCRIPT_DIR/target/test-transcript-guest-feature-set-gate.log"
     _gf_rc=0
@@ -6052,6 +6061,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Guest-feature-set tests passed: $_gf_ran test(s) executed under listen-vsock alone"
+    fi
 
     # CRITERION 3 (1003-444f) IS SATISFIED BY --workspace, NOT BY A SECOND
     # CHECK, and the check I wrote first is deleted rather than shipped.
