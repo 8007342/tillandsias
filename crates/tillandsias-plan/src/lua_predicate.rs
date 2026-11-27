@@ -1128,6 +1128,16 @@ fn project_root_is_the_cwds_repo(root: &Path, cwd: Option<&Path>) -> bool {
 }
 
 /// The first ancestor of `start` (inclusive) that holds plan/index.yaml or .git.
+/// ORDER 2417-jzhh. The repository containing the running script, for
+/// `require` only: a library module travels with the script that requires it.
+/// A fixture that roots a checker in a scratch tree (cwd or
+/// TILLANDSIAS_REPO_ROOT) keeps fs.* and proc.run there, but the checker's
+/// `require "common.x"` still finds the module beside the checker.
+pub(crate) fn script_repo_root() -> Option<PathBuf> {
+    let script = SCRIPT_PATH.get()?;
+    walk_up_to_repo(script.parent()?.to_path_buf())
+}
+
 fn walk_up_to_repo(mut dir: PathBuf) -> Option<PathBuf> {
     loop {
         if dir.join("plan/index.yaml").is_file() || dir.join(".git").exists() {
