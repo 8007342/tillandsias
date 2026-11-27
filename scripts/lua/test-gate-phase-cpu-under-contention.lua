@@ -50,9 +50,12 @@ local function sh(body)
     return T:run{ SH, "-s", "--", ROOT, d.abs, cwd = d.abs, stdin = PRE .. body, env_unset = { "TILLANDSIAS_*" }, timeout_ms = 180000 }
 end
 local has_taskset = fixture.which("taskset") ~= nil
+-- fs is repo-confined, so the counter is probed with test -r (2421-mmbq)
+local HAS_PSI = proc.run{ argv = { "test", "-r", "/proc/pressure/cpu" }, timeout_ms = 5000 }.code == 0
 local body = [==[
 _step "waiting phase"; _run sleep 3
 _step "busy phase"; _run bash -c 'busy 1500000'
+_step "detached phase"; _run bash -c 'setsid bash -c "busy 6000000" </dev/null >/dev/null 2>&1 & sleep 3'
 ]==]
 if has_taskset then
     body = body .. [==[
@@ -72,14 +75,19 @@ local out = (r.stdout or "") .. (r.stderr or "")
 local function line(name) return ("\n" .. out):match("\n([^\n]*" .. name:gsub("%-", "%%-") .. "[^\n]*)") or "" end
 local function cpu(l) return tonumber(l:match("cpu (%d+%.%d)s")) end
 local function wall(l) return tonumber(l:match("^%s*(%d+%.%d)s")) end
-local lw, lb, lc = line("waiting phase"), line("busy phase"), line("contended phase")
+local lw, lb, lc, ld = line("waiting phase"), line("busy phase"), line("contended phase"), line("detached phase")
+-- 2421-mmbq: CPU work in a process the gate shell never waits for (a container, a daemon)
+T:arm("6 DETACHED work outside the step children reads off-cpu", text.contains(ld, "off-cpu"), ld)
+T:arm("6 DETACHED and is NOT contended: the work ran, the host was not busy", ld ~= "" and not text.contains(ld, "(contended:"), ld)
 T:arm("2 WAITING a phase that sleeps reports ~0 s of CPU", cpu(lw) ~= nil and cpu(lw) < 0.5 and (wall(lw) or 0) >= 2.5, lw ~= "" and lw or out:sub(1, 400))
-T:arm("2 WAITING and is marked as waiting", text.contains(lw, "waited"), lw)
+T:arm("2 WAITING and is marked off-cpu", text.contains(lw, "off-cpu"), lw)
+T:arm("2 WAITING but not contended (sleeping is not the host being busy)", lw ~= "" and not text.contains(lw, "(contended:"), lw)
 T:arm("3 BUSY a CPU-bound phase reports CPU close to its wall clock", cpu(lb) ~= nil and wall(lb) ~= nil and cpu(lb) >= 0.6 * wall(lb), lb)
-T:arm("3 BUSY and is not marked", lb ~= "" and not text.contains(lb, "waited"), lb)
+T:arm("3 BUSY and is not marked", lb ~= "" and not text.contains(lb, "off-cpu") and not text.contains(lb, "(contended:"), lb)
 if has_taskset then
     T:arm("4 CONTENDED a pinned phase beside two hogs reports CPU well under its wall clock", cpu(lc) ~= nil and wall(lc) ~= nil and cpu(lc) < 0.6 * wall(lc), lc)
-    T:arm("4 CONTENDED and is marked", text.contains(lc, "waited"), lc)
+    T:arm("4 CONTENDED and is marked off-cpu", text.contains(lc, "off-cpu"), lc)
+    T:arm("4 CONTENDED and, with PSI, marked contended (2421-mmbq)", (not HAS_PSI) or text.contains(lc, "(contended:"), lc)
 else
     out.line("skip: 4 no taskset on this host: the planted concurrent load cannot be pinned")
 end
@@ -87,5 +95,5 @@ local n = 0
 for l in (fs.exists(d.rel .. "/t.jsonl") and fs.read(d.rel .. "/t.jsonl") or ""):gmatch("[^\n]+") do
     if text.contains(l, '"step":"step:') then n = n + 1 end
 end
-T:arm("5 the timing emit still writes one step: record per phase", n == (has_taskset and 3 or 2), n .. " records")
+T:arm("5 the timing emit still writes one step: record per phase", n == (has_taskset and 4 or 3), n .. " records")
 T:finish()

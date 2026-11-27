@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: gate-phase-waited-marker-claims-contention-it-cannot-see
+    field: status
+    value: implemented
+    ts: "2026-11-27T11:46:09Z"
+    host: yoga
+events:
+  - packet_id: gate-phase-waited-marker-claims-contention-it-cannot-see
+    event:
+      type: implemented
+      ts: "2026-11-27T11:46:09Z"
+      host: yoga
+      summary: |
+        On work/2421-mmbq. Criteria 1-3: the waited marker is replaced by "off-cpu Xs: not in this step own processes
+        (waiting, contention, or work in containers/daemons it does not count)"; each phase records the
+        /proc/pressure/cpu "some total" delta (5th phase-log column, read with the read builtin, -1 without PSI) and
+        is marked "(contended: Xs of CPU-pressure stall)" only when the stall exceeds 1 s and 25% of its wall clock;
+        a host with no PSI gets one line saying contention is not measured. Red first:
+        test-gate-phase-cpu-under-contention.lua (12 arms) fails 4 on trunk, among them the pinned-hogs phase marked
+        contended; a phase whose CPU work runs in a detached non-child process reads off-cpu and NOT contended (the
+        839-veey A/B case). A loose-threshold mutant (contended whenever PSI reads) fails three controls. My first
+        contended arm matched the phase name "contended phase" and passed on trunk; the arms now match "(contended:".

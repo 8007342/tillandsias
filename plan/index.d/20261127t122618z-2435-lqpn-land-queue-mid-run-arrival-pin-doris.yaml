@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by doris-windows at macuahuitl's request: pin the land queue's mid-run arrival behaviour.
+packets:
+  - packet_id: land-queue-mid-run-arrival-pin
+    order: 2435-lqpn
+    status: in_progress
+    kind: test
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [land-queue, fixture]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-land-queue-mid-run-arrival.lua
+      - scripts/gate-steps.d/984-2435-lqpn.step
+    related: [2143-z5uj, 2433-lqcm]
+    title: |
+      Pin it: a PR that becomes landable during a land run lands in that run
+    context: |
+      Building 2433-lqcm's option A showed it already exists: pass 1 re-reads the queue before every pick,
+      including the pick after the last candidate (2143-z5uj). This fixture pins that, so the design's
+      premise (the wait between lands is an idle queue, not arrivals a run left behind) stays true.
+    verifiable_closure: |
+      test-land-queue-mid-run-arrival.lua (step 984): ok, 3 arms, on Linux; with the re-read at
+      land-queue.sh next_candidate disabled, arms 1 and 2 fail (landed=1).
+    unscoreable: "a pin; its own mutation check"
+    next_action: Land it.
