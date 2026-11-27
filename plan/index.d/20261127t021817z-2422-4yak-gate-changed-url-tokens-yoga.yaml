@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: gate-changed-reads-a-url-as-the-scripts-directory
+    order: "2422-4yak"
+    status: in_progress
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, velocity]
+    estimated_hours: 2
+    owned_files: [scripts/gate-changed.sh, scripts/lua/test-gate-changed-selects-by-input.lua]
+    title: "gate-changed maps every scripts/ change to a tillandsias-headless build because API URLs ending /workers/scripts resolve to scripts/"
+    context: |
+      MEASURED on yoga 2026-11-27 (trunk eae062384): gate-changed.sh --list --files <one .sh or .txt under scripts/>
+      selects crates=1/28, tillandsias-headless, for merge-floor-driver.sh, check-issue-citation-convention.sh and
+      portability/checkout-writers.txt alike. --map gives crate:crates/tillandsias-headless an input of the bare prefix
+      scripts/. CAUSE: the token extractor's resolve() strips leading components until a repo path exists, so Cloudflare
+      API URLs in cloud_usage.rs, cloudflare_mcp.rs and cloudflare_worker_deploy.rs (".../accounts/{account}/workers/scripts")
+      resolve to scripts/. Every change under scripts/ therefore builds and tests the largest crate. Coordinator 2026-11-27:
+      likely the bigger velocity win than the declaration tranche.
+    exit_criteria:
+      - "Red first: a stub crate whose source names an https URL ending /workers/scripts is NOT selected by a change under scripts/ (new arm of test-gate-changed-selects-by-input.lua; red on trunk)."
+      - "On the real tree, --list for a scripts/ .sh selects crates=0/28 unless a crate genuinely names that path; the three measured subjects recorded before/after."
+    unscoreable: "fixture-scored: test-gate-changed-selects-by-input.lua"
+    provenance: "yoga, from the #1424 velocity measurement, 2026-11-27"
+    related: [2261-8gx5, 2239-5gb5]
+    events:
+      - {type: claimed, ts: "2026-11-27T02:18:17Z", host: yoga, summary: "claimed; work ref work/2422-4yak"}
