@@ -1,4 +1,5 @@
 -- @trace order:1316-bnzt, order:2398-zvug, spec:ci-release
+-- inputs: build.sh .gitignore methodology/convergence.yaml methodology/multi-host-development.yaml scripts/allocate-gate-step-prefix.sh scripts/attest-native-lint.sh scripts/build-sidecar.sh scripts/change-class.sh scripts/check-native-lint-attested.sh scripts/check-plan-binary-current.sh scripts/gate-changed.sh scripts/gate-stamp.sh scripts/land-on-platform-branch.sh scripts/land-queue.sh scripts/lib-freeze-paths.sh scripts/lua/check-carried-obligations.lua scripts/lua/land-queue-host-door.lua scripts/lua/shadow-intake.lua scripts/lua/test-land-queue-eviction-comment.lua scripts/plan-binary-probe.sh scripts/release-freeze.sh lib/lua/common/ crates/tillandsias-plan/
 -- @env PATH HOME TMPDIR
 --
 -- test-land-queue-landing.lua — scripts/land-queue.sh, arms 1-13 of the former
