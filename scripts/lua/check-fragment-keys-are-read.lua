@@ -115,12 +115,13 @@ table.sort(files)
 local READ_KEYS = " packets events fields status capabilities "
 local NON_FOLD_CHANNELS = " "
 
+local SRC = require("common.listed_read").read_all("fragment-keys-are-read", files, function(name) return DIR .. "/" .. name end)
 local violations, checked = 0, 0
 for _, name in ipairs(files) do
     local f = DIR .. "/" .. name
     checked = checked + 1
-    local okr, body = pcall(fs.read, f)
-    if okr and type(body) == "string" then
+    local body = SRC[f]
+    if type(body) == "string" then
         for _, line in ipairs(text.lines(body)) do
             local key = line:match("^([%a_][%w_]*):")
             if key and not READ_KEYS:find(" " .. key .. " ", 1, true)
