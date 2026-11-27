@@ -45,10 +45,11 @@ local REDUCERS = { "| max", "| join(", "| add", "| length", "| first", "| any", 
 
 local files = fs.walk(SCAN_DIR, { suffix = ".sh" })
 table.sort(files)
+local SRC = require("common.listed_read").read_all("jq-multiline-capture-strips-cr", files)
 local violations, multiline = {}, 0
 for _, file in ipairs(files) do
-    local ok, body = pcall(fs.read, file)
-    if ok and body then
+    local body = SRC[file]
+    if body then
         local n = 0
         for line in (body .. "\n"):gmatch("(.-)\n") do
             n = n + 1

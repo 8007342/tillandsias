@@ -152,10 +152,14 @@ end
 
 -- 2) wholly untracked litmus files: every command line is "added"
 local untracked = git({ "ls-files", "--others", "--exclude-standard", "--", GLOB })
+local new_files = {}
 for _, f in ipairs(text.lines(untracked.stdout or "")) do
-    if f ~= "" and fs.exists(f) and not has_negative(f) then
-        local ok, body = pcall(fs.read, f)
-        for _, l in ipairs(text.lines((ok and body) or "")) do
+    if f ~= "" and fs.exists(f) then new_files[#new_files + 1] = f end
+end
+local NEW_SRC = require("common.listed_read").read_all(NAME, new_files)
+for _, f in ipairs(new_files) do
+    if not has_negative(f) then
+        for _, l in ipairs(text.lines(NEW_SRC[f])) do
             local cmd = after_command(l)
             if cmd and is_pin(cmd) then report(f, cmd) end
         end

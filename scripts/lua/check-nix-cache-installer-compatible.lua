@@ -31,10 +31,11 @@ for _, f in ipairs(fs.list(DIR) or {}) do
 end
 if #files == 0 then verdict.could_not_run("nix-cache-installer", "empty-population:" .. DIR) end
 
+local SRC = require("common.listed_read").read_all("nix-cache-installer", files)
 local bad, judged = 0, 0
 for _, wf in ipairs(files) do
-    local ok, body = pcall(fs.read, wf)
-    if ok and type(body) == "string" then
+    local body = SRC[wf]
+    if type(body) == "string" then
         local uses, has_cache = {}, false
         for line in (body .. "\n"):gmatch("([^\n]*)\n") do
             if not line:match("^%s*#") then

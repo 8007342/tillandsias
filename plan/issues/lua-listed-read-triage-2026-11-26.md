@@ -15,6 +15,8 @@ A checker that wraps each read of a LISTED file in `pcall(fs.read)` and drops th
 **Method**: a script found each site, its enclosing `for … do` loop, and whether the next six lines report the failure. Every in-loop site was then read by hand. The overrides are the eight rows whose reasons differ from the defaults.
 
 Batch 1 is done: scripts/lua/test-listed-read-blocks-batch1.lua (gate step 962), red 8/8 first. check-centicolon-ratchet:71 and check-cheatsheet-source-anchors:72 moved to A while it was built (they fail safe).
+Batch 2 is done: test-listed-read-blocks-batch2.lua (gate step 961, #1692), red 10/10 first.
+Batch 3 is done: test-listed-read-blocks-batch3.lua (gate step 941), red 8/8 first. common.listed_read now names a repeated unreadable path once. check-guest-unit-hardening:30 moved to A (it fails safe). check-no-base64-script-injection also blocks when its git grep fails on an unreadable file, which it used to swallow as no candidates.
 
 ## Batches (8–10 checkers per PR, each red first on a planted unreadable listed file)
 
@@ -38,7 +40,6 @@ Batch 1 is done: scripts/lua/test-listed-read-blocks-batch1.lua (gate step 962),
   - `scripts/lua/check-framing-raw-decodes.lua`
   - `scripts/lua/check-grep-patterns-compile.lua`
 - batch 3:
-  - `scripts/lua/check-guest-unit-hardening.lua`
   - `scripts/lua/check-image-pins.lua`
   - `scripts/lua/check-jq-multiline-capture-strips-cr.lua`
   - `scripts/lua/check-launch-artifacts-untracked.lua`
@@ -136,7 +137,7 @@ Batch 1 is done: scripts/lua/test-listed-read-blocks-batch1.lua (gate step 962),
 | `scripts/lua/check-framing-raw-decodes.lua:63` | B | a file from a listing whose read failure is dropped, so the check can pass over a file it never read |
 | `scripts/lua/check-gate-step-not-also-inline.lua:23` | A | single read outside a listing loop: an optional or probed file; outside this sweep |
 | `scripts/lua/check-grep-patterns-compile.lua:65` | B | a file from a listing whose read failure is dropped, so the check can pass over a file it never read |
-| `scripts/lua/check-guest-unit-hardening.lua:30` | B | a file from a listing whose read failure is dropped, so the check can pass over a file it never read |
+| `scripts/lua/check-guest-unit-hardening.lua:30` | A | an unreadable unit file is collected as missing and blocks (moved from B in batch 3: it fails safe) |
 | `scripts/lua/check-image-pins.lua:118` | B | a file from a listing whose read failure is dropped, so the check can pass over a file it never read |
 | `scripts/lua/check-image-pins.lua:171` | A | failure is reported (emit/refuse/blocked/could-not-run) |
 | `scripts/lua/check-imagegen-tier-sources-ungated.lua:38` | A | failure is reported (emit/refuse/blocked/could-not-run) |
