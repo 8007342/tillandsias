@@ -68,7 +68,12 @@ each account may hold only a limited number, and it is in preview.
 
 **Options for the operator, no-timer options first.**
 
-- **A. Re-run on exit, at a natural boundary.** When a run ends, land-queue lists the non-draft PRs into
+- **A. Re-run on exit — ALREADY THE BEHAVIOUR (measured 2026-11-27).** Pass 1 re-reads the queue before
+  every candidate, including the pick after the last one (2143-z5uj). In a fixture where the stub gate adds
+  #2 while #1, the only candidate, gates, unmodified trunk lands both in one invocation (landed=2), and
+  three arrivals in a row land too (landed=3). So nothing that arrives during a run is stranded, and the
+  ~17 min is time the queue sits IDLE. Only B or D addresses that. The original proposal, kept for the
+  record: When a run ends, land-queue lists the non-draft PRs into
   linux-next once more. If any PR is new or updated since the run's start snapshot, it starts another run
   under the same lock. That is one check per run, not a timer. It drains everything that arrives while a
   run is busy, which is where most of the backlog builds. It cannot start an idle queue.
@@ -84,7 +89,7 @@ each account may hold only a limited number, and it is in preview.
   it is the polling cadence the standing rule reserves for the operator. Offered only if A and B are not
   enough.
 
-**Recommended: A + B.** A covers the busy queue, and B covers the idle queue. Both reuse the existing lock
+**Recommended: B.** A turned out to be existing behaviour, and B is the only no-timer option that starts an idle queue. Both reuse the existing lock
 (`skip:land-queue:in-flight` on overlap) and add no cron or timer.
 
 **What does not change.** Merge order, the gate, eviction, trains, and "one landing at a time". A
@@ -95,6 +100,5 @@ queue.
 
 **Open questions for the operator.**
 
-- May A (self re-run at the end of a run) be enabled?
 - May B (a peer's READY message starts a run without the coordinator) be enabled?
 - Is D wanted at all, and at what cadence?
