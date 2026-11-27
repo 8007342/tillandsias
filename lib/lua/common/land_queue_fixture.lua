@@ -173,6 +173,9 @@ function L:run_queue(S, opts, ...)
         { "TILLANDSIAS_LAND_QUEUE_TRAIN_LOG", o("TRAIN_LOG", T .. "/trains.log") },
         { "TILLANDSIAS_LAND_QUEUE_DAILY_SKIP", o("DAILY_SKIP", "1") },
         { "TILLANDSIAS_LAND_QUEUE_DAILY_MAX_AGE_S", o("DAILY_MAX_AGE_S", "86400") },
+        -- 2432-ik2d: an empty queue cuts a stale proof by default; arms that are not about
+        -- that must not see an extra gate run and an attest push (test-land-queue-daily-autocut.lua is).
+        { "TILLANDSIAS_LAND_QUEUE_DAILY_AUTO", o("DAILY_AUTO", "0") },
         { "TILLANDSIAS_LAND_QUEUE_PLAN_DEPINFO", o("PLAN_DEPINFO", T .. "/no-plan-depinfo.d") },
         { "TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH_STAMP", o("PLAN_REFRESH_STAMP", T .. "/plan-refresh-stamp") },
         { "TILLANDSIAS_LAND_QUEUE_HOST_DOOR", o("HOST_DOOR_CMD", "") },
