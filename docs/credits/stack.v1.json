@@ -10464,6 +10464,24 @@
       "from": "image:imagegen",
       "kind": "package",
       "optional": false,
+      "to": "pkg:fedora:lua"
+    },
+    {
+      "from": "image:imagegen",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:fedora:lua-filesystem"
+    },
+    {
+      "from": "image:imagegen",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:fedora:lua-lpeg"
+    },
+    {
+      "from": "image:imagegen",
+      "kind": "package",
+      "optional": false,
       "to": "pkg:fedora:mesa-vulkan-drivers"
     },
     {
@@ -59495,6 +59513,7 @@
       "optional": false,
       "pulled_by": [
         "image:default-base",
+        "image:imagegen",
         "image:inference"
       ],
       "source": "images/default/Containerfile.base",
@@ -59513,6 +59532,7 @@
       "optional": false,
       "pulled_by": [
         "image:default-base",
+        "image:imagegen",
         "image:inference"
       ],
       "source": "images/default/Containerfile.base",
@@ -59531,6 +59551,7 @@
       "optional": false,
       "pulled_by": [
         "image:default-base",
+        "image:imagegen",
         "image:inference"
       ],
       "source": "images/default/Containerfile.base",
@@ -61165,7 +61186,7 @@
   "schema": "tillandsias-stack/v1",
   "summary": {
     "components": 57,
-    "edges": 3131,
+    "edges": 3134,
     "license_families": {
       "model": 7,
       "permissive": 1718,
