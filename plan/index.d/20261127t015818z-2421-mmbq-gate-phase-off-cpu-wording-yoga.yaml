@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: gate-phase-waited-marker-claims-contention-it-cannot-see
+    order: "2421-mmbq"
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [gate, metrics]
+    estimated_hours: 3
+    owned_files: [build.sh, scripts/lua/test-gate-phase-cpu-under-contention.lua]
+    title: "the gate's (waited:) marker says 'host busy' where its CPU number only means 'not this shell's children'"
+    context: |
+      MEASURED by macuahuitl 2026-11-27 (839-veey A/B, trunk 328ff6c3b, FORCE_CHECK=1 GATE_PROFILE=1, logs at
+      ~/claudia/ab-839/ on macuahuitl). B (20 CPU hogs = nproc, load to 25.7) holds prediction 1: inflated phases
+      are marked and their cpu matches A's (credential fixtures 5.3s in both). A (idle, load 1.7) has 34 of 480
+      marked, e.g. credential fixtures 41.1s wall / 5.3s cpu and tool-materialization 32.3s / 2.3s.
+      CAUSE: bash `times` counts only children the gate shell waited for; a podman container's processes run
+      under conmon outside that tree, and a daemon's work never reaches it. So off-CPU time is not contention,
+      and the marker's wording ("the host was busy or the step blocked") is falsified, not the measurement.
+    exit_criteria:
+      - "The marker states only what the number shows: off-CPU time not spent in the step's own processes (waiting, contention, or work in containers/daemons it does not count)."
+      - "On Linux each phase also records the CPU-pressure stall delta (/proc/pressure/cpu some total), and a 'contended' mark appears only when that stall is a material share of the phase's wall clock; red first: an idle phase whose work runs in a non-child process is off-cpu but NOT contended, and the pinned-hogs phase is contended."
+      - "Where PSI is absent (macOS, msys) the report says so by name and keeps only the off-cpu wording."
+    unscoreable: "fixture-scored: test-gate-phase-cpu-under-contention.lua"
+    provenance: "macuahuitl's 839-veey A/B, 2026-11-27; analysis yoga"
+    related: [839-veey]
