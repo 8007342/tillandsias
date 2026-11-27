@@ -1,4 +1,5 @@
 -- @trace order:1437-khnx, order:1832-5a9z, spec:meta-orchestration, order:2385-psbb
+-- inputs: methodology/convergence.yaml methodology/distributed-work.yaml plan/index.yaml scripts/agent-identity.sh scripts/build-image.sh scripts/derive-host-identity.sh scripts/lib/tool-dispatch.sh scripts/lua/check-claims-across-branches.lua scripts/lua/test-capability-routing.lua scripts/lua/test-claims-across-branches.lua scripts/nix-toolbox.sh scripts/plan-binary-probe.sh scripts/select-work-batch.sh lib/lua/common/ crates/tillandsias-plan/
 -- @env PATH HOME TMPDIR
 --
 -- test-packet-tier-fields.lua — fixture for the tier-routing scalars `size` and

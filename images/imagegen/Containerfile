@@ -45,7 +45,7 @@ LABEL io.tillandsias.imagegen.sdcpp-tag="${SDCPP_TAG}"
 # ICD. The four X/glvnd libraries are what the NVIDIA ICD (mounted by CDI)
 # links against; without them it fails to load and the run is silently CPU.
 RUN dnf -y install --setopt=install_weak_deps=False vulkan-loader mesa-vulkan-drivers \
-        libX11 libXext libglvnd-glx libglvnd-egl libgomp \
+        libX11 libXext libglvnd-glx libglvnd-egl libgomp lua lua-filesystem lua-lpeg \
     && dnf clean all \
     && useradd -u 1000 -m -s /sbin/nologin imagegen
 COPY --from=build /src/build/bin/sd-server /src/build/bin/sd-cli /usr/local/bin/

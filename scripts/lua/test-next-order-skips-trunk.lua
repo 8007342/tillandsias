@@ -1,4 +1,5 @@
 -- @env TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
+-- inputs: plan/index.d/20260928t130215z-33163463-yoga-silverblue.yaml Cargo.lock plan/index.yaml lib/lua/common/ crates/tillandsias-plan/
 -- @trace order:2152-u7s4
 --
 -- test-next-order-skips-trunk.lua — `next-order` never mints a prefix trunk

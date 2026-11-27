@@ -1137,7 +1137,10 @@ imagegen	fedora	libzstd	1.5.7-5.fc44	BSD-3-Clause OR GPL-2.0-only
 imagegen	fedora	llvm-filesystem	22.1.8-4.fc44	Apache-2.0 WITH LLVM-exception OR NCSA
 imagegen	fedora	llvm-libs	22.1.8-4.fc44	Apache-2.0 WITH LLVM-exception OR NCSA
 imagegen	fedora	lm_sensors-libs	3.6.0-24.fc44	LGPL-2.1-or-later
+imagegen	fedora	lua	5.4.8-5.fc44	MIT
+imagegen	fedora	lua-filesystem	1.8.0-16.fc44	MIT
 imagegen	fedora	lua-libs	5.4.8-5.fc44	MIT
+imagegen	fedora	lua-lpeg	1.1.0-7.fc44	MIT
 imagegen	fedora	lz4-libs	1.10.0-4.fc44	GPL-2.0-or-later AND BSD-2-Clause
 imagegen	fedora	mesa-dri-drivers	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
 imagegen	fedora	mesa-filesystem	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
