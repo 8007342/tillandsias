@@ -10275,6 +10275,24 @@
       "to": "oci:docker.io/library/alpine:3.22"
     },
     {
+      "from": "image:enclave-fetch",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4"
+    },
+    {
+      "from": "image:enclave-fetch",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-filesystem"
+    },
+    {
+      "from": "image:enclave-fetch",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-lpeg"
+    },
+    {
       "from": "image:flutter",
       "kind": "base-image",
       "optional": false,
@@ -10633,6 +10651,24 @@
       "kind": "package",
       "optional": false,
       "to": "pkg:debian:libgomp1"
+    },
+    {
+      "from": "image:imagegen-cuda",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-filesystem"
+    },
+    {
+      "from": "image:imagegen-cuda",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-lpeg"
+    },
+    {
+      "from": "image:imagegen-cuda",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua5.4"
     },
     {
       "from": "image:imagegen-cuda",
@@ -57963,14 +57999,15 @@
       "name": "lua5.4",
       "optional": false,
       "pulled_by": [
+        "image:enclave-fetch",
         "image:git",
         "image:proxy",
         "image:router",
         "image:vault",
         "image:web"
       ],
-      "source": "images/git/Containerfile",
-      "version": "5.4.6-r1"
+      "source": "images/enclave-fetch/Containerfile",
+      "version": "5.4.7-r0"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=lua5.4-filesystem",
@@ -57984,13 +58021,14 @@
       "name": "lua5.4-filesystem",
       "optional": false,
       "pulled_by": [
+        "image:enclave-fetch",
         "image:git",
         "image:proxy",
         "image:router",
         "image:vault",
         "image:web"
       ],
-      "source": "images/git/Containerfile",
+      "source": "images/enclave-fetch/Containerfile",
       "version": "1.8.0-r4"
     },
     {
@@ -58005,14 +58043,15 @@
       "name": "lua5.4-lpeg",
       "optional": false,
       "pulled_by": [
+        "image:enclave-fetch",
         "image:git",
         "image:proxy",
         "image:router",
         "image:vault",
         "image:web"
       ],
-      "source": "images/git/Containerfile",
-      "version": "1.0.2-r3"
+      "source": "images/enclave-fetch/Containerfile",
+      "version": "1.1.0-r0"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=nss-tools",
@@ -58381,9 +58420,10 @@
       "name": "lua-filesystem",
       "optional": true,
       "pulled_by": [
+        "image:imagegen-cuda",
         "image:webkit"
       ],
-      "source": "images/webkit/Containerfile",
+      "source": "images/imagegen/Containerfile.cuda",
       "version": "1.8.0-3"
     },
     {
@@ -58398,9 +58438,10 @@
       "name": "lua-lpeg",
       "optional": true,
       "pulled_by": [
+        "image:imagegen-cuda",
         "image:webkit"
       ],
-      "source": "images/webkit/Containerfile",
+      "source": "images/imagegen/Containerfile.cuda",
       "version": "1.0.2-2"
     },
     {
@@ -58415,9 +58456,10 @@
       "name": "lua5.4",
       "optional": true,
       "pulled_by": [
+        "image:imagegen-cuda",
         "image:webkit"
       ],
-      "source": "images/webkit/Containerfile",
+      "source": "images/imagegen/Containerfile.cuda",
       "version": "5.4.6-3build2"
     },
     {
@@ -58563,18 +58605,18 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/bat/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:bat",
-      "license": "unknown",
-      "license_family": "unknown",
-      "license_source": "none",
+      "license": "Apache-2.0 AND BSD-2-Clause AND BSD-2-Clause-Views AND BSD-3-Clause AND CC-BY-SA-3.0 AND LGPL-3.0-or-later AND GPL-2.0-only WITH GCC-exception-2.0 AND MIT AND Unicode-3.0 AND Unicode-DFS-2016 AND Unlicense AND WTFPL AND (0BSD OR MIT OR Apache-2.0) AND (Apache-2.0 OR BSL-1.0) AND (Apache-2.0 OR MIT) AND (Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT) AND (MIT OR Apache-2.0 OR Zlib) AND (Unlicense OR MIT)",
+      "license_family": "permissive",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "bat",
       "optional": false,
       "pulled_by": [
         "image:default-base"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "0.26.1-4.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/black/",
@@ -59026,11 +59068,11 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/git/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:git",
-      "license": "unknown",
-      "license_family": "unknown",
-      "license_source": "none",
+      "license": "BSD-3-Clause AND GPL-2.0-only AND GPL-2.0-or-later AND LGPL-2.1-or-later AND MIT",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "git",
       "optional": false,
       "pulled_by": [
@@ -59038,7 +59080,7 @@
         "image:imagegen"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "2.56.1-1.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/git-delta/",
@@ -59369,18 +59411,18 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/jq/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:jq",
-      "license": "unknown",
+      "license": "MIT AND ICU AND CC-BY-3.0",
       "license_family": "unknown",
-      "license_source": "none",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "jq",
       "optional": false,
       "pulled_by": [
         "image:default-base"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "1.8.1-3.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/just/",
@@ -59755,18 +59797,18 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/ncurses/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:ncurses",
-      "license": "unknown",
-      "license_family": "unknown",
-      "license_source": "none",
+      "license": "MIT-open-group",
+      "license_family": "permissive",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "ncurses",
       "optional": false,
       "pulled_by": [
         "image:default-base"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "6.6-1.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/ncurses-term/",
@@ -60387,18 +60429,18 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/unzip/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:unzip",
-      "license": "unknown",
+      "license": "Info-ZIP",
       "license_family": "unknown",
-      "license_source": "none",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "unzip",
       "optional": false,
       "pulled_by": [
         "image:default-base"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "6.0-69.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/uv/",
@@ -61276,13 +61318,13 @@
   "schema": "tillandsias-stack/v1",
   "summary": {
     "components": 57,
-    "edges": 3140,
+    "edges": 3143,
     "license_families": {
       "model": 7,
-      "permissive": 1718,
+      "permissive": 1720,
       "service": 15,
-      "strong-copyleft": 26,
-      "unknown": 161,
+      "strong-copyleft": 27,
+      "unknown": 158,
       "weak-copyleft": 20
     },
     "nodes": 1947
