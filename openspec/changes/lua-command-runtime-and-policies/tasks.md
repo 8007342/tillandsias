@@ -89,7 +89,7 @@ retirement, Lua land rewrite or draft-spec activation is implied.
 ## 4. Migration instruments
 
 - [x] 4.1 `1443-xkwb` bootstrap-shell allowlist; population lines on the
-      three deciders; `check-decider-retirement.sh`. S / sonnet.
+      three deciders; `scripts/lua/check-decider-retirement.lua`. S / sonnet.
 - [ ] 4.2 (existing rows, not re-filed) 1384-bqhy `script run` + verdict
       module; 1384-bxhk shell ratchet; 1384-ddua decider pilot;
       902-5bf9 litmus `steps:`; 1384-j3cv build.sh launcher.

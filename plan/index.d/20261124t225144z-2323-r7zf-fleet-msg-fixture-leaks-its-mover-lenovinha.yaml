@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: fleet-msg-same-host-fixture-leaks-its-mover
+    order: 2323-r7zf
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [release-gate]
+    estimated_hours: 1
+    title: |
+      test-fleet-msg-same-host.sh leaves its tillandsias --msg-serve running after every pass, holding whatever descriptors it inherited; on macuahuitl that was the land lock, for about 80 minutes.
+    context: |
+      The fixture has an EXIT trap that kills the mover, but the mover is started as a shell FUNCTION in the background, so the recorded pid is the function's subshell and the binary is its child. The trap kills the subshell and the binary is orphaned. One such orphan was running on lenovinha since 12:38 the same day.
+      The mover is started with exec in that subshell, so the recorded pid is the binary, and with fd 9 (the land lock) closed.
+    exit_criteria:
+      - "after the test no --msg-serve process is left under its throwaway HOME"
+      - "the mover does not hold a descriptor 9 the caller had open"
+      - "the fixture itself fails when the pid it would kill is not the server"
+    verifiable_closure: "litmus:fleet-msg-same-host"
+    next_action: "Land work/2323-r7zf."
+    provenance: coordinator report 2026-11-24; cause measured and filed by lenovinha.
+    related: [1506-q7ab]
+    events:
+      - {type: filed, ts: '2026-11-24T22:51:44Z', host: lenovinha, summary: leaked mover measured and filed}

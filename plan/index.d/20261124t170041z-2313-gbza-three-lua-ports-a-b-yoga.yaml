@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: agent-identity-brew-shim-and-base-ledger-fixtures-ported-to-lua
+    order: "2313-gbza"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/test-agent-identity.lua
+      - scripts/lua/test-brew-shim-reentrancy.lua
+      - scripts/lua/test-base-ledger-status-loss.lua
+    title: "three shell fixtures ported to Lua: agent identity, brew shim reentrancy, base ledger status loss"
+    context: |
+      ports: test-agent-identity, test-brew-shim-reentrancy, test-base-ledger-status-loss.
+      Claimed by yoga before the work, in the coordinator's test-[a-c]* range.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its subject is mutated; callers run the .lua; the three .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by build.sh and their litmus"
+    provenance: "coordinator queue 2026-11-24 (test-[a-c]* range), yoga"
+    related: [756-hn3a, 966-rq7f, 751-i9mb]
+    events:
+      - {type: claimed, ts: "2026-11-24T17:00:41Z", host: yoga, summary: "claimed; work ref work/2313-gbza"}

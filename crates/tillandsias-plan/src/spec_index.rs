@@ -144,7 +144,7 @@ pub fn resolve_dir() -> Option<String> {
 /// scripts/spec-index-ensure.sh and the consumer is this ladder; if they name
 /// different directories the index is written where nothing reads it, which is
 /// 890-t9pu's writer/reader defect. The shell side is pinned across its three
-/// carriers by scripts/check-spec-index-resolution-agreement.sh, and that guard
+/// carriers by scripts/lua/check-spec-index-resolution-agreement.lua, and that guard
 /// cannot see this file — so changing one without the other is a silent split.
 ///
 /// Discovery mirrors the shell block in scripts/spec-index-ensure.sh and its
@@ -418,7 +418,7 @@ mod tests {
     }
 
     fn fixture_entry(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("tilland-sie-{tag}-{}", std::process::id()));
+        let dir = crate::test_scratch::path(format!("tilland-sie-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("fixture dir");
         dir

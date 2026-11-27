@@ -38,6 +38,12 @@ record the pre/post `strace -f -e execve` count in the packet.
       best-effort, nothing on stdout; `mcp_now_ms`/`mcp_log_usage` signatures
       unchanged. `[mint on claim]`
 
+- [x] 1.6 D3.6 (2393-j27x): `lib-push-capability.sh` → `lua/push-capability.lua` (9 → 6
+      execve) and `lib-project-engine-capability.sh` → `lua/project-engine-capability.lua`
+      (20 → 9), red first; `lib-lane`, `lib-embed-endpoint`, `lib-provider-limit` measured
+      and kept shell by the admission test. `[2393-j27x]`
+- [ ] 1.7 D3.6: `lib-expert-capability.sh` (24 execve), split in two helpers. `[mint on claim]`
+
 ## 2. Packaging and guards
 
 - [x] 2.1 `Containerfile` copies `images/default/lua/` to

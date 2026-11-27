@@ -1,5 +1,5 @@
 -- @trace order:2007-vy3p, order:2006-wahn
--- @env PATH
+-- @env PATH TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
 --
 -- test-grep-exit-two-fails-closed.lua — a push or credential gate whose grep
 -- FAILS (exit 2: a pattern this grep rejects, or a file it cannot read) must
@@ -14,7 +14,7 @@
 --   2 HELPER    the hook's _grep_refuses refuses on a match AND on exit 2, and
 --               passes only on a clean miss
 --   3 WIRED     the hook's attestation-grammar check goes through _grep_refuses
---   4 PURGE     check-purge-clears-vault-credentials.sh reports an unreadable
+--   4 PURGE     check-purge-clears-vault-credentials.lua reports an unreadable
 --               purge script as a violation; the pre-fix form skipped it and
 --               answered ok
 --   5 COMPILE   check-grep-patterns-compile.lua refuses a script holding the
@@ -33,7 +33,7 @@ local REL = "target/plan-scratch/g2" .. tostring(math.random(1000, 9999))
 fs.mkdir(REL)
 local DIR = ROOT .. "/" .. REL
 local HOOK = ROOT .. "/scripts/hooks/pre-push-local-gate.sh"
-local PURGE = "scripts/check-purge-clears-vault-credentials.sh"
+local PURGE = "scripts/lua/check-purge-clears-vault-credentials.lua"
 
 local failed, passed = {}, 0
 local function arm(name, cond, got)
@@ -86,12 +86,21 @@ arm("3 WIRED the attestation-grammar check goes through _grep_refuses",
         and hook:find("grep %-qvE '%^%(|") == nil,
     "the hook's grammar line")
 
--- 4: the purge gate on a scratch repo with one unreadable purge script.
+-- 4: the purge gate on a scratch repo with one unreadable purge script. The
+-- guard is Lua; its door is confined to the repository it runs in, and the
+-- scratch repo (cwd) is that repository, so the copied guard reads it.
+local PLAN = env.get("TILLANDSIAS_PLAN_BIN") or ""
+if PLAN == "" then PLAN = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN") or "" end
+if PLAN == "" then
+    PLAN = ROOT .. "/target/release/tillandsias-plan"
+    if not fs.exists("target/release/tillandsias-plan") then PLAN = "tillandsias-plan" end
+end
 local repo = DIR .. "/repo"
+local GUARD_NAME = PURGE:match("[^/]+$")
 local setup = table.concat({
     "set -e",
     "mkdir -p '" .. repo .. "/scripts'",
-    "cp '" .. ROOT .. "/" .. PURGE .. "' '" .. repo .. "/scripts/'",
+    "cp '" .. ROOT .. "/" .. PURGE .. "' '" .. repo .. "/" .. GUARD_NAME .. "'",
     "printf 'pub fn reset_state_once() -> i32 {\\n    keep();\\n}\\npub fn reset_guest_once() {}\\n' > '" .. repo .. "/soft.rs'",
     "printf '#!/bin/sh\\npodman system reset --force\\n' > '" .. repo .. "/scripts/wipe.sh'",
     "cd '" .. repo .. "' && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -qm fixture",
@@ -103,24 +112,26 @@ if s.code ~= 0 then
 else
     local function run_purge(script)
         local r = proc.run({
-            argv = { "bash", script },
+            argv = { PLAN, "script", "run", repo .. "/" .. script },
             cwd = repo,
-            env = { PATH = env.get("PATH") or "/usr/bin:/bin", TILLANDSIAS_PURGE_GUARD_SOFT_SRC = repo .. "/soft.rs" },
+            -- The runtime roots at TILLANDSIAS_REPO_ROOT when the caller set it
+            -- (it passes to children): pin it to the scratch repo.
+            env = { PATH = env.get("PATH") or "/usr/bin:/bin", TILLANDSIAS_REPO_ROOT = repo, TILLANDSIAS_PURGE_GUARD_SOFT_SRC = repo .. "/soft.rs" },
             timeout_ms = 60000,
         })
         return text.trim(r.stdout or ""), r.code
     end
-    local now, now_rc = run_purge("scripts/" .. PURGE:match("[^/]+$"))
-    -- The pre-fix form, rebuilt from this file by undoing the fix, must answer ok.
-    local pre = bash("sed -e 's/^    _rc=0; grep -qF -- \"\\$DESTROYS\" \"\\$f\" || _rc=\\$?$/    grep -qF -- \"$DESTROYS\" \"$f\" || continue/' " ..
-        "-e 's/^    _rc=0; grep -qE \"^\\[^#\\]\\*\\${LINUX_DESTROYS}\" \"\\$f\" || _rc=\\$?$/    grep -qE \"^[^#]*${LINUX_DESTROYS}\" \"$f\" || continue/' " ..
-        "-e '/^    case \"\\$_rc\" in 0) ;; 1) continue ;; \\*) violations+=/d' '" .. repo .. "/scripts/" .. PURGE:match("[^/]+$") .. "' > '" .. repo .. "/pre-fix.sh'")
-    local before, before_rc = run_purge("pre-fix.sh")
+    local now, now_rc = run_purge(GUARD_NAME)
+    -- The pre-fix form, rebuilt from the guard by undoing the fix (an
+    -- unreadable file skipped instead of reported), must answer ok.
+    local src = fs.read(repo .. "/" .. GUARD_NAME)
+    local pre_src, n = src:gsub('violations%[#violations %+ 1%] = f %.%. ":unreadable%-grep%-exit%-2"', "-- pre-fix: skipped")
+    fs.write(repo .. "/pre-fix.lua", pre_src)
+    local before, before_rc = run_purge("pre-fix.lua")
     arm("4 PURGE an unreadable purge script is a violation now, and the pre-fix form answered ok",
-        now_rc == 1 and now:find("scripts/wipe.sh:unreadable-grep-exit-2", 1, true) ~= nil
+        n == 2 and now_rc == 1 and now:find("scripts/wipe.sh:unreadable-grep-exit-2", 1, true) ~= nil
             and before_rc == 0 and before:find("^ok:purge%-clears%-vault%-credentials") ~= nil,
-        "now rc=" .. tostring(now_rc) .. " [" .. now .. "]; pre-fix rc=" .. tostring(before_rc) .. " [" .. before .. "]" ..
-            (pre.code ~= 0 and (" (pre-fix rebuild failed: " .. tostring(pre.stderr) .. ")") or ""))
+        "now rc=" .. tostring(now_rc) .. " [" .. now .. "]; pre-fix (" .. n .. " edits) rc=" .. tostring(before_rc) .. " [" .. before .. "]")
 end
 
 -- 5: the pattern-compile decider, on a scratch tree, with a negative control.

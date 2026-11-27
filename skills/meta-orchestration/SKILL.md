@@ -445,6 +445,19 @@ scripts/check-daily-maintenance.sh check     # exit 0 = today's gate ran; skip t
 Read the push guards too, every time, even when the day's gate is current
 (see "Push Guards Armed" below): `tillandsias-plan script run scripts/lua/check-hooks-armed.lua`.
 
+**On `due:*`, take the cycle's startup boundary BEFORE running the body** (order
+888-3d6x). The body is not inert: it runs the gates it maintains, and one of
+them can fail and need a fix. Anything the body changes before Start Of Cycle
+step 3 exists predates the boundary, so the cycle cannot attest it and loses its
+`MO-FULL:` marker (measured on tlatoanis-macbook-air 2026-08-25: a dead size
+trigger the body found, fixed in three files, cost that cycle its marker). Take
+it in the checkout you will work in, exactly as step 3 does, and reuse it there:
+
+```bash
+boundary_dir="$(mktemp -d "${TMPDIR:-/tmp}/meta-orchestration-boundary.XXXXXX")"
+scripts/meta-orchestration-worktree-guard.sh snapshot "$boundary_dir"
+```
+
 It prints exactly one line matching
 `^(ok:daily-maintenance-(current|stamped):[0-9]{4}-[0-9]{2}-[0-9]{2}|skip:forge-exempt|due:(no-marker|unreadable-marker|stale:[0-9]{4}-[0-9]{2}-[0-9]{2}))$`
 and exits 0 only when today's gate is recorded. **`due:*` means run the body**;
@@ -952,6 +965,11 @@ filing — not the prompt.
    boundary_dir="$(mktemp -d "${TMPDIR:-/tmp}/meta-orchestration-boundary.XXXXXX")"
    scripts/meta-orchestration-worktree-guard.sh snapshot "$boundary_dir"
    ```
+   **Already taken at Start Of Day? Reuse it; do not snapshot again** (order
+   888-3d6x). When the daily check answered `due:*`, the boundary was taken
+   before the maintenance body ran (see "Start Of Day"), and a second snapshot
+   now would absorb anything the body changed into the baseline it is judged
+   against.
    The guard records `git status --porcelain=v1 -z --untracked-files=all`
    plus content hashes for every status-visible dirty path. If the worktree is
    dirty, treat every recorded path as immutable sibling/operator work unless
@@ -1636,7 +1654,7 @@ unbalanced backtick, a literal `$(`) — but understand what that can and cannot
 do: a *balanced* substitution leaves no trace at all, so the refusal is a
 backstop, not a guarantee. The file is the guarantee.
 
-Pinned by `scripts/test-ledger-prose-roundtrip.sh`, which asserts byte-identity
+Pinned by `scripts/lua/test-ledger-prose-roundtrip.lua`, which asserts byte-identity
 for text containing backticks, `$(...)` and `$VAR`.
 
 ### Multi-line `perl -0pi` edits are FORBIDDEN on this tree (hard rule, 2026-09-04)

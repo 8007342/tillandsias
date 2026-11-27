@@ -89,6 +89,20 @@ case "$(uname -s)" in
         ;;
 esac
 
+# ── Guard: `build.sh --floor` stays native (order 2130-fl0r) ─────────────
+# The floor is the memory-limited host's check: no build, ~seconds natively.
+# Across wsl.exe it booted the guest and read the tree over /mnt/c, where a
+# modified build.sh was invisible to `git diff` (1 of 2 changed paths, 35 s
+# against 1 s native, yolanda 2026-11-20).
+if [[ "$_W2_DIRECT" != 1 ]]; then
+    for _w2_arg in "$@"; do
+        if [[ "$_w2_arg" == "--floor" ]]; then
+            ! declare -F _w2_restore_caller_opts >/dev/null || _w2_restore_caller_opts
+            return 0 2>/dev/null || exit 0
+        fi
+    done
+fi
+
 # ── Guard: explicit skip ──────────────────────────────────────────────────
 if [[ "${TILLANDSIAS_SKIP_WSL2:-}" == "1" ]]; then
     [[ "$_W2_DIRECT" == 1 && $# -gt 0 ]] && exec "$@"
@@ -316,7 +330,10 @@ fi
 # process until the exec'd program exits. Always overwritten, never inherited.
 export TILLANDSIAS_WSL_HOST_WINPID
 TILLANDSIAS_WSL_HOST_WINPID="$(cat "/proc/$$/winpid" 2>/dev/null || true)"
-_W2_SESSION="$(printf '%q' "$(realpath --relative-to="$(pwd)" "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/wsl-guest-session.sh")")"
+# ORDER 2415-gntr: one spelling on both sides. Under a `cd` to git's C:/... toplevel, pwd says C:/Users/...
+# while this file's directory says /c/Users/...; realpath cannot relate the two and returns the absolute
+# /c/ path, which the guest cannot open (bash: /c/.../wsl-guest-session.sh: No such file, rc=127).
+_W2_SESSION="$(printf '%q' "$(realpath --relative-to="$(cygpath -u "$(pwd)")" "$(cygpath -u "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)")/wsl-guest-session.sh")")"
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-env-forward.sh"
 _ENV_FORWARD="$(tillandsias_env_forward_prefix)"
 
@@ -375,7 +392,7 @@ fi
 # Sourced from a build script: $0/$@ are the calling script and its args.
 # Re-exec it via a path RELATIVE to the checkout (the absolute Git-Bash
 # /c/... form does not exist inside the distro).
-SCRIPT_REL="$(realpath --relative-to="$(pwd)" "$0")"
+SCRIPT_REL="$(realpath --relative-to="$(cygpath -u "$(pwd)")" "$(cygpath -u "$(realpath "$0")")")"  # one spelling on both sides, as _W2_SESSION
 
 # ORDER 1267-uafx: A GATE ADVANCES BOTH LOCI, OR SAYS WHICH ONE IT DID NOT.
 # The gate builds the Linux ELF inside the distro and never the native

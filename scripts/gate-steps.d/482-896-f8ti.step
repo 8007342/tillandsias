@@ -1,0 +1,15 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 5: the next slowest movable blocks,
+# lenovinha timing log 2026-11-24).
+#
+# append-event must not write into the ARCHIVE (896-f8ti). Arms 3 and 4 are
+# the load-bearing pair: the naive fix ("refuse anything not in the base")
+# passes the refusal arms and breaks 699-usxc, the case that lets a packet
+# filed THIS cycle receive events. Falsified against the pre-fix binary —
+# arm 1 catches the acceptance, arm 3 catches the fragment it wrote.
+STEP_DESC="Checking the append-event archived-refusal fixture (896-f8ti)"
+STEP_LUA="scripts/lua/test-append-event-archived-refusal.lua"
+STEP_ERROR="append-event's archive guard regressed — either events are landing on completed work again, or legitimate writes to fragment-only packets are being refused"
+STEP_SECOND_REGIME="macbookair 2026-11-25 darwin ok:append-event-archived-refusal:5 arms"
+STEP_OK="append-event archived-refusal fixture passed"
+STEP_READS="scripts/lua/test-append-event-archived-refusal.lua"

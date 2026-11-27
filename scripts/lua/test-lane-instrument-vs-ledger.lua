@@ -23,7 +23,11 @@
 -- passed, <f> failed`, ok:lane-instrument-vs-ledger:<p> |
 -- violation:lane-instrument-vs-ledger:<f> | skip:lane-instrument-vs-ledger:no-validator
 
-local root = text.trim(proc.run{ argv = { "pwd", "-P" } }.stdout or "")
+-- 2246-fkea helpers (yolanda, msys: `pwd -P` gave /c/..., a "relative" cwd to
+-- the native runner, and a bare bash is WSL's there).
+local fixture = require "common.fixture"
+local SH = fixture.posix_shell()
+local root = fixture.repo_root()
 local GUARD = "scripts/hooks/pre-push-local-gate.sh"
 local pass, fail = 0, 0
 local function ok(m) out.line("ok:   " .. m); pass = pass + 1 end
@@ -44,7 +48,7 @@ local function cleanup() proc.run{ argv = { "find", W, "-delete" }, timeout_ms =
 -- A real validator for the control arm, resolved (and therefore EXECUTED) in
 -- the checkout rather than from inside the scratch repo (1056-5344).
 fs.write(rel .. "/resolve.sh", ". scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null\n")
-local real = text.trim(proc.run{ argv = { "bash", W .. "/resolve.sh" } }.stdout or "")
+local real = text.trim(proc.run{ argv = { SH, W .. "/resolve.sh" } }.stdout or "")
 if real:sub(1, 2) == "./" then real = root .. "/" .. real:sub(3) end
 if real == "" then
     cleanup()
@@ -84,7 +88,7 @@ proc.run{ argv = { "chmod", "+x", W .. "/stub" } }
 local function run_guard(planbin)
     local rsha = text.trim(git({ "rev-parse", "origin/linux-next" }).stdout or "")
     local head = text.trim(git({ "rev-parse", "HEAD" }).stdout or "")
-    local r = proc.run{ argv = { "bash", "scripts/hooks/pre-push-local-gate.sh" }, cwd = WC,
+    local r = proc.run{ argv = { SH, "scripts/hooks/pre-push-local-gate.sh" }, cwd = WC,
         stdin = "refs/heads/linux-next " .. head .. " refs/heads/linux-next " .. rsha .. "\n",
         env = { GIT_TERMINAL_PROMPT = "0", TILLANDSIAS_PLAN_BIN = planbin, TILLANDSIAS_GATE_DIFF_BASE = "", TILLANDSIAS_GATE_DIFF_BASE_ROOT = "" }, timeout_ms = 600000 }
     return (r.stdout or "") .. (r.stderr or "")

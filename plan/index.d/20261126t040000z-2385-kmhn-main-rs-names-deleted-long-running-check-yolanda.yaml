@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: main-rs-names-deleted-long-running-check
+    order: "2385-kmhn"
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [rust, plan-binary]
+    estimated_hours: 0.5
+    title: "main.rs names the deleted scripts/check-long-running-view.sh in a comment and a refusal string"
+    context: |
+      #1594 (2384-5fj5) ports check-long-running-view to scripts/lua/check-long-running-view.lua and deletes the .sh.
+      crates/tillandsias-plan/src/main.rs still names the .sh at ~10908 (comment) and ~10969 (the terminal-flip refusal,
+      "the wording check-long-running-view.sh uses"), so the refusal points users at a file that is gone.
+      Keep the refusal's "SAME COMMIT as this status change" wording: test-long-running-view-refuses-at-completion arm 6 pins it.
+    exit_criteria:
+      - "Both sites name scripts/lua/check-long-running-view.lua; test-long-running-view-refuses-at-completion stays green."
+    unscoreable: "a two-line string fix; its test is the existing fixture"
+    provenance: "coordinator 2026-11-26 (follow-up to #1594), yolanda"
+    related: [2384-5fj5, 1211-q9bm]
+    depends_on: [two-check-deciders-to-lua]
+    events:
+      - {type: filed, ts: "2026-11-26T01:17:16Z", host: yolanda, summary: "filed ready, to pick up after #1594 lands; not claimed"}

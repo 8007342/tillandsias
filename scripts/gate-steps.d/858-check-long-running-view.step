@@ -1,0 +1,21 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 4: the next slowest blocks,
+# measured one at a time on lenovinha). As a .step it is no build.sh edit, so it
+# never makes intake HEAVY; it runs in the pool (it writes only its own scratch).
+#
+# Order 251 criterion LM-04. `plan/long-running.md` is declared a filtered
+# view of the ledger's active multi_cycle packets and nothing enforced it.
+# It drifted in July (caught by a human verifier, repaired by hand, bought
+# six weeks) and again by 2026-08-25, when it was right about 7 of 31
+# packets: 11 rows, four naming obsoleted packets, twenty live ones absent.
+# A 23%-accurate sub-queue steers agents toward dead work.
+#
+# Checks MEMBERSHIP, not rendering: which orders appear is derivable and is
+# what rotted; the phase / blocked-on / verification columns are editorial
+# and fabricating them would make the view more convincing and no more true.
+STEP_DESC="Checking plan/long-running.md matches the live multi_cycle set (251 LM-04)"
+STEP_LUA="scripts/lua/check-long-running-view.lua"
+STEP_ERROR="the long-running view disagrees with the ledger (251 LM-04) — see the verdict line above"
+STEP_OK="Long-running view agreement check passed"
+STEP_SECOND_REGIME="yolanda 2026-11-26 msys ok:long-running-view:26 live packets listed"
+STEP_READS="plan/index.yaml plan/index.d/** plan/long-running.md scripts/lua/check-long-running-view.lua"

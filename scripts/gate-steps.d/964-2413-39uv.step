@@ -1,0 +1,11 @@
+# Gate step 2413-39uv — data, not code (order 1072-b7eq).
+#
+# build.sh --gate-steps used to turn a root it could not enter into "", match no
+# step, and exit 0. This pins that it refuses instead.
+STEP_DESC="Checking build.sh --gate-steps refuses a root it cannot enter (2413-39uv)"
+STEP_LUA="scripts/lua/test-gate-steps-root-unreadable.lua"
+STEP_ERROR="build.sh --gate-steps accepted an unreadable root, so a gate could run nothing and read green (2413-39uv) — see the FAIL lines above"
+STEP_OK="gate-steps root refusal passed"
+STEP_SECOND_REGIME="doris 2026-11-26 msys ok:gate-steps-root-unreadable:2 arms"
+STEP_SERIAL="runs a nested build.sh"
+STEP_READS="build.sh scripts/lua/test-gate-steps-root-unreadable.lua"

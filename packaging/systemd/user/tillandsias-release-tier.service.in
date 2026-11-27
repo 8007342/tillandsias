@@ -6,14 +6,14 @@
 # the very check it describes (890-27mv — it refused its own templates).
 [Unit]
 Description=Tillandsias release-tier run (the tier the release gates on, off the release path)
-Documentation=file:@CHECKOUT@/scripts/check-release-tier-freshness.sh
+Documentation=file:@CHECKOUT@/scripts/lua/check-release-tier-freshness.lua
 
 [Service]
 Type=oneshot
 WorkingDirectory=@CHECKOUT@
 # scripts/local-ci.sh with NO --phase runs every phase, which is the whole
 # point: `--phase <p>` writes a record covering only that phase, and
-# check-release-tier-freshness.sh reads a phase-only record as no answer at
+# check-release-tier-freshness.lua reads a phase-only record as no answer at
 # all (1174-6r4k). A timer that fired a phase-only run would keep this row's
 # defect while looking like its fix.
 ExecStart=@CHECKOUT@/scripts/local-ci.sh

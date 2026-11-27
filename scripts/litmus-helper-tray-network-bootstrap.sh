@@ -19,9 +19,17 @@ case "$MODE" in
     awk '/^pub\(crate\) fn ensure_enclave_for_project\(/{f=1} f&&/ensure_router_running\(/&&!er{er=NR} f&&/run_container_observed/&&!er{early=NR} f&&/ensure_shared_git_and_inference_for_launch\(/&&!gi{gi=NR} f&&/^}$/{f=0} /^async fn ensure_shared_git_and_inference_for_launch\(/{h=1} h&&/run_container_observed/&&!rc{rc=NR} h&&/^}$/{h=0} END{if(er&&gi&&rc&&!early&&er<gi)print "ok: ensure_enclave_for_project router@"er" before container@"rc; else{print "FAIL: ensure_enclave_for_project router-ordering wrong (er="er" gi="gi" rc="rc" early="early")"; exit 1}}' crates/tillandsias-headless/src/main.rs
     ;;
   check-ensure_enclave_network-present)
+    # 2309-fa7q: ensure_enclave_for_project reaches the network through the
+    # container_deps model, so its arm reads the call and the model's binding.
+    # The walk ends at the function's own brace, and one miss fails the check.
+    rc=0
     for fn in run_opencode_mode run_observatorium_mode ensure_enclave_for_project; do
-      awk -v want="$fn" '$0~"^(pub(\\(crate\\))? )?fn "want"\\(" {in_fn=1} in_fn&&/ensure_enclave_network/{found=1; exit} /^(pub(\\(crate\\))? )?fn /&&in_fn&&$0!~"^(pub(\\(crate\\))? )?fn "want"\\(" {exit} END{if(found)print "ok: "want" ensure_enclave_network present"; else{print "FAIL: "want" missing ensure_enclave_network"; exit 1}}' crates/tillandsias-headless/src/main.rs
+      call='ensure_enclave_network[(]'
+      [ "$fn" != ensure_enclave_for_project ] || call='container_deps::ensure_forge_launch[(]'
+      awk -v want="$fn" -v call="$call" '$0~"^(pub([(]crate[)])? )?fn "want"[(]"{f=1} f&&$0~call{found=1; exit} f&&/^}$/{exit} END{if(found)print "ok: "want" ensure_enclave_network present"; else{print "FAIL: "want" missing ensure_enclave_network"; exit 1}}' crates/tillandsias-headless/src/main.rs || rc=1
     done
+    grep -qE 'Service::EnclaveNetwork => crate::ensure_enclave_network[(]' crates/tillandsias-headless/src/container_deps.rs || { echo "FAIL: container_deps no longer binds EnclaveNetwork to ensure_enclave_network"; rc=1; }
+    exit "$rc"
     ;;
   check-format_observed_launch_failure-classifier)
     awk '/async fn format_observed_launch_failure/{in_fn=1} in_fn&&/classify_typed_launch_failure/{found=1; exit} /^}$/&&in_fn{exit} END{if(found)print "ok: classify_typed_launch_failure threaded into format_observed_launch_failure"; else{print "FAIL: classify_typed_launch_failure missing from format_observed_launch_failure body"; exit 1}}' crates/tillandsias-podman/src/client.rs

@@ -71,14 +71,14 @@ critical_path:
     expected_behavior: "ok: inference run-arg seams green"
 
   - step: "a CDI spec mounting a hostPath that no longer exists is STALE and regenerated, not current because the driver is unchanged (1248-j6vd)"
-    command: "bash scripts/test-nvidia-cdi-stale-hostpath.sh 2>&1 | tail -n 1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-nvidia-cdi-stale-hostpath.lua 2>&1"
     timeout_ms: 30000
-    expected_behavior: "ok:nvidia-cdi-stale-hostpath:8/8"
+    expected_behavior: "ok:nvidia-cdi-stale-hostpath:8 arms"
 
   - step: "a GPU container start that fails names its cause and the log path in the refusal itself (1248-j6vd criterion 2)"
-    command: "bash scripts/test-dev-inference-start-refusal-names-cause.sh 2>&1 | tail -n 1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-dev-inference-start-refusal-names-cause.lua 2>&1"
     timeout_ms: 30000
-    expected_behavior: "ok:dev-inference-start-refusal-names-cause:6/6"
+    expected_behavior: "ok:dev-inference-start-refusal-names-cause:7 arms"
 
 failure_modes:
   - "dev-inference-ensure.sh refuses a failed GPU container start with a bare blocked:container-start-failed, and the one-line cause stays in serve.log where only a manual diagnosis finds it (1248-j6vd)"

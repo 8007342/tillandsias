@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: nine-a-c-shell-fixtures-ported-to-lua-batch-5
+    order: "2367-wtse"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 6
+    owned_files:
+      - scripts/lua/test-append-vs-origin-fold.lua
+      - scripts/lua/test-append-event-archived-refusal.lua
+      - scripts/lua/test-append-event-archived-refusal-is-hermetic.lua
+      - scripts/lua/test-archiver-ruby-could-not-run.lua
+      - scripts/lua/test-bench-prompt-uniqueness.lua
+      - scripts/lua/test-build-sh-ci-full-install-prep.lua
+      - scripts/lua/test-capability-routing.lua
+      - scripts/lua/test-command-policy-evaluator.lua
+      - scripts/lua/test-cycle-lock-attested-release.lua
+    title: "nine a-c shell fixtures ported to Lua (batch 5)"
+    context: |
+      ports: test-append-vs-origin-fold, test-append-event-archived-refusal, test-append-event-archived-refusal-is-hermetic,
+      test-archiver-ruby-could-not-run, test-bench-prompt-uniqueness, test-build-sh-ci-full-install-prep,
+      test-capability-routing, test-command-policy-evaluator, test-cycle-lock-attested-release.
+      Claimed by yoga before the work. Batch size and 2-3 mutants per fixture by the operator's rule relayed 2026-11-25.
+      The same change puts macbookair's darwin lines for 295, 432, 490, 500 and 844 in their step files.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its main assertions are mutated; callers run the .lua; the nine .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by gate steps, build.sh and litmus tests"
+    provenance: "coordinator queue 2026-11-25 (test-[a-c]* range), yoga"
+    related: [2366-7zvv, 2362-2cfp]
+    events:
+      - {type: claimed, ts: "2026-11-25T16:29:36Z", host: yoga, summary: "claimed; work ref work/2367-wtse"}

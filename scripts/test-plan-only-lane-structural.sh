@@ -40,7 +40,7 @@
 #
 # HERMETIC: two scratch git repos (a bare "remote" plus a working copy each),
 # a stub tillandsias-plan binary, a stub for check-plan-binary-current.sh's
-# OWN fixture dependency (test-expire-claims-write-is-opt-in.sh — a different
+# OWN fixture dependency (lua/test-expire-claims-write-is-opt-in.lua — a different
 # packet's 16-arm write-vs-read behaviour has nothing to do with this one),
 # mktemp only. No network, no credentials, the real repo is never touched.
 #
@@ -189,7 +189,7 @@ chmod +x "$AB/wc/scripts"/*.sh "$AB/wc/scripts/hooks"/*.sh 2>/dev/null || true
 # So CONSTRUCT the property rather than inherit it. If this checkout has no
 # built binary either, SKIP BY NAME rather than scoring the guard wrong for an
 # environment the arm never claimed to need — the precedent is
-# test-claims-across-branches.sh's own 1109-t8kw skip.
+# test-claims-across-branches.lua's own 1109-t8kw skip.
 #
 # AND IT IS THE BINARY, NOT yq. `yq` satisfies the lane's FIRST validator gate
 # (pre-push-local-gate.sh:1003) and is NOT enough for these arms: arm A's push
@@ -330,11 +330,10 @@ done
 # concern, unrelated to this packet; this stub exists only so
 # check-plan-binary-current.sh reaches the validator-surface stamping code
 # this packet adds, which runs BEFORE it shells out to that fixture.
-cat > "$CD/wc/scripts/test-expire-claims-write-is-opt-in.sh" <<'STUB'
-#!/usr/bin/env bash
-echo "expire-claims-write-is-opt-in: 0 passed, 0 failed"
-exit 0
-STUB
+# The fixture is Lua now, run as `$BIN script run <it>`: the checker needs only the
+# file, and the stub binary's `script` verb below prints the arm count it parses.
+mkdir -p "$CD/wc/scripts/lua"
+printf -- '-- stub\n' > "$CD/wc/scripts/lua/test-expire-claims-write-is-opt-in.lua"
 chmod +x "$CD/wc/scripts"/*.sh "$CD/wc/scripts/hooks"/*.sh 2>/dev/null || true
 
 # A REAL validator-surface source: unlike test-plan-binary-freshness.sh's
@@ -365,6 +364,7 @@ case "${1:-}" in
     check) exit 0 ;;
     validate-yaml) exit 0 ;;
     yaml-type) echo '!!map'; exit 0 ;;
+    script) echo "expire-claims-write-is-opt-in: 0 passed, 0 failed"; exit 0 ;;
 esac
 exit 0
 STUB

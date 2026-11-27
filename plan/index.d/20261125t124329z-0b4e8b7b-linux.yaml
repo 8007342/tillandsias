@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: dirty-tree-safety-fixture-cannot-find-git-on-msys-and-hides-the-refusal
+    event:
+      type: note
+      ts: "2026-11-25T12:43:29Z"
+      agent_id: linux-lenovinha-claude-20261125t124328z
+      host: linux
+      summary: |-
+        msys, yolanda relayed by macuahuitl 2026-11-25, #1557 at 1a2611795: ok:meta-orchestration-dirty-tree-safety, rc 0; its litmus 6 of 6, including step 4, which msys could not reach before. The refused-snapshot branch was not exercised on msys; lenovinha's Linux red covers it.

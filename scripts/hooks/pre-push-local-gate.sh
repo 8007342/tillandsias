@@ -1615,16 +1615,24 @@ attempt_plan_only_lane() {
         # PAST ts is accepted and its skew printed — a delayed push is real and
         # common, and requiring a declaration for it would turn every relay fold
         # into a refusal or a ritual.
-        if [[ -f scripts/check-fragment-ts-skew.sh ]]; then
-            if ! out="$(bash scripts/check-fragment-ts-skew.sh 2>&1)"; then
+        if [[ -f scripts/lua/check-fragment-ts-skew.lua ]]; then
+            # ORDER 2124-mwzr: the guard is Lua on `script run` (ported from the
+            # .sh), asked of the plan_bin this lane already resolved, like
+            # check-fragment-status-loss below: a binary with no `script run`
+            # cannot run it, and a guard that cannot run refuses here, never skips.
+            if ! grep -qx script <<<"$("$plan_bin" capabilities 2>/dev/null)"; then
+                echo "plan-only lane: validation FAILED — $plan_bin has no \`script run\`, so check-fragment-ts-skew cannot run (rebuild: cargo build --release -p tillandsias-plan; full gate required)" >&2
+                return 1
+            fi
+            if ! out="$("$plan_bin" script run scripts/lua/check-fragment-ts-skew.lua 2>&1)"; then
                 echo "plan-only lane: validation FAILED — a fragment carries a FUTURE timestamp (1313-w78k):" >&2
                 echo "$out" | head -12 | sed 's/^/  /' >&2
                 return 1
             fi
             # The past-skew notes are information, not a verdict: print them.
-            printf '%s\n' "$out" | grep -E '^note:fragment-ts-past:' >&2 || true
+            grep -E '^note:fragment-ts-past:' <<<"$out" >&2 || true
         else
-            LANE_NOTES+=("scripts/check-fragment-ts-skew.sh absent — skipped")
+            LANE_NOTES+=("scripts/lua/check-fragment-ts-skew.lua absent — skipped")
         fi
 
         if [[ -f scripts/lua/check-fragment-status-loss.lua ]]; then
@@ -1657,7 +1665,7 @@ attempt_plan_only_lane() {
             # It is not free, either: it would oblige every fixture that drives
             # this lane with a fragment-bearing push to provision this script in
             # its scratch tree. Measured — an earlier revision of this fix did
-            # refuse here, and broke test-gate-stamp-scope.sh case 7, whose tree
+            # refuse here, and broke test-gate-stamp-scope.lua case 7, whose tree
             # legitimately provisions a minimal set. Scope kept to the binary,
             # which is what 1124-7f3u is about.
             LANE_NOTES+=("scripts/lua/check-fragment-status-loss.lua absent — skipped")
@@ -1761,7 +1769,7 @@ attempt_plan_only_lane() {
     # it directly and the full gate fails there. So fail-closed bought nothing in
     # production and broke the instruments.
     #
-    # test-gate-stamp-scope.sh's own case-7 note records this exact substitution
+    # test-gate-stamp-scope.lua's own case-7 note records this exact substitution
     # one dependency over: without yq on macOS that arm "stopped testing the
     # lane's stamp handling and started testing tool availability". A fixture
     # that fails for want of a copied script is measuring the fixture.
@@ -1993,7 +2001,7 @@ enforce_stamp_scope() {
         # coordinator closure after a scoped land was refused here. The lane
         # validates the whole outgoing diff and declines anything that is not
         # plan-only, so a code class outside the scope still reaches the refusal
-        # below (test-gate-stamp-scope.sh case 9).
+        # below (test-gate-stamp-scope.lua case 9).
         if attempt_plan_only_lane; then
             exit 0
         fi

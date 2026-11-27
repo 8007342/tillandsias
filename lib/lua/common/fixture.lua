@@ -64,12 +64,17 @@ end
 -- ORDER 2257-qnt7. Where PATH finds a tool, or nil. Never spawn `which`: it is a
 -- package of its own, absent in the WSL builder, where a spawn failure read as
 -- "the tool is missing". `type -P` is bash's own PATH search: no function,
--- alias or builtin. The answer is in the shell's spelling (native_path() it
--- before a native spawn). path: the PATH to search (default: this process's).
+-- alias or builtin. path: the PATH to search (default: this process's). On
+-- native Windows the answer is made spawnable (2258-6xu8): /usr/bin/bash is an MSYS
+-- mount no drive rule can map, so cygpath says where it is, and the .exe that
+-- msys hides is put back.
 function M.which(tool, path)
     -- The PATH is set inside the shell: a narrow one must not stop it starting.
     local r = proc.run{ argv = { M.posix_shell(), "-s", "--", tool, path }, timeout_ms = 10000,
-        stdin = '[ $# -lt 2 ] || PATH="$2"\ntype -P -- "$1"\n' }
+        stdin = '[ $# -lt 2 ] || P="$2"\nhit="$(PATH="${P-$PATH}"; type -P -- "$1")" || exit 1\n'
+            .. 'if command -v cygpath >/dev/null 2>&1; then\n'
+            .. '  case "$hit" in (*.exe) ;; (*) [ ! -f "$hit.exe" ] || hit="$hit.exe" ;; esac\n'
+            .. '  hit="$(cygpath -m -- "$hit")" || exit 1\nfi\nprintf "%s\\n" "$hit"\n' }
     local p = text.trim(r.stdout or "")
     if r.code ~= 0 or p == "" then return nil end
     return p
@@ -111,6 +116,15 @@ function M.plan_binary()
     return M.native_path(p)
 end
 
+-- ORDER 2253-j2at. An absolute path in either spelling the fleet produces:
+-- /x on Linux, macOS and MSYS, and a drive path C:/x or C:\x on native
+-- Windows. A check written `p:sub(1, 1) == "/"` reads every Windows path as
+-- relative (macuahuitl relayed: the Mac's attest-smoke hit the same bug).
+function M.is_abs(p)
+    if type(p) ~= "string" or p == "" then return false end
+    return p:sub(1, 1) == "/" or p:find("^%a:[/\\]") ~= nil
+end
+
 local SCRATCH = "target/plan-scratch"
 
 -- ORDER 2158-vrb7. scratch.mkdir returns a Windows verbatim path (\\?\C:\...).
@@ -143,7 +157,12 @@ function T:arm(name, cond, got)
         self.passed = self.passed + 1
         out.line("ok:   " .. name)
     else
-        out.line("FAIL: " .. name .. " — got: " .. tostring(got))
+        -- ORDER 2322-a756: a diagnostic cut at a byte count can end inside a UTF-8 character,
+        -- and out.line refuses it: the arm's failure became a script error naming no arm.
+        local line = "FAIL: " .. name .. " — got: " .. tostring(got)
+        if not pcall(out.line, line) then
+            out.line("FAIL: " .. name .. " — got: " .. (tostring(got):gsub("[\128-\255]", "?")))
+        end
         self.failed[#self.failed + 1] = name
     end
     return cond
@@ -172,11 +191,59 @@ function T:short_scratch()
 end
 
 -- proc.run with argv given positionally; named fields pass through.
+-- ORDER 2305-zm8j. proc.run hands a child every TILLANDSIAS_* name and
+-- CARGO_TARGET_DIR, and a gate exports both. A fixture whose subject reads one
+-- drops it: env_unset = { "TILLANDSIAS_*", "CARGO_TARGET_DIR" } (the call's own
+-- env still wins).
+--
+-- ORDER 2384-svqx — A CHILD THAT RE-ENTERS BUILD.SH MUST KEEP WHAT LETS IT INHERIT.
+-- env_unset { "TILLANDSIAS_*" } also strips the variables a nested build.sh uses to
+-- see that its parent already holds a lock or a sandbox, and the child then
+-- re-acquires it. #1578 was evicted twice for exactly this, on Linux only:
+--   - TOOLBOX_PATH, container, TILLANDSIAS_SKIP_TOOLBOX: without them build.sh
+--     re-execs into a fresh toolbox and dies ("TOOLBOX_PATH not set").
+--   - TILLANDSIAS_SHARED_TARGET_HELD (with TILLANDSIAS_SHARED_TARGET, CARGO_TARGET_DIR):
+--     without it the child waits on its own parent's shared-target flock until
+--     its timeout.
+-- macOS has neither the toolbox nor flock, so a darwin run can never show it.
+-- A fixture that strips TILLANDSIAS_* and runs build.sh (or anything that sources
+-- with-tillandsias-builder.sh or shared-target.sh) passes env = M.gate_inherit(env).
+M.GATE_INHERIT = { "TOOLBOX_PATH", "container", "TILLANDSIAS_SKIP_TOOLBOX",
+    "TILLANDSIAS_SHARED_TARGET_HELD", "TILLANDSIAS_SHARED_TARGET", "CARGO_TARGET_DIR" }
+-- The caller declares all of M.GATE_INHERIT in its -- @env header (env.get refuses an
+-- undeclared name). A missing declaration is an error naming it, never a silent skip:
+-- a skipped name is the very bug this helper exists to prevent.
+function M.gate_inherit(e)
+    e = e or {}
+    local missing = {}
+    for _, k in ipairs(M.GATE_INHERIT) do
+        local ok, v = pcall(env.get, k)
+        if not ok then missing[#missing + 1] = k
+        elseif v and v ~= "" and e[k] == nil then e[k] = v end
+    end
+    if #missing > 0 then
+        error("fixture.gate_inherit: add to the -- @env header: " .. table.concat(missing, " ") .. " (2384-svqx)", 2)
+    end
+    return e
+end
+
+-- ORDER 2392-2gm8. A command the door REFUSES (status policy_denied / policy_consent_required)
+-- returns ok=false, code=nil and raises nothing; that is the door's contract (a denial is a
+-- result). In a fixture it let an unchecked cleanup read as done: a refused `rm -rf` of a
+-- snapshot left the checkout's gate stamp borrowed while the run was green. So a refusal ends
+-- the fixture with refused:<name>:door-refused, naming the command, rule and remedy. A fixture
+-- whose SUBJECT is the refusal passes refusal_ok = true and gets the result back.
 function T:run(spec)
     local argv = {}
     for i, a in ipairs(spec) do argv[i] = a end
-    return proc.run{ argv = argv, cwd = spec.cwd, env = spec.env, stdin = spec.stdin,
+    local r = proc.run{ argv = argv, cwd = spec.cwd, env = spec.env, env_unset = spec.env_unset, stdin = spec.stdin,
         timeout_ms = spec.timeout_ms or 120000 }
+    if not spec.refusal_ok and type(r.status) == "string" and r.status:match("^policy_") then
+        self:refuse("door-refused", table.concat(argv, " ") .. ": " .. r.status .. " (" .. tostring(r.rule_id) .. ") "
+            .. tostring(r.why) .. " — remedy: " .. tostring(r.remedy)
+            .. " (if the refusal is this fixture's subject, pass refusal_ok = true; 2392-2gm8)")
+    end
+    return r
 end
 
 -- Run, and refuse the whole test if the setup command fails.

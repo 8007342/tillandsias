@@ -20,17 +20,17 @@ description: >
   default home is outside target/, an explicit TILLANDSIAS_CHECK_LOG_INDEX is
   honoured verbatim, a legacy target/ index is adopted exactly once by copy,
   the resolved index is intact after target/ is removed (and after a real
-  `cargo clean` where cargo is on PATH), and check-release-tier-freshness.sh
+  `cargo clean` where cargo is on PATH), and check-release-tier-freshness.lua
   still answers ok about a host's release tier after the sweep — where the
   pre-fix reader answered never:. Hermetic: every arm builds its own tree.
 
 preconditions:
   - workspace contains scripts/convergence-log-path.sh
-  - workspace contains scripts/test-check-log-index-survives-cargo-clean.sh
+  - workspace contains scripts/lua/test-check-log-index-survives-cargo-clean.lua
 
 critical_path:
   - step: "the resolver and the fixture parse and carry their exec bits"
-    command: "bash -n scripts/convergence-log-path.sh && bash -n scripts/test-check-log-index-survives-cargo-clean.sh && test -x scripts/convergence-log-path.sh && test -x scripts/test-check-log-index-survives-cargo-clean.sh && echo 'ok: check-log-index-parses'"
+    command: "bash -n scripts/convergence-log-path.sh && test -x scripts/convergence-log-path.sh && echo 'ok: check-log-index-parses'"
     timeout_ms: 5000
     expected_behavior: "ok: check-log-index-parses"
 
@@ -42,6 +42,6 @@ critical_path:
   - step: "the index survives what cargo clean does to target/, legacy history is adopted once, and the freshness reader still finds the tier after the sweep"
     # Capture then match (check-shell-ratchet.lua, 1624-bv73): no pipe in a
     # litmus command. The whole fixture output is echoed on a miss.
-    command: "out=$(bash scripts/test-check-log-index-survives-cargo-clean.sh 2>&1); rc=$?; case \"$out\" in *'PASS: check-log-index-survives-cargo-clean'*) echo 'ok: check-log-index-survives-cargo-clean' ;; *) echo \"$out\"; echo \"FAIL: fixture rc=$rc\" ;; esac"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-check-log-index-survives-cargo-clean.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "ok: check-log-index-survives-cargo-clean"
+    expected_behavior: "ok:check-log-index-survives-cargo-clean:"

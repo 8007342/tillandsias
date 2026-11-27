@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: build-sh-gate-steps-accepts-a-root-it-cannot-cd-into-and-exits-0-and-never-maps-a-windows-root-for-wsl2
+    field: status
+    value: in_progress
+    ts: "2026-11-26T20:47:50Z"
+    host: doris
+  - packet_id: build-sh-gate-steps-accepts-a-root-it-cannot-cd-into-and-exits-0-and-never-maps-a-windows-root-for-wsl2
+    field: next_action
+    value: "Slice 1 done (doris): build.sh refuses an unreadable --gate-steps root, exit 2, refused:gate-steps:root-unreadable:<root>; pinned by test-gate-steps-root-unreadable.lua (step 959). Red on doris msys before the fix: rc=0; after: 2 arms. Linux run owed (macuahuitl). Slice 2 left: the WSL2 forward maps a drive-letter root to /mnt/<d>/, then 2413-4e9a's arm 5 un-skips."
+    ts: "2026-11-26T20:47:50Z"
+    host: doris

@@ -163,6 +163,7 @@ pub struct Command {
     timeout: Option<Duration>,
     stdin: Option<Vec<u8>>,
     group: bool,
+    detach: bool,
     capture_bytes: usize,
 }
 
@@ -196,6 +197,112 @@ async fn reap_group(pgid: libc::pid_t) {
     alive(libc::SIGKILL);
 }
 
+/// A TERM or INT to the RUNNER ends its live child groups (order 2408-fsxe).
+///
+/// A grouped child leads its own process group, so a signal to this process
+/// never reached it: the runner died with 143, the child was reparented, and
+/// the deadline that would have bounded it died with the runner (#1610 arm
+/// 11b, land run 94: "live=1 left=1 rc=143"). Each grouped run registers its
+/// pgid here for as long as it is live. On the first one this process installs
+/// a TERM and an INT handler, but ONLY where the disposition is still the
+/// default: a process that handles or ignores the signal itself keeps its own
+/// behaviour. The handler TERMs every registered group, gives them
+/// GROUP_TERM_GRACE, KILLs the rest, restores the default and re-raises, so the
+/// runner still exits with the signal's status. Everything it calls (killpg,
+/// nanosleep, signal, raise) is async-signal-safe. RESIDUAL: more than
+/// `SLOTS` concurrent grouped runs go unregistered, and a descendant that
+/// setsid()s out of its group escapes this as it escapes the deadline.
+#[cfg(unix)]
+mod term_guard {
+    use std::sync::atomic::{AtomicI32, Ordering};
+
+    const SLOTS: usize = 64;
+    static GROUPS: [AtomicI32; SLOTS] = [const { AtomicI32::new(0) }; SLOTS];
+    static INSTALL: std::sync::Once = std::sync::Once::new();
+
+    /// Holds a group's slot; dropping it unregisters the group.
+    pub(crate) struct Registered(Option<usize>);
+
+    impl Drop for Registered {
+        fn drop(&mut self) {
+            if let Some(i) = self.0 {
+                GROUPS[i].store(0, Ordering::SeqCst);
+            }
+        }
+    }
+
+    pub(crate) fn register(pgid: libc::pid_t) -> Registered {
+        INSTALL.call_once(install);
+        for (i, slot) in GROUPS.iter().enumerate() {
+            if slot
+                .compare_exchange(0, pgid, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+            {
+                return Registered(Some(i));
+            }
+        }
+        Registered(None)
+    }
+
+    fn install() {
+        for sig in [libc::SIGTERM, libc::SIGINT] {
+            // SAFETY: sigaction with valid, zeroed structs; the handler only
+            // makes async-signal-safe calls.
+            unsafe {
+                let mut old: libc::sigaction = std::mem::zeroed();
+                if libc::sigaction(sig, std::ptr::null(), &mut old) != 0
+                    || old.sa_sigaction != libc::SIG_DFL
+                {
+                    continue;
+                }
+                let mut new: libc::sigaction = std::mem::zeroed();
+                new.sa_sigaction = on_signal as extern "C" fn(libc::c_int) as libc::sighandler_t;
+                libc::sigemptyset(&mut new.sa_mask);
+                libc::sigaction(sig, &new, std::ptr::null_mut());
+            }
+        }
+    }
+
+    extern "C" fn on_signal(sig: libc::c_int) {
+        let each = |s: libc::c_int| {
+            let mut any = false;
+            for slot in &GROUPS {
+                let pgid = slot.load(Ordering::SeqCst);
+                // SAFETY: killpg takes no pointers; a stale pgid fails ESRCH.
+                if pgid > 0 && unsafe { libc::killpg(pgid, s) } == 0 {
+                    any = true;
+                }
+            }
+            any
+        };
+        if each(libc::SIGTERM) {
+            let step = libc::timespec {
+                tv_sec: 0,
+                tv_nsec: 20_000_000,
+            };
+            let rounds = super::GROUP_TERM_GRACE.as_millis() / 20;
+            let mut left = true;
+            for _ in 0..rounds {
+                // SAFETY: nanosleep with a valid timespec.
+                unsafe { libc::nanosleep(&step, std::ptr::null_mut()) };
+                left = each(0);
+                if !left {
+                    break;
+                }
+            }
+            if left {
+                each(libc::SIGKILL);
+            }
+        }
+        // SAFETY: restore the default and re-raise, so the exit status is the
+        // signal's, exactly as without this handler.
+        unsafe {
+            libc::signal(sig, libc::SIG_DFL);
+            libc::raise(sig);
+        }
+    }
+}
+
 /// Put `rest` on `cmd` as argv entries, ONE ENTRY EACH, byte-identical
 /// (order 1553-q3wi; executor contract CRITERION 4).
 ///
@@ -203,7 +310,8 @@ async fn reap_group(pgid: libc::pid_t) {
 /// quotes an argument only for a space, a tab or an empty string, so an
 /// argument holding a newline went out bare, and an MSYS child (Git's printf)
 /// split it at the newline: measured on yolanda 2026-10-08, "a\nb" arrived as
-/// two entries. So on Windows an argument containing CR or LF goes out through
+/// two entries. So on Windows an argument containing CR, LF or a glob character
+/// (`*`, `?`, `[`, which an MSYS child expands: 2415-fbyd) goes out through
 /// `raw_arg` with quotes FORCED by the CommandLineToArgvW / MSVC CRT rules (see
 /// `win_quote`), and every other argument takes std's unchanged path, so no
 /// argv that works today changes (pinned against std by
@@ -230,10 +338,19 @@ mod win_quote {
     const BACKSLASH: u16 = b'\\' as u16;
     const QUOTE: u16 = b'"' as u16;
 
+    /// CR/LF (1553-q3wi), and the glob characters `*`, `?` and `[` (2415-fbyd):
+    /// an MSYS child globs every UNQUOTED argument against its own cwd, and std
+    /// leaves `*.rs` bare, so `find -name *.rs` beside a decoy.rs received
+    /// `-name decoy.rs`. A quoted argument is never globbed, and a native child
+    /// parses the forced quotes back to the identical bytes.
     pub(crate) fn needs_forced_quotes_units(units: &[u16]) -> bool {
-        units
-            .iter()
-            .any(|&u| u == u16::from(b'\n') || u == u16::from(b'\r'))
+        units.iter().any(|&u| {
+            u == u16::from(b'\n')
+                || u == u16::from(b'\r')
+                || u == u16::from(b'*')
+                || u == u16::from(b'?')
+                || u == u16::from(b'[')
+        })
     }
 
     pub(crate) fn quote_units(units: &[u16]) -> Vec<u16> {
@@ -303,11 +420,12 @@ mod win_quote {
             }
         }
 
-        /// Only CR or LF force the raw path; everything else stays on std's.
+        /// Only CR, LF or a glob character (2415-fbyd) force the raw path;
+        /// everything else stays on std's.
         #[test]
-        fn only_cr_or_lf_forces_quotes() {
+        fn only_cr_lf_or_glob_forces_quotes() {
             let units = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
-            for s in ["a\nb", "a\rb", "\r\n"] {
+            for s in ["a\nb", "a\rb", "\r\n", "*.rs", "?x", "[ab]"] {
                 assert!(needs_forced_quotes_units(&units(s)), "{s:?}");
             }
             for s in ["plain", "", "two words", "tab\there", "q\"x", "back\\"] {
@@ -369,6 +487,7 @@ impl Command {
             timeout: None,
             stdin: None,
             group: false,
+            detach: false,
             capture_bytes: DEFAULT_CAPTURE_BYTES,
         }
     }
@@ -428,12 +547,37 @@ impl Command {
     /// started, not only the child (order 1384-aixy; the 1132-r4mt and
     /// 1305-udgs defect was a killed guard leaving its grandchildren running).
     ///
-    /// Only the timeout path kills the group. A run that completes normally
-    /// leaves nothing to kill on Unix; on Windows the job is created with
-    /// KILL_ON_JOB_CLOSE, so anything still inside it when the run's handle is
-    /// dropped goes too.
+    /// The group is killed when the deadline passes AND reaped (TERM, then
+    /// KILL after GROUP_TERM_GRACE) as soon as the leader exits. This line used
+    /// to say "only the timeout path kills the group", which was not what the
+    /// code did (corrected by 2294-dtch). So nothing the leader leaves behind
+    /// survives the run; `detach(true)` keeps the deadline kill but skips the
+    /// exit reap. On Windows the job is created with KILL_ON_JOB_CLOSE, so
+    /// anything still inside it when the run's handle is dropped goes too.
     pub fn group(mut self, on: bool) -> Self {
         self.group = on;
+        self
+    }
+
+    /// Keep the group's DEADLINE and scope-close kill, but do NOT reap the
+    /// group when the leader EXITS, by itself or by a signal from outside
+    /// (order 2294-dtch). Requires `group(true)`; the managed scope refuses
+    /// `detach` without it.
+    ///
+    /// WHY: a grouped run reaps its group the moment the leader exits, so a
+    /// caller asking "did the subject leave a process behind?" always heard
+    /// "no". The runner had already killed whatever leaked. Measured on darwin
+    /// 2026-11-24: test-fleet-run arm 10 stayed green on a fleet-run mutant
+    /// that leaks its step's child, and a Lua port of
+    /// test-macos-vz-orphan-diagnosis read ok:4 on a helper that outlives a
+    /// SIGKILLed tray.
+    ///
+    /// A detached run's leftovers OUTLIVE THE RUN, so the caller owns killing
+    /// them. Unix only: on Windows the job object still ends every descendant
+    /// when the run's handle drops (KILL_ON_JOB_CLOSE), so `detach` changes
+    /// nothing there.
+    pub fn detach(mut self, on: bool) -> Self {
+        self.detach = on;
         self
     }
 
@@ -496,6 +640,9 @@ impl Command {
         };
         #[cfg(unix)]
         let group_leader = if self.group { child.id() } else { None };
+        // 2408-fsxe: held for the whole run, so a TERM/INT to the runner reaches it.
+        #[cfg(unix)]
+        let _term_guard = group_leader.map(|p| term_guard::register(p as libc::pid_t));
 
         // Take both pipes BEFORE awaiting anything, then drain them together.
         // Reading one to EOF and then the other is the deadlock this crate
@@ -599,8 +746,9 @@ impl Command {
                     st = child.wait() => break st?,
                 }
             };
+            // 2294-dtch: a detached run leaves the leader's group to its caller.
             #[cfg(unix)]
-            if let Some(pgid) = group_leader {
+            if let Some(pgid) = group_leader.filter(|_| !self.detach) {
                 reap_group(pgid as libc::pid_t).await;
             }
             #[cfg(windows)]

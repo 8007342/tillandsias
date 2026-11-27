@@ -78,7 +78,7 @@ source "$SCRIPT_DIR/common.sh"
 # `git-service` (dropped from the Rust constant) and never gained `nix-cache`
 # (added by 801-kqme on 2026-08-17), so every forge container it launched sent
 # https://nix-cache:5000 through squid. Kept in step with ENCLAVE_NO_PROXY_BASE
-# by scripts/test-enclave-proxy-lib.sh.
+# by scripts/lua/test-enclave-proxy-lib.lua.
 # shellcheck source=scripts/lib/enclave-proxy.sh
 source "$SCRIPT_DIR/lib/enclave-proxy.sh"
 require_podman

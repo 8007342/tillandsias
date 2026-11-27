@@ -57,7 +57,7 @@ fn down_is_emitted_verbatim_with_exit_one() {
 
 /// Order 2169-tdop: the fleet's todo-shaped deciders (check-bare-metal-host-
 /// initialized.sh prints `todo:initialize-bare-metal-host:<component>:<cmd>`
-/// with rc 1, read by check-fleet-membership.sh) port with byte-identical
+/// with rc 1, read by check-fleet-membership.lua) port with byte-identical
 /// output: one line, verbatim, rc 1.
 #[test]
 fn todo_is_emitted_verbatim_with_exit_one() {
@@ -103,6 +103,9 @@ const LEGACY: &[(&str, &[i32])] = &[
     ("never:", &[1]),
     ("drift:", &[1]),
     ("missing:", &[0, 1]),
+    ("claimed-elsewhere:", &[1]),
+    ("unknown-packet:", &[2]),
+    ("unknown:", &[2]),
 ];
 
 #[test]

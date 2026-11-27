@@ -145,7 +145,7 @@ in_forge_delegation:
           --emit-flow` has NO caller anywhere in the loop — the worker skill
           tells agents to RUN cycle-metrics.sh and report it, never to emit.
           The only invocations in the tree are its own fixture
-          (scripts/test-cycle-flow-emit-idempotency.sh) and its own litmus,
+          (scripts/lua/test-cycle-flow-emit-idempotency.lua) and its own litmus,
           which is why litmus:cycle-flow-telemetry-shape is green while the
           log is dead: it tests the EMITTER, not the WIRING.
           Filed as order 943-7dn5.

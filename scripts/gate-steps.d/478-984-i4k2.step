@@ -1,0 +1,10 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 5: the next slowest movable blocks,
+# lenovinha timing log 2026-11-24).
+#
+STEP_DESC="Verifying the skew line can see a behaviour change (984-i4k2)"
+STEP_LUA="scripts/lua/test-expert-capability-behaviour-skew.lua"
+STEP_ERROR="the expert-capability behaviour-skew detector regressed (984-i4k2) — see the failing case above"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:expert-capability-behaviour-skew:8 arms at 2627fa738 (the Lua fixture, 2341-324y; rc 0 after rebuilding a stale plan binary, relayed by macuahuitl)"
+STEP_OK="Expert-capability behaviour-skew fixture passed"
+STEP_READS="scripts/lua/test-expert-capability-behaviour-skew.lua"

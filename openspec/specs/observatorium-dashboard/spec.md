@@ -220,5 +220,5 @@ changes are authorized.
 Verification: `cd observatorium && npm test` (site generator, honesty lint,
 publish and verify; gate step 930-2066-obsv), `litmus:stable-channel-shape`
 (no automation writes the deploy ref) and
-`scripts/test-promote-stable-evidence-gate.sh`.
+`scripts/lua/test-promote-stable-evidence-gate.lua`.
 Public deployment requires separate live evidence; configuration is not proof.

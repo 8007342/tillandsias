@@ -28,7 +28,7 @@ preconditions:
   - workspace contains scripts/lua/check-convergence-velocity.lua
   - workspace contains scripts/generate-evidence-bundle.sh
   - workspace contains scripts/release-preflight-local.sh
-  - workspace contains scripts/test-convergence-dashboard.sh
+  - workspace contains scripts/lua/test-convergence-dashboard.lua
   - workspace contains scripts/update-convergence-dashboard.sh
   - workspace contains openspec/specs/observability-convergence/spec.md
   - shell utilities (grep, wc) are available in PATH
@@ -37,7 +37,7 @@ critical_path:
   - step: "Req trace: @trace spec:observability-convergence on all 5 scripts"
     # Spec § Observability mandates each convergence script carry
     # the spec trace. Pin all 5 active shell surfaces.
-    command: "for f in scripts/lua/check-convergence-velocity.lua scripts/generate-evidence-bundle.sh scripts/release-preflight-local.sh scripts/test-convergence-dashboard.sh scripts/update-convergence-dashboard.sh; do grep -Fq 'spec:observability-convergence' \"$f\" || { echo \"FAIL: $f missing@trace\"; exit 1; }; done && echo \"ok: 5 scripts traced\""
+    command: "for f in scripts/lua/check-convergence-velocity.lua scripts/generate-evidence-bundle.sh scripts/release-preflight-local.sh scripts/lua/test-convergence-dashboard.lua scripts/update-convergence-dashboard.sh; do grep -Fq 'spec:observability-convergence' \"$f\" || { echo \"FAIL: $f missing@trace\"; exit 1; }; done && echo \"ok: 5 scripts traced\""
     timeout_ms: 5000
     expected_behavior: "ok: 5 scripts traced"
 
@@ -68,15 +68,15 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: 4 exit codes"
 
-  - step: "Req test harness: test-convergence-dashboard.sh has >=6 test groups"
+  - step: "Req test harness: the dashboard projection fixture runs"
     # Spec § Litmus Tests § Coverage computation requires testable
     # assertions. The dashboard test script organizes assertions
     # into groups (rendered md shape, rendered json shape, alert
     # levels, trend metrics, resource metrics, signature shape,
     # source-of-truth).
-    command: "COUNT=$(grep -cF '[group]' scripts/test-convergence-dashboard.sh); if [ \"$COUNT\" -ge 6 ]; then echo \"ok: $COUNT test groups\"; else echo \"FAIL: $COUNT groups (expected >=6)\"; exit 1; fi"
-    timeout_ms: 3000
-    expected_behavior: "ok:"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-convergence-dashboard.lua 2>&1"
+    timeout_ms: 60000
+    expected_behavior: "ok:convergence-dashboard:"
 
   - step: "Req staleness: spec body declares 30-day staleness threshold"
     # Spec § Spec debt and staleness § Scenario `Spec with no
@@ -110,7 +110,7 @@ rollback:
     convergence-dashboard.sh, update-convergence-dashboard.sh);
     check-convergence-velocity's `could-not-run:convergence-velocity:no-rust-checker`
     verdict (order 831-ezea — it must NOT go back to a green no-op);
-    generate-evidence-bundle.sh 4 exit codes; >=6 test groups in
-    test-convergence-dashboard.sh; spec body staleness threshold
+    generate-evidence-bundle.sh 4 exit codes; the fixture
+    test-convergence-dashboard.lua green; spec body staleness threshold
     (30 days) and alert thresholds (red < 90%, yellow < 95%).
-  command: "grep -n 'spec:observability-convergence\\|Python retired\\|could-not-run:convergence-velocity\\|Exit Code\\|30 days\\|red < 90%' scripts/lua/check-convergence-velocity.lua scripts/generate-evidence-bundle.sh scripts/test-convergence-dashboard.sh openspec/specs/observability-convergence/spec.md 2>/dev/null | head -20"
+  command: "grep -n 'spec:observability-convergence\\|Python retired\\|could-not-run:convergence-velocity\\|Exit Code\\|30 days\\|red < 90%' scripts/lua/check-convergence-velocity.lua scripts/generate-evidence-bundle.sh scripts/lua/test-convergence-dashboard.lua openspec/specs/observability-convergence/spec.md 2>/dev/null | head -20"

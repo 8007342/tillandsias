@@ -23,7 +23,7 @@
 # rebuild the original problem in a new shape while looking like success — the
 # same defect family as a test that cannot fail, and just as invisible, because
 # a shuffled corpus and a correct one are byte-different but both "have ids".
-# The safety property is asserted directly by scripts/test-requirement-ids.sh:
+# The safety property is asserted directly by scripts/lua/test-requirement-ids.lua:
 # run twice, second run is a no-op and the tree is unchanged.
 #
 # TOMBSTONED SPECS ARE STAMPED TOO (exit criterion 4). 30 of 177 spec files

@@ -37,6 +37,7 @@
 #   ^website-update:deferred:<tag>:<why>$         step 5 could not enqueue; promotion stands
 #                                                 (no line: no Website-Update trailer in range)
 #   ^refused:stable-tag-push-refused:<sha>$       release flipped, tag push failed (1768-2k56)
+#   ^refused:promote-gate:<tag>$                  a smoke record is missing, or the queue is busy
 #   ^refused:(no-evidence|no-release|bad-tag|missing-target|demote-verify-failed
 #            |promote-commit-unresolvable|stable-tag-not-moved|stable-tag-unverified):.*$
 #                                                 refusal (exit 1)
@@ -51,7 +52,7 @@
 # is outward-facing should be ASKABLE.
 #
 # Usage:
-#   scripts/promote-stable.sh vX.Y.YYMMDD.N [--force] [--dry-run]
+#   scripts/promote-stable.sh vX.Y.YYMMDD.N [--force] [--dry-run] [--allow-unmeasured <platform>[,..] --approval <row>]
 #   scripts/promote-stable.sh demote <mistaken-tag> --to <intended-tag> [--dry-run]
 
 set -euo pipefail
@@ -70,14 +71,18 @@ TAG=""
 TARGET=""
 FORCE=""
 DRY_RUN=0
+ALLOW_UNMEASURED=""
+APPROVAL=""
 while [ $# -gt 0 ]; do
     case "$1" in
         demote)     MODE="demote" ;;
         --force)    FORCE="--force" ;;
         --dry-run)  DRY_RUN=1 ;;
+        --allow-unmeasured) shift; ALLOW_UNMEASURED="${1:-}" ;;
+        --approval) shift; APPROVAL="${1:-}" ;;
         --to)       shift; TARGET="${1:-}" ;;
         -*)         echo "usage: $0 vX.Y.YYMMDD.N [--force] [--dry-run]" >&2
-                    _afford "this script takes a release tag and only --force, --dry-run and --to" "pass the daily tag to promote (vX.Y.YYMMDD.N), or demote <mistaken> --to <intended>, and drop the unknown flag"; echo "refused:bad-tag:$1"; exit 1 ;;
+                    _afford "this script takes a release tag and only --force, --dry-run, --allow-unmeasured, --approval and --to" "pass the daily tag to promote (vX.Y.YYMMDD.N), or demote <mistaken> --to <intended>, and drop the unknown flag"; echo "refused:bad-tag:$1"; exit 1 ;;
         *)          if [ -z "$TAG" ]; then TAG="$1"; else TARGET="$1"; fi ;;
     esac
     shift
@@ -392,6 +397,28 @@ if [ "$_has_evidence" -eq 0 ]; then
         # affordance-ok: the stderr lines right above this verdict say why it refused and what to do
         echo "refused:no-evidence:$TAG:missing=${_ev_missing}"
         exit 1
+    fi
+fi
+
+# ORDER 2296-pn45 (bundle landing phase 4). THE RECORD GATE, beside the report gate above:
+# each of linux, darwin and windows has a smoke-record for THIS tag on the ledger row
+# smoke-<tag>, and the land queue is idle. scripts/lua/check-promote-gate.lua decides; no
+# plan binary, or a gate that could not run, refuses. --force overrides it as loudly.
+_pg_plan="${TILLANDSIAS_PLAN_BIN:-$(command -v tillandsias-plan || true)}"
+_pg_rc=3; _pg_out="could-not-run:promote-gate:no-plan-binary"
+if [ -n "$_pg_plan" ] && [ -x "$_pg_plan" ]; then
+    _pg_rc=0
+    _pg_out="$(cd "$REPO_ROOT" && TILLANDSIAS_PLAN_BIN="$_pg_plan" "$_pg_plan" script run scripts/lua/check-promote-gate.lua -- \
+        "$TAG" ${ALLOW_UNMEASURED:+--allow-unmeasured "$ALLOW_UNMEASURED"} ${APPROVAL:+--approval "$APPROVAL"} 2>&1)" || _pg_rc=$?
+fi
+printf '%s\n' "$_pg_out" >&2
+_pg_last="${_pg_out##*$'\n'}"
+if [ "$_pg_rc" -ne 0 ] || [[ "$_pg_last" != "ok:promote-gate:$TAG:"* ]]; then
+    if [ "$FORCE" = "--force" ]; then
+        echo "WARNING: promoting $TAG over the record gate (--force): $_pg_last" >&2
+        echo "Record the override as a cycle entry via 'tillandsias-plan loop-status-append' (who/when/why)." >&2
+    else
+        _afford "the record gate did not pass: $_pg_last" "clear what it names (its header has the smoke-record grammar), or the operator passes --force"; echo "refused:promote-gate:$TAG"; exit 1
     fi
 fi
 

@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-25. p-s port range, batch 5 (macuahuitl: batch 5, then 6).
+packets:
+- packet_id: port-p-s-fixtures-batch-5
+  order: 2348-psb6
+  status: implemented
+  kind: chore
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [shell-to-lua, macos, fixtures, portability]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 2
+  title: 'Three whole-file shell-to-Lua ports from the p-s range: test-sigpipe-verdict-measured, test-pre-push-refuses-carried-silent, test-spec-index-repo-relative-rung'
+  ports: [scripts/test-sigpipe-verdict-measured.sh, scripts/test-pre-push-refuses-carried-silent.sh, scripts/test-spec-index-repo-relative-rung.sh]
+  context: >-
+    Each port keeps its arms and moves to the common.fixture grammar. The subjects are shell (lib-sigpipe-verdict.sh,
+    the pre-push hook's carried block, spec-index-ensure.sh's 801-a2by block), so each arm runs the real subject in a
+    bash child fed on stdin and reads its verdict in Lua. Picked from p-s files no open PR touches. Callers: gate steps
+    070, 958 and 185 (STEP_LUA, fresh darwin second-regime lines), the local-ci landed-guards roster row (runtime lua),
+    and the library's own refusal text.
+  exit_criteria:
+  - 'Each .lua gives the same verdict as its .sh on the trunk tree, and the same red arms under a mutant.'
+  - 'Every caller runs the .lua; the three .sh files and their floor lines are gone.'
+  verifiable_closure: 'Mutant parity in the PR; gate steps 070, 958 and 185 green on darwin.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the mutant parity is the deliverable.'
+  next_action: >-
+    Implemented. Darwin (bash 3.2.57): ok:sigpipe-verdict-measured:5 arms, ok:pre-push-refuses-carried-silent:5 arms,
+    ok:spec-index-repo-relative-rung:6 arms. Six mutants (two per subject), each red on the same arm in .sh and .lua.
+  provenance: 'tlatoanis-macbook-air 2026-11-25, on macuahuitl-fedora''s direction.'
+  related: [2318-psb4, 2340-psb5]
+  events:
+  - {type: filed, ts: '2026-11-25T11:01:00Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}

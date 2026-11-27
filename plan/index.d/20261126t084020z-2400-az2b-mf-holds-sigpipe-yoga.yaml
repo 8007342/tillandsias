@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: litmus-stdlib-mf-holds-misses-a-present-match-on-a-large-haystack
+    order: 2400-az2b
+    status: in_progress
+    kind: fix
+    title: "litmus-stdlib's mf_holds* pipe printf into an early-exiting grep under pipefail, so a match on a large haystack reads as absent (and mf_lacks as passing)"
+    capability_tags: [linux, tooling]
+    owned_files:
+      - scripts/litmus-stdlib.sh
+      - scripts/test-host-tools.sh
+      - scripts/check-host-tools.sh
+      - scripts/lua/test-litmus-stdlib-holds-large-haystack.lua
+      - openspec/litmus-tests/litmus-stdlib-portability-shape.yaml
+    depends_on: []
+    context: |
+      What still applies of the closed drafts #1208 (2118-jdcy) and #1211 (2118-2hda), each line looked up in trunk (coordinator,
+      from macbookair, 2026-11-26): 14 of their 22 files are gone from trunk and 3 more no longer carry the old line; 8 lines
+      still do. Six are litmus-stdlib's mf_holds, mf_holds_ere, mf_holds_literal, mf_holds_line, mf_holds_i and mf_holds_i_ere,
+      each eval "printf '%s\n' \"$$1\"" | grep -q... MEASURED on yoga: with set -o pipefail and a 5 MB haystack whose
+      FIRST line is the needle, trunk's mf_holds answered not-found in 40 of 40 calls; every mf_lacks built on it therefore
+      passed while the text was present. The other two are one site each in test-host-tools.sh and check-host-tools.sh.
+    exit_criteria:
+      - "A fixture run by litmus:stdlib-portability-shape is red against trunk's primitives (a present match on a large haystack under pipefail) and green after."
+      - "The eight sites take here-strings; the pipe-site floor drops by the sites removed; the existing stdlib litmus stays green."
+    verifiable_closure: |
+      litmus:stdlib-portability-shape
+    provenance: "coordinator 2026-11-26 (#1208/#1211 lookup), yoga"
+    events:
+      - {type: claimed, ts: "2026-11-26T08:40:20Z", host: yoga, summary: "claimed; work ref work/2400-az2b"}

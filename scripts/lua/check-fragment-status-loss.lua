@@ -34,7 +34,7 @@
 --
 -- WHAT THIS GATE CANNOT SEE, stated here so no reader has to find the .sh:
 --   * plan/index.d ONLY. A closure already compacted into plan/index.yaml is
---     outside it; scripts/check-base-ledger-status-loss.sh is the (advisory)
+--     outside it; scripts/lua/check-base-ledger-status-loss.lua is the (advisory)
 --     reader of the base ledger.
 --   * an UNKNOWN packet_id under `packets:` — that entry CREATES the packet,
 --     so there is nothing to compare; unknown ids are caught only on the

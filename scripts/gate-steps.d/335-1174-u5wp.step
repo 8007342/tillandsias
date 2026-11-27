@@ -18,17 +18,13 @@
 # the 1056-5344 union debt vetoing adoption, and keep the gate invocation
 # actually skipped rather than merely preceded by an announcement.
 #
-# STEP_SCRIPT is a LITERAL path (1063-nraf).
+# STEP_LUA is a LITERAL path (1063-nraf).
 STEP_DESC="Checking the land tool adopts only a green, full-scope, debt-free gate stamp (1174-u5wp)"
-STEP_SCRIPT="scripts/test-land-adopts-valid-stamp.sh"
+STEP_LUA="scripts/lua/test-land-adopts-valid-stamp.lua"
 STEP_ERROR="stamp adoption in the land tool regressed (1174-u5wp) — a stale, narrower-scope or union-indebted stamp may now be adopted, which would send an un-gated or under-gated tree to the push; see the verdict line above"
 STEP_OK="land stamp-adoption check passed"
-# Exit 3 means the tool is absent or the extraction markers moved — nothing was
-# examined, and the fixture says so by name rather than passing.
-STEP_SKIP_EXIT=3
-STEP_SKIP_DESC="the land tool is absent or its adoption block could not be extracted"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   the gate-failure branch is scoped to attempts that actually gated"
+STEP_SECOND_REGIME="macbookair 2026-11-25 darwin ok:land-adopts-valid-stamp:9 arms"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/gate-stamp.sh scripts/land-on-platform-branch.sh scripts/test-land-adopts-valid-stamp.sh"
+STEP_READS="scripts/gate-stamp.sh scripts/land-on-platform-branch.sh scripts/lua/test-land-adopts-valid-stamp.lua"

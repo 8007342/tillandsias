@@ -187,13 +187,18 @@ query() {
         return 2
     }
     _q_rows="$(printf '%s\n' "$_q_rows" | sort -u)"
+    # ORDER 2326-b52d. Tab is IFS whitespace: an empty phase field collapsed and the size was
+    # read as the phase. Split on a unit separator, which is not.
+    # A missing phase is `runtime`, as the runner's get_test_phase reads it: calling it
+    # pre-build would print run:<spec> for a test the runner then skips.
+    _q_rows="${_q_rows//$'\t'/$'\037'}"
 
     _q_specs=""
     _q_out=""
     _q_runs=""
     # A `while read` in a pipeline runs in a subshell on some shells, so the
     # accumulators would be lost. Feed it from a here-doc instead.
-    while IFS="$(printf '\t')" read -r p spec test match phase size; do
+    while IFS=$'\037' read -r p spec test match phase size; do
         [ -n "$test" ] || continue
         if grep -qxF "$test" <<<"$_q_bound"; then
             binding="bound"
@@ -208,7 +213,7 @@ query() {
                     *"|$spec|"*) ;;
                     *)
                         _q_specs="${_q_specs}${spec}|"
-                        _q_runs="${_q_runs}scripts/run-litmus-test.sh ${spec} --phase ${phase:-pre-build} --size ${size:-instant} --compact
+                        _q_runs="${_q_runs}scripts/run-litmus-test.sh ${spec} --phase ${phase:-runtime} --size ${size:-instant} --compact
 "
                         ;;
                 esac
@@ -245,6 +250,7 @@ EOF
 #
 # Per bound test (an unbound test runs in no suite, so it never appears):
 #   phase other than pre-build   -> deferred:phase (a pre-build run skips it)
+#     (a file with no phase: line is runtime, as in run-litmus-test.sh)
 #   declared match               -> run, whatever its size
 #   command match, instant|quick -> run
 #   command match, anything else -> deferred:size
@@ -287,15 +293,16 @@ relay_scope() {
     _rs_bound="$(bound_tests)"
     _rs_rows="$(scan "$_rs_targets")" || { echo "unavailable:litmus-scan-failed"; return 2; }
     _rs_rows="$(printf '%s\n%s\n' "$_rs_rows" "$(self_rows "$_rs_targets")" | grep . | LC_ALL=C sort -u)"
+    _rs_rows="${_rs_rows//$'\t'/$'\037'}"  # 2326-b52d, as above
 
     # One classified line per bound test row: <class>\t<spec>\t<path>\t<size>
     # where class is run-declared, run-command, deferred-size or deferred-phase.
     _rs_cls=""
-    while IFS="$(printf '\t')" read -r p spec test match phase size; do
+    while IFS=$'\037' read -r p spec test match phase size; do
         [ -n "$test" ] || continue
         grep -qxF "$test" <<<"$_rs_bound" || continue
         size="${size:-instant}"
-        if [ "${phase:-pre-build}" != "pre-build" ]; then c="deferred-phase"
+        if [ "${phase:-runtime}" != "pre-build" ]; then c="deferred-phase"
         elif [ "$match" = "declared" ]; then c="run-declared"
         else
             case "$size" in

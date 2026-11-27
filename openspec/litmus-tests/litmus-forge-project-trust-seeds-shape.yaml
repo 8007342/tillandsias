@@ -14,24 +14,19 @@ severity: normal
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-forge-project-trust-seeds.sh
+  - workspace contains scripts/lua/test-forge-project-trust-seeds.lua
   - workspace contains images/default/lib-common.sh
 
 critical_path:
-  - step: "fixture parses and is executable"
-    command: "bash -n scripts/test-forge-project-trust-seeds.sh && test -x scripts/test-forge-project-trust-seeds.sh && echo 'ok: parse'"
-    timeout_ms: 2000
-    expected_behavior: "ok: parse"
-
   - step: "each harness's trust key is seeded exactly, merged, idempotent, forge-only (non-forge NEGATIVE CONTROL writes nothing)"
-    command: "bash scripts/test-forge-project-trust-seeds.sh 2>&1 | tail -n 1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-project-trust-seeds.lua 2>&1"
     timeout_ms: 180000
-    expected_behavior: "PASS: forge-project-trust-seeds"
+    expected_behavior: "ok:forge-project-trust-seeds:"
 
 observability:
   traces:
     - "@trace spec:default-image"
-  expected_log: "PASS: forge-project-trust-seeds"
+  expected_log: "ok:forge-project-trust-seeds:"
   log_fields:
     spec: "default-image"
     test: "forge-project-trust-seeds-shape"
@@ -41,4 +36,4 @@ rollback:
   on_failure: >
     A seed that clobbers a harness config or writes outside a forge is worse
     than the prompt it removes: restore the merge and the forge gate first.
-  command: "bash scripts/test-forge-project-trust-seeds.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-project-trust-seeds.lua 2>&1"

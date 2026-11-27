@@ -1,0 +1,19 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 5: the next slowest movable blocks,
+# lenovinha timing log 2026-11-24).
+#
+# Order 1223-wzc4. The coordination pass re-derives "which host is active"
+# every time, and the corrected recipe lived in drill prose — where it was
+# retyped WRONG two passes after being written down, stripping the email
+# domain that is the only part naming the host. This fixture pins the three
+# corrections that kept getting lost: count by email, derive the host from
+# the domain (BOTH conventions, including <Host>.local), and bucket an
+# address that names no host instead of rendering it as one.
+STEP_DESC="Checking the fleet-activity read (1223-wzc4)"
+STEP_LUA="scripts/lua/test-fleet-activity.lua"
+STEP_ERROR="the fleet-activity read regressed — a working host can again read as silent, or a shared address as a host"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-24 darwin PASS: fleet-activity 9/9 at e1e44ec8b (direct)"
+STEP_OK="fleet-activity read fixture passed"
+STEP_SERIAL="asserts under 10 s and 20 s timeouts; a busy pool trips them"
+STEP_LANES="timing"
+STEP_READS="scripts/lua/test-fleet-activity.lua"

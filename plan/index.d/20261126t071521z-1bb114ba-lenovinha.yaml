@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: images-inference-nine-scripts-stay-shell-until-the-runtime-ruling
+    event:
+      type: note
+      ts: "2026-11-26T07:15:21Z"
+      agent_id: linux-lenovinha-claude-20261126t071521z
+      host: lenovinha
+      summary: |-
+        Same operator question, nine more images (macuahuitl 2026-11-26): none of chromium, proxy, router, vault, vm, warp, web, webkit, web-wrangler ships Lua (fedora-minimal, alpine 3.20/3.22, caddy-alpine, hashicorp/vault, debian-slim, ubuntu 24.04, node bookworm-slim; vm/bootstrap runs on a bare VM). 15 scripts. Entrypoints that stay shell regardless: proxy/entrypoint.sh, router/entrypoint.sh, vault/entrypoint.sh (left unread: credential path), warp, web, web-wrangler entrypoint.sh, chromium-framework-launch.sh, webkit-launch.sh. Rust/Go, not Lua: proxy/squid-supervisor.sh (237, PID 1, signal forwarding and wait). Portable only if the image gains a Lua runner: router/router-reload.sh (29), chromium and webkit browser-audio-start.sh. Never: vm/bootstrap 10/20/30 (pre-toolchain).

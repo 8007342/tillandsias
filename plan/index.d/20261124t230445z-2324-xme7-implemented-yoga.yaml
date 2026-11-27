@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: lww-alias-item-opener-and-land-notice-fixtures-ported-to-lua
+    field: status
+    value: implemented
+    ts: "2026-11-24T23:04:45Z"
+    host: yoga
+events:
+  - packet_id: lww-alias-item-opener-and-land-notice-fixtures-ported-to-lua
+    event: {type: implemented, ts: "2026-11-24T23:04:45Z", host: yoga, summary: "implemented on work/2324-xme7"}

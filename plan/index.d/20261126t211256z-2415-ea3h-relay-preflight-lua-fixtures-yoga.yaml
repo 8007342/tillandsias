@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: relay-preflight-phase-5-selects-lua-fixtures
+    order: "2415-ea3h"
+    status: in_progress
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [relay, fixtures, gate]
+    estimated_hours: 3
+    owned_files: [scripts/relay-preflight.sh, scripts/lua/test-relay-preflight-selects-lua-fixtures.lua]
+    title: "relay-preflight phase 5 selects and runs Lua fixtures; zero selected reads fixtures=not-run"
+    context: |
+      Filed by yoga for doris's finding, relayed by the coordinator 2026-11-26 as order 2413-3dap; that row is
+      not on trunk at 3c07288fa, so this one carries the work (a later 2413-3dap fragment should be closed
+      against this). Phase 5 builds its population from git ls-files 'scripts/test-*.sh' and its subjects from
+      DIFF_SCRIPTS (*.sh only), so a Lua-only diff runs ZERO fixtures on every host and still prints ok.
+      Every relay-preflight ok of 2026-11-26 carries fixtures=0.
+    exit_criteria:
+      - "Red first: a Lua-only diff touching a subject a scripts/lua/test-*.lua fixture names selects that fixture; trunk's phase-5 block selects nothing."
+      - "A selected .lua fixture runs through the one runner; no runner is red, never a skip."
+      - "Zero selected prints fixtures=not-run inside the ok:relay-preflight: line (the prefix is an interface; coordinator 2026-11-26)."
+    unscoreable: "fixture-scored: test-relay-preflight-selects-lua-fixtures.lua"
+    provenance: "doris finding 2413-3dap via coordinator macuahuitl 2026-11-26; yoga"
+    related: [1594-mtc3]
+    events:
+      - {type: claimed, ts: "2026-11-26T21:12:56Z", host: yoga, summary: "claimed; work ref work/2415-ea3h"}

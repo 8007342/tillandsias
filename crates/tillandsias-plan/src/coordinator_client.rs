@@ -520,9 +520,20 @@ mod tests {
         let dead = child.id();
         child.wait().unwrap();
         std::fs::write(dir.path().join("gate-dead"), format!("{dead}\n")).unwrap();
+        // ORDER 2402-tjpr. Unix only: pid_alive asks kill(pid, 0). Off Unix it answers
+        // true by design, because the markers there are written by Git Bash's build.sh
+        // with MSYS pids, which no Windows process query can judge; a fresh marker then
+        // holds the lane until MARKER_STALE_AFTER. That conservative answer is pinned
+        // instead, so a change to it is a decision, not an accident.
+        #[cfg(unix)]
         assert!(
             !lane_marker_held(dir.path(), now),
             "a finished gate's marker must not hold the lane"
+        );
+        #[cfg(not(unix))]
+        assert!(
+            lane_marker_held(dir.path(), now),
+            "off Unix a fresh pid marker holds the lane: liveness is not judged there"
         );
     }
 

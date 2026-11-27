@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: centicolon-ratchet-opsx-dirt-and-bound-litmus-fixtures-ported-to-lua
+    order: "2362-2cfp"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/test-centicolon-ratchet.lua
+      - scripts/lua/test-check-opsx-generated-dirt.lua
+      - scripts/lua/test-bound-litmus-is-runnable.lua
+    title: "three shell fixtures ported to Lua: CentiColon ratchet, opsx generated dirt, bound litmus is runnable"
+    context: |
+      ports: test-centicolon-ratchet, test-check-opsx-generated-dirt, test-bound-litmus-is-runnable.
+      Claimed by yoga before the work, in the coordinator's test-[a-c]* range (batch 3).
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its subject is mutated; callers run the .lua; the three .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by a gate step, build.sh and a litmus"
+    provenance: "coordinator queue 2026-11-25 (test-[a-c]* range), yoga"
+    related: [1395-ue3i, 1528-gxzf, 2359-a3c5]
+    events:
+      - {type: claimed, ts: "2026-11-25T15:13:37Z", host: yoga, summary: "claimed; work ref work/2362-2cfp"}

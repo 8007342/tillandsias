@@ -91,61 +91,7 @@ TILLANDSIAS_PROJECT_ENGINE_SRC_REL="images/default/config-overlay/mcp/project-in
 # Where the forge image bakes the engine (Containerfile: COPY config-overlay/mcp/).
 TILLANDSIAS_PROJECT_ENGINE_DEFAULT="/home/forge/.config-overlay/mcp/project-info.sh"
 
-# _tpe_clean_manifest — manifest-shaped stream in, sorted unique tokens out.
-# Anything that is not a bare `[a-z][a-z0-9-]*` token is DROPPED, and an empty
-# result reads as "no manifest": that is what makes a pre-manifest engine's
-# output (nothing, or JSON-RPC noise) fail the shape test instead of being
-# mistaken for a capability list. Same grammar as lib-expert-capability.sh.
-_tpe_clean_manifest() {
-    awk '
-        { sub(/#.*/, "") }
-        { gsub(/[ \t\r]+/, "") }
-        /^[a-z][a-z0-9-]*$/ { print }
-    ' 2>/dev/null | sort -u
-}
-
-# _tpe_join — newline-separated tokens -> csv, or the supplied empty-marker.
-_tpe_join() {
-    _tpe_j_empty="$1"
-    _tpe_j_out="$(tr '\n' ',' 2>/dev/null | sed 's/,*$//' 2>/dev/null)" || _tpe_j_out=""
-    if [ -z "$_tpe_j_out" ]; then
-        printf '%s' "$_tpe_j_empty"
-    else
-        printf '%s' "$_tpe_j_out"
-    fi
-}
-
-# _tpe_version <newline-separated-set> — the engine-contract-vN token, or `-`.
-_tpe_version() {
-    _tpe_v_out="$(printf '%s\n' "$1" | sed -n 's/^\(engine-contract-v[0-9][0-9]*\)$/\1/p' | head -1)" || _tpe_v_out=""
-    printf '%s' "${_tpe_v_out:--}"
-}
-
-# _tpe_has <token> <newline-separated-set>
-_tpe_has() {
-    _tpe_h_needle="$1"
-    for _tpe_h_t in $2; do
-        if [ "$_tpe_h_t" = "$_tpe_h_needle" ]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
-# _tpe_checkout_manifest <checkout> — the expectation, extracted TEXTUALLY from
-# the checkout's engine source: the lines of the PROJECT_INFO_ENGINE_MANIFEST
-# single-quoted block, shape-filtered. Executing checkout code here would run
-# an unvetted script during a health probe; reading it keeps the same safety
-# property capabilities.txt has.
-_tpe_checkout_manifest() {
-    _tpe_cm_file="$1/$TILLANDSIAS_PROJECT_ENGINE_SRC_REL"
-    [ -r "$_tpe_cm_file" ] || return 0
-    sed -n "/^PROJECT_INFO_ENGINE_MANIFEST='/,/^'/p" "$_tpe_cm_file" 2>/dev/null \
-        | sed "1d;\$d" 2>/dev/null \
-        | _tpe_clean_manifest
-}
-
-# tillandsias_project_engine_capability [<engine>] [<checkout>]
+# tillandsias_project_engine_capability <engine> <checkout>
 #
 # <engine>   path to the baked engine script (defaults to the image path; may
 #            be empty/absent).
@@ -153,68 +99,50 @@ _tpe_checkout_manifest() {
 #
 # Sets TILLANDSIAS_PROJECT_ENGINE_{STATE,BAKED,EXPECTED,MISSING,ONLY} and
 # TILLANDSIAS_PROJECT_ENGINE_LINE.
+#
+# ORDER 2393-j27x (openspec forge-lua-helpers D3.6): the manifest reads, the
+# shape filter and the two set differences are lua/project-engine-capability.lua
+# on `tillandsias-plan script run --helper` (beside this file in a checkout,
+# /usr/local/lib/tillandsias/lua/ in the image), where they were sixteen
+# processes of awk | sort, sed | sed and tr | sed (measured in the forge image).
+# The four states are the helper's CLOSED vocabulary. Without the runner or the
+# module the state is `unknown` with probe=no-plan-binary on the line, the same
+# shape lib-common.sh renders for a missing probe (probe=helper-missing): an
+# absent probe never reports a verdict, and there is no second implementation.
 tillandsias_project_engine_capability() {
     _tpe_bin="${1:-$TILLANDSIAS_PROJECT_ENGINE_DEFAULT}"
     _tpe_checkout="${2:-}"
-    TILLANDSIAS_PROJECT_ENGINE_STATE="absent"
+    TILLANDSIAS_PROJECT_ENGINE_STATE="unknown"
     TILLANDSIAS_PROJECT_ENGINE_BAKED="-"
     TILLANDSIAS_PROJECT_ENGINE_EXPECTED="-"
     TILLANDSIAS_PROJECT_ENGINE_MISSING="-"
     TILLANDSIAS_PROJECT_ENGINE_ONLY="-"
-    _tpe_now_set=""
-    _tpe_want_set=""
-
-    # ── what does the BAKED ENGINE say about itself ───────────────────────
-    # Asked of the ARTIFACT (order 569). stdin comes from /dev/null so a
-    # pre-manifest engine — whose only mode is the JSON-RPC stdin loop — reads
-    # EOF and exits silently instead of hanging the probe; its empty output is
-    # then the stale-engine verdict, which is the truth.
-    if [ -n "$_tpe_bin" ] && [ -x "$_tpe_bin" ]; then
-        _tpe_raw=""
-        if command -v timeout >/dev/null 2>&1; then
-            _tpe_raw="$(timeout 5 "$_tpe_bin" capabilities </dev/null 2>/dev/null)" || _tpe_raw=""
-        else
-            _tpe_raw="$("$_tpe_bin" capabilities </dev/null 2>/dev/null)" || _tpe_raw=""
-        fi
-        _tpe_now_set="$(printf '%s\n' "$_tpe_raw" | _tpe_clean_manifest)" || _tpe_now_set=""
-        if [ -z "$_tpe_now_set" ]; then
-            TILLANDSIAS_PROJECT_ENGINE_STATE="stale-engine"
-        else
-            TILLANDSIAS_PROJECT_ENGINE_STATE="ready"
-            TILLANDSIAS_PROJECT_ENGINE_BAKED="$(_tpe_version "$_tpe_now_set")"
-        fi
+    TILLANDSIAS_PROJECT_ENGINE_PROBE="no-plan-binary"
+    _tpe_run="${TILLANDSIAS_PLAN_BIN:-tillandsias-plan}"
+    _tpe_lua=""
+    for _tpe_c in "${BASH_SOURCE:+${BASH_SOURCE%/*}/lua/project-engine-capability.lua}" \
+                  "${0%/*}/lua/project-engine-capability.lua" \
+                  /usr/local/lib/tillandsias/lua/project-engine-capability.lua; do
+        if [ -n "$_tpe_c" ] && [ -r "$_tpe_c" ]; then _tpe_lua="$_tpe_c"; break; fi
+    done
+    _tpe_vals=""
+    if [ -n "$_tpe_lua" ] && command -v "$_tpe_run" >/dev/null 2>&1; then
+        _tpe_vals="$("$_tpe_run" script run --helper "$_tpe_lua" -- "$_tpe_bin" "$_tpe_checkout" 2>/dev/null)" || _tpe_vals=""
     fi
-
-    # ── what does the CHECKOUT expect ─────────────────────────────────────
-    if [ -n "$_tpe_checkout" ]; then
-        _tpe_want_set="$(_tpe_checkout_manifest "$_tpe_checkout")" || _tpe_want_set=""
-        if [ -n "$_tpe_want_set" ]; then
-            TILLANDSIAS_PROJECT_ENGINE_EXPECTED="$(_tpe_version "$_tpe_want_set")"
-        fi
-    fi
-
-    # ── the verdict + the two set differences ─────────────────────────────
-    if [ "$TILLANDSIAS_PROJECT_ENGINE_STATE" = "ready" ] && [ -n "$_tpe_want_set" ]; then
-        _tpe_missing=""
-        for _tpe_t in $_tpe_want_set; do
-            if ! _tpe_has "$_tpe_t" "$_tpe_now_set"; then
-                _tpe_missing="${_tpe_missing}${_tpe_t}
-"
-            fi
-        done
-        _tpe_extra=""
-        for _tpe_t in $_tpe_now_set; do
-            if ! _tpe_has "$_tpe_t" "$_tpe_want_set"; then
-                _tpe_extra="${_tpe_extra}${_tpe_t}
-"
-            fi
-        done
-        TILLANDSIAS_PROJECT_ENGINE_MISSING="$(printf '%s' "$_tpe_missing" | _tpe_join -)" || TILLANDSIAS_PROJECT_ENGINE_MISSING="-"
-        TILLANDSIAS_PROJECT_ENGINE_ONLY="$(printf '%s' "$_tpe_extra" | _tpe_join -)" || TILLANDSIAS_PROJECT_ENGINE_ONLY="-"
-        if [ "$TILLANDSIAS_PROJECT_ENGINE_MISSING" != "-" ] \
-            || [ "$TILLANDSIAS_PROJECT_ENGINE_ONLY" != "-" ]; then
-            TILLANDSIAS_PROJECT_ENGINE_STATE="skewed"
-        fi
+    if [ -n "$_tpe_vals" ]; then
+        { IFS= read -r _tpe_s; IFS= read -r _tpe_b; IFS= read -r _tpe_e; IFS= read -r _tpe_m; IFS= read -r _tpe_o; } <<_TPE_EOF
+$_tpe_vals
+_TPE_EOF
+        case "$_tpe_s" in
+            absent|stale-engine|ready|skewed)
+                TILLANDSIAS_PROJECT_ENGINE_STATE="$_tpe_s"
+                TILLANDSIAS_PROJECT_ENGINE_BAKED="${_tpe_b:--}"
+                TILLANDSIAS_PROJECT_ENGINE_EXPECTED="${_tpe_e:--}"
+                TILLANDSIAS_PROJECT_ENGINE_MISSING="${_tpe_m:--}"
+                TILLANDSIAS_PROJECT_ENGINE_ONLY="${_tpe_o:--}"
+                TILLANDSIAS_PROJECT_ENGINE_PROBE="" ;;
+            *) TILLANDSIAS_PROJECT_ENGINE_PROBE="helper-out-of-grammar" ;;
+        esac
     fi
 
     _tillandsias_project_engine_emit
@@ -222,7 +150,7 @@ tillandsias_project_engine_capability() {
 }
 
 _tillandsias_project_engine_emit() {
-    TILLANDSIAS_PROJECT_ENGINE_LINE="project_engine: state=${TILLANDSIAS_PROJECT_ENGINE_STATE} baked=${TILLANDSIAS_PROJECT_ENGINE_BAKED} expected=${TILLANDSIAS_PROJECT_ENGINE_EXPECTED} missing_in_engine=${TILLANDSIAS_PROJECT_ENGINE_MISSING} engine_only=${TILLANDSIAS_PROJECT_ENGINE_ONLY}"
+    TILLANDSIAS_PROJECT_ENGINE_LINE="project_engine: state=${TILLANDSIAS_PROJECT_ENGINE_STATE} baked=${TILLANDSIAS_PROJECT_ENGINE_BAKED} expected=${TILLANDSIAS_PROJECT_ENGINE_EXPECTED} missing_in_engine=${TILLANDSIAS_PROJECT_ENGINE_MISSING} engine_only=${TILLANDSIAS_PROJECT_ENGINE_ONLY}"${TILLANDSIAS_PROJECT_ENGINE_PROBE:+ probe=${TILLANDSIAS_PROJECT_ENGINE_PROBE}}
 }
 
 # tillandsias_project_engine_advice — the one-sentence action for each verdict.
@@ -235,6 +163,9 @@ tillandsias_project_engine_advice() {
             ;;
         stale-engine)
             printf 'UNKNOWABLE ENGINE: an engine is installed but predates the embedded capability manifest, so what it can do cannot be determined — treat its answers as suspect and rebuild the forge image from a current checkout.\n'
+            ;;
+        unknown)
+            printf 'UNKNOWN ENGINE STATE: the capability probe could not run (probe=%s), so whether the baked engine matches this checkout is not known — this is not a no-skew verdict.\n' "${TILLANDSIAS_PROJECT_ENGINE_PROBE:-unknown}"
             ;;
         skewed)
             printf 'IMAGE REBUILD REQUIRED: the baked engine and the mounted checkout carry different answer contracts. The engine is image-baked (order 459), so NO relaunch and NO in-session build heals this — waiting or retrying is futile. Rebuild the forge image from this checkout.\n'

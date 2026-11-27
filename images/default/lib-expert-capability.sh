@@ -109,30 +109,6 @@
 # litmus:expert-capability-skew-honesty.
 TILLANDSIAS_EXPERT_MANIFEST_REL="crates/tillandsias-plan/capabilities.txt"
 
-# _tec_clean_manifest — read a manifest-shaped stream, emit sorted unique tokens.
-# Anything that is not a bare `[a-z][a-z0-9-]*` token is DROPPED, and the caller
-# treats an empty result as "no manifest". That is what makes a pre-569 binary's
-# usage dump (prose, spaces, capitals) fail the shape test instead of being
-# mistaken for a capability list.
-_tec_clean_manifest() {
-    awk '
-        { sub(/#.*/, "") }
-        { gsub(/[ \t\r]+/, "") }
-        /^[a-z][a-z0-9-]*$/ { print }
-    ' 2>/dev/null | sort -u
-}
-
-# _tec_join — newline-separated tokens -> csv, or the supplied empty-marker.
-_tec_join() {
-    _tec_j_empty="$1"
-    _tec_j_out="$(tr '\n' ',' 2>/dev/null | sed 's/,*$//' 2>/dev/null)" || _tec_j_out=""
-    if [ -z "$_tec_j_out" ]; then
-        printf '%s' "$_tec_j_empty"
-    else
-        printf '%s' "$_tec_j_out"
-    fi
-}
-
 # tillandsias_expert_capability [<binary>] [<checkout>]
 #
 # <binary>   path to the installed tillandsias-plan (may be empty/absent).
@@ -140,223 +116,67 @@ _tec_join() {
 #
 # Sets TILLANDSIAS_EXPERT_CAP_{NOW,AFTER,SKEW,BLOCKED,LOST} and
 # TILLANDSIAS_EXPERT_CAPABILITY_LINE.
+#
+# ORDER 2396-x2x9 (openspec forge-lua-helpers D3.6, task 1.7): the manifest reads,
+# the set differences, the build-in-flight probe and the build-id / source-revision
+# currency check are lua/expert-capability.lua on `tillandsias-plan script run
+# --helper` (beside this file in a checkout, /usr/local/lib/tillandsias/lua/ in
+# the image), where they were 18 processes of awk | sort, tr | sed, sed | head and
+# timeout (measured in the forge image). The skew vocabulary is the helper's and is
+# CLOSED. The helper runs on TILLANDSIAS_PLAN_BIN, else tillandsias-plan on PATH,
+# else the probed binary itself. With none of them able to run it, every field
+# stays at its default and skew=unknown-currency with probe=no-plan-binary on the
+# line: currency cannot be established, so writes are suspect, never "no skew".
+#
+# The build-in-flight distinction (pending-build "wait, it is coming" vs
+# relaunch-required "retrying is futile") is the helper's: FORGE_EXPERTS_STATE_DIR
+# and FORGE_EXPERTS_BUILD_BUDGET_SECS are passed to it as arguments, because the
+# helper door hands it an allowlisted environment (2029-39bt).
 tillandsias_expert_capability() {
     _tec_bin="${1:-}"
     _tec_checkout="${2:-}"
     TILLANDSIAS_EXPERT_CAP_NOW="none"
     TILLANDSIAS_EXPERT_CAP_AFTER="none"
-    TILLANDSIAS_EXPERT_CAP_SKEW="none"
+    TILLANDSIAS_EXPERT_CAP_SKEW="unknown-currency"
     TILLANDSIAS_EXPERT_CAP_BLOCKED="-"
     TILLANDSIAS_EXPERT_CAP_LOST="-"
-    _tec_now_set=""
-    _tec_after_set=""
-
-    # ── what can I use RIGHT NOW ──────────────────────────────────────────
-    # Asked of the ARTIFACT, never inferred from the checkout: that inference is
-    # precisely the mistake `experts: ready` made.
-    if [ -n "$_tec_bin" ] && [ -x "$_tec_bin" ]; then
-        _tec_raw=""
-        if command -v timeout >/dev/null 2>&1; then
-            # A hung or wedged binary must not stall a launch. 5s is ~1000x the
-            # measured cost of this call (sub-5ms in the order-557 timings).
-            _tec_raw="$(timeout 5 "$_tec_bin" capabilities 2>/dev/null)" || _tec_raw=""
-        else
-            _tec_raw="$("$_tec_bin" capabilities 2>/dev/null)" || _tec_raw=""
-        fi
-        # Every substitution below carries an explicit `|| <fallback>`. Not
-        # defensive noise: forge-plan.sh sources this under `set -euo pipefail`,
-        # where ONE failing command in a pipeline inside `$( )` terminates the
-        # MCP server mid-request and the client sees a dropped connection
-        # instead of a diagnostic. The fallbacks keep every failure inside the
-        # grammar.
-        _tec_now_set="$(printf '%s\n' "$_tec_raw" | _tec_clean_manifest)" || _tec_now_set=""
-        if [ -z "$_tec_now_set" ]; then
-            # The binary exists but produced no manifest. A pre-569 artifact
-            # prints usage here — and the one order 531 shipped printed it on
-            # STDOUT and exited 0, so a caller checking only the exit status
-            # would have read incapability as success. Shape, not status, is
-            # what decides.
-            TILLANDSIAS_EXPERT_CAP_NOW="stale-binary"
-        else
-            TILLANDSIAS_EXPERT_CAP_NOW="$(printf '%s\n' "$_tec_now_set" | _tec_join none)" || TILLANDSIAS_EXPERT_CAP_NOW="none"
-        fi
-    fi
-
-    # ── what would a RELAUNCH give me ─────────────────────────────────────
-    # Read from the checkout, so it reflects uncommitted local edits to the
-    # expert crate — the case the operator named: work that is undiscoverable
-    # now but present on the next forge run.
-    if [ -n "$_tec_checkout" ] && [ -r "$_tec_checkout/$TILLANDSIAS_EXPERT_MANIFEST_REL" ]; then
-        _tec_after_set="$(_tec_clean_manifest < "$_tec_checkout/$TILLANDSIAS_EXPERT_MANIFEST_REL")" || _tec_after_set=""
-        if [ -n "$_tec_after_set" ]; then
-            TILLANDSIAS_EXPERT_CAP_AFTER="$(printf '%s\n' "$_tec_after_set" | _tec_join none)" || TILLANDSIAS_EXPERT_CAP_AFTER="none"
-        fi
-    fi
-
-    # ── the two set differences ───────────────────────────────────────────
-    _tec_missing=""
-    for _tec_t in $_tec_after_set; do
-        if ! _tec_has "$_tec_t" "$_tec_now_set"; then
-            _tec_missing="${_tec_missing}${_tec_t}
-"
-        fi
+    TILLANDSIAS_EXPERT_CAP_PROBE="no-plan-binary"
+    _tec_lua=""
+    for _tec_c in "${BASH_SOURCE:+${BASH_SOURCE%/*}/lua/expert-capability.lua}" \
+                  "${0%/*}/lua/expert-capability.lua" \
+                  /usr/local/lib/tillandsias/lua/expert-capability.lua; do
+        if [ -n "$_tec_c" ] && [ -r "$_tec_c" ]; then _tec_lua="$_tec_c"; break; fi
     done
-    _tec_lost=""
-    for _tec_t in $_tec_now_set; do
-        if ! _tec_has "$_tec_t" "$_tec_after_set"; then
-            _tec_lost="${_tec_lost}${_tec_t}
-"
-        fi
-    done
-    TILLANDSIAS_EXPERT_CAP_BLOCKED="$(printf '%s' "$_tec_missing" | _tec_join -)" || TILLANDSIAS_EXPERT_CAP_BLOCKED="-"
-    # A checkout with NO manifest is not evidence that a relaunch would take
-    # anything away — we simply have nothing to compare against. Reporting the
-    # whole capability set as "lost" there would be a guess dressed as a fact,
-    # and an alarming one. `after_relaunch=none` is already in the line, so the
-    # reader can see exactly why this field is empty.
-    if [ "$TILLANDSIAS_EXPERT_CAP_AFTER" = "none" ]; then
-        TILLANDSIAS_EXPERT_CAP_LOST="-"
-    else
-        TILLANDSIAS_EXPERT_CAP_LOST="$(printf '%s' "$_tec_lost" | _tec_join -)" || TILLANDSIAS_EXPERT_CAP_LOST="-"
-    fi
-
-    # ── the verdict ───────────────────────────────────────────────────────
-    if [ "$TILLANDSIAS_EXPERT_CAP_BLOCKED" != "-" ]; then
-        if _tec_build_in_flight; then
-            TILLANDSIAS_EXPERT_CAP_SKEW="pending-build"
-        else
-            TILLANDSIAS_EXPERT_CAP_SKEW="relaunch-required"
-        fi
-    elif [ "$TILLANDSIAS_EXPERT_CAP_LOST" != "-" ] \
-        && [ "$TILLANDSIAS_EXPERT_CAP_AFTER" != "none" ]; then
-        TILLANDSIAS_EXPERT_CAP_SKEW="relaunch-regresses"
-    fi
-
-    # ── ORDER 984-i4k2: BEHAVIOUR, NOT ONLY CAPABILITY ────────────────────
-    #
-    # Everything above compares two SUBCOMMAND SETS. A subcommand present in
-    # both the running binary and the checkout is invisible to it however much
-    # its behaviour changed, and `skew=none` is then truthful and useless at
-    # the same time.
-    #
-    # MEASURED 2026-09-03. Forges whose binaries predated 823e3ac0d kept
-    # writing `append-event` output straight into plan/index.yaml instead of a
-    # fragment — on FOUR hosts (lenovinha-tillandsias-forge,
-    # pirria-tillandsias-forge, macuahuitl-tillandsias-forge, yolanda) — while
-    # this line reported `skew=none` on every one. `append-event` existed in
-    # both versions, so the sets matched exactly.
-    #
-    # So compare the BUILD IDENTITY too: what the running binary was compiled
-    # from (`build-id`, baked by build.rs) against what a rebuild from this
-    # checkout would produce (`source-revision`, the same hash code). Only the
-    # revision half is new; the capability comparison above is untouched and
-    # its verdicts still win, because a missing subcommand is a bigger fact
-    # than a stale one.
-    #
-    # A HOST THAT CANNOT ESTABLISH ITS OWN CURRENCY SAYS SO. That is the whole
-    # point: `unknown-currency` is louder than `none` and is the honest answer
-    # for a binary too old to have `build-id` at all — which is exactly the
-    # 2026-09-03 population. A truthful-but-inapplicable green is what this
-    # defect is made of, so the absence of an answer must not render as one.
-    if [ "$TILLANDSIAS_EXPERT_CAP_SKEW" = "none" ] && [ -n "$_tec_bin" ]; then
-        _tec_running_id="$("$_tec_bin" build-id 2>/dev/null | head -1)" || _tec_running_id=""
-        _tec_checkout_id=""
-        if [ -n "$_tec_checkout" ] \
-            && [ -f "$_tec_checkout/crates/tillandsias-plan/src/main.rs" ]; then
-            _tec_checkout_id="$("$_tec_bin" source-revision \
-                "$_tec_checkout/crates/tillandsias-plan" 2>/dev/null | head -1)" \
-                || _tec_checkout_id=""
-        fi
-        case "$_tec_running_id" in
-            *+*)
-                # Both sides answered: a mismatch is a real behaviour skew.
-                if [ -n "$_tec_checkout_id" ] \
-                    && [ "$_tec_running_id" != "$_tec_checkout_id" ]; then
-                    TILLANDSIAS_EXPERT_CAP_SKEW="rebuild-required"
-                fi
-                ;;
-            *)
-                # No build-id. Either the binary predates it (the measured
-                # population) or the probe could not run it. Both are "I cannot
-                # tell", and neither is `none`.
-                #
-                # THIS ARM IS ABOUT THE BINARY, NOT THE COMPARISON. A checkout
-                # with no sources to compare against is a different situation:
-                # there is nothing to be current WITH, the binary is fine, and
-                # `after_relaunch` already reports what the checkout provided.
-                # Criterion 3 asks that a host unable to establish ITS OWN
-                # currency say so; it does not ask for an alarm when the
-                # comparison target is absent, and raising one there would fire
-                # on every partial mount and every manifest-only fixture.
-                TILLANDSIAS_EXPERT_CAP_SKEW="unknown-currency"
-                ;;
-        esac
+    # A runner counts only when its answer is in the grammar: the binary under
+    # test may itself be a stale or stub binary that answers `script run` with a
+    # usage dump, and the next candidate must then be tried.
+    if [ -n "$_tec_lua" ]; then
+        for _tec_run in "${TILLANDSIAS_PLAN_BIN:-}" tillandsias-plan "$_tec_bin"; do
+            [ -n "$_tec_run" ] && command -v "$_tec_run" >/dev/null 2>&1 || continue
+            _tec_vals="$("$_tec_run" script run --helper "$_tec_lua" -- "$_tec_bin" "$_tec_checkout" \
+                "${FORGE_EXPERTS_STATE_DIR:-/dev/shm/tillandsias-experts}" "${FORGE_EXPERTS_BUILD_BUDGET_SECS:-300}" 2>/dev/null)" || _tec_vals=""
+            [ -n "$_tec_vals" ] || continue
+            { IFS= read -r _tec_n; IFS= read -r _tec_a; IFS= read -r _tec_s; IFS= read -r _tec_b; IFS= read -r _tec_l; } <<_TEC_EOF
+$_tec_vals
+_TEC_EOF
+            case "$_tec_s" in
+                none|pending-build|relaunch-required|relaunch-regresses|rebuild-required|unknown-currency)
+                    TILLANDSIAS_EXPERT_CAP_NOW="${_tec_n:-none}"
+                    TILLANDSIAS_EXPERT_CAP_AFTER="${_tec_a:-none}"
+                    TILLANDSIAS_EXPERT_CAP_SKEW="$_tec_s"
+                    TILLANDSIAS_EXPERT_CAP_BLOCKED="${_tec_b:--}"
+                    TILLANDSIAS_EXPERT_CAP_LOST="${_tec_l:--}"
+                    TILLANDSIAS_EXPERT_CAP_PROBE=""
+                    break ;;
+                *) TILLANDSIAS_EXPERT_CAP_PROBE="helper-out-of-grammar" ;;
+            esac
+        done
     fi
 
     _tillandsias_expert_capability_emit
     return 0
 }
 
-# _tec_has <token> <newline-separated-set>
-_tec_has() {
-    _tec_h_needle="$1"
-    for _tec_h_t in $2; do
-        if [ "$_tec_h_t" = "$_tec_h_needle" ]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
-# _tec_build_in_flight — is ensure_forge_experts still running?
-#
-# THE DISTINCTION THIS FUNCTION CARRIES. `pending-build` says "wait, it is
-# coming"; `relaunch-required` says "retrying is futile". They are opposite
-# instructions, and only this probe separates them. If it is deleted or made to
-# always answer false, every mid-build forge tells its agent to relaunch
-# needlessly; if it always answers true, an agent on a checkout that can never
-# build the capability waits forever. Both are worse than the skew itself.
-_tec_build_in_flight() {
-    _tec_state_dir="${FORGE_EXPERTS_STATE_DIR:-/dev/shm/tillandsias-experts}"
-    [ -r "$_tec_state_dir/state" ] || return 1
-    _tec_state="$(cat "$_tec_state_dir/state" 2>/dev/null)" || _tec_state=""
-    [ "$_tec_state" = "building" ] || return 1
-    # A `building` stamp older than the budget is an ABANDONED build, not an
-    # in-flight one — the same rule forge_experts_state_line applies before it
-    # renders degraded(build-abandoned-after-Ns). Without this, an OOM-killed
-    # builder pins the verdict at "wait" for the rest of the session.
-    _tec_started="$(cat "$_tec_state_dir/started_at" 2>/dev/null)" || _tec_started=0
-    case "$_tec_started" in
-        '' | *[!0-9]*) _tec_started=0 ;;
-    esac
-    _tec_now_ts="$(date +%s 2>/dev/null)" || _tec_now_ts=0
-    case "$_tec_now_ts" in
-        '' | *[!0-9]*) _tec_now_ts=0 ;;
-    esac
-    _tec_elapsed=$((_tec_now_ts - _tec_started))
-    [ "$_tec_elapsed" -ge 0 ] || _tec_elapsed=0
-    [ "$_tec_elapsed" -le "${FORGE_EXPERTS_BUILD_BUDGET_SECS:-300}" ] || return 1
-    return 0
-}
-
-# Is the spec RAG index actually built? (order 760-hzi4 / 712-r5x8.)
-#
-# WHY THIS FIELD EXISTS. Every other field on this line reports SUBCOMMANDS —
-# what the binary can be asked. `spec-retrieve` and `spec-envelope` are
-# compiled in, so the line has always advertised them truthfully while
-# `spec_answer` refused every question for want of DATA. A caller reading the
-# capability line therefore concluded the spec expert was usable when it could
-# not answer anything. That is the same behavioural-vs-subcommand drift as
-# 760-nwzr: a capability is what the system can DO, not what it can be asked.
-#
-# Uses the same predicate the answer path uses (forge-plan.sh: both
-# chunks.jsonl and vectors.jsonl non-empty), so the line cannot claim an index
-# the answer path would reject. Order 801-a2by moved the index into the DURABLE
-# tier, so it resolves the path with the same shared block forge-plan.sh and
-# the producer use — a capability line computed from a different path than the
-# answer path opens would claim `spec_index=present` for an index spec_answer
-# then refuses, which is worse than either being wrong alone.
-#
 # >>> BEGIN spec-index resolution (801-a2by) — BYTE-IDENTICAL in three files:
 #       scripts/spec-index-ensure.sh                     (the producer)
 #       images/default/config-overlay/mcp/forge-plan.sh  (spec_answer)
@@ -365,7 +185,7 @@ _tec_build_in_flight() {
 #     is silently ABSENT rather than loudly missing, which is how the embedding
 #     step stayed unwritten on every host for weeks. Agreement is proven
 #     BEHAVIOURALLY — the block is extracted from each file and executed under
-#     one env — by scripts/check-spec-index-resolution-agreement.sh. Edit all
+#     one env — by scripts/lua/check-spec-index-resolution-agreement.lua. Edit all
 #     three together or that guard goes red.
 #
 #     Precedence, highest first:
@@ -543,7 +363,7 @@ _tillandsias_expert_capability_emit() {
     # ORDER 1747-e9d6: embed_verdict= says WHY embed_endpoint is unset (the
     # resolve_embed_endpoint verdict: unreachable:, no-curl:, ok:...), not only
     # that it is. Appended last, like the fields above.
-    TILLANDSIAS_EXPERT_CAPABILITY_LINE="expert_capability: now=${TILLANDSIAS_EXPERT_CAP_NOW} after_relaunch=${TILLANDSIAS_EXPERT_CAP_AFTER} skew=${TILLANDSIAS_EXPERT_CAP_SKEW} blocked_capabilities=${TILLANDSIAS_EXPERT_CAP_BLOCKED} lost_on_relaunch=${TILLANDSIAS_EXPERT_CAP_LOST} spec_index=${TILLANDSIAS_EXPERT_CAP_SPEC_INDEX} embed_endpoint=${TILLANDSIAS_EXPERT_CAP_EMBED} embed_model=${TILLANDSIAS_EXPERT_CAP_EMBED_MODEL} embed_verdict=${TILLANDSIAS_EMBED_ENDPOINT_VERDICT:-none}"
+    TILLANDSIAS_EXPERT_CAPABILITY_LINE="expert_capability: now=${TILLANDSIAS_EXPERT_CAP_NOW} after_relaunch=${TILLANDSIAS_EXPERT_CAP_AFTER} skew=${TILLANDSIAS_EXPERT_CAP_SKEW} blocked_capabilities=${TILLANDSIAS_EXPERT_CAP_BLOCKED} lost_on_relaunch=${TILLANDSIAS_EXPERT_CAP_LOST} spec_index=${TILLANDSIAS_EXPERT_CAP_SPEC_INDEX} embed_endpoint=${TILLANDSIAS_EXPERT_CAP_EMBED} embed_model=${TILLANDSIAS_EXPERT_CAP_EMBED_MODEL} embed_verdict=${TILLANDSIAS_EMBED_ENDPOINT_VERDICT:-none}${TILLANDSIAS_EXPERT_CAP_PROBE:+ probe=${TILLANDSIAS_EXPERT_CAP_PROBE}}"
 }
 
 # tillandsias_expert_capability_advice — the one-sentence action for the verdict.

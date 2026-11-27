@@ -39,25 +39,20 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-windows-host-lane-refusal.sh
-  - workspace contains scripts/test-windows-host-lane-refusal-controls.sh
+  - workspace contains scripts/lua/test-windows-host-lane-refusal.lua
+  - workspace contains scripts/lua/test-windows-host-lane-refusal-controls.lua
   - workspace contains crates/tillandsias-headless/src/main.rs
   - the behavioural arm additionally needs a native tillandsias.exe at this
     locus; it SKIPS BY NAME elsewhere, so a green run off-msys must not be read
     as a behavioural pass
 
 critical_path:
-  - step: "both fixtures parse and carry their exec bits"
-    command: "bash -n scripts/test-windows-host-lane-refusal.sh && bash -n scripts/test-windows-host-lane-refusal-controls.sh && test -x scripts/test-windows-host-lane-refusal.sh && test -x scripts/test-windows-host-lane-refusal-controls.sh && echo 'ok: windows-host-lane-fixtures-parse'"
-    timeout_ms: 10000
-    expected_behavior: "ok: windows-host-lane-fixtures-parse"
-
   - step: "every arm passes against the real source: the refusal precedes lane selection, both cfg arms exist, the refusal names the working command, and the non-Windows arm returns None"
-    command: "bash scripts/test-windows-host-lane-refusal.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-windows-host-lane-refusal.lua 2>&1"
     timeout_ms: 120000
     expected_behavior: "ok:windows-host-lane-refusal:all"
 
   - step: "POSITIVE CONTROLS: the fixture goes RED when the refusal call is removed, and RED on position when it is merely moved below lane selection while its text arms stay green"
-    command: "bash scripts/test-windows-host-lane-refusal-controls.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-windows-host-lane-refusal-controls.lua 2>&1"
     timeout_ms: 180000
     expected_behavior: "ok:windows-host-lane-refusal-controls:2/2"

@@ -141,7 +141,7 @@ run_block() {  # <PATH to use>  -> echoes the cosign: line the block emitted
 line="$(run_block "/usr/bin:/bin")"
 if [ "$line" = "cosign:could-not-run:cosign-absent" ]; then
     ok "ARM 1: a host without cosign emits cosign:could-not-run:cosign-absent — not a pass, not a failure"
-elif printf '%s' "$line" | grep -q '^cosign:verified'; then
+elif grep -q <<<"$line" '^cosign:verified'; then
     bad "ARM 1: a host WITHOUT cosign reported '$line' — a missing tool read as a verified signature, which is the could-not-run-as-ok shape this row exists to remove"
 else
     bad "ARM 1: expected cosign:could-not-run:cosign-absent, got '${line:-<nothing>}'"
@@ -171,9 +171,9 @@ _want="$(awk '{print $1}' "$REL/SHA256SUMS" 2>/dev/null | head -1)"
 _have="$(_digest "$REL/tillandsias-linux-x86_64")"
 if [ -n "$_want" ] && [ "$_want" = "$_have" ]; then
     line="$(run_block "$STUBDIR:/usr/bin:/bin")"
-    if printf '%s' "$line" | grep -q '^cosign:FAILED:'; then
+    if grep -q <<<"$line" '^cosign:FAILED:'; then
         ok "ARM 3: a substituted asset whose SHA256SUMS entry was regenerated PASSES the hash check and is REFUSED on the signature ($line)"
-    elif printf '%s' "$line" | grep -q '^cosign:verified'; then
+    elif grep -q <<<"$line" '^cosign:verified'; then
         bad "ARM 3: the substituted asset was reported VERIFIED ('$line') — the signature check does not bind to content and adds nothing over the hash"
     else
         bad "ARM 3: expected cosign:FAILED:, got '${line:-<nothing>}'"

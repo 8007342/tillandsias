@@ -23,7 +23,12 @@ LABEL org.opencontainers.image.licenses="GPL-3.0-or-later AND BUSL-1.1"
 # Add bash, jq, curl on top of the upstream Alpine-based vault image.
 # `--no-cache` keeps the layer deterministic.
 USER root
-RUN apk add --no-cache bash jq curl coreutils socat \
+# Order 2413-qewe: lua5.4 + lua5.4-filesystem + lua5.4-lpeg are this image's Lua
+# runtime (operator ruling 2026-11-26: Lua, then Rust, then Go in every container),
+# and /usr/bin/lua names it as in the forge. This is the distro Lua chosen for
+# images/git (2413-thcz), not the static tillandsias-plan. Runtime only.
+RUN apk add --no-cache bash jq curl coreutils socat lua5.4 lua5.4-filesystem lua5.4-lpeg \
+    && ln -sf lua5.4 /usr/bin/lua \
     && mkdir -p /vault/data /vault/config /vault/audit /run/secrets \
     && chown -R vault:vault /vault/data /vault/config /vault/audit
 

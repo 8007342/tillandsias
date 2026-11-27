@@ -445,6 +445,41 @@ async fn a_newline_argument_arrives_whole_at_an_msys_child() {
     }
 }
 
+/// ORDER 2415-fbyd: an MSYS child started by a native parent GLOBS its own
+/// unquoted argv against its cwd, so `find -name *.rs` beside a decoy.rs
+/// received `-name decoy.rs` and searched the wrong set. A glob-character
+/// argument must arrive literally. Pre-fix: FAILS ("decoy.rs" printed).
+#[cfg(windows)]
+#[tokio::test]
+async fn a_glob_argument_arrives_literally_at_an_msys_child() {
+    let probe = Command::new(["printf", "%s", "x"]).run().await;
+    match &probe {
+        Ok(out) if out.stdout_lossy() == "x" => {}
+        _ => {
+            eprintln!("skip:glob-argv-msys:no MSYS printf on PATH");
+            return;
+        }
+    }
+    let dir = std::env::temp_dir().join(format!("exec-glob-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("scratch dir");
+    std::fs::write(dir.join("decoy.rs"), b"x").expect("decoy");
+    std::fs::write(dir.join("decoy.yaml"), b"x").expect("decoy");
+    for arg in ["*.rs", "?ecoy.rs", "[d]ecoy.yaml", "*"] {
+        let out = Command::new(["printf", "%s", arg])
+            .current_dir(&dir)
+            .run()
+            .await
+            .expect("spawn");
+        assert_eq!(
+            out.stdout,
+            arg.as_bytes(),
+            "MSYS printf must receive {arg:?} literally, not globbed; got {:?}",
+            String::from_utf8_lossy(&out.stdout)
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// A native (MSVC CRT rules) child receives the same arguments, plus the
 /// CRITERION 4 hostile literal, as one byte-identical entry each.
 #[cfg(windows)]

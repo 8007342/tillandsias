@@ -3,16 +3,16 @@
 # results record for that file's exact bytes (and its spec's), with four
 # mutation arms.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking the CentiColon grader: enforced x reachable x tier x green record for the bytes (1395-88tp)"
-STEP_SCRIPT="scripts/test-centicolon-grade.sh"
+STEP_LUA="scripts/lua/test-centicolon-grade.lua"
 STEP_ERROR="the CentiColon grader credited an obligation it must not, or refused nothing it must (1395-88tp) — see the verdict line above"
 STEP_OK="CentiColon grader holds"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:centicolon-grade:11"
+STEP_SECOND_REGIME="macbookair 2026-11-25 darwin ok:centicolon-grade:18 arms"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
 STEP_LANES="timing"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="openspec/litmus-bindings.yaml openspec/litmus-tests/** openspec/litmus-tests/unbound-grandfathered.txt scripts/centicolon-grade.sh scripts/plan-binary-probe.sh scripts/test-centicolon-grade.sh"
+STEP_READS="openspec/litmus-bindings.yaml openspec/litmus-tests/** openspec/litmus-tests/unbound-grandfathered.txt scripts/centicolon-grade.sh scripts/plan-binary-probe.sh scripts/lua/test-centicolon-grade.lua"

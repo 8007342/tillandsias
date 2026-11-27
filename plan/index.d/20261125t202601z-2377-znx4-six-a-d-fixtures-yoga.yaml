@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: six-a-d-shell-fixtures-ported-to-lua-batch-7
+    order: "2377-znx4"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 6
+    owned_files:
+      - scripts/lua/test-check-bash-dialect.lua
+      - scripts/lua/test-codex-safe-state.lua
+      - scripts/lua/test-credential-channel-host-push-lane.lua
+      - scripts/lua/test-cycle-preflight-cargo-resolution.lua
+      - scripts/lua/test-decider-retirement.lua
+      - scripts/lua/test-dispatch-reap.lua
+    title: "six a-d shell fixtures ported to Lua (batch 7)"
+    context: |
+      ports: check-bash-dialect codex-safe-state credential-channel-host-push-lane cycle-preflight-cargo-resolution decider-retirement dispatch-reap.
+      Claimed by yoga before the work. What is left of a-c after this: the cloudflare fixtures, step 350's credential harness, two lock and claim fixtures,
+      change-class (2373-zter), build-image-installed-version-alias and capture-helper.
+      The same change puts macbookair's darwin line for 610 in its step file once #1579 is on trunk.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its main assertions are mutated; callers run the .lua; the six .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by gate steps, build.sh and litmus tests"
+    provenance: "coordinator queue 2026-11-25 (test-[a-c]* range), yoga"
+    related: [2373-8vq6]
+    events:
+      - {type: claimed, ts: "2026-11-25T20:26:01Z", host: yoga, summary: "claimed; work ref work/2377-znx4"}

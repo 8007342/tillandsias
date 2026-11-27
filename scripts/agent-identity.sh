@@ -60,7 +60,7 @@
 #   scripts/agent-identity.sh id [backend]   # print the full agent id
 #   scripts/agent-identity.sh node-name      # print the shared node-name probe
 #
-# Fixture: scripts/test-agent-identity.sh (hermetic env -i scenarios).
+# Fixture: scripts/lua/test-agent-identity.lua (hermetic env -i scenarios).
 # Litmus:  openspec/litmus-tests/litmus-agent-identity-canonical-source-shape.yaml
 
 # tillandsias_node_name — the portable node-name fallback chain, extracted

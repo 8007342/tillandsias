@@ -875,30 +875,11 @@ pub(crate) fn ensure_vault_tls_leaf(
         return Ok(());
     }
 
-    let lock_dir = certs_dir.join(".vault-tls-generation.lock");
-    let mut acquired_lock = false;
-    for _ in 0..50 {
-        match fs::create_dir(&lock_dir) {
-            Ok(()) => {
-                acquired_lock = true;
-                break;
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                std::thread::sleep(Duration::from_millis(100));
-            }
-            Err(e) => return Err(format!("acquire Vault TLS generation lock: {e}")),
-        }
-    }
-    if !acquired_lock {
-        return Err("timed out waiting for Vault TLS generation lock".to_string());
-    }
-    struct LockDir(PathBuf);
-    impl Drop for LockDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir(&self.0);
-        }
-    }
-    let _lock = LockDir(lock_dir);
+    // 2258-sr65: the CA mint's own wait; this copy had the same 5 s limit.
+    let _lock = crate::acquire_generation_lock(
+        &certs_dir.join(".vault-tls-generation.lock"),
+        "Vault TLS generation lock",
+    )?;
     if !vault_tls_leaf_needs_refresh(&ca_cert, &cert, &key) {
         return Ok(());
     }
@@ -3133,7 +3114,7 @@ fn claim_cloudflare_rotation_scheduler_slot() -> bool {
 /// [`spawn_github_token_rotation_scheduler`] — the Linux tray at start, every
 /// lane launch (`ensure_enclave_for_project`) and the guest listener
 /// (`maybe_spawn_vsock_listener`) — pinned by
-/// scripts/test-cloudflare-token-rotation.sh arm 6. Never effective in a
+/// scripts/lua/test-cloudflare-token-rotation.lua arm 6. Never effective in a
 /// forge (the check refuses and the thread ends).
 ///
 /// A failure prints `blocked:cloudflare-token-rotation-failed:<reason> (remedy:
@@ -10855,7 +10836,7 @@ mod tests {
 // Every test here uses an in-memory store (no Vault) and either an injected
 // refresh closure or the real `tillandsias-fake-cloudflare` over loopback (no
 // real Cloudflare). The fake-driven tests are `#[ignore]`d so a plain
-// `cargo test` needs no fake binary; scripts/test-cloudflare-token-rotation.sh
+// `cargo test` needs no fake binary; scripts/lua/test-cloudflare-token-rotation.lua
 // builds the fake and runs them by name.
 /// Order 1719-83po: the presence check is three-valued, and an unreadable
 /// Vault is never reported as "no login" (the tray would offer a login that
@@ -11049,7 +11030,7 @@ mod cloudflare_token_rotation_tests {
             });
         assert!(
             bin.exists(),
-            "fake-cloudflare binary not found at {bin:?}; run scripts/test-cloudflare-token-rotation.sh"
+            "fake-cloudflare binary not found at {bin:?}; run scripts/lua/test-cloudflare-token-rotation.lua"
         );
         let dir =
             std::env::temp_dir().join(format!("cf-token-rotation-{name}-{}", std::process::id()));
@@ -11194,7 +11175,7 @@ mod cloudflare_token_rotation_tests {
 
     // ── ARM 1: 20 min left -> exactly one exchange, refresh record first ──
     #[test]
-    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-token-rotation.sh"]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/lua/test-cloudflare-token-rotation.lua"]
     fn cloudflare_token_rotation_fake_due_token_rotates_once_refresh_first() {
         let server = start_fake("arm1");
         let old = logged_in_bundle(&server, NOW + 20 * 60);
@@ -11275,7 +11256,7 @@ mod cloudflare_token_rotation_tests {
     }
 
     #[test]
-    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-token-rotation.sh"]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/lua/test-cloudflare-token-rotation.lua"]
     fn cloudflare_token_rotation_fake_concurrent_checks_exchange_once() {
         let (n, outs) = concurrent_run("arm2", true);
         assert_eq!(n, 1, "one lock -> exactly one exchange: {outs:?}");
@@ -11300,7 +11281,7 @@ mod cloudflare_token_rotation_tests {
 
     // ── ARM 3: 2 h left -> no exchange, no write ─────────────────────────
     #[test]
-    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-token-rotation.sh"]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/lua/test-cloudflare-token-rotation.lua"]
     fn cloudflare_token_rotation_fake_not_due_makes_no_exchange() {
         let server = start_fake("arm3");
         let store = MemStore::with(&logged_in_bundle(&server, NOW + 2 * 3600));
@@ -11335,7 +11316,7 @@ mod cloudflare_token_rotation_tests {
 
     // ── ARM 4: the fake refuses the refresh -> both old records intact ────
     #[test]
-    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-token-rotation.sh"]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/lua/test-cloudflare-token-rotation.lua"]
     fn cloudflare_token_rotation_fake_refused_refresh_keeps_both_records() {
         let server = start_fake("arm4");
         // A refresh token the fake never issued: it answers 400 invalid_grant.
@@ -11385,7 +11366,7 @@ mod cloudflare_token_rotation_tests {
 
     // ── ARM 5: a forge never rotates (and never touches store or fake) ───
     #[test]
-    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-token-rotation.sh"]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/lua/test-cloudflare-token-rotation.lua"]
     fn cloudflare_token_rotation_fake_forge_never_rotates() {
         let server = start_fake("arm5");
         let store = MemStore::with(&logged_in_bundle(&server, NOW + 60));
@@ -11443,7 +11424,7 @@ mod cloudflare_token_rotation_tests {
 
     // ── Crash between the two writes: nothing is lost ────────────────────
     #[test]
-    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-token-rotation.sh"]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/lua/test-cloudflare-token-rotation.lua"]
     fn cloudflare_token_rotation_fake_crash_between_writes_loses_nothing() {
         let server = start_fake("crash");
         let old = logged_in_bundle(&server, NOW + 60);

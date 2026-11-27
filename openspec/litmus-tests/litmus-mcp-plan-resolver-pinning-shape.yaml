@@ -14,23 +14,18 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-mcp-plan-resolver-pinning.sh
+  - workspace contains scripts/lua/test-mcp-plan-resolver-pinning.lua
 
 critical_path:
-  - step: "fixture parses and is executable"
-    command: "bash -n scripts/test-mcp-plan-resolver-pinning.sh && test -x scripts/test-mcp-plan-resolver-pinning.sh && echo 'ok: parse'"
-    timeout_ms: 2000
-    expected_behavior: "ok: parse"
-
   - step: "foreign and sparse repos resolve to nothing, a real ledger to the repo's own, outside-a-repo fallbacks held to the ledger test, both servers agree; plan_query from a sparse repo does not answer from $HOME"
-    command: "bash scripts/test-mcp-plan-resolver-pinning.sh 2>&1 | tail -n 1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-mcp-plan-resolver-pinning.lua 2>&1 | tail -n 1"
     timeout_ms: 120000
-    expected_behavior: "PASS: mcp-plan-resolver-pinning"
+    expected_behavior: "ok:mcp-plan-resolver-pinning:12 arms"
 
 observability:
   traces:
     - "@trace spec:forge-environment-discoverability"
-  expected_log: "PASS: mcp-plan-resolver-pinning"
+  expected_log: "ok:mcp-plan-resolver-pinning:12 arms"
   log_fields:
     spec: "forge-environment-discoverability"
     test: "mcp-plan-resolver-pinning-shape"
@@ -41,4 +36,4 @@ rollback:
     A server answering from a foreign plan/index.yaml or a stale $HOME clone is
     the defect: restore project_toplevel + is_tillandsias_ledger and the
     no-fallback-inside-a-repo rule in both servers.
-  command: "bash scripts/test-mcp-plan-resolver-pinning.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-mcp-plan-resolver-pinning.lua"

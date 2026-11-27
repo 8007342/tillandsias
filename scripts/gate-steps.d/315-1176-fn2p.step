@@ -13,20 +13,20 @@
 # an ordinary failure). Both are the failure modes a later "tightening" would
 # introduce, and neither is visible without an arm.
 #
-# STEP_SCRIPT is a LITERAL path (1063-nraf).
+# STEP_LUA is a LITERAL path (1063-nraf).
 STEP_DESC="Checking a gate too short of memory refuses by name, and a SIGKILLed gate says so (1176-fn2p)"
-STEP_SCRIPT="scripts/test-gate-memory-refusal.sh"
+STEP_LUA="scripts/lua/test-gate-memory-refusal.lua"
 STEP_ERROR="the memory floor or the OOM post-mortem regressed (1176-fn2p) — a gate killed for memory may again stop with an empty log indistinguishable from a hang, the floor may have become a second cliff refusing hosts that would have finished, or an unrelated OOM may now launder an ordinary gate failure; see the verdict line above"
 STEP_OK="gate memory floor and OOM post-mortem check passed"
 # Exit 3 means a probe is missing — nothing was examined, and the fixture says so
 # by name rather than passing. Exit 1 remains a real regression.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="one of the two probes is absent, so neither half could be exercised"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   NC2 structurally: the driver consults the OOM record only on the no-failing-line path"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:gate-memory-refusal:16 arms at ebb2dc29f (the Lua fixture, 2355-ncuh; bash 3.2, relayed by macuahuitl)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="builds with cargo into the shared target; runs the litmus runner (it wipes its runtime dirs)"
 STEP_LANES="cargo litmus"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/check-gate-memory-floor.sh scripts/land-on-platform-branch.sh scripts/lua/check-oom-postmortem.lua scripts/plan-binary-probe.sh scripts/test-gate-memory-refusal.sh"
+STEP_READS="scripts/check-gate-memory-floor.sh scripts/land-on-platform-branch.sh scripts/lua/check-oom-postmortem.lua scripts/plan-binary-probe.sh scripts/lua/test-gate-memory-refusal.lua"

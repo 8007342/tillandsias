@@ -20,14 +20,14 @@ size: instant
 
 preconditions:
   - workspace contains scripts/metrics-log-path.sh
-  - workspace contains scripts/test-metrics-log-fallback-is-loud.sh
+  - workspace contains scripts/lua/test-metrics-log-fallback-is-loud.lua
 
 critical_path:
   - step: "the metrics-log resolver keeps records in the checkout, stays loud outside one, and honours PROJECT_ROOT"
-    command: "bash scripts/test-metrics-log-fallback-is-loud.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-metrics-log-fallback-is-loud.lua 2>&1"
     timeout_ms: 300000
-    expected_behavior: "three arms pass and the fixture prints its verdict token"
-    assert_output_contains: "ok:metrics-log-fallback:3/3"
+    expected_behavior: "every arm passes and the fixture prints its verdict token"
+    assert_output_contains: "ok:metrics-log-fallback:9 arms"
 
 evidence:
-  artifact: "scripts/metrics-log-path.sh + scripts/test-metrics-log-fallback-is-loud.sh"
+  artifact: "scripts/metrics-log-path.sh + scripts/lua/test-metrics-log-fallback-is-loud.lua"

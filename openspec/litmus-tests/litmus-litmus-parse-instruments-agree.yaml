@@ -9,7 +9,7 @@
 # litmus reaches a gate on one host and is refused on another.
 #
 # THIS FILE EXISTS BECAUSE THE FIXTURE ALONE WAS NOT ENOUGH. v1 of that order
-# shipped scripts/test-litmus-parse-instruments-agree.sh invoked by NOTHING —
+# shipped scripts/test-litmus-parse-instruments-agree.sh (now scripts/lua/test-litmus-parse-instruments-agree.lua) invoked by NOTHING —
 # no litmus named it, build.sh did not call it, and nothing in the gate checks
 # that a new test-*.sh is wired. That is the 877-mynm / order 440 shape
 # (shipped, invoked by nothing), and it is the same defect family the fixture
@@ -27,13 +27,13 @@ severity: medium
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-litmus-parse-instruments-agree.sh
+  - workspace contains scripts/lua/test-litmus-parse-instruments-agree.lua
   - workspace contains scripts/run-litmus-test.sh
   - a runnable tillandsias-plan is resolvable, or the fixture skips by name
 
 critical_path:
   - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-litmus-parse-instruments-agree.sh && test -x scripts/test-litmus-parse-instruments-agree.sh && echo 'ok: parse-instruments-fixture-parses'"
+    command: "test -f scripts/lua/test-litmus-parse-instruments-agree.lua && echo 'ok: parse-instruments-fixture-parses'"
     expected_behavior: "ok: parse-instruments-fixture-parses"
     assert_exit: 0
     timeout_ms: 5000
@@ -50,12 +50,18 @@ critical_path:
   # a fresh clone with no built plan binary cannot answer the question, and the
   # fixture says so in the same words scripts/lua/check-litmus-yaml-parses.lua uses.
   - step: "both instruments agree, or the fixture says it cannot answer"
-    command: "bash scripts/test-litmus-parse-instruments-agree.sh 2>&1 | tail -1 | grep -E '^(ok:litmus-parse-instruments-agree:3/3|skip:no-runnable-reader)$'"
-    expected_behavior: "ok:litmus-parse-instruments-agree:3/3 (or skip:no-runnable-reader)"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-parse-instruments-agree.lua"
+    expected_behavior: "ok:litmus-parse-instruments-agree:3 arms"
     assert_exit: 0
     assert_output_nonempty: true
     timeout_ms: 300000
 
+
+  - step: "order 2349-b3u2: a phase: on a litmus step is refused by line; a top-level phase, a block scalar and another section are not"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-step-phase.lua 2>&1"
+    expected_behavior: "ok:litmus-step-phase-fixture:14 arms"
+    assert_exit: 0
+    timeout_ms: 60000
 
 anti_regression:
   - claim: "the verdict word may not say ok for a file that is not YAML"

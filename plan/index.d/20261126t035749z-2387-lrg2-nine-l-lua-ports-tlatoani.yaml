@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-26. l range, batch 2 (the stale-draft files), per macuahuitl 2026-11-25.
+packets:
+- packet_id: port-l-fixtures-batch-2
+  order: 2387-lrg2
+  status: implemented
+  kind: chore
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [shell-to-lua, macos, fixtures, portability]
+  size: M
+  implementer_tier: sonnet
+  estimated_hours: 4
+  title: 'Nine whole-file shell-to-Lua ports from the l range (batch 2, the stale-draft files)'
+  ports: [scripts/test-land-gate-refusal-names-its-step.sh, scripts/test-ledger-prose-roundtrip.sh, scripts/test-ledger-write-reaches-its-reader.sh, scripts/test-litmus-parse-only-duplicate-key.sh, scripts/test-litmus-binding-truth.sh, scripts/test-litmus-parse-instruments-agree.sh, scripts/test-loop-status-append-input.sh, scripts/test-litmus-kill-adjudicator.sh, scripts/test-litmus-diff-scope.sh]
+  context: >-
+    These files were held by the stale drafts #1208, #1211, #1212 and #1217. Each draft's still-unlanded diff
+    against these files was checked line by line against trunk. In #1208, #1211 and #1217 it is pipe-to-herestring
+    rewrites (moot once the file is Lua) or already superseded on trunk (diff-scope's env -u). #1212 is NOT a stale
+    port: it adds io/memory PSI reporting to run-litmus-test.sh, a feature, and stays open as such; the kill-adjudicator
+    port pins trunk's seven arms. ledger-write-reaches-its-reader is ported from trunk after #1597 (checkout-resolved
+    plan binary). None re-enters build.sh. Callers: gate steps 110, 413, 754 (STEP_LUA, fresh darwin regime lines;
+    754's stale msys .sh regime dropped); build.sh ledger-prose-roundtrip and land-gate-refusal (_run_lua_decider);
+    litmus binding-truth, parse-instruments-agree, loop-status-append-input-shape and unreferenced-lane-fixtures-run
+    (no pipes); comment pointers in run-litmus-test.sh, centicolon-grade-static.lua and the meta-orchestration skill.
+    Linux runs wanted: parse-only-duplicate-key arm 13 (podman preflight) and diff-scope arm A1 (yq parity, no yq here).
+  exit_criteria:
+  - 'Each .lua gives the same verdict as its .sh on the trunk tree, and the same red arms under a mutant.'
+  - 'Every caller runs the .lua; the nine .sh files and their floor lines are gone.'
+  verifiable_closure: 'Mutant parity in the PR; the three gate steps, two build.sh deciders and four litmus tests green on darwin and in the Linux land gate.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the mutant parity is the deliverable.'
+  next_action: 'Implemented. After it lands, close #1208, #1211 and #1217 with a tombstone; keep #1212 open as the io/memory PSI feature.'
+  provenance: 'tlatoanis-macbook-air 2026-11-26, on macuahuitl-fedora''s direction.'
+  related: [2386-lrg1, 2386-zxgc, 2132-2yjt]
+  events:
+  - {type: filed, ts: '2026-11-26T03:57:49Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}

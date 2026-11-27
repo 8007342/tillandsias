@@ -490,7 +490,7 @@ agent_observability_protocol:
           message.id (keeping the last line). Measured on
           tlatoanis-macbook-air 2026-09-27 while implementing 1437-3pj7:
           3486 assistant lines, 1519 messages; a naive sum overcounts 2.3x.
-          Pinned by scripts/test-session-tokens.sh arm 1.
+          Pinned by scripts/lua/test-session-tokens.lua arm 1.
         every_host: >
           Every session on every host and in every forge records its own
           row at cycle end; a host whose last five rows are all main_ctx=0

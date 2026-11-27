@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-25. v56.11.24.1 macOS smoke, finding 3 (macuahuitl row 1).
+packets:
+- packet_id: provision-marker-completion-line-and-pending-kernel
+  order: 2352-pvcm
+  status: implemented
+  kind: bugfix
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [macos, vm, provisioning, diagnose]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 2
+  title: 'The guest provision marker gets a completion line, and a kernel upgrade waiting for the next boot is recorded and said by --diagnose'
+  context: >-
+    v56.11.24.1 macOS smoke, at Ready: /var/log/tillandsias-provision-marker held a start line and an upgrade line
+    (installed kernel-core 7.3.4, running 6.19.10) and no completion line. The host-read provision.state DID say
+    phase complete; the in-guest marker never had a completion writer, so a guest at Ready read like one that stopped
+    after the upgrade. The pending kernel is EXPECTED: 1925-gupg upgrades the OS on the first boot, provisioning runs
+    once, the VM boots through EFI/GRUB (newest entry) and the tray's quit is a cold stop, so the next launch runs the
+    new kernel. Until now nothing said so.
+  change: >-
+    The provision script computes kernel_running / kernel_installed / kernel_reboot_pending (yes|no|unknown), appends
+    `tillandsias-provision-complete kernel_running=.. kernel_installed=.. kernel_reboot_pending=.. <ts>` to the in-guest
+    marker (best-effort, before the state record, which stays last), and adds the three fields to provision.state.
+    `--diagnose` prints a Guest kernel line under Provisioning: COMPLETE, saying a pending reboot is expected and that
+    relaunching the tray boots the new kernel; an older record without the fields prints nothing.
+  exit_criteria:
+  - 'A fixture runs the generated script tail with rpm/uname faked: the marker ends in a completion line and the state says kernel_reboot_pending yes (control: no). Red on the pre-fix script.'
+  - '--diagnose names the pending kernel as expected, with both versions.'
+  verifiable_closure: 'cargo test -p tillandsias-vm-layer a_completed_provision_writes_its_completion_line_and_kernel_state; cargo test -p tillandsias-macos-tray a_pending_guest_kernel_reboot_is_reported_as_expected; next macOS smoke shows the completion line.'
+  unscoreable: 'unpinnable-until-the-next-release: the live check is the next macOS smoke reading the marker.'
+  next_action: >-
+    Implemented. Fixture red on the old script (panics: no completion line), green after; both crates' suites pass
+    on darwin, clippy -D warnings clean. Live check: next macOS smoke reads the marker's last line.
+  provenance: 'tlatoanis-macbook-air 2026-11-25, v56.11.24.1 smoke finding 3, on macuahuitl-fedora''s direction.'
+  related: [1925-gupg, 1055-e8ie, 1084-x8ya]
+  events:
+  - {type: filed, ts: '2026-11-25T11:16:59Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}

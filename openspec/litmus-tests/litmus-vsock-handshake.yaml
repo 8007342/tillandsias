@@ -1,7 +1,7 @@
 # @trace spec:vsock-transport
 name: litmus:vsock-handshake
 spec: vsock-transport
-phase: 2
+phase: runtime
 description: >
   Exercise the maintained headless vsock listener fixture, exchange the real
   Hello/HelloAck schema at wire version 2, and prove the same typed framing on
@@ -20,7 +20,6 @@ caveats:
 
 critical_path:
   - step: "wire-v2 definition, typed framing, and maintained runtime fixture pass or skip explicitly"
-    phase: runtime
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-vsock-handshake-wire-v2.lua 2>&1"
     timeout_ms: 180000
     success_pattern: "^(ok|skip):vsock-handshake-wire-v2:"

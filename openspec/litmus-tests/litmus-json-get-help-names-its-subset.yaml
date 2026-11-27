@@ -15,15 +15,15 @@ description: >
   listed select() as refused; the parser supports it.
 
 preconditions:
-  - workspace contains scripts/test-json-get-help-names-its-subset.sh
+  - workspace contains scripts/lua/test-json-get-help-names-its-subset.lua
   - workspace contains scripts/plan-binary-probe.sh
   - workspace contains crates/tillandsias-plan/src/json_query.rs
 
 critical_path:
   - step: "every help line holds against the parser: flags named, supported forms parse, refused forms exit 3 unsupported, filter reshapes parse"
-    command: "bash scripts/test-json-get-help-names-its-subset.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-json-get-help-names-its-subset.lua 2>&1"
     timeout_ms: 30000
-    expected_behavior: "PASS: json-get-help-names-its-subset 6/6"
+    expected_behavior: "ok:json-get-help-names-its-subset:7 arms"
 
 observability:
   traces:

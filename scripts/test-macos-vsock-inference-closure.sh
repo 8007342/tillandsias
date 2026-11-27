@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # @trace spec:vsock-transport
+# drives-vm: boots the guest through the installed tray and installs a oneshot in it (2399-vsok)
 #
 # test-macos-vsock-inference-closure.sh — order 830-xsk2, the row's closure.
 #
@@ -22,7 +23,7 @@
 #
 # THE SHARE IS home-src (~/src), NOT the model cache. Earlier probes on this row
 # used the model cache and a dotfile there trips
-# test-macos-model-share-writable.sh's empty-cache precondition — fine for a
+# scripts/lua/test-macos-model-share-writable.lua's empty-cache precondition — fine for a
 # one-off, a defect in anything committed.
 #
 # SLOW BY NATURE, ~10 minutes: the product path is `--status-check`, which

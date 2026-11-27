@@ -25,7 +25,8 @@
 
 local fixture = require "common.fixture"
 local root = fixture.repo_root()
-local C = root .. "/scripts/check-no-fixture-writes-live-ledger.sh"
+local C = "scripts/lua/check-no-fixture-writes-live-ledger.lua"
+local PLAN = fixture.plan_binary()
 local REL = "target/plan-scratch/no-fixture-live-ledger-" .. tostring(time.now_ms())
 local W = root .. "/" .. REL
 local E = { PATH = env.get("PATH"), HOME = env.get("HOME") }
@@ -43,15 +44,15 @@ local function finish()
     out.line("FAIL: no-fixture-writes-live-ledger " .. pass .. "/" .. total .. " (1320-44rs)")
     verdict.emit("violation:no-fixture-writes-live-ledger:" .. fail .. "-failed", 1)
 end
-if not fs.read("scripts/check-no-fixture-writes-live-ledger.sh") then
-    bad("arm 1: " .. C .. " does not exist"); finish()
+if not fs.exists(C) or not PLAN or PLAN == "" then
+    bad("arm 1: " .. C .. " or a plan binary to run it does not exist"); finish()
 end
 
 -- flags(name, body) -> true when the checker flags it
 local function flags(name, body)
     body = body:gsub("__LED__", "plan/index.d"):gsub("__LSD__", "plan/loop_status.d")
     fs.write(REL .. "/" .. name .. ".sh", body .. "\n")
-    local r = proc.run({ argv = { fixture.posix_shell(), C, W .. "/" .. name .. ".sh" }, env = E, timeout_ms = 60000 })
+    local r = proc.run({ argv = { PLAN, "script", "run", C, "--", REL .. "/" .. name .. ".sh" }, cwd = root, env = E, timeout_ms = 60000 })
     local o = (r.stdout or "") .. (r.stderr or "")
     return r.code ~= 0 and o:find("violation:fixture-writes-live-ledger:" .. REL .. "/" .. name .. ".sh:", 1, true) ~= nil
 end
@@ -75,10 +76,11 @@ if flags("j", 'cd "$ROOT"\ngit worktree add --detach -q "$wt" HEAD\ncd "$wt" || 
 if wrongly == "" then ok("arm 2: the scaffold idioms and a read are accepted") else bad("arm 2: wrongly flagged:" .. wrongly) end
 
 -- 3
-local r = proc.run({ argv = { fixture.posix_shell(), C }, env = E, timeout_ms = 120000 })
+local r = proc.run({ argv = { PLAN, "script", "run", C }, cwd = root, env = E, timeout_ms = 120000 })
 local o = text.trim((r.stdout or "") .. (r.stderr or ""))
-local last = o:match("([^\n]*)$") or ""
-if r.code == 0 and last:match("^ok:fixtures%-write%-scaffolds%-only:%d+ checked$") then
+local last = ""
+for _, l in ipairs(text.lines(o)) do if l:match("^ok:fixtures%-write%-scaffolds%-only:%d+ checked$") then last = l end end
+if r.code == 0 and last ~= "" then
     ok("arm 3: the real corpus is clean (" .. last .. ")")
 else
     bad("arm 3: rc=" .. tostring(r.code) .. " [" .. o .. "]")

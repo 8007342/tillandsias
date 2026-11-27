@@ -46,7 +46,7 @@
 #   ok:no-linux-next-ref                     no origin/linux-next tracking ref here
 #   blocked:linux-next-not-merged:<br>       exit 1 — merge origin/linux-next first
 #
-# Pinned by scripts/test-pre-push-linux-next-merged.sh (hermetic fixture with
+# Pinned by scripts/lua/test-pre-push-linux-next-merged.lua (hermetic fixture with
 # a mutation-control arm) via litmus:pre-push-linux-next-merged-shape.
 #
 # stdin: the git pre-push ref list, "<local ref> <local sha> <remote ref>

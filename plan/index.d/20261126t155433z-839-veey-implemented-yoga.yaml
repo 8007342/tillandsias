@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: gate-phase-timings-are-meaningless-under-self-inflicted-contention
+    field: status
+    value: implemented
+    ts: "2026-11-26T15:54:33Z"
+    host: yoga
+events:
+  - packet_id: gate-phase-timings-are-meaningless-under-self-inflicted-contention
+    event:
+      type: note
+      ts: "2026-11-26T15:54:33Z"
+      host: yoga
+      summary: |
+        EXIT CRITERIA (the row had none; coordinator 2026-11-26 asked for them):
+        (1) every phase the gate reports carries its CPU time beside its wall clock;
+        (2) a phase whose wall clock exceeds its CPU by more than 1 s and is at least twice it is
+            marked as waited, so a contention-inflated number is never read as the step's cost;
+        (3) red first against a planted concurrent load: scripts/lua/test-gate-phase-cpu-under-contention.lua;
+        (4) measured on a slow-gate host (macuahuitl): a gate idle (A) and a gate beside a concurrent
+            cargo build (B), both phase-report blocks recorded on this row.
+  - packet_id: gate-phase-timings-are-meaningless-under-self-inflicted-contention
+    event: {type: implemented, ts: "2026-11-26T15:54:33Z", host: yoga, summary: "implemented on work/839-veey: _cpu_children_now (bash times, run in the gate shell) records each phase's children CPU; the phase log gains a 4th column; _phase_report prints cpu and a waited marker; criteria 1-3 met (fixture 8 arms: waiting 3.0s/cpu 0.0s marked, busy cpu~wall unmarked, contended 10.0s/cpu 3.3s marked beside two pinned hogs; red on trunk's report); criterion 4 is macuahuitl's A/B pair"}

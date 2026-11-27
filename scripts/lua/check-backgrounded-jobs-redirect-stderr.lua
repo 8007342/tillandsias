@@ -71,11 +71,13 @@ end
 -- redirects stdout without also redirecting stderr.
 local BACKGROUNDED_REDIRECT = [=[(>>?)[[:space:]]*[^[:space:]|&]+.*[^&]&[[:space:]]*$]=]
 
+-- 2417-jzhh: every matched entrypoint is read, or the check blocks naming it
+local SRC = require("common.listed_read").read_all("backgrounded-stderr", candidates)
 local checked = 0
 local bad = {}
 for _, f in ipairs(candidates) do
-    local ok, content = pcall(fs.read, f)
-    if ok then
+    local content = SRC[f]
+    if content then
         local lineno = 0
         for _, line in ipairs(text.lines(content)) do
             lineno = lineno + 1

@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: eight-git-image-fixtures-ported-to-lua
+    order: "2373-8vq6"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 6
+    owned_files:
+      - scripts/lua/test-mirror-coordinator-bump.lua
+      - scripts/lua/test-mirror-discipline.lua
+      - scripts/lua/test-mirror-host-cert-and-sshd.lua
+      - scripts/lua/test-mirror-receive-wrapper.lua
+      - scripts/lua/test-mirror-sshd-posture.lua
+      - scripts/lua/test-mirror-sync-state.lua
+      - scripts/lua/test-pre-receive-yaml-gate.lua
+      - scripts/lua/test-ssh-lane-sidecar.lua
+    title: "eight fixtures that drive the git image ported to Lua"
+    context: |
+      ports: mirror-coordinator-bump mirror-discipline mirror-host-cert-and-sshd mirror-receive-wrapper mirror-sshd-posture mirror-sync-state pre-receive-yaml-gate ssh-lane-sidecar.
+      Claimed by yoga before the work. images/git itself is untouched: whether that image carries a Lua runner waits on the operator.
+      The same change puts macbookair's darwin lines for 375, 748 and 953 in their step files once #1576 is on trunk.
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its main assertions are mutated; callers run the .lua; the eight .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by gate steps and litmus tests"
+    provenance: "coordinator 2026-11-25 (option C until the images/git ruling), yoga"
+    related: [2372-snfs]
+    events:
+      - {type: claimed, ts: "2026-11-25T19:32:09Z", host: yoga, summary: "claimed; work ref work/2373-8vq6"}

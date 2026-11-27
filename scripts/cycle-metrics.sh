@@ -101,7 +101,7 @@
 # For that rule to hold, a step name that itself contains `:runs=` is
 # rewritten to `_runs=` in the reported key (no emitter names steps that way;
 # the rewrite keeps the rule true rather than documented). Pinned by a
-# colon-bearing step name in scripts/test-cycle-metrics-recurrence.sh.
+# colon-bearing step name in scripts/test-cycle-metrics-recurrence.lua.
 #
 # STEP NAMES ARE SANITISED BEFORE THEY REACH A LINE. The grammar is
 # whitespace- and comma-delimited, and the three lines are read back ONE PER
@@ -298,10 +298,20 @@ if ! command -v metrics_default_log >/dev/null 2>&1; then
     }
 fi
 _metrics_default_log() { metrics_default_log "$1" "$REPO_ROOT"; }
+# ORDER (packet: metrics-default-log-refusal-leaves-only-the-subshell). The
+# resolver runs inside $(...), so the stub's `exit 2` above ended only that
+# subshell: the refusal printed and the reporter carried on with an EMPTY path,
+# for minutes. Resolve each default here, at top level, and exit when it fails.
+# printf -v assigns without another subshell.
+_default_log_into() {
+    local _p
+    _p="$(_metrics_default_log "$2")" || exit 2
+    printf -v "$1" '%s' "$_p"
+}
 
-USAGE_LOG="${TILLANDSIAS_EXPERT_USAGE_LOG:-$(_metrics_default_log forge-expert-usage.jsonl)}"
-FLOW_LOG="${TILLANDSIAS_CYCLE_FLOW_LOG:-$(_metrics_default_log tillandsias-cycle-flow.jsonl)}"
-TIMING_LOG="${TILLANDSIAS_TIMING_LOG:-$(_metrics_default_log tillandsias-timing.jsonl)}"
+USAGE_LOG="${TILLANDSIAS_EXPERT_USAGE_LOG:-}"; [ -n "$USAGE_LOG" ] || _default_log_into USAGE_LOG forge-expert-usage.jsonl
+FLOW_LOG="${TILLANDSIAS_CYCLE_FLOW_LOG:-}"; [ -n "$FLOW_LOG" ] || _default_log_into FLOW_LOG tillandsias-cycle-flow.jsonl
+TIMING_LOG="${TILLANDSIAS_TIMING_LOG:-}"; [ -n "$TIMING_LOG" ] || _default_log_into TIMING_LOG tillandsias-timing.jsonl
 # ORDER 1915-gtph. ONE GATE RUN, ONE ID. build.sh --check exports
 # TILLANDSIAS_TIMING_RUN_ID for its whole run, so its build-check total row,
 # every phase row and every row its children write can be grouped without
@@ -323,7 +333,7 @@ esac
 # agent states the number and the script folds it — the check-mcp-surface shape.
 # What this buys over prose in a handoff is that the attestation becomes
 # structured, logged, and comparable across cycles.
-TOKENS_LOG="${TILLANDSIAS_TOKENS_LOG:-$(_metrics_default_log tillandsias-tokens.jsonl)}"
+TOKENS_LOG="${TILLANDSIAS_TOKENS_LOG:-}"; [ -n "$TOKENS_LOG" ] || _default_log_into TOKENS_LOG tillandsias-tokens.jsonl
 
 # ── ORDER 1096-p3tn: a SECOND live timing log makes every count a partition ──
 # The refusal above closes the path that CREATES a second log. This closes the
@@ -356,7 +366,7 @@ TOKENS_LOG="${TILLANDSIAS_TOKENS_LOG:-$(_metrics_default_log tillandsias-tokens.
 # take down the step they are measuring; and an --emit-flow caller is not even
 # reading the timing log. Refusing there couples an unrelated writer to a
 # timing-log split — measured: with /tmp debris present,
-# test-cycle-flow-emit-idempotency.sh failed 12 scenarios because a FLOW emit
+# test-cycle-flow-emit-idempotency.lua failed 12 scenarios because a FLOW emit
 # was refused over a TIMING log. The split matters when numbers are PUBLISHED,
 # which is this script's reporting path, so the guard lives there.
 case "${1:-}" in
@@ -738,7 +748,7 @@ if [ "${1:-}" = "--emit-flow" ]; then
     # the omission stops being able to produce a poisoned row at all.
     #
     # `-` is now unreachable by construction, which is the pinned property
-    # (test-cycle-flow-emit-idempotency.sh scenarios 5 and 8): a sentinel that
+    # (test-cycle-flow-emit-idempotency.lua scenarios 5 and 8): a sentinel that
     # cannot be written cannot be mistaken for a cycle id, and the replace-key
     # (host+cycle) can no longer collapse every unlabelled cycle onto one row.
     #
@@ -962,7 +972,7 @@ printf 'experts_substitution: unknown (needs the agent harness tool log; not der
 # is retro-labelled by a fact nobody recorded. An `ok-unexposed` cycle also
 # fires the mcp_outage: line, because a read path that silently degraded for a
 # whole cycle IS the outage 737-zcj5 was built to stop losing.
-HEALTH_LOG="${TILLANDSIAS_EXPERT_HEALTH_LOG:-$(_metrics_default_log forge-expert-health.jsonl)}"
+HEALTH_LOG="${TILLANDSIAS_EXPERT_HEALTH_LOG:-}"; [ -n "$HEALTH_LOG" ] || _default_log_into HEALTH_LOG forge-expert-health.jsonl
 mcp_health="unprobed"
 mcp_outages=0
 if [ -s "$HEALTH_LOG" ]; then

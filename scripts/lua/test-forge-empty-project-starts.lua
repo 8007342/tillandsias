@@ -22,7 +22,7 @@
 --
 -- REGIME. Hermetic and offline, with REAL git. The implementation is
 -- awk-extracted from images/default/lib-common.sh, as
--- test-forge-clone-wait-is-bounded.sh does, but git is NOT stubbed: a wrapper
+-- test-forge-clone-wait-is-bounded.lua does, but git is NOT stubbed: a wrapper
 -- rewrites the git://test-mirror-host/testproj URL to a local bare mirror and
 -- calls the real binary, so clone, ls-remote and HEAD resolution are git's own
 -- behaviour on a mirror shaped like images/git/entrypoint.sh leaves it.

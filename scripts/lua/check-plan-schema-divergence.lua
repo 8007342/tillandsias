@@ -23,7 +23,7 @@
 -- binary this script already runs under, named by `-- --plan <path>`,
 -- TILLANDSIAS_PLAN_BIN, or TILLANDSIAS_SCRIPT_RUNNER_BIN (set by build.sh's
 -- _run_lua_decider). It is a child, not fs.read, because the files may lie
--- outside the repository (test-yaml-reader-availability.sh passes a temp file).
+-- outside the repository (test-yaml-reader-availability.lua passed a temp file).
 --
 -- Usage: tillandsias-plan script run scripts/lua/check-plan-schema-divergence.lua [-- [--plan <bin>] [index.yaml [schema.yaml]]]
 

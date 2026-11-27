@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: daily-maintenance-body-runs-before-the-startup-boundary-exists
+    field: status
+    value: implemented
+    ts: "2026-11-26T15:26:42Z"
+    host: yoga
+events:
+  - packet_id: daily-maintenance-body-runs-before-the-startup-boundary-exists
+    event: {type: implemented, ts: "2026-11-26T15:26:42Z", host: yoga, summary: "implemented on work/888-3d6x: the Start Of Day section tells a due:* cycle to take its startup boundary BEFORE the maintenance body, in the checkout it will work in; Start Of Cycle step 3 reuses that boundary instead of re-snapshotting (which would absorb the body's changes into the baseline)"}

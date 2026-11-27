@@ -1,0 +1,11 @@
+# Gate step — data, not code (order 1072-b7eq). Moved from an inline build.sh
+# --check block by the .step series (batch 3, 2266: the slowest blocks first,
+# measured one at a time on lenovinha). As a .step it is no build.sh edit, so it
+# never makes intake HEAVY; it runs in the pool (it writes only its own scratch).
+STEP_DESC="Checking --changed --intake defers, marks HEAVY, and matches cargo's crate graph (2248-zcqh)"
+STEP_LUA="scripts/lua/test-gate-changed-intake.lua"
+STEP_ERROR="--changed --intake no longer defers whole-tree/slow fixtures by name, marks an unscopable change HEAVY, or derives the crate graph cargo resolves (2248-zcqh)"
+STEP_OK="--changed --intake fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin ok:gate-changed-intake:12 arms at 213905e79 (run directly; fleet-run reds it because it deletes the other .step files the fixture reads)"
+STEP_READS="scripts/lua/test-gate-changed-intake.lua"
+STEP_SECOND_REGIME="yolanda 2026-11-23 msys ok:gate-changed-intake:13 arms at d4c5f4880 (fleet-run)"

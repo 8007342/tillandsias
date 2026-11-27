@@ -1,93 +1,118 @@
-#!/usr/bin/env bash
-# tillandsias-models — list ollama models loaded in the enclave inference
-# container, annotated with their planner tier. Exits 1 with a single
-# diagnostic line when the inference container is unreachable.
-#
-# Usage: tillandsias-models [--json]
-#
-# @trace spec:forge-environment-discoverability
-# @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md, runtime/forge-container.md
+#!/usr/bin/env lua
+-- tillandsias-models — list ollama models loaded in the enclave inference
+-- container, annotated with their planner tier. Exits 1 with a single
+-- diagnostic line when the inference container is unreachable.
+--
+-- Usage: tillandsias-models [--json]
+--
+-- @trace spec:forge-environment-discoverability, order:2380-ds8v
+-- @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md, runtime/forge-container.md
+--
+-- Stock Lua 5.4; curl fetches and jq parses, as before.
 
-set -euo pipefail
+local HELP = [[
+tillandsias-models — list ollama models loaded in the enclave inference
+container, annotated with their planner tier. Exits 1 with a single
+diagnostic line when the inference container is unreachable.
 
-JSON=0
-case "${1:-}" in
-    --json) JSON=1 ;;
-    -h|--help) sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    "") ;;
-    *) echo "tillandsias-models: unknown arg '$1'" >&2
-       echo "usage: tillandsias-models [--json]" >&2; exit 2 ;;
-esac
+Usage: tillandsias-models [--json]
 
-INFERENCE_URL="${TILLANDSIAS_INFERENCE_URL:-http://inference:11434}"
+]]
 
-# Order 482d: the tier a model prints is the CANONICAL table's tier, read from
-# byte-identical copies of images/inference/tiers/{tier-table,models.ollama}.tsv
-# (this image's build context cannot reach that directory, so the copies ship
-# here and litmus:inference-tier-table-migration asserts they are identical).
-# The previous hard-coded map ("keep in sync") had drifted from what the
-# inference container actually runs. A model the table does not name prints --.
-TIERS_DIR="${TILLANDSIAS_CLI_TIERS_DIR:-$(cd "$(dirname "$(readlink -f "$0")")/../share/tiers" 2>/dev/null && pwd)}"
-tier_for() {
-    local tag="$1" id="" tier="" vram ram models
-    [ -r "$TIERS_DIR/models.ollama.tsv" ] && [ -r "$TIERS_DIR/tier-table.tsv" ] || { printf '%s' '--'; return; }
-    while IFS=$'\t' read -r lid otag; do
-        case "$lid" in ''|'#'*) continue ;; esac
-        [ "$otag" = "$tag" ] && { id="$lid"; break; }
-    done < "$TIERS_DIR/models.ollama.tsv"
-    if [ -n "$id" ]; then
-        while IFS=$'\t' read -r t vram ram models; do
-            case "$t" in ''|'#'*) continue ;; esac
-            case ",$models," in *",$id,"*) tier="$t"; break ;; esac
-        done < "$TIERS_DIR/tier-table.tsv"
-    fi
-    printf '%s' "${tier:---}"
-}
+local mode = arg[1] or ""
+if mode == "-h" or mode == "--help" then io.stdout:write(HELP); os.exit(0) end
+if mode ~= "" and mode ~= "--json" then
+    io.stderr:write("tillandsias-models: unknown arg '" .. mode .. "'\nusage: tillandsias-models [--json]\n")
+    os.exit(2)
+end
+local json = mode == "--json"
+local function getenv(n) local v = os.getenv(n); return v ~= "" and v or nil end
+local function quote(s) return "'" .. s:gsub("'", "'\\''") .. "'" end
+local function capture(cmd)
+    local p = io.popen(cmd)
+    local o = p:read("a") or ""
+    p:close()
+    return o
+end
+local function str(s)
+    return '"' .. s:gsub('[%c"\\\127]', function(c)
+        if c == '"' or c == "\\" then return "\\" .. c end
+        return ("\\u%04x"):format(c:byte())
+    end) .. '"'
+end
+local URL = getenv("TILLANDSIAS_INFERENCE_URL") or "http://inference:11434"
+local function nothing(why) io.stdout:write(('{"error":"%s","url":%s,"models":[]}\n'):format(why, str(URL))) end
 
-raw="$(curl -fsS --max-time 3 "${INFERENCE_URL%/}/api/tags" 2>/dev/null || true)"
-if [ -z "$raw" ]; then
-    if [ $JSON -eq 1 ]; then
-        printf '{"error":"inference container not running","url":"%s","models":[]}\n' "$INFERENCE_URL"
-    else
-        printf 'inference container not running (%s/api/tags unreachable)\n' "$INFERENCE_URL" >&2
-    fi
-    exit 1
-fi
+-- Order 482d: the tier a model prints is the CANONICAL table's tier, read from
+-- byte-identical copies of images/inference/tiers/{tier-table,models.ollama}.tsv
+-- (this image's build context cannot reach that directory, so the copies ship
+-- here and litmus:inference-tier-table-migration asserts they are identical).
+-- A model the table does not name prints --.
+local DIR = getenv("TILLANDSIAS_CLI_TIERS_DIR")
+if not DIR then
+    local self = capture("readlink -f " .. quote(arg[0] or "")):gsub("\n$", "")
+    DIR = (self:match("^(.*)/[^/]*$") or ".") .. "/../share/tiers"
+end
+-- Rows of a table, split on tabs, comments and blanks dropped.
+local function rows(name)
+    local f = io.open(DIR .. "/" .. name, "r")
+    if not f then return nil end
+    local t = {}
+    for l in f:lines() do
+        if l ~= "" and l:sub(1, 1) ~= "#" then
+            local c = {}
+            for v in (l .. "\t"):gmatch("([^\t]*)\t") do c[#c + 1] = v end
+            t[#t + 1] = c
+        end
+    end
+    f:close()
+    return t
+end
+local adapter, table_rows = rows("models.ollama.tsv"), rows("tier-table.tsv")
+local function tier_for(tag)
+    if not (adapter and table_rows) then return "--" end
+    for _, a in ipairs(adapter) do
+        if a[2] == tag then
+            for _, t in ipairs(table_rows) do
+                if ("," .. (t[4] or "") .. ","):find("," .. a[1] .. ",", 1, true) then return t[1] end
+            end
+            return "--"
+        end
+    end
+    return "--"
+end
 
-# TSV: name<TAB>size<TAB>modified<TAB>digest
-tsv="$(printf '%s' "$raw" | jq -r '.models[] | [.name, (.size|tostring),
-    (.modified_at//""), (.digest//"")] | @tsv' 2>/dev/null || true)"
+-- One shell, so the answer never travels on a command line (Linux caps one argument at
+-- 128 KiB): `up`, then name<TAB>size<TAB>modified<TAB>digest, one model a line.
+local answer = capture("raw=\"$(curl -fsS --max-time 3 " .. quote((URL:gsub("/$", "")) .. "/api/tags") .. " 2>/dev/null)\"; [ -n \"$raw\" ] || exit 0; echo up; "
+    .. [[printf '%s' "$raw" | jq -r '.models[] | [.name, (.size|tostring), (.modified_at//""), (.digest//"")] | @tsv' 2>/dev/null]])
+local tsv = answer:match("^up\n(.*)$")
+if not tsv then
+    if json then nothing("inference container not running")
+    else io.stderr:write(("inference container not running (%s/api/tags unreachable)\n"):format(URL)) end
+    os.exit(1)
+end
 
-if [ -z "$tsv" ]; then
-    if [ $JSON -eq 1 ]; then
-        printf '{"error":"no models loaded","url":"%s","models":[]}\n' "$INFERENCE_URL"
-    else
-        printf 'no models loaded at %s\n' "$INFERENCE_URL"
-    fi
-    exit 0
-fi
+local models = {}
+for l in tsv:gmatch("[^\n]+") do
+    local c = {}
+    for v in (l .. "\t"):gmatch("([^\t]*)\t") do c[#c + 1] = v end
+    if (c[1] or "") ~= "" then models[#models + 1] = { name = c[1], tier = tier_for(c[1]), size = tonumber(c[2]) or 0, modified = c[3] or "", digest = c[4] or "" } end
+end
+if #models == 0 then
+    if json then nothing("no models loaded") else io.stdout:write(("no models loaded at %s\n"):format(URL)) end
+    os.exit(0)
+end
 
-if [ $JSON -eq 1 ]; then
-    annotated=""
-    while IFS=$'\t' read -r name size modified digest; do
-        [ -z "$name" ] && continue
-        annotated+="${name}"$'\t'"$(tier_for "$name")"$'\t'"${size}"$'\t'"${modified}"$'\t'"${digest}"$'\n'
-    done <<<"$tsv"
-    printf '%s' "$annotated" | jq -Rs --arg url "$INFERENCE_URL" '{
-        url: $url,
-        models: (split("\n") | map(select(length>0)) | map(split("\t") | {
-            name: .[0], tier: .[1],
-            size_bytes: (.[2]|tonumber? // 0),
-            modified_at: .[3], digest: .[4]
-        }))
-    }'
+if json then
+    local out = {}
+    for i, m in ipairs(models) do
+        out[i] = ('{"name":%s,"tier":%s,"size_bytes":%d,"modified_at":%s,"digest":%s}'):format(str(m.name), str(m.tier), m.size // 1 | 0, str(m.modified), str(m.digest))
+    end
+    io.stdout:write(('{"url":%s,"models":[%s]}\n'):format(str(URL), table.concat(out, ",")))
 else
-    printf 'Tillandsias inference models (%s)\n\n' "$INFERENCE_URL"
-    printf '  %-4s %-28s %-14s %s\n' TIER NAME SIZE MODIFIED
-    while IFS=$'\t' read -r name size modified digest; do
-        [ -z "$name" ] && continue
-        size_mib=$(( ${size:-0} / 1024 / 1024 ))
-        printf '  %-4s %-28s %-14s %s\n' \
-            "$(tier_for "$name")" "$name" "${size_mib} MiB" "${modified%%.*}"
-    done <<<"$tsv"
-fi
+    io.stdout:write(("Tillandsias inference models (%s)\n\n"):format(URL) .. ("  %-4s %-28s %-14s %s\n"):format("TIER", "NAME", "SIZE", "MODIFIED"))
+    for _, m in ipairs(models) do
+        io.stdout:write(("  %-4s %-28s %-14s %s\n"):format(m.tier, m.name, (m.size // 1048576 | 0) .. " MiB", (m.modified:match("^(.-)%.") or m.modified)))
+    end
+end
