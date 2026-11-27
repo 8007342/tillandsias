@@ -665,11 +665,13 @@ not_run_line() {
         printf '  not-run: nothing — tier=full runs the whole gate (%s)\n' "${_daily_note:-full}"
     fi
 }
-# --daily-full: gate the trunk tip with the selector OFF and publish the result.
-if [ "$DAILY_FULL" -eq 1 ]; then
-    git fetch -q "$REMOTE" "$TRUNK" || { say "could-not-run:host:daily-full:fetch-failed"; exit 3; }
+# daily_full_run — gate the trunk tip with the selector OFF and publish the result.
+# Returns 0 (green proof published), 1 (red published), 3 (could not run). Used by
+# --daily-full and, since 2432-ik2d, by an idle run whose newest proof is stale.
+daily_full_run() {
+    git fetch -q "$REMOTE" "$TRUNK" || { say "could-not-run:host:daily-full:fetch-failed"; return 3; }
     _dsha="$(git rev-parse "$REMOTE/$TRUNK")"
-    git checkout -q --detach "$_dsha" || { say "could-not-run:host:daily-full:checkout-failed"; exit 3; }
+    git checkout -q --detach "$_dsha" || { say "could-not-run:host:daily-full:checkout-failed"; return 3; }
     rm -f "$_RUNDIR/no-daily-proof"
     ( _gate_clean_env; export TILLANDSIAS_CLASS_SELECTOR=off TILLANDSIAS_FULL_GATE_MARKER="$_RUNDIR/no-daily-proof"
       # 2270-7gp6: the salvage-audit fixture's live 334-ref audit runs here, once a day.
@@ -683,15 +685,35 @@ if [ "$DAILY_FULL" -eq 1 ]; then
         say "dry-run: would publish $_dref -> ${_dsha:0:9} (gate rc=$_drc)"
     elif ! git push -q "$REMOTE" "$_dsha:$_dref" 2>/dev/null; then
         say "could-not-run:host:daily-full:push-failed:$_dref (gate rc=$_drc; log $_RUNDIR/daily-full-gate.log)"
-        exit 3
+        return 3
     fi
     if [ "$_drc" -eq 0 ]; then
         say "ok:land-queue:daily-full:${_dsha:0:9}:$_dref — land gates may skip unchanged steps against it for ${DAILY_MAX_AGE_S}s"
-        exit 0
+        return 0
     fi
     say "red:land-queue:daily-full:${_dsha:0:9}:rc=$_drc:$_dref — scoped lands freeze back to full until a green daily run (log $_RUNDIR/daily-full-gate.log)"
-    exit 1
+    return 1
+}
+if [ "$DAILY_FULL" -eq 1 ]; then
+    daily_full_run; exit $?
 fi
+# ORDER 2432-ik2d: AN IDLE QUEUE CUTS A STALE PROOF. Only a manual --daily-full did,
+# and a day without one froze every scoped land (2429-u3rp) without a word. Crons are
+# operator-only, so the queue does it on an EMPTY run, never with work waiting, never
+# in a dry run, never when a red daily run is newer (that needs a person, not a retry),
+# and never on main/release (daily_proof refuses those first). 0 turns it off.
+DAILY_AUTO="${TILLANDSIAS_LAND_QUEUE_DAILY_AUTO:-1}"
+daily_auto_cut() {
+    [ "$DAILY_AUTO" = 1 ] && [ "$DRY_RUN" -ne 1 ] || return 0
+    git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null || return 0
+    if daily_proof "$(git rev-parse "$REMOTE/$TRUNK")"; then return 0; fi
+    case "$_daily_why" in
+        no-daily-run|daily-run-stale:*|daily-run-not-on-*) ;;
+        *) say "daily-full:auto:not-cut:$_daily_why"; return 0 ;;
+    esac
+    say "daily-full:auto:cutting:$_daily_why — the queue is idle, so it proves trunk now (scoped lands are FULL until a fresh green proof exists)"
+    daily_full_run
+}
 
 read_queue() { # <first>
     local _qjson _qrc _qlen _all _prio _hold _drafts n h
@@ -750,6 +772,7 @@ read_queue 1 || exit 1
 
 if [ -z "$_cands" ]; then
     say "ok:land-queue:0 landed=0 evicted=0 requeued=0 skipped=0 — the queue is empty"
+    daily_auto_cut || true   # 2432-ik2d: its own verdict line says what it did
     exit 0
 fi
 
