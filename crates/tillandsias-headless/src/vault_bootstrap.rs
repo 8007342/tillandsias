@@ -1860,7 +1860,7 @@ pub fn github_token_due_check_live(debug: bool) -> Result<DueCheck, String> {
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| e.to_string())?
         .as_secs();
-    let forge = std::env::var("TILLANDSIAS_HOST_KIND").as_deref() == Ok("forge");
+    let forge = tillandsias_core::forge_marker::refuse_as_forge();
     let store = VaultGitHubTokenStore { debug };
     rotate_github_token_if_due(
         &store,
@@ -3015,7 +3015,10 @@ pub fn cloudflare_token_due_check_live(debug: bool) -> Result<CloudflareDueCheck
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|_| cloudflare_rotation_failure("clock"))?
         .as_secs();
-    let forge = host_kind_is_forge(std::env::var("TILLANDSIAS_HOST_KIND").ok().as_deref());
+    let forge = host_kind_is_forge(std::env::var("TILLANDSIAS_HOST_KIND").ok().as_deref())
+        || tillandsias_core::forge_marker::marker_is_valid(std::path::Path::new(
+            tillandsias_core::forge_marker::FORGE_MARKER_PATH,
+        ));
     if forge {
         return Ok(CloudflareDueCheck::RefusedInForge);
     }

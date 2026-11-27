@@ -322,6 +322,16 @@ COPY skills/ /opt/skills/
 RUN mkdir -p /etc/tillandsias/locales
 COPY locales/ /etc/tillandsias/locales/
 
+# ── Forge marker (order 2354-5biy, operator ruling 2026-11-27) ─
+# This file is what makes a container a forge (host_kind=forge) for the
+# command policy, however it was started: the launcher, podman exec or
+# queue.submit. It is owned by root, mode 0444, written before USER 1000, so
+# the unprivileged agent can neither change it nor plant one elsewhere.
+# Neither TILLANDSIAS_HOST_KIND nor /run/.containerenv is evidence on its own.
+# @trace spec:command-policies
+RUN printf 'kind=forge\n' > /etc/tillandsias/forge \
+    && chown 0:0 /etc/tillandsias/forge && chmod 0444 /etc/tillandsias/forge
+
 # ── Fix ownership ──────────────────────────────────────────────
 RUN chown -R 1000:1000 /home/forge /opt
 
