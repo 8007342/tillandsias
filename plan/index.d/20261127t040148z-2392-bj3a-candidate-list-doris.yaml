@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# doris-windows 2026-11-27: the NPU bench's candidate list, ready for the operator's go. Nothing is run yet.
+status:
+  - packet_id: npu-inference-benchmark-on-xdna2-lemonade-flm-vs-cpu-and-igpu
+    field: next_action
+    value: |
+      HELD for the operator's go on this list (macuahuitl relays). Host doris: Ryzen AI, XDNA2 NPU, Radeon 890M
+      iGPU, 61.6 GB RAM. NPU driver 32.0.20102.4480 (was 32.0.203.257; FLM needs >= .311). Lemonade 2026.48.3,
+      FLM v1.0.13, ryzenai-llm v1.7.0, llama.cpp b12233 (cpu, vulkan) and b12223 (rocm).
+      Candidates (model, size GB, lane). Matched pairs: the same model on several lanes.
+        Llama-3.2-1B: Llama-3.2-1B-Instruct-NPU 1.82 (npu, ryzenai-llm) | llama3.2-1b-FLM 1.2 (npu, flm, not downloaded)
+        Qwen3 small: qwen3-1.7b-FLM 1.6 (npu, flm) | Qwen3-0.6B-GGUF 0.36 (igpu, llamacpp)
+        Qwen3-4B: qwen3-4b-FLM 3.1 (npu, flm) | Qwen3-4B-Instruct-2507-GGUF 2.33 (igpu vulkan; cpu)
+        Qwen3-8B: qwen3-8b-FLM 5.6 (npu, flm) | Qwen3-8B-GGUF 4.89 (igpu vulkan; cpu)
+        Llama-3.1-8B: Llama-3.1-8B-NPU 8.66 (npu, ryzenai-llm)
+        Qwen2.5-7B: Qwen2.5-7B-Instruct-NPU 5.63 (npu, ryzenai-llm)
+        gpt-oss-20b: gpt-oss-20b-NPU 12.5 (npu, ryzenai-llm) | gpt-oss-20b-mxfp4-GGUF 11.3 (igpu vulkan)
+        Gemma-4 E4B: gemma4-it-e4b-FLM 8.5 (npu, flm) | Gemma-4-E4B-it-GGUF 5.56 (igpu vulkan)
+        Upper bound: qwen3.6-moe-35b-a3b-FLM 20.6 (npu, flm) | Qwen3-14B-GGUF 7.96, Qwen2.5-Coder-32B-Instruct-GGUF 18.5 (igpu vulkan)
+        Speech: whisper-v3-turbo-FLM 0.61 (npu) | Whisper-Base 0.14 (whispercpp cpu/npu/rocm)
+      Measure per run: load time, time to first token, decode tokens/s, prompt tokens/s, power state; fixed
+      prompt sets at 128/1024 input tokens, 256 output, 3 runs each, nothing else loaded (max_loaded_models=1).
+      OBSERVATION, not a change: Lemonade's llamacpp picks the vulkan backend by default (log: "Using LlamaCpp
+      Backend: vulkan"); llamacpp:rocm is installed and unused. Bench both iGPU backends explicitly per run; do NOT
+      change Lemonade's default (macuahuitl).
+      Smoke-verified 2026-11-27: Llama-3.2-1B-Instruct-NPU answered (6.9 s cold), Qwen3-4B and Qwen3-14B GGUF
+      answered on vulkan, SD-Turbo 512px image in 16.5 s.
+    ts: "2026-11-27T04:01:48Z"
+    host: doris
