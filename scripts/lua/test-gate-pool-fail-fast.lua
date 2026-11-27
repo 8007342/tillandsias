@@ -18,6 +18,10 @@
 local fixture = require "common.fixture"
 local T = fixture.new("gate-pool-fail-fast")
 local ROOT = fixture.repo_root()
+local U = text.trim((proc.run({ argv = { "uname", "-s" }, timeout_ms = 10000 }).stdout) or "")
+if U ~= "Linux" and U ~= "Darwin" then
+    verdict.emit("skip:gate-pool-fail-fast:" .. U .. "-re-execs-build-sh-into-wsl", 0)
+end
 local S = T:scratch()
 local SLOW = 4
 
