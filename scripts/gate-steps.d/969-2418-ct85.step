@@ -1,0 +1,10 @@
+# Gate step 2418-ct85 — data, not code (order 1072-b7eq).
+#
+# common/argv_batch runs a long item list in command-line-sized batches, so a
+# whole-list spawn cannot pass Windows' 32 767-character limit and read as "nothing".
+STEP_DESC="Checking common/argv_batch batches a long argv and fails closed (2418-ct85)"
+STEP_LUA="scripts/lua/test-argv-batch.lua"
+STEP_ERROR="common/argv_batch dropped or reordered items, or read a failed batch as success (2418-ct85) — see the FAIL lines above"
+STEP_OK="argv batch helper passed"
+STEP_SECOND_REGIME="doris 2026-11-26 msys ok:argv-batch:4 arms"
+STEP_READS="lib/lua/common/argv_batch.lua scripts/lua/test-argv-batch.lua"

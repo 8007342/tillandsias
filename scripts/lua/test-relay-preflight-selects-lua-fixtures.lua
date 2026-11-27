@@ -70,4 +70,21 @@ o = select("scripts/lua/test-gone.lua")
 T:arm("5 a deleted Lua fixture is not selected", not has(o, "test-gone.lua"), o)
 o = select("docs/nothing.md")
 T:arm("6 a diff naming nothing selects nothing", not has(o, "selected:scripts/"), o)
+
+-- 7 (2419-8him) a .lua fixture is run with TILLANDSIAS_PLAN_BIN and TILLANDSIAS_SCRIPT_RUNNER_BIN
+-- naming the runner: 175 fixtures read one of them and refuse could-not-run without it, so 2415-ea3h
+-- reported each red by construction (#1424's relay reddened on test-bare-mktemp.lua in 8 ms). The
+-- loop's command construction is cut from the script and run with a stub runner that prints them.
+local build = src:match("\n(%s*_fx_cmd=%(bash \"%$_fx\"%)\n.-\n%s*fi\n)")
+T:arm("7 premise: the loop's _fx_cmd construction is found", build ~= nil)
+if build then
+    fs.write(d.rel .. "/runner", "#!/bin/sh\necho \"PLAN=$TILLANDSIAS_PLAN_BIN RUNNER=$TILLANDSIAS_SCRIPT_RUNNER_BIN\"\n")
+    T:run{ "chmod", "+x", d.abs .. "/runner" }
+    fs.write(d.rel .. "/cmd.sh", '_lua_runner() { _lb="$1"; }\nset -- "$1"\nR="$1"\n_fx=scripts/lua/test-x.lua; _name=fixture:test-x.lua\n'
+        .. "_lua_runner() { _lb=\"$R\"; return 0; }\n" .. build .. '"${_fx_cmd[@]}"\n')
+    local r = T:run{ SH, d.abs .. "/cmd.sh", d.abs .. "/runner", env_unset = { "TILLANDSIAS_*" }, timeout_ms = 30000 }
+    local want = "PLAN=" .. d.abs .. "/runner RUNNER=" .. d.abs .. "/runner"
+    T:arm("7 a .lua fixture sees TILLANDSIAS_PLAN_BIN and TILLANDSIAS_SCRIPT_RUNNER_BIN naming the runner",
+        text.contains(r.stdout or "", want), (r.stdout or "") .. (r.stderr or ""))
+end
 T:finish()
