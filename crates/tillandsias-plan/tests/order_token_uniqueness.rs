@@ -11,7 +11,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn scratch(tag: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!(
+    // test_scratch removes the dir at process exit (2408-rkvd: /tmp is a tmpfs).
+    let d = tillandsias_plan::test_scratch::path(format!(
         "order-token-uniqueness-{tag}-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
