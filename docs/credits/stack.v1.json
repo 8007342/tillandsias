@@ -61276,7 +61276,7 @@
   "schema": "tillandsias-stack/v1",
   "summary": {
     "components": 57,
-    "edges": 3134,
+    "edges": 3140,
     "license_families": {
       "model": 7,
       "permissive": 1718,
