@@ -44,10 +44,21 @@ local CONTAINERFILES = seam("TILLANDSIAS_BROWSER_CLAIM_CONTAINERFILES",
 local BROWSER_PKGS = { "chromium", "chromium-headless", "google-chrome-stable", "google-chrome",
     "chrome-for-testing", "firefox", "epiphany", "webkit2gtk4.1", "webkitgtk6.0" }
 
+-- None readable is could-not-run (exit 3): there is no image to judge
+-- against. Some readable and some not is blocked (exit 2), naming each
+-- one the check skipped (2417-jzhh).
+local any_cf = false
+for _, cf in ipairs(CONTAINERFILES) do
+    if pcall(fs.read, cf) then any_cf = true; break end -- optional-read: a probe for "any readable"; read_all below names every failure
+end
+if not any_cf then
+    verdict.could_not_run("forge-browser-claims", "no forge Containerfile readable: " .. table.concat(CONTAINERFILES, " "))
+end
+local CF_SRC = require("common.listed_read").read_all("forge-browser-claims", CONTAINERFILES)
 local image_browsers, read_any = {}, false
 for _, cf in ipairs(CONTAINERFILES) do
-    local ok, src = pcall(fs.read, cf)
-    if ok and src then
+    local src = CF_SRC[cf]
+    if src then
         read_any = true
         for _, line in ipairs(text.lines(src)) do
             if not line:match("^%s*#") then
@@ -91,10 +102,11 @@ local function is_claim(line)
     return true
 end
 
+local DOC_SRC = require("common.listed_read").read_all("forge-browser-claims", docs)
 local claims = {}
 for _, f in ipairs(docs) do
-    local ok, src = pcall(fs.read, f)
-    if ok and src then
+    local src = DOC_SRC[f]
+    if src then
         for i, line in ipairs(text.lines(src)) do
             if is_claim(line) then claims[#claims + 1] = f .. ":" .. i .. ": " .. text.trim(line) end
         end

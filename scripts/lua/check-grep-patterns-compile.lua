@@ -60,10 +60,11 @@ if #files == 0 then
 end
 
 -- { file, line, pattern, ere }
+local SRC = require("common.listed_read").read_all("grep-patterns-compile", files)
 local found = {}
 for _, path in ipairs(files) do
-    local ok, body = pcall(fs.read, path)
-    if ok and body then
+    local body = SRC[path]
+    if body then
         local n = 0
         for line in (body .. "\n"):gmatch("([^\n]*)\n") do
             n = n + 1

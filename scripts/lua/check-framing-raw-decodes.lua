@@ -59,9 +59,10 @@ local total_files = 0
 
 local ok_walk, files = pcall(fs.walk, "crates", { suffix = ".rs" })
 if ok_walk then
+    local SRC = require("common.listed_read").read_all("framing-ratchet", files)
     for _, f in ipairs(files) do
-        local ok_r, content = pcall(fs.read, f)
-        if ok_r then
+        local content = SRC[f]
+        if content then
             local c = 0
             for _, line in ipairs(text.lines(content)) do
                 if text.contains(line, DECODE) then
