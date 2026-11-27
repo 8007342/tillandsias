@@ -71,10 +71,11 @@ end
 table.sort(files)
 files[#files + 1] = at("images/default/lib-common.sh")
 
+local SRC = require("common.listed_read").read_all("launch-artifacts-untracked", files)
 local unmanifested = {}
 for _, f in ipairs(files) do
-    local okr, body = pcall(fs.read, f)
-    if okr and body then
+    local body = SRC[f]
+    if body then
         local shown = ROOT == "." and f or f:sub(#ROOT + 2)
         for n, line in ipairs(text.lines(body)) do
             if text.is_match(line, WRITE) then

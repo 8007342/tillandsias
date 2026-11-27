@@ -1,0 +1,15 @@
+# Gate step 2417-jzhh batch 3 — data, not code.
+#
+# Eight more checkers that read a listing must block (exit 2, naming the file)
+# when a listed file cannot be read, never count it clean. Each arm plants a
+# chmod 000 file in a scratch tree; its control makes it readable again.
+# check-no-base64-script-injection's listing comes from git grep, which stops
+# on such a file; the files it names now join the listing.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking eight listing checkers block on an unreadable listed file (2417-jzhh batch 3)"
+STEP_LUA="scripts/lua/test-listed-read-blocks-batch3.lua"
+STEP_ERROR="a listing checker read ok over a file it could not read (2417-jzhh) — see the FAIL lines above"
+STEP_OK="batch-3 listing checkers block on unreadable files"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-27 darwin ok:listed-read-blocks-batch3:16 arms at 732138c0e (red 8/8 on the trunk checkers first)"
+STEP_READS="scripts/lua/test-listed-read-blocks-batch3.lua lib/lua/common/listed_read.lua scripts/lua/check-image-pins.lua scripts/lua/check-jq-multiline-capture-strips-cr.lua scripts/lua/check-launch-artifacts-untracked.lua scripts/lua/check-litmus-expression-pinning-added.lua scripts/lua/check-litmus-grep-escapes.lua scripts/lua/check-litmus-steps-can-fail.lua scripts/lua/check-nix-cache-installer-compatible.lua scripts/lua/check-no-base64-script-injection.lua"

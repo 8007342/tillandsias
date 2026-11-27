@@ -100,10 +100,11 @@ end
 
 local files = fs.walk(DIR, { suffix = ".yaml" })
 table.sort(files)
+local SRC = require("common.listed_read").read_all("litmus-grep-escapes", files)
 local hits = {}
 for _, file in ipairs(files) do
-    local ok, body = pcall(fs.read, file)
-    if ok and body then
+    local body = SRC[file]
+    if body then
         local n = 0
         for l in body:gmatch("([^\n]*)\n?") do
             n = n + 1

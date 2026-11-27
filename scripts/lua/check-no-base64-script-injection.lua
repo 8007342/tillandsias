@@ -54,11 +54,16 @@ if res.status == "exited" and res.code == 0 then
         if l ~= "" then candidates[#candidates + 1] = l end
     end
 end
+-- git grep stops on a tracked file it cannot read and exits non-zero, which
+-- the swallow above reads as "no candidates" (2417-jzhh). The files it names
+-- join the listing, so read_all blocks naming them.
+for path in (res.stderr or ""):gmatch("error: [^\n]-'([^'\n]+)': [^\n]*") do candidates[#candidates + 1] = path end
 
+local SRC = require("common.listed_read").read_all("no-base64-script-injection", candidates)
 local violations = {}
 for _, f in ipairs(candidates) do
-    local ok, content = pcall(fs.read, f)
-    if ok and text.is_match(content, EXECUTABLE) then
+    local content = SRC[f]
+    if content and text.is_match(content, EXECUTABLE) then
         violations[#violations + 1] = f
     end
 end

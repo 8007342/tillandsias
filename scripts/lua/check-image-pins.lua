@@ -114,9 +114,10 @@ end
 
 -- Parse every FROM line: { file, line, image, kind, ref, digest }.
 local froms = {}
+local SRC = require("common.listed_read").read_all("image-pins", files, rooted)
 for _, disp in ipairs(files) do
-    local ok_r, content = pcall(fs.read, rooted(disp))
-    if ok_r then
+    local content = SRC[rooted(disp)]
+    if content then
         local args, stages = {}, {}
         for n, raw in ipairs(text.lines(content)) do
             local line = raw:gsub("^%s+", "")

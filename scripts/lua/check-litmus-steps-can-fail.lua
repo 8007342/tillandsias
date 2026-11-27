@@ -85,12 +85,13 @@ local function last_find(s, needle)
 end
 
 local AND, OR = "&& echo ", "|| echo "
+local SRC = require("common.listed_read").read_all("litmus-steps-can-fail", files, function(name) return DIR .. "/" .. name end)
 local violations, checked = 0, 0
 for _, name in ipairs(files) do
     local path = DIR .. "/" .. name
     checked = checked + 1
-    local okr, body = pcall(fs.read, path)
-    if okr and type(body) == "string" then
+    local body = SRC[path]
+    if type(body) == "string" then
         for lineno, line in ipairs(text.lines(body)) do
             local a = line:find(AND, 1, true)
             -- `*'&& echo '*'|| echo '*`: some `|| echo ` after some `&& echo `.

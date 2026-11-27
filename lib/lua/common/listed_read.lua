@@ -21,10 +21,11 @@
 local M = {}
 
 function M.read_all(name, items, path_of)
-    local sources, unreadable = {}, {}
+    local sources, unreadable, seen = {}, {}, {}
     for _, item in ipairs(items or {}) do
         local p = path_of and path_of(item) or item
-        if sources[p] == nil then
+        if not seen[p] then
+            seen[p] = true
             local ok, body = pcall(fs.read, p)
             if ok and type(body) == "string" then sources[p] = body else unreadable[#unreadable + 1] = p end
         end
