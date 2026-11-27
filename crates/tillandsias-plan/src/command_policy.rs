@@ -1941,6 +1941,91 @@ pub fn audit_log_path(workspace: &Path) -> PathBuf {
         .join(AUDIT_BASENAME)
 }
 
+// ORDER 2430-s7ii: the log grew without bound (8.8 GB on macuahuitl, 1.9 GB on yoga
+// at ~32 MB/day), and `policy audit` read all of it into memory. Past a size cap the
+// live file is RENAMED to a timestamped generation beside it (atomic: an appender
+// holding the old descriptor finishes into the generation, nothing is lost). A
+// generation is removed only when the total is over a cap AND it is entirely older
+// than AUDIT_PRUNE_AGE, so the 14-day retirement window (1443-we89) is never pruned.
+const AUDIT_MAX_BYTES: u64 = 256 * 1024 * 1024;
+const AUDIT_TOTAL_MAX_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+const AUDIT_PRUNE_AGE: std::time::Duration = std::time::Duration::from_secs(30 * 24 * 3600);
+
+fn env_bytes(name: &str, default: u64) -> u64 {
+    std::env::var(name)
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(default)
+}
+
+/// The rotated generations of `path`, oldest first (their names sort by time).
+pub fn audit_generations(path: &Path) -> Vec<PathBuf> {
+    let (Some(dir), Some(base)) = (path.parent(), path.file_name().and_then(|n| n.to_str())) else {
+        return Vec::new();
+    };
+    let prefix = format!("{base}.");
+    let mut out: Vec<PathBuf> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| {
+            let n = e.file_name().to_str()?.to_string();
+            n.starts_with(&prefix).then(|| e.path())
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+/// Rotate `path` when it has reached `max`, then prune generations while the total is
+/// over `total_max`, oldest first, but only generations last written before `now - age`.
+pub fn audit_rotate(
+    path: &Path,
+    max: u64,
+    total_max: u64,
+    age: std::time::Duration,
+    now: std::time::SystemTime,
+) {
+    let Ok(meta) = std::fs::metadata(path) else {
+        return;
+    };
+    if meta.len() < max {
+        return;
+    }
+    let stamp = chrono::DateTime::<chrono::Utc>::from(now).format("%Y%m%dT%H%M%S%.6fZ");
+    let mut target = path.as_os_str().to_owned();
+    target.push(format!(".{stamp}-{}", std::process::id()));
+    if std::fs::rename(path, &target).is_err() {
+        return;
+    }
+    let gens = audit_generations(path);
+    let mut total: u64 = gens
+        .iter()
+        .filter_map(|g| std::fs::metadata(g).ok())
+        .map(|m| m.len())
+        .sum();
+    for g in &gens {
+        if total <= total_max {
+            break;
+        }
+        let Ok(m) = std::fs::metadata(g) else {
+            continue;
+        };
+        let old = m
+            .modified()
+            .ok()
+            .and_then(|t| now.duration_since(t).ok())
+            .is_some_and(|d| d > age);
+        if !old {
+            break; // generations sort by time: everything after this one is younger
+        }
+        if std::fs::remove_file(g).is_ok() {
+            total = total.saturating_sub(m.len());
+        }
+    }
+}
+
 fn audit_append(path: &Path, line: &serde_json::Value) {
     if cfg!(test) || std::env::var("TILLANDSIAS_POLICY_AUDIT").as_deref() == Ok("off") {
         return;
@@ -1948,6 +2033,16 @@ fn audit_append(path: &Path, line: &serde_json::Value) {
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
+    audit_rotate(
+        path,
+        env_bytes("TILLANDSIAS_POLICY_AUDIT_MAX_BYTES", AUDIT_MAX_BYTES),
+        env_bytes(
+            "TILLANDSIAS_POLICY_AUDIT_TOTAL_MAX_BYTES",
+            AUDIT_TOTAL_MAX_BYTES,
+        ),
+        AUDIT_PRUNE_AGE,
+        std::time::SystemTime::now(),
+    );
     use std::io::Write;
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
@@ -2025,11 +2120,26 @@ pub fn audit_summary(
     since: Option<chrono::Duration>,
     caller: Option<&str>,
 ) -> Option<Vec<AuditRow>> {
-    let text = std::fs::read_to_string(path).ok()?;
+    use std::io::BufRead;
+    // 2430-s7ii: every rotated generation, then the live file, streamed line by line
+    // (read_to_string held all of an 8.8 GB log in memory). None only when NONE exists.
+    let mut files = audit_generations(path);
+    files.push(path.to_path_buf());
+    let readers: Vec<_> = files
+        .iter()
+        .filter_map(|f| std::fs::File::open(f).ok())
+        .collect();
+    if readers.is_empty() {
+        return None;
+    }
     let cutoff = since.map(|d| chrono::Utc::now() - d);
     let mut counts: std::collections::BTreeMap<(String, String), usize> =
         std::collections::BTreeMap::new();
-    for line in text.lines() {
+    for line in readers
+        .into_iter()
+        .flat_map(|f| std::io::BufReader::new(f).lines().map_while(Result::ok))
+    {
+        let line = line.as_str();
         let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
             continue;
         };
@@ -2073,6 +2183,127 @@ pub fn parse_since(s: &str) -> Option<chrono::Duration> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── 2430-s7ii: the audit log rotates by size and keeps its window ────────────────
+    fn audit_dir(tag: &str) -> PathBuf {
+        let d = crate::test_scratch::dir(format!("audit-rotate-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+    fn line(rule: &str) -> String {
+        format!(
+            "{{\"ts\":\"{}\",\"caller\":\"c\",\"rule_id\":\"{rule}\",\"decision\":\"deny\"}}\n",
+            chrono::Utc::now().to_rfc3339()
+        )
+    }
+    fn backdate(p: &Path, secs: u64) {
+        let f = std::fs::OpenOptions::new().write(true).open(p).unwrap();
+        f.set_modified(std::time::SystemTime::now() - std::time::Duration::from_secs(secs))
+            .unwrap();
+    }
+    const DAY: u64 = 24 * 3600;
+
+    #[test]
+    fn audit_rotates_at_the_cap_and_loses_no_line() {
+        let d = audit_dir("cap");
+        let p = d.join(AUDIT_BASENAME);
+        std::fs::write(&p, line("a").repeat(10)).unwrap();
+        audit_rotate(
+            &p,
+            1 << 20,
+            u64::MAX,
+            AUDIT_PRUNE_AGE,
+            std::time::SystemTime::now(),
+        );
+        assert!(
+            p.exists() && audit_generations(&p).is_empty(),
+            "under the cap nothing rotates"
+        );
+        audit_rotate(
+            &p,
+            16,
+            u64::MAX,
+            AUDIT_PRUNE_AGE,
+            std::time::SystemTime::now(),
+        );
+        let g = audit_generations(&p);
+        assert!(
+            !p.exists(),
+            "at the cap the live file is renamed, so the next append starts it empty"
+        );
+        assert_eq!(g.len(), 1);
+        assert_eq!(
+            std::fs::read_to_string(&g[0]).unwrap().lines().count(),
+            10,
+            "every line is in the generation"
+        );
+    }
+
+    #[test]
+    fn audit_prune_never_removes_a_young_generation_however_large() {
+        let d = audit_dir("young");
+        let p = d.join(AUDIT_BASENAME);
+        for i in 0..3 {
+            std::fs::write(&p, line(&format!("r{i}")).repeat(50)).unwrap();
+            audit_rotate(&p, 16, 1, AUDIT_PRUNE_AGE, std::time::SystemTime::now());
+        }
+        assert_eq!(
+            audit_generations(&p).len(),
+            3,
+            "total over the cap, but all inside the window: keep all"
+        );
+    }
+
+    #[test]
+    fn audit_prune_removes_an_old_generation_over_the_total_cap() {
+        let d = audit_dir("old");
+        let p = d.join(AUDIT_BASENAME);
+        std::fs::write(&p, line("old").repeat(50)).unwrap();
+        audit_rotate(
+            &p,
+            16,
+            u64::MAX,
+            AUDIT_PRUNE_AGE,
+            std::time::SystemTime::now(),
+        );
+        let old = audit_generations(&p).remove(0);
+        backdate(&old, 40 * DAY);
+        std::fs::write(&p, line("new").repeat(50)).unwrap();
+        audit_rotate(&p, 16, 1, AUDIT_PRUNE_AGE, std::time::SystemTime::now());
+        let g = audit_generations(&p);
+        assert_eq!(
+            g.len(),
+            1,
+            "the 40-day-old generation goes once the total is over the cap"
+        );
+        assert!(
+            std::fs::read_to_string(&g[0]).unwrap().contains("\"new\""),
+            "the young one stays"
+        );
+    }
+
+    #[test]
+    fn audit_summary_reads_every_generation_and_the_live_file() {
+        let d = audit_dir("summary");
+        let p = d.join(AUDIT_BASENAME);
+        std::fs::write(&p, line("x").repeat(3)).unwrap();
+        audit_rotate(
+            &p,
+            16,
+            u64::MAX,
+            AUDIT_PRUNE_AGE,
+            std::time::SystemTime::now(),
+        );
+        std::fs::write(&p, line("x").repeat(2)).unwrap();
+        let rows = audit_summary(&p, Some(chrono::Duration::days(14)), None).unwrap();
+        let n: usize = rows
+            .iter()
+            .filter(|((r, _), _)| r == "x")
+            .map(|(_, n)| *n)
+            .sum();
+        assert_eq!(n, 5, "3 rotated + 2 live: the window spans the rotation");
+    }
 
     fn req(argv: &[&str], k: HostKind) -> Request {
         Request {
