@@ -18,9 +18,9 @@
 # installed to ~/.local/bin/tillandsias-plan inside the distro — which is
 # already PLAN_BIN_CANONICAL, the wrappers' first fallback candidate.
 #
-# Dual-lane, one file:
-#   inner (inside the distro)  build + install + capabilities-verify
-#   outer (Windows Git Bash)   re-exec the inner lane through wsl.exe
+# Inner lane only (inside the distro): build + install + capabilities-verify.
+# The outer lane (Windows Git Bash re-exec through wsl.exe) is
+# scripts/lua/wsl-plan-expert-ensure.lua (2421-7wvs).
 #
 # GRAMMAR (exactly one line on stdout; always exit 0 — this is advisory, the
 # deterministic direct-binary fallback keeps a cycle alive without experts):
@@ -55,29 +55,9 @@ if [ -n "${WSL_DISTRO_NAME:-}" ] || [ "${1:-}" = "inner" ]; then
     exit 0
 fi
 
-# ── Outer lane: Windows host shell ─────────────────────────────────────────
-case "$(uname -s 2>/dev/null)" in
-    MINGW* | MSYS* | CYGWIN*) : ;;
-    *)
-        echo "skip:not-windows"
-        exit 0
-        ;;
-esac
-command -v wsl.exe >/dev/null 2>&1 || { echo "skip:no-wsl"; exit 0; }
-distro="${TILLANDSIAS_WSL_BUILD_DISTRO:-tillandsias-build}"
-# wsl.exe emits UTF-16LE; strip NULs and CRs before matching.
-if ! wsl.exe -l -q 2>/dev/null | tr -d '\0\r' | grep -qx "$distro"; then # sigpipe-ok: safe pipeline
-    echo "skip:no-build-distro"
-    exit 0
-fi
-repo_msys="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# Git Bash /c/... is the distro's /mnt/c/... under default WSL mounts.
-repo_wsl="/mnt${repo_msys}"
-verdict="$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' \
-    wsl.exe -d "$distro" -- bash -lc "bash '$repo_wsl/scripts/wsl-plan-expert-ensure.sh' inner" 2>/dev/null \
-    | tr -d '\0\r' | tail -1)"
-case "$verdict" in
-    ok:wsl-plan-expert:* | degraded:* | skip:*) printf '%s\n' "$verdict" ;;
-    *) echo "degraded:wsl-invoke-failed" ;;
-esac
+# ── Outer lane: ported to scripts/lua/wsl-plan-expert-ensure.lua (2421-7wvs) ──
+# The Windows-host side (find the build distro, re-exec this file's inner lane
+# through wsl.exe) is Lua now. This file keeps only the inner lane, which runs
+# INSIDE the guest, where no Lua runner exists until 2420-rd7x.
+echo "degraded:outer-lane-is-lua — run: tillandsias-plan script run scripts/lua/wsl-plan-expert-ensure.lua"
 exit 0

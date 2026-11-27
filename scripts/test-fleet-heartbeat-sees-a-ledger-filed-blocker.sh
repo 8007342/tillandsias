@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# inputs: images/default/lib-common.sh plan/index.yaml scripts/agent-identity.sh scripts/check-plan-binary-current.sh scripts/check-resumable-claim-dirt.sh scripts/check-stranded-in-progress.sh scripts/cycle-preflight.sh scripts/fleet-heartbeat.sh scripts/lua/test-plan-binary-probe-release-over-debug.lua scripts/plan-binary-probe.sh scripts/regenerate-cheatsheet-index.sh scripts/select-work-batch.sh scripts/with-wsl2-builder.sh scripts/wsl-plan-expert-ensure.sh VERSION lib/lua/common/ crates/tillandsias-plan/ plan/index.d/ plan/issues/
 # @trace order:1196-5hva, spec:observability-metrics
 #
 # test-fleet-heartbeat-sees-a-ledger-filed-blocker.sh — the first fixture this

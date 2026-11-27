@@ -1,4 +1,5 @@
 -- @env PATH HOME TMPDIR
+-- inputs: crates/tillandsias-headless/src/main.rs images/default/lib-common.sh plan/index.yaml scripts/check-capability-row.sh scripts/check-plan-binary-current.sh scripts/check-resumable-claim-dirt.sh scripts/check-stranded-in-progress.sh scripts/cycle-preflight.sh scripts/lua/check-ledger-distillation.lua scripts/lua/check-must-ship-rows.lua scripts/lua/test-plan-binary-probe-release-over-debug.lua scripts/plan-binary-probe.sh scripts/regenerate-cheatsheet-index.sh scripts/release-freeze.sh scripts/release-preflight.sh scripts/select-work-batch.sh scripts/verify-version-monotonic.sh scripts/with-wsl2-builder.sh scripts/wsl-plan-expert-ensure.sh VERSION lib/lua/common/ crates/tillandsias-plan/
 -- @trace order:1218-25z3, spec:versioning, spec:ci-release, order:2380-wjrd
 --
 -- test-must-ship-rows.lua — scripts/lua/check-must-ship-rows.lua names the rows marked for the next cut whose fix

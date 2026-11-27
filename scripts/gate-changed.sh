@@ -262,8 +262,23 @@ FILENAME == W "/tokens" {
         r = resolve(tok, f, ctx)
         if (r == "" || r == f || r == "/") continue
         nres++
+        # 2423-86ca: a token that stops at a $ ("$ROOT/scripts/${name}.sh") names a
+        # directory only because the name is dynamic, as does a Lua concatenation
+        # (ROOT .. "/scripts/" .. name). Record it apart from a WHOLE
+        # read (a glob, a find or ls, a plain mention), and from a LITERAL file
+        # under the directory; END narrows the dynamic edge when the file has both
+        # a literal and no whole read of that directory.
+        if (r ~ /^scripts\/(.*\/)?$/) {
+            if ((substr(text, 1, 1) == "$" || text ~ /^["\047][[:space:]]*\.\./) && tok !~ /\*/) { DYN[f, r] = 1; continue }
+            WHOLE[f, r] = 1
+        } else if (r ~ /^scripts\// && r !~ /\/$/) LIT[f, r] = 1
         add(f, r, (ex == "x" && r ~ /\.(sh|lua)$/) ? "x" : "r")
     }
+    # 2423-86ca: a census that names the directory without a slash
+    # (fs.walk("scripts"), find scripts, git ls-files scripts) reads it whole; the
+    # token loop above never sees a bare word, so record it here. Without this a
+    # narrowed file that walks scripts/ would select on no script change.
+    if (full ~ /(fs\.(walk|list|glob|dir)|(^|[^A-Za-z_])(ls|find)[[:space:]]|ls-files)/ && full ~ /(["\047 (]|^)scripts\/?(["\047 ),]|$)/) { WHOLE[f, "scripts/"] = 1; add(f, "scripts/", "r") }
     # TREE SCANS read "*": a repo-wide git listing with no pathspec (not one
     # run inside a scratch repo via -C "$tmp"), a recursive grep/find/rg aimed
     # at the repo root, or a glob over every root entry.
@@ -274,6 +289,18 @@ FILENAME == W "/tokens" {
 }
 FILENAME == W "/scanlines" { f = $0; sub(/:.*/, "", f); ALL[f] = 1; next }
 END {
+    # 2423-86ca: a dynamic directory edge stays unless the same file names a
+    # literal file under that directory and reads none of it whole (a census).
+    # It also stays when one of those literals ITSELF reads the directory
+    # dynamically or whole: the names may be DATA that literal holds
+    # (test-host-tools.sh runs the provers check-host-tools.sh lists).
+    for (k in DYN)   { split(k, kk, SUBSEP); RD[kk[1], kk[2]] = 1 }
+    for (k in WHOLE) { split(k, kk, SUBSEP); RD[kk[1], kk[2]] = 1 }
+    for (k in DYN) {
+        split(k, kk, SUBSEP); keep = 1
+        if (!((kk[1], kk[2]) in WHOLE)) for (j in LIT) { split(j, jj, SUBSEP); if (jj[1] == kk[1] && index(jj[2], kk[2]) == 1) { if ((jj[2], kk[2]) in RD) { keep = 1; break } keep = 0 } }
+        if (keep) add(kk[1], kk[2], "r")
+    }
     for (k in E) { split(k, kk, SUBSEP); print kk[1] "\t" kk[2] "\t" E[k] > (W "/edges") }
     ALL["build.sh"] = 1   # a fixture that RUNS build.sh depends on all of it
     for (f in ALL) print f > (W "/allsrc")

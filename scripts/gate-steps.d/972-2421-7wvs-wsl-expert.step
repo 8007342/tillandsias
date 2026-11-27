@@ -1,0 +1,10 @@
+# Gate step 2421-7wvs (slice 2) — data, not code (order 1072-b7eq).
+#
+# wsl-plan-expert-ensure's outer lane is Lua; it must answer the .sh's grammar
+# and always exit 0 (advisory).
+STEP_DESC="Checking wsl-plan-expert-ensure.lua's outer lane (2421-7wvs)"
+STEP_LUA="scripts/lua/test-wsl-plan-expert-ensure.lua"
+STEP_ERROR="wsl-plan-expert-ensure.lua's outer lane diverged from its grammar (2421-7wvs) — see the FAIL lines above"
+STEP_OK="wsl-plan-expert-ensure outer lane passed"
+STEP_SECOND_REGIME="doris 2026-11-27 msys ok:wsl-plan-expert-ensure-fixture:3 arms"
+STEP_READS="scripts/lua/wsl-plan-expert-ensure.lua scripts/wsl-plan-expert-ensure.sh scripts/lua/test-wsl-plan-expert-ensure.lua"

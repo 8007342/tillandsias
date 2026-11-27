@@ -1,4 +1,5 @@
 -- @trace order:1255-s4im, order:1176-9vqn, order:2380-psba
+-- inputs: .github/workflows/release.yml crates/tillandsias-headless/src/main.rs images/default/lib-common.sh plan/index.yaml scripts/check-capability-row.sh scripts/check-credential-channel.sh scripts/check-plan-binary-current.sh scripts/check-resumable-claim-dirt.sh scripts/check-stranded-in-progress.sh scripts/cycle-preflight.sh scripts/hooks/pre-push-local-gate.sh scripts/hooks/pre-push-version-guard.sh scripts/land-queue.sh scripts/lib-freeze-paths.sh scripts/lua/check-ledger-distillation.lua scripts/lua/check-must-ship-rows.lua scripts/lua/test-plan-binary-probe-release-over-debug.lua scripts/plan-binary-probe.sh scripts/regenerate-cheatsheet-index.sh scripts/release-freeze.sh scripts/release-preflight.sh scripts/select-work-batch.sh scripts/verify-version-monotonic.sh scripts/with-wsl2-builder.sh scripts/wsl-plan-expert-ensure.sh VERSION lib/lua/common/ crates/tillandsias-plan/ plan/index.d/
 -- @env PATH HOME
 --
 -- test-release-freeze-audit.lua — `release-freeze.sh audit` and release-preflight's Gate 6.
