@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: gate-phase-waited-marker-claims-contention-it-cannot-see
+    field: status
+    value: in_progress
+    ts: "2026-11-27T11:41:56Z"
+    host: yoga
+events:
+  - packet_id: gate-phase-waited-marker-claims-contention-it-cannot-see
+    event: {type: claimed, ts: "2026-11-27T11:41:56Z", host: yoga, summary: "claimed by yoga (coordinator 2026-11-27); work ref work/2421-mmbq"}
