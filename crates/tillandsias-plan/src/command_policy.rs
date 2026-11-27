@@ -116,6 +116,13 @@ pub fn marker_state(path: &Path) -> MarkerState {
     if !meta.file_type().is_file() {
         return MarkerState::Untrusted("not-a-regular-file");
     }
+    #[cfg(not(unix))]
+    {
+        // No forge is a native Windows process (SafeRoots::forge is a Linux
+        // container layout), so nothing on this platform is forge evidence.
+        let _ = meta;
+        MarkerState::Untrusted("not-a-linux-container")
+    }
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
@@ -125,18 +132,10 @@ pub fn marker_state(path: &Path) -> MarkerState {
         if meta.mode() & 0o222 != 0 {
             return MarkerState::Untrusted("writable");
         }
-    }
-    #[cfg(not(unix))]
-    {
-        // No forge is a native Windows process (SafeRoots::forge is a Linux
-        // container layout), so nothing on this platform is forge evidence.
-        let _ = meta;
-        return MarkerState::Untrusted("not-a-linux-container");
-    }
-    #[cfg(unix)]
-    match std::fs::read_to_string(path) {
-        Ok(s) if record_field(&s, "kind") == Some("forge") => MarkerState::Valid,
-        _ => MarkerState::Untrusted("content"),
+        match std::fs::read_to_string(path) {
+            Ok(s) if record_field(&s, "kind") == Some("forge") => MarkerState::Valid,
+            _ => MarkerState::Untrusted("content"),
+        }
     }
 }
 
