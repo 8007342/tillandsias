@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: images-imagegen-cuda-has-no-lua-runtime
+    order: "2425-8wqr"
+    status: ready
+    kind: improvement
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [images, lua]
+    estimated_hours: 2
+    owned_paths: [images/imagegen/Containerfile.cuda]
+    title: "images/imagegen/Containerfile.cuda (Ubuntu 24.04 + CUDA 13.3 runtime) has no Lua runtime"
+    context: |
+      Operator ruling: Lua goes in every container. 2413-pg82 ships the Fedora imagegen image alone (macuahuitl,
+      2026-11-27) so the multi-GB nvidia base does not hold it. Add lua5.4 lua-filesystem lua-lpeg to the runtime
+      stage's apt-get install (Ubuntu alternatives provide /usr/bin/lua, as measured on webkit, 2413-fbzp), measure
+      the size before and after under private tags, and prove lfs and lpeg load in the built image.
+    exit_criteria:
+      - "the CUDA imagegen image builds with lua5.4, lfs and lpeg loading via lua -e, with its size before and after named in the PR"
+    unscoreable: "image-build-row: closure is the measured build named in the PR, as for the other 2413 rows."
+    next_action: "after 2422-gg77 batches 3 and 4: add the three packages to the runtime apt line, build before/after, verify."
+    provenance: filed by lenovinha at macuahuitl's request, split from 2413-pg82.
+    related: [2413-pg82, 2413-fbzp]
+    events:
+      - {type: filed, ts: '2026-11-27T04:48:19Z', host: lenovinha, summary: imagegen CUDA variant needs a Lua runtime}
