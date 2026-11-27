@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: a-cheatsheet-staged-into-the-forge-without-provenance-or-past-its-age-is-an-error-or-labelled-stale
+    field: status
+    value: in_progress
+    ts: "2026-11-27T14:38:38Z"
+    host: yoga
+events:
+  - packet_id: a-cheatsheet-staged-into-the-forge-without-provenance-or-past-its-age-is-an-error-or-labelled-stale
+    event: {type: claimed, ts: "2026-11-27T14:38:38Z", host: yoga, summary: "claimed by yoga (coordinator 2026-11-27: plan_next Direction work). Rulings: the no-provenance arm lands as a ratchet (a floor of today's sheets, a new one refused, the floor only shrinks); the stale age is the operator's, built as one config value defaulting to unset (no stale marking); tellme on the image track is fine. Work ref work/2080-kkki."}
