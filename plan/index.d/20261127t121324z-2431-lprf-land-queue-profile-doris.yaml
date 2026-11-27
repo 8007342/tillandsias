@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by doris-windows at macuahuitl's request: the land-queue time profile (runs 96-105).
+# Details: plan/issues/land-queue-time-profile-and-continuous-mode-2026-11-27.md
+packets:
+  - packet_id: land-queue-stamps-runs-trains-and-candidate-gaps
+    order: 2431-lprf
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [land-queue, velocity, metrics]
+    estimated_hours: 2
+    owned_files: [scripts/land-queue.sh]
+    title: |
+      land-queue stamps run start and end, marks train phases and the gap between candidates
+    context: |
+      In runs 96-105 the marked phases outside the gate total under 30 s per candidate, yet a land takes
+      ~30 min against a ~13 min gate. The rest sits between runs, which nothing stamps. Add run=, train=
+      and gap= timing lines so the READY-to-landed time can be computed.
+    verifiable_closure: |
+      A fixture land run prints run start/end, train phase and gap lines; a profile script sums them.
+    unscoreable: "an instrument; pinned by its fixture"
+    next_action: Add the timing lines to land-queue.sh, with a fixture.
+  - packet_id: plan-refresh-rebuild-on-tests-only-change
+    order: 2432-prfb
+    status: ready
+    kind: perf
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [land-queue, velocity, cargo]
+    estimated_hours: 2
+    owned_files: [crates/tillandsias-plan/build.rs]
+    title: |
+      The 60 s plan-refresh is a correct rebuild; only a tests-only change could skip it
+    context: |
+      #1656, #1668 and #1676 (the 60 s refreshes) all changed crates/tillandsias-plan, so the refresh key
+      changed and the rebuild was needed. Only #1668 was tests-only: build.rs reruns on tests/ to keep
+      build-id equal to source-revision, which relinks the binary for a test edit.
+    verifiable_closure: |
+      A tests-only change leaves the plan-refresh key unchanged, and build-id still matches source-revision.
+    unscoreable: "about 60 s on roughly 1 candidate in 15; record before fixing"
+    next_action: Optional. Embed a separate tests stamp so a tests-only change does not relink.
+  - packet_id: land-queue-continuous-event-driven-mode
+    order: 2433-lqcm
+    status: blocked
+    kind: design
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [land-queue, velocity, systemd]
+    estimated_hours: 6
+    owned_files: [packaging/systemd/user/tillandsias-land-queue-listen.service.in, scripts/land-queue.sh]
+    title: |
+      A continuous land queue on macuahuitl, started by PR events (gh event listen), not by a coordinator
+    context: |
+      The ~17 min of a land spent outside the gate is the wait for someone to start a run. Design: a
+      systemd user unit loops on `gh event listen` (a blocking subscription, no polling), runs land-queue
+      under its existing lock, re-runs once after each run, and has a 60 min --timeout as the only
+      time-based safety net. The plan/issues note has the full design.
+    verifiable_closure: |
+      With 2431-lprf's stamps: median READY-to-landed time before and after, on macuahuitl.
+    unscoreable: "needs the operator's decision on a standing rule (no unapproved polling cadence)"
+    next_action: >
+      BLOCKED on the operator: approve the listener running unattended and the 60 min safety-net cadence,
+      and choose whether a run starts only when a PR leaves draft or also on each push. Before that, check
+      that gh event listen (in preview) is enabled on macuahuitl's account.
