@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# inputs: scripts/check-forge-findings-persisted.sh scripts/check-mcp-expert-health.sh lib/lua/common/ crates/tillandsias-plan/
 # @trace order:741-3y48, spec:meta-orchestration
 set -uo pipefail
 

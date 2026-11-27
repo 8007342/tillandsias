@@ -1,4 +1,5 @@
 -- @env PATH HOME
+-- inputs: openspec/litmus-tests/litmus-lww-channel-fields-alias.yaml plan/index.yaml scripts/lua/check-fragment-status-loss.lua scripts/lua/check-litmus-mutation-arms-mutate.lua scripts/lua/test-litmus-item-opener-refused.lua scripts/plan-binary-probe.sh scripts/run-litmus-test.sh scripts/test-fragment-status-loss.sh lib/lua/common/ crates/tillandsias-plan/
 -- @trace order:1059-pb2j, order:2310-eji3
 --
 -- test-litmus-mutation-arm-guard.lua — check-litmus-mutation-arms-mutate.lua flags an arm
