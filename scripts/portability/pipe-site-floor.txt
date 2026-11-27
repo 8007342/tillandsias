@@ -511,7 +511,6 @@ scripts scripts/test-git-mirror-vault-agent-auto-auth.sh 18
 scripts scripts/test-github-token-auto-rotation.sh 1
 scripts scripts/test-groundtruth-corpus-declaration.sh 8
 scripts scripts/test-guest-binaries-nix-lane.sh 9
-scripts scripts/test-headless-sidecar-target-gate.sh 1
 scripts scripts/test-hook-mover-enumeration-is-batched.sh 1
 scripts scripts/test-host-tools.sh 30
 scripts scripts/test-image-build-convergence.sh 2

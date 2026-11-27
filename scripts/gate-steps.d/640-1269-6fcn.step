@@ -8,13 +8,14 @@
 # negative control, and pins the release job's runner.arch sidecar selection.
 # Pre-fix: arm 1 fails with rc=101 "required runtime asset missing".
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf). Ported from the .sh in 2354-5biy.
 STEP_DESC="Checking the router sidecar is required only for Linux-target headless builds (1269-6fcn)"
-STEP_SCRIPT="scripts/test-headless-sidecar-target-gate.sh"
+STEP_LUA="scripts/lua/test-headless-sidecar-target-gate.lua"
 STEP_ERROR="a non-Linux target build of tillandsias-headless again refuses without the Linux-only router sidecar, or a Linux build stopped refusing (1269-6fcn)"
 STEP_OK="router sidecar required only for Linux targets; release job selects it by runner.arch"
 STEP_SECOND_REGIME="yolanda 2026-09-29 msys PASS: headless-sidecar-target-gate (1269-6fcn) at 89e5f2999; ARM3 ok, ARM1 and ARM2 named skips (no mingw, msvc host)"
+STEP_SECOND_REGIME="tlatoani 2026-11-27 darwin PASS: headless-sidecar-target-gate (1269-6fcn) at 262ee65de; ARM3 ok, ARM1 ok (windows-gnu cargo check, sidecar absent), ARM2 named skip (aarch64-apple-darwin host)"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="crates/tillandsias-embed/build.rs crates/tillandsias-embed/src/** crates/tillandsias-embed/src/collect.rs scripts/test-headless-sidecar-target-gate.sh"
+STEP_READS="crates/tillandsias-embed/build.rs crates/tillandsias-embed/src/** crates/tillandsias-embed/src/collect.rs scripts/lua/test-headless-sidecar-target-gate.lua .github/workflows/release.yml"
