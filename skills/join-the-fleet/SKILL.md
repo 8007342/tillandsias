@@ -37,6 +37,10 @@ not run is not a green; the verdict carries the counts for that reason.
 change methodology first and this page second; never the other way round
 (CLAUDE.md, Authority).
 
+**Vocabulary.** `methodology/glossary.yaml` is binding (1908-9q4c): packets,
+messages and methodology use its terms. Ask `methodology_ask "what does <term>
+mean"` for a word you are unsure of.
+
 ## Remote unreachable: STOP — check FIRST, and on the first GitHub failure (order 2239-rmun)
 
 The user's direction (2026-11-22): a host that cannot push code to the remote
