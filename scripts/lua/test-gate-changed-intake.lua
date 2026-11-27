@@ -43,6 +43,9 @@
 --                  `# inputs: scripts/a.sh` reads scripts/a.sh, not scripts/
 --  19 DECIDER      --check-declared refuses a declaration that misses a literal
 --                  path the fixture names, and accepts it once declared
+--  20 ON-TOUCH     (2263-6xsp) a changed scripts/test-* fixture that reads the
+--                  whole scripts/ and declares nothing gets ONE advisory hint
+--                  naming `# inputs:`; a declared one gets none; exit stays 0
 --  16 NO-DEADLOCK  (2256-mvmy) the same tree padded past the 64 KB pipe buffer
 --                  (as the real population is, ~80 KB): a serial row's `wait`
 --                  must not sit on the loop's own input. Before the fix the
@@ -396,6 +399,43 @@ do
         rc19 == 1 and o19:find("undeclared:scripts/test-f.sh:scripts/b.sh", 1, true) ~= nil
             and rc19b == 0 and o19b:find("ok:gate-changed-declared-inputs:1 declaring", 1, true) ~= nil,
         "rc=" .. rc19 .. " out=" .. o19:sub(1, 160) .. " | after rc=" .. rc19b .. " out=" .. o19b:sub(1, 120))
+end
+
+-- 20: the on-touch hint, on a scratch repo whose base commit precedes the edit.
+do
+    local X = T:scratch("on-touch")
+    local function w(rel, body) fs.write(X.rel .. "/" .. rel, body) end
+    proc.run{ argv = { "mkdir", "-p", X.abs .. "/scripts/gate-steps.d" } }
+    w("Cargo.toml", "[workspace]\nmembers = [\n]\n")
+    -- the real shape: "$ROOT/scripts/${n}.sh" tokenizes as ROOT/scripts/, the
+    -- whole directory (a bare "scripts/${n}.sh" yields no token at all)
+    local DYN = 'bash "$ROOT/scripts/${n}.sh"\n'
+    w("scripts/a.sh", "#!/usr/bin/env bash\n")
+    w("scripts/test-undeclared.sh", "#!/usr/bin/env bash\nn=a\n" .. DYN)
+    w("scripts/test-declared.sh", "#!/usr/bin/env bash\n# inputs: scripts/a.sh\nn=a\n" .. DYN)
+    w("build.sh", 'if [[ "$FLAG_CHECK" == true ]]; then\n'
+        .. '    _step "u..."\n    if ! _run bash "$SCRIPT_DIR/scripts/test-undeclared.sh" 2>&1; then\n        _error "u"\n        exit 1\n    fi\n'
+        .. '    _step "d..."\n    if ! _run bash "$SCRIPT_DIR/scripts/test-declared.sh" 2>&1; then\n        _error "d"\n        exit 1\n    fi\n'
+        .. 'elif [[ "$FLAG_TEST$FLAG_CHECK" == x ]]; then\n    :\nfi\n')
+    local function g(args)
+        local argv = { "git", "-C", X.abs, "-c", "user.email=f@f", "-c", "user.name=f", "-c", "commit.gpgsign=false" }
+        for _, a in ipairs(args) do argv[#argv + 1] = a end
+        return T:must(argv)
+    end
+    T:must{ "git", "init", "-q", X.abs }
+    g{ "add", "-A" }; g{ "commit", "-qm", "base" }
+    local base = text.trim(g{ "rev-parse", "HEAD" }.stdout or "")
+    -- touch both fixtures after the base
+    w("scripts/test-undeclared.sh", "#!/usr/bin/env bash\nn=a\n" .. DYN .. "# touched\n")
+    w("scripts/test-declared.sh", "#!/usr/bin/env bash\n# inputs: scripts/a.sh\nn=a\n" .. DYN .. "# touched\n")
+    local r = proc.run{ argv = { SH, GC, "--check-declared", base }, cwd = X.abs, timeout_ms = 120000,
+        env = { TILLANDSIAS_GATE_CHANGED_ROOT = X.abs } }
+    local o20 = r.stdout or ""
+    T:arm("20 ON-TOUCH only the undeclared scripts/ reader that the change touches gets the hint, and exit stays 0",
+        r.status == "exited" and r.code == 0
+            and o20:find("hint:scripts/test-undeclared.sh reads the whole scripts/", 1, true) ~= nil
+            and not o20:find("hint:scripts/test-declared.sh", 1, true),
+        "rc=" .. tostring(r.code) .. " out=" .. o20:sub(1, 400))
 end
 
 T:finish()

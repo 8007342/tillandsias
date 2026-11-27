@@ -1,3 +1,4 @@
+-- inputs: scripts/lua/test-claims-across-branches.lua scripts/plan-binary-probe.sh scripts/test-support/scratch-git.sh scripts/lua/check-claim-confirmed.lua scripts/gate-steps.d/953-1034-whsp.step build.sh plan/index.yaml plan/index.d/ crates/tillandsias-plan/ scripts/lua/check-claims-across-branches.lua
 -- @env PATH HOME
 -- @trace order:1034-whsp, order:1948-xbaf, order:2372-snfs, order:2392-9zcp
 --
