@@ -22,7 +22,7 @@
 
 local OUT = "docs/credits/package-licences.tsv"
 local IMAGES = { "builder", "chromium-core", "chromium-framework", "default", "default-base", "flutter", "git", "imagegen",
-    "imagegen-cuda", "imagegen-studio", "inference", "proxy", "router", "vault", "warp", "web", "web-studio-grapesjs",
+    "enclave-fetch", "imagegen-cuda", "imagegen-studio", "inference", "proxy", "router", "vault", "warp", "web", "web-studio-grapesjs",
     "web-wrangler", "webkit" }
 
 local function run(argv, ms)

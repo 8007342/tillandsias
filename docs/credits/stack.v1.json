@@ -10275,6 +10275,24 @@
       "to": "oci:docker.io/library/alpine:3.22"
     },
     {
+      "from": "image:enclave-fetch",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4"
+    },
+    {
+      "from": "image:enclave-fetch",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-filesystem"
+    },
+    {
+      "from": "image:enclave-fetch",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-lpeg"
+    },
+    {
       "from": "image:flutter",
       "kind": "base-image",
       "optional": false,
@@ -57963,14 +57981,15 @@
       "name": "lua5.4",
       "optional": false,
       "pulled_by": [
+        "image:enclave-fetch",
         "image:git",
         "image:proxy",
         "image:router",
         "image:vault",
         "image:web"
       ],
-      "source": "images/git/Containerfile",
-      "version": "5.4.6-r1"
+      "source": "images/enclave-fetch/Containerfile",
+      "version": "5.4.7-r0"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=lua5.4-filesystem",
@@ -57984,13 +58003,14 @@
       "name": "lua5.4-filesystem",
       "optional": false,
       "pulled_by": [
+        "image:enclave-fetch",
         "image:git",
         "image:proxy",
         "image:router",
         "image:vault",
         "image:web"
       ],
-      "source": "images/git/Containerfile",
+      "source": "images/enclave-fetch/Containerfile",
       "version": "1.8.0-r4"
     },
     {
@@ -58005,14 +58025,15 @@
       "name": "lua5.4-lpeg",
       "optional": false,
       "pulled_by": [
+        "image:enclave-fetch",
         "image:git",
         "image:proxy",
         "image:router",
         "image:vault",
         "image:web"
       ],
-      "source": "images/git/Containerfile",
-      "version": "1.0.2-r3"
+      "source": "images/enclave-fetch/Containerfile",
+      "version": "1.1.0-r0"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=nss-tools",
@@ -61276,7 +61297,7 @@
   "schema": "tillandsias-stack/v1",
   "summary": {
     "components": 57,
-    "edges": 3140,
+    "edges": 3143,
     "license_families": {
       "model": 7,
       "permissive": 1718,
