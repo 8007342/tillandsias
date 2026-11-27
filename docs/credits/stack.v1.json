@@ -18891,6 +18891,24 @@
       "to": "oci:docker.io/library/node:22.19.0-bookworm-slim"
     },
     {
+      "from": "image:web-wrangler",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-filesystem"
+    },
+    {
+      "from": "image:web-wrangler",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-lpeg"
+    },
+    {
+      "from": "image:web-wrangler",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua5.4"
+    },
+    {
       "from": "image:webkit",
       "kind": "download",
       "optional": false,
@@ -58421,6 +58439,7 @@
       "optional": true,
       "pulled_by": [
         "image:imagegen-cuda",
+        "image:web-wrangler",
         "image:webkit"
       ],
       "source": "images/imagegen/Containerfile.cuda",
@@ -58439,6 +58458,7 @@
       "optional": true,
       "pulled_by": [
         "image:imagegen-cuda",
+        "image:web-wrangler",
         "image:webkit"
       ],
       "source": "images/imagegen/Containerfile.cuda",
@@ -58457,6 +58477,7 @@
       "optional": true,
       "pulled_by": [
         "image:imagegen-cuda",
+        "image:web-wrangler",
         "image:webkit"
       ],
       "source": "images/imagegen/Containerfile.cuda",
@@ -61318,7 +61339,7 @@
   "schema": "tillandsias-stack/v1",
   "summary": {
     "components": 57,
-    "edges": 3143,
+    "edges": 3149,
     "license_families": {
       "model": 7,
       "permissive": 1720,
