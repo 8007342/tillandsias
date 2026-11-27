@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: resource-lock-prefix-scan-test-flakes-on-a-released-lock
+    order: "2436-2ywt"
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [linux, headless, flake]
+    estimated_hours: 2
+    title: "flake: resource_lock::tests::held_resources_with_prefix_lists_only_live_matching_locks sees a released lock as live"
+    context: |
+      Failed once in relay-preflight of work/2354-5biy (#1708), cargo-test:tillandsias-headless, 1 of 1078:
+        panicked at crates/tillandsias-headless/src/resource_lock.rs:443:9:
+        scanner must list exactly the live lock with the prefix
+          left: ["test-launch-3889973-alpha", "test-launch-3889973-beta"]
+          right: ["test-launch-3889973-alpha"]
+      Rerun alone in the same tree, 3/3 green (cargo test -p tillandsias-headless --bin tillandsias resource_lock).
+      #1708 does not touch resource_lock. The "beta" lock the test released was still listed as held, so
+      either its release is not complete when the scan runs, or the scan reads a holder that has not exited yet.
+    exit_criteria:
+      - "The cause is named (release ordering, holder liveness check, or shared scratch state) and the test passes 200 consecutive runs under the full headless suite's parallelism."
+    unscoreable: "a flake: closure is a repeat-count measurement"
+    next_action: "Read resource_lock.rs:400-445; loop the test under --test-threads matching the suite."
+    provenance: "coordinator macuahuitl-fedora 2026-11-27, from #1708 preflight"
+    events:
+      - {type: filed, ts: "2026-11-27T13:11:02Z", host: lenovinha, summary: "filed at p3 on the coordinator's word"}

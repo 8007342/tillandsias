@@ -594,6 +594,17 @@ _cpu_children_now() {
             for (i = 1; i <= 2; i++) { t = $i; m = t; sub(/m.*/, "", m); sec = t; sub(/^[0-9]+m/, "", sec); sub(/s$/, "", sec); s += m * 60000 + sec * 1000 }
             printf "%d", s }' "$f" 2>/dev/null)" || _CPU_NOW=-1
     [[ "$_CPU_NOW" =~ ^[0-9]+$ ]] || _CPU_NOW=-1
+    # ORDER 2421-mmbq: CPU time cannot tell contention from work it does not see (a podman
+    # container runs under conmon, outside this shell's children). The kernel's CPU
+    # pressure counter can: "some total" is the microseconds at least one task waited for
+    # a CPU. Read with the builtin, no subshell; -1 where there is no PSI (macOS, msys).
+    _PSI_NOW=-1
+    local _k _a _b _c _t
+    if [[ -r "${_PHASE_PSI_FILE:-/proc/pressure/cpu}" ]]; then
+        while read -r _k _a _b _c _t; do
+            if [[ "$_k" == some && "$_t" == total=* ]]; then _PSI_NOW=$(( ${_t#total=} / 1000 )); break; fi
+        done < "${_PHASE_PSI_FILE:-/proc/pressure/cpu}"
+    fi
 }
 
 _phase_close() {
@@ -614,7 +625,13 @@ _phase_close() {
         cpu=$(( _CPU_NOW - _PHASE_CPU0 ))
         [[ "$cpu" -ge 0 ]] || cpu=-1
     fi
-    _PHASE_LOG="${_PHASE_LOG}${elapsed}	${work}	${_PHASE_NAME}	${cpu}
+    # `psi` (2421-mmbq): the CPU-pressure stall during the phase, ms; -1 without PSI.
+    local psi=-1
+    if [[ "${_PHASE_PSI0:--1}" -ge 0 && "$_PSI_NOW" -ge 0 ]]; then
+        psi=$(( _PSI_NOW - _PHASE_PSI0 ))
+        [[ "$psi" -ge 0 ]] || psi=-1
+    fi
+    _PHASE_LOG="${_PHASE_LOG}${elapsed}	${work}	${_PHASE_NAME}	${cpu}	${psi}
 "
     _PHASE_NAME=""
 }
@@ -1470,6 +1487,7 @@ _step()  {
     _PHASE_RAN_WORK=0
     _cpu_children_now
     _PHASE_CPU0="$_CPU_NOW"
+    _PHASE_PSI0="$_PSI_NOW"
     [[ "${FLAG_GRAPHS:-false}" == true ]] || echo -e "${CYAN}[build]${NC} $*"
 }
 
@@ -1484,20 +1502,21 @@ _phase_report() {
     # but when a phase's span materially exceeds the work measured inside it,
     # the difference is time the named step did not spend, and printing it is
     # how the unattributed gap stops hiding inside a step's number.
-    if [[ "${TILLANDSIAS_GATE_PROFILE:-0}" == "1" ]]; then
-        printf '%s' "$_PHASE_LOG" | sort -rn | awk -F'\t' \
-            '{ gap = ($2 >= 0 && $1 - $2 > 250) ? sprintf("   (+%.1fs unattributed)", ($1-$2)/1000) : ""
-               cpu = ($4 != "" && $4 >= 0) ? sprintf("   cpu %.1fs", $4/1000) : ""
-               waited = ($4 != "" && $4 >= 0 && $1 - $4 > 1000 && $1 >= 2 * $4) ? "   (waited: most of this wall clock is not this step using CPU; the host was busy or the step blocked. 839-veey)" : ""
-               printf "  %6.1fs  %s%s%s%s\n", $1/1000, $3, cpu, gap, waited }' >&2
-    else
-        printf '%s' "$_PHASE_LOG" | sort -rn \
-            | awk -F'\t' -v lim="$slow_ms" \
-            '$1 > lim { gap = ($2 >= 0 && $1 - $2 > 250) ? sprintf("   (+%.1fs unattributed)", ($1-$2)/1000) : ""
-                        cpu = ($4 != "" && $4 >= 0) ? sprintf("   cpu %.1fs", $4/1000) : ""
-                        waited = ($4 != "" && $4 >= 0 && $1 - $4 > 1000 && $1 >= 2 * $4) ? "   (waited: most of this wall clock is not this step using CPU; the host was busy or the step blocked. 839-veey)" : ""
-                        printf "  %6.1fs  %s%s%s%s\n", $1/1000, $3, cpu, gap, waited }' >&2
+    # 2421-mmbq: the marks say only what each number shows. off-cpu = wall clock not spent
+    # in this step own processes (839-veey A/B: idle phases whose work ran in containers
+    # read that way, so it is not "the host was busy"). contended = the kernel CPU-pressure
+    # stall was a material share of the wall clock, which IS the host being busy.
+    local lim=-1
+    [[ "${TILLANDSIAS_GATE_PROFILE:-0}" == "1" ]] || lim="$slow_ms"
+    if printf '%s' "$_PHASE_LOG" | awk -F'\t' '$5 == "" || $5 < 0 { f = 1 } END { exit !f }'; then
+        _info "no CPU-pressure counter (/proc/pressure/cpu) on this host: phases are not marked contended, only off-cpu"
     fi
+    printf '%s' "$_PHASE_LOG" | sort -rn | awk -F'\t' -v lim="$lim" \
+        '$1 > lim { gap = ($2 >= 0 && $1 - $2 > 250) ? sprintf("   (+%.1fs unattributed)", ($1-$2)/1000) : ""
+                    cpu = ($4 != "" && $4 >= 0) ? sprintf("   cpu %.1fs", $4/1000) : ""
+                    off = ($4 != "" && $4 >= 0 && $1 - $4 > 1000 && $1 >= 2 * $4) ? sprintf("   (off-cpu %.1fs: not in this step own processes: waiting, contention, or work in containers/daemons it does not count. 2421-mmbq)", ($1-$4)/1000) : ""
+                    hot = ($5 != "" && $5 >= 0 && $5 > 1000 && 4 * $5 >= $1) ? sprintf("   (contended: %.1fs of CPU-pressure stall)", $5/1000) : ""
+                    printf "  %6.1fs  %s%s%s%s%s\n", $1/1000, $3, cpu, gap, off, hot }' >&2
     _info "Gate phases totalled $(( total / 1000 ))s (set TILLANDSIAS_GATE_PROFILE=1 for every phase)"
 }
 
@@ -3578,20 +3597,68 @@ _gs_count_skips() {
 _gs_pool() {
     local _jobs="$1" _d _f _i=0 _n _rc _t0=$SECONDS _total=0 _ran=0
     local -a _ser=()
+    local -a _pool=() _disp=()
+    local _red="" _k _seen _ord _l
     _d="$(mktemp -d "${TMPDIR:-/tmp}/gate-pool.XXXXXX")" || { _error "gate-steps pool: no scratch dir"; exit 1; }
     for _f in "$_gs_root"/scripts/gate-steps.d/*.step; do
         [ -e "$_f" ] || continue
         _total=$((_total + 1))
         if grep -q '^STEP_SERIAL=' "$_f"; then _ser+=("$_f"); continue; fi
+        _pool+=("$_f")
+    done
+    # ORDER 2430-ffst: DISPATCH order is fail-fast — steps named in
+    # TILLANDSIAS_GATE_STEP_ORDER (one step basename per line, most red per
+    # second first; scripts/lua/gate-step-order.lua derives it from the timing
+    # log) start first, the rest follow in filename order. Indices stay the
+    # FILENAME order, so the replay below is unchanged.
+    _ord="${TILLANDSIAS_GATE_STEP_ORDER:-}"
+    if [ -n "$_ord" ] && [ -r "$_ord" ]; then
+        while IFS= read -r _l; do
+            _l="${_l%$'\r'}"; [ -n "$_l" ] || continue
+            _k=0; for _f in ${_pool[@]+"${_pool[@]}"}; do _k=$((_k + 1)); [ "${_f##*/}" = "$_l" ] && _disp+=("$_k"); done
+        done < "$_ord"
+    fi
+    _k=0; for _f in ${_pool[@]+"${_pool[@]}"}; do
+        _k=$((_k + 1)); _seen=0
+        for _i in ${_disp[@]+"${_disp[@]}"}; do [ "$_i" = "$_k" ] && { _seen=1; break; }; done
+        [ "$_seen" = 1 ] || _disp+=("$_k")
+    done
+    _n=${#_pool[@]}
+    for _k in ${_disp[@]+"${_disp[@]}"}; do
+        # ORDER 2430-ffst: the pool used to `wait` for EVERY worker before it
+        # looked at a single rc, so a red PR paid the whole pool before failing.
+        # Without --keep-going, a finished red stops dispatch and the gate ends.
+        if [ "$FLAG_KEEP_GOING" != true ]; then
+            for _i in "$_d"/*.rc; do
+                [ -e "$_i" ] || continue
+                [ "$(cat "$_i" 2>/dev/null)" = 0 ] || { _red="$_i"; break; }
+            done
+            [ -z "$_red" ] || break
+        fi
         while [ "$(jobs -rp | wc -l)" -ge "$_jobs" ]; do sleep 0.2; done
-        _i=$((_i + 1))
-        printf '%s\n' "$_f" > "$_d/$_i.name"
+        _f="${_pool[$((_k - 1))]}"
+        printf '%s\n' "$_f" > "$_d/$_k.name"
         # A worker never inherits the pool size: a fixture that runs a nested
         # gate (--gate-steps on a scratch tree) must run it serially.
-        { ( unset TILLANDSIAS_GATE_STEP_JOBS; _gs_one "$_f" ) > "$_d/$_i.out" 2>&1; echo $? > "$_d/$_i.rc"; } &
+        { ( unset TILLANDSIAS_GATE_STEP_JOBS; _gs_one "$_f" ) > "$_d/$_k.out" 2>&1; echo $? > "$_d/$_k.rc.tmp"; mv -f "$_d/$_k.rc.tmp" "$_d/$_k.rc"; } &
     done
+    if [ -n "$_red" ]; then
+        # Let the running workers finish (killing one mid-step can strand its
+        # scratch state), dispatch nothing more, then name the red.
+        wait
+        _i=0
+        while [ "$_i" -lt "$_n" ]; do
+            _i=$((_i + 1))
+            [ -e "$_d/$_i.rc" ] || continue
+            _rc="$(cat "$_d/$_i.rc" 2>/dev/null)"
+            [ "$_rc" = 0 ] && continue
+            cat "$_d/$_i.out" 2>/dev/null
+            _error "gate-steps pool: $(basename "$(cat "$_d/$_i.name")") refused (rc=${_rc:-none}); fail-fast stopped dispatch (2430-ffst); a step that passes alone and reds here is a missing STEP_SERIAL (2155-gpar)"
+            rm -rf "$_d"; exit 1
+        done
+    fi
     wait
-    _n=$_i; _i=0
+    _i=0
     while [ "$_i" -lt "$_n" ]; do
         _i=$((_i + 1))
         cat "$_d/$_i.out" 2>/dev/null
@@ -5984,6 +6051,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # was green. Only the guest_feature_set_* tests run, so the marginal cost
     # is one more compile of the crate's test binary (58 s cold on a MacBook
     # Air), not a second full suite. Same zero-ran refusal as above.
+    # ORDER 2437-v9vv: skippable against a daily full proof like the pass above. It
+    # tests the same crate closure (tillandsias-headless), and a feature changes which
+    # code compiles, not which repo files the crate reads, so the same scanned input
+    # list judges it. It ran on every land, scripts-only included (run 110).
+    # shellcheck disable=SC2086 — the declared inputs are words by design.
+    if _class_may_skip cargo-guest-feature-tests $_CARGO_FEATURE_TEST_INPUTS; then
+    # shellcheck disable=SC2086
+    _class_skip_line cargo-guest-feature-tests $_CARGO_FEATURE_TEST_INPUTS
+    else
     _step "Running guest-feature-set tests (listen-vsock, no tray) — 1713-1dnx..."
     _gf_transcript="$SCRIPT_DIR/target/test-transcript-guest-feature-set-gate.log"
     _gf_rc=0
@@ -6004,6 +6080,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Guest-feature-set tests passed: $_gf_ran test(s) executed under listen-vsock alone"
+    fi
 
     # CRITERION 3 (1003-444f) IS SATISFIED BY --workspace, NOT BY A SECOND
     # CHECK, and the check I wrote first is deleted rather than shipped.

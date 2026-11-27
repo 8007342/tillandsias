@@ -656,6 +656,25 @@ gate_env_for() {
     fi
 }
 # not_run_line <gate log> — the land's not-run: line, naming every skipped step.
+# _land_trailers <pr> <lane> — ORDER 2431-2yic: the land commit names its lane, so an
+# audit needs no host's run logs (a week of plan-only lands read as gated, 2026-11-27).
+# Message only: the gate stamp is a digest of the tree, and the tree is unchanged.
+# Idempotent (replace), so a push retry that re-adopts and comes back here is safe.
+_land_trailers() {
+    local _msg _sk=0 _gb
+    _msg="$(git log -1 --format=%B HEAD 2>/dev/null)" || return 0
+    local -a _t=(--trailer "Lane: $2")
+    if [ "$2" = full ]; then
+        [ -f "$_RUNDIR/pr-$1-skips" ] && _sk="$(grep -c . "$_RUNDIR/pr-$1-skips" 2>/dev/null)" || true
+        case "$_daily_note" in "full:"*|"") _gb=full ;; *) _gb=daily-proof ;; esac
+        _t+=(--trailer "Gate-Skipped: ${_sk:-0}" --trailer "Gate-Base: $_gb")
+    fi
+    _msg="$(printf '%s\n' "$_msg" | git interpret-trailers --if-exists replace "${_t[@]}")" || return 0
+    git -c user.name=land-queue -c user.email=land-queue@localhost commit -q --amend -m "$_msg" >/dev/null 2>&1 \
+        || say "advisory:land-queue:$1:lane-trailer-not-written — the landing proceeds without it"
+    # The landing is PROVED by merge_sha reaching the remote, so it must name the amended commit.
+    merge_sha="$(git rev-parse HEAD)"
+}
 not_run_line() {
     local _sk
     _sk="$(grep -o 'skip:class-selector:[^ ]*' "$1" 2>/dev/null | sed 's/^skip:class-selector://' | LC_ALL=C sort -u | tr '\n' ' ')"
@@ -1186,7 +1205,8 @@ try_batch() {
     now="$(git rev-parse "$REMOTE/$TRUNK" 2>/dev/null)"
     parents=(-p "$base")
     for hs in "${heads[@]}"; do parents+=(-p "$hs"); done
-    c="$(printf 'land-train(%s): %d members into %s, one gate on the union\n\n%s\n' "$ids" "${#nums[@]}" "$TRUNK" "$carried" \
+    # 2431-2yic: the lane, in the trailer block (with Carried: when there is one).
+    c="$(printf 'land-train(%s): %d members into %s, one gate on the union\n\n%s%sLane: train\n' "$ids" "${#nums[@]}" "$TRUNK" "$carried" "${carried:+$'\n'}" \
         | GIT_AUTHOR_NAME=land-queue GIT_AUTHOR_EMAIL=land-queue@localhost \
           GIT_COMMITTER_NAME=land-queue GIT_COMMITTER_EMAIL=land-queue@localhost \
           git commit-tree "$union^{tree}" "${parents[@]}")" || { abandon commit-tree-failed; return 0; }
@@ -1810,6 +1830,7 @@ Full gate log kept on the landing host at \`$_glog\`.$(evict_marker "$num" "$hea
     # re-fetched, re-adopted and retried (bounded) instead of re-gated.
     _pushtry=1; _pushmax=3; _landed_ok=0; _pout=""
     while :; do
+        _land_trailers "$num" "$_lane"
         _pout="$(git push "$REMOTE" "HEAD:refs/heads/$TRUNK" 2>&1)"
         _prc=$?
         git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null || true
