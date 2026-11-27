@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: same-version-forge-rebuild-on-containerfile-only-change
+    order: "2429-gxck"
+    status: ready
+    kind: question
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, images, linux]
+    estimated_hours: 2
+    title: "does image_build_inputs rebuild the forge image when only images/default/Containerfile changes at the same VERSION?"
+    context: |
+      Raised by 2354-5biy (forge marker baked into the forge image). The forge tag is
+      localhost/tillandsias-forge:v<VERSION> (crates/tillandsias-headless/src/main.rs versioned_image_tag), and
+      the Containerfile is embedded in the binary (crates/tillandsias-embed/build.rs). A version bump has no
+      matching tag and rebuilds, so release installs get the marker. On a dev host that rebuilds at the same
+      VERSION while the tag already exists, whether image_build_inputs notices a Containerfile-only change is
+      unmeasured; if it does not, such a host keeps a marker-less forge that reads bare-metal.
+    exit_criteria:
+      - "Measured on one Linux host: a Containerfile-only change at the same VERSION either rebuilds the forge image (cite the build reason line) or does not (named, with a follow-up row for the fix)."
+    unscoreable: "a one-off measurement on a dev host; no fixture until the answer is known"
+    next_action: "Read image_build_inputs in main.rs, then change a comment in images/default/Containerfile in a scratch checkout and launch a forge at the same VERSION."
+    provenance: "coordinator macuahuitl-fedora 2026-11-27, from 2354-5biy"
+    related: [a-forge-queue-jobs-audit-record-says-bare-metal]
+    events:
+      - {type: filed, ts: "2026-11-27T10:46:49Z", host: lenovinha, summary: "filed at p3 on the coordinator's word"}

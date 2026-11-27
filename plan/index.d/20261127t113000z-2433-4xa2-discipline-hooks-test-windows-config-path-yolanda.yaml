@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: discipline-hooks-tests-write-a-windows-path-into-git-config-unescaped
+    order: "2433-4xa2"
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [tillandsias-plan, msys, tests]
+    estimated_hours: 1
+    owned_paths: [crates/tillandsias-plan/src/discipline_hooks.rs]
+    title: "discipline_hooks tests fail on Windows: the fixture writes a backslash path into a git config file, which git rejects"
+    context: |
+      Measured on yolanda (msys) 2026-11-27 on clean trunk (origin/linux-next, detached): cargo test -p tillandsias-plan --lib
+      discipline_hooks fails 2/2, both at discipline_hooks.rs:451 (assert!(st.success()) after git init):
+      a_global_hooks_path_gets_a_local_one_beside_it_and_the_global_dir_stays_empty and
+      a_local_hooks_path_is_honoured_and_not_announced. Found while gating 1903-sj5t; not caused by it.
+      Probable cause (inferred, not instrumented): the fixture writes "hooksPath = {}" with global_hooks.display(),
+      a C:\Users\... path; in git config a backslash starts an escape, so \U and \x make the file unparseable and
+      git init exits non-zero ("fatal: bad config line 2" reproduced by hand with such a line). Linux paths have no
+      backslash, so the Linux gate never sees it.
+    exit_criteria:
+      - "both tests pass on msys; the config line is written with forward slashes or escaped backslashes"
+      - "an arm or assertion that a backslash path in the written config round-trips through git config --get core.hooksPath"
+    unscoreable: "fixture-row: closure is the two existing cargo tests discipline_hooks::tests::a_global_hooks_path_gets_a_local_one_beside_it_and_the_global_dir_stays_empty and a_local_hooks_path_is_honoured_and_not_announced passing on msys; no litmus covers a cargo unit test."
+    next_action: "write the path with forward slashes (or escape backslashes) in the fixture's config writer, then run the two tests on msys."
+    provenance: filed by yolanda at macuahuitl-fedora's request, during 1903-sj5t attribution.
+    related: [1903-sj5t, 1788-qlwq]
+    events:
+      - {type: filed, ts: '2026-11-27T11:30:00Z', host: yolanda, summary: discipline_hooks tests red on Windows from an unescaped config path}

@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: land-queue-cuts-a-stale-daily-proof-when-idle
+    field: status
+    value: in_progress
+    ts: "2026-11-27T11:24:16Z"
+    host: yoga
+events:
+  - packet_id: land-queue-cuts-a-stale-daily-proof-when-idle
+    event: {type: claimed, ts: "2026-11-27T11:24:16Z", host: yoga, summary: "claimed by yoga (coordinator 2026-11-27: before 2421-mmbq); work ref work/2432-ik2d"}
