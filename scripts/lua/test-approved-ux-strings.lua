@@ -1,4 +1,5 @@
 -- @trace order:1642-cc54
+-- inputs: crates/tillandsias-headless/src/bringup_progress.rs crates/tillandsias-macos-tray/src/reset_state.rs plan/index.yaml scripts/lua/check-approved-ux-strings.lua lib/lua/common/ crates/tillandsias-plan/
 -- @env PATH TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
 --
 -- test-approved-ux-strings.lua — scripts/lua/check-approved-ux-strings.lua finds an

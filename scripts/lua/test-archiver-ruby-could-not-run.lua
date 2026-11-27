@@ -1,4 +1,5 @@
 -- @env PATH HOME XDG_RUNTIME_DIR TOOLBOX_PATH container
+-- inputs: .gitignore plan/index.yaml rust-toolchain.toml scripts/archive-plan-packets.lua scripts/archive-plan-packets.rb scripts/archive-plan-packets.sh scripts/check-archive-answerability.sh scripts/ensure_toolbox.sh scripts/native-scratch-dir.sh scripts/plan-binary-probe.sh scripts/podman-neutralize-proxy.sh scripts/with-tillandsias-builder.sh scripts/with-wsl2-builder.sh lib/lua/common/ crates/tillandsias-plan/
 -- @trace order:965-sxec, order:2186-niam, order:2367-wtse
 --
 -- test-archiver-ruby-could-not-run.lua — an absent or unusable ruby makes archive-plan-packets.sh

@@ -1,4 +1,5 @@
 -- @trace order:1024-c3h3, order:2208-vxb6
+-- inputs: build.sh images/default/lib-common.sh README.md scripts/check-plan-binary-current.sh scripts/check-resumable-claim-dirt.sh scripts/check-stranded-in-progress.sh scripts/cycle-preflight.sh scripts/lua/check-fragment-closure-evidence-added.lua scripts/lua/test-plan-binary-probe-release-over-debug.lua scripts/plan-binary-probe.sh scripts/regenerate-cheatsheet-index.sh scripts/select-work-batch.sh scripts/with-wsl2-builder.sh scripts/wsl-plan-expert-ensure.sh VERSION lib/lua/common/ crates/tillandsias-plan/
 --
 -- test-closure-evidence-survives-landing.lua — PORTED from
 -- test-closure-evidence-survives-landing.sh (2208-vxb6), same arms, same lines.

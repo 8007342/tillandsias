@@ -37,7 +37,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # and metric-compatible Arial/Times/Courier.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates curl xz-utils unzip \
+        ca-certificates curl xz-utils unzip lua5.4 lua-filesystem lua-lpeg \
         fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
