@@ -40,6 +40,9 @@ end
 local function base(repo)
     fs.mkdir(repo.rel .. "/scripts/lua")
     fs.write(repo.rel .. "/" .. DEC, src)
+    -- the checker requires common.listed_read (2417-jzhh), which resolves from the repo it runs in
+    fs.mkdir(repo.rel .. "/lib/lua/common")
+    fs.write(repo.rel .. "/lib/lua/common/listed_read.lua", fs.read("lib/lua/common/listed_read.lua"))
     fs.write(repo.rel .. "/.gitignore", "Cargo.lock\n")
     T:must{ "git", "-C", repo.abs, "add", "-A" }
     T:must{ "git", "-C", repo.abs, "commit", "-q", "-m", "base" }
