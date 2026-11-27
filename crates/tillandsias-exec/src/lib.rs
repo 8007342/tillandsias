@@ -470,6 +470,14 @@ where
 }
 
 impl Command {
+    /// The PATH the child will see when the command sets one (last write wins,
+    /// as in the spawn). Windows' env is case-insensitive. Used by the `#!`
+    /// resolver (2436-wsbg) so a stub dir the command puts first is searched.
+    #[cfg(windows)]
+    pub(crate) fn child_path(&self) -> Option<&OsStr> {
+        self.envs.iter().rev().find(|(k, _)| k.eq_ignore_ascii_case("PATH")).map(|(_, v)| v.as_os_str())
+    }
+
     /// Build from an argv sequence. `Command::new(["git", "status"])`.
     pub fn new<I, S>(argv: I) -> Self
     where
@@ -593,6 +601,13 @@ impl Command {
         protect_parent_std_handles();
         let run = RunId::new();
 
+        #[cfg(windows)]
+        let rewritten = win_script::rewrite(program, rest, self.cwd.as_deref(), self.child_path());
+        #[cfg(windows)]
+        let (program, rest) = match &rewritten {
+            Some(v) => (&v[0], &v[1..]),
+            None => (program, rest),
+        };
         let mut cmd = tokio::process::Command::new(program);
         apply_args(&mut cmd, rest);
         cmd.stdin(if self.stdin.is_some() {
@@ -1001,6 +1016,13 @@ impl Command {
             return Err(ExecError::EmptyArgv);
         };
         protect_parent_std_handles();
+        #[cfg(windows)]
+        let rewritten = win_script::rewrite(program, rest, self.cwd.as_deref(), self.child_path());
+        #[cfg(windows)]
+        let (program, rest) = match &rewritten {
+            Some(v) => (&v[0], &v[1..]),
+            None => (program, rest),
+        };
         let mut cmd = tokio::process::Command::new(program);
         apply_args(&mut cmd, rest);
         cmd.stdin(Stdio::null())
@@ -1044,6 +1066,101 @@ impl Command {
 /// unbounded only if a long-lived process keeps timing out ungrouped commands
 /// whose descendants live forever. `.group(true)` ends the tree, and with it
 /// the thread.
+/// ORDER 2428-cens-c: A SHEBANG SCRIPT RUNS ON WINDOWS THE WAY exec(2) RUNS IT.
+///
+/// CreateProcess runs only PE images. An argv naming a `#!` script (a fixture's
+/// stub `gh`, `podman`, `git`; a repo hook) failed with os error 193 ("not a
+/// valid Win32 application"), or was not found at all by name, because a PATH
+/// search only tries PATHEXT names. Measured in the doris census, 2026-11-27:
+/// 14 fixtures red on msys for exactly this, among them command-policy-consent,
+/// git-mirror-relay-token-expiry and run-verb-agent-door. Unix needs nothing: the
+/// kernel reads the `#!`. Here the runner does what the kernel would, through
+/// Git's bash (the shell every script in this repo is written for), and only for
+/// a file that IS a script: a PE, a .cmd/.bat, or a name a PATHEXT file answers
+/// first is spawned exactly as before.
+#[cfg(windows)]
+pub(crate) mod win_script {
+    use std::ffi::{OsStr, OsString};
+    use std::path::{Path, PathBuf};
+    use std::sync::OnceLock;
+
+    fn is_script(p: &Path) -> bool {
+        let mut b = [0u8; 2];
+        match std::fs::File::open(p) {
+            Ok(mut f) => {
+                use std::io::Read;
+                p.is_file() && f.read_exact(&mut b).is_ok() && &b == b"#!"
+            }
+            Err(_) => false,
+        }
+    }
+
+    fn pathext() -> Vec<String> {
+        std::env::var("PATHEXT")
+            .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".into())
+            .split(';')
+            .filter(|e| !e.is_empty())
+            .map(|e| e.to_ascii_lowercase())
+            .collect()
+    }
+
+    /// Git's bash: TILLANDSIAS_POSIX_SHELL, else <git --exec-path>/../../../bin/bash.exe.
+    fn shell() -> Option<&'static OsString> {
+        static SH: OnceLock<Option<OsString>> = OnceLock::new();
+        SH.get_or_init(|| {
+            if let Some(s) = std::env::var_os("TILLANDSIAS_POSIX_SHELL").filter(|s| !s.is_empty()) {
+                return Some(s);
+            }
+            let out = std::process::Command::new("git").arg("--exec-path").output().ok()?;
+            let ep = PathBuf::from(String::from_utf8_lossy(&out.stdout).trim());
+            // <root>/<mingw64|ucrt64|...>/libexec/git-core -> <root>/bin/bash.exe
+            let bash = ep.parent()?.parent()?.parent()?.join("bin").join("bash.exe");
+            bash.is_file().then(|| bash.into_os_string())
+        })
+        .as_ref()
+    }
+
+    /// The script `program` names, or None when CreateProcess should get it as-is.
+    fn script_for(program: &OsStr, cwd: Option<&Path>, path: Option<&OsStr>) -> Option<PathBuf> {
+        let p = Path::new(program);
+        let has_sep = program.to_string_lossy().contains(['/', '\\']);
+        if has_sep || p.is_absolute() {
+            let full = match cwd {
+                Some(d) if p.is_relative() => d.join(p),
+                _ => p.to_path_buf(),
+            };
+            return is_script(&full).then_some(full);
+        }
+        if p.extension().is_some() {
+            return None; // `x.exe`, `x.cmd`: CreateProcess's own business
+        }
+        let exts = pathext();
+        let path = path.map(OsStr::to_os_string).or_else(|| std::env::var_os("PATH"))?;
+        for dir in std::env::split_paths(&path) {
+            if exts.iter().any(|e| dir.join(format!("{}{e}", program.to_string_lossy())).is_file()) {
+                return None; // a PATHEXT file is found first: unchanged behaviour
+            }
+            let cand = dir.join(p);
+            if is_script(&cand) {
+                return Some(cand);
+            }
+        }
+        None
+    }
+
+    /// argv for a shebang script: [bash, <script>, rest...]; None leaves the argv alone.
+    /// `path`: the PATH the child gets (the command's own, when it sets one).
+    pub(crate) fn rewrite(program: &OsStr, rest: &[OsString], cwd: Option<&Path>, path: Option<&OsStr>) -> Option<Vec<OsString>> {
+        let script = script_for(program, cwd, path)?;
+        let sh = shell()?;
+        let mut v = Vec::with_capacity(rest.len() + 2);
+        v.push(sh.clone());
+        v.push(script.into_os_string());
+        v.extend(rest.iter().cloned());
+        Some(v)
+    }
+}
+
 #[cfg(windows)]
 mod win_pump {
     use std::io::Read;

@@ -474,6 +474,14 @@ async fn supervise(
         return Err(ExecError::EmptyArgv);
     };
     protect_parent_std_handles();
+    // 2436-wsbg: a `#!` script runs through Git's bash on Windows, as in Command::run.
+    #[cfg(windows)]
+    let rewritten = crate::win_script::rewrite(program, rest, command.cwd.as_deref(), command.child_path());
+    #[cfg(windows)]
+    let (program, rest) = match &rewritten {
+        Some(v) => (&v[0], &v[1..]),
+        None => (program, rest),
+    };
     let mut cmd = tokio::process::Command::new(program);
     crate::apply_args(&mut cmd, rest);
     cmd.stdin(if command.stdin.is_some() {
