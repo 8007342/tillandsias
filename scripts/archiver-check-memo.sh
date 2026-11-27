@@ -65,9 +65,24 @@ _digest() {
         # It used to be path + size + mtime, which made two worktrees' identical
         # builds look different and a same-path rebuild with a copied mtime look
         # the same. Hashing it costs milliseconds against a check of seconds.
-        local _plan_bin
+        # ORDER 2429-amem: by BUILD-ID first. A real tillandsias-plan embeds the
+        # checkout it was built from (surface_root's env!("CARGO_MANIFEST_DIR")),
+        # so every gate worktree's build of identical sources has different
+        # bytes, and a byte key missed on every fresh worktree: 106 hits to 798
+        # misses in a week on macuahuitl, 65 s per miss. build-id is the content
+        # hash of the crate sources it compiled (build.rs), path-free. Its path
+        # dependencies are outside that hash, so their tracked blobs and
+        # Cargo.lock join the key. A binary that cannot answer build-id (older,
+        # or a fixture) keeps the byte hash.
+        local _plan_bin _bid
         if _plan_bin="$(resolve_plan_binary 2>/dev/null)" && [ -n "$_plan_bin" ] && [ -e "$_plan_bin" ]; then
-            printf 'plan-binary:'; "${SHA[@]}" < "$_plan_bin"
+            _bid="$("$_plan_bin" build-id 2>/dev/null | tr -d '\r')"
+            if [[ "$_bid" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+[0-9a-f]+$ ]]; then
+                printf 'plan-build-id:%s\n' "$_bid"
+                git ls-files -s -- Cargo.lock crates/tillandsias-podman crates/tillandsias-msg crates/tillandsias-exec 2>/dev/null
+            else
+                printf 'plan-binary:'; "${SHA[@]}" < "$_plan_bin"
+            fi
         else
             printf 'plan-binary:none\n'
         fi

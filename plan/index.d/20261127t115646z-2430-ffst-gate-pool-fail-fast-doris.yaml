@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by doris-windows at macuahuitl's request: velocity row 2, fail-fast gate ordering.
+packets:
+  - packet_id: gate-step-pool-fails-fast-and-orders-by-red-rate
+    order: 2430-ffst
+    status: in_progress
+    kind: perf
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, velocity]
+    estimated_hours: 4
+    owned_files:
+      - build.sh
+      - scripts/lua/gate-step-order.lua
+      - scripts/lua/test-gate-pool-fail-fast.lua
+      - scripts/gate-steps.d/983-2430-ffst.step
+    title: |
+      The gate-step pool stops at the first red and dispatches the likeliest reds first
+    context: |
+      The pool waited for every worker before reading a single rc, so a red PR paid for the whole pool.
+      Without --keep-going a finished red now stops dispatch. TILLANDSIAS_GATE_STEP_ORDER sets the
+      dispatch order, and scripts/lua/gate-step-order.lua derives it from the timing log (red rate per
+      second). Measured in the WSL guest on doris, 6 slow green steps and 1 red at jobs=2: trunk 17.3 s
+      with all 7 run; this branch 8.3 s with 1 run; the green pool is unchanged at 16.8 s.
+    verifiable_closure: |
+      test-gate-pool-fail-fast.lua (step 983) gives ok, 4 arms, on Linux; arm 1 fails on trunk's build.sh.
+    unscoreable: "pinned by its own fixture; the real time-to-red needs a host with a populated timing log"
+    next_action: >
+      On a host with the timing log, generate the order file, set TILLANDSIAS_GATE_STEP_ORDER in the
+      gate, and measure time-to-red before and after (predicted 282 s to about 90 s). Check that pooled
+      steps reach the timing log at all: their phase records are written in worker subshells.
+    ts: "2026-11-27T11:56:46Z"
+    host: doris

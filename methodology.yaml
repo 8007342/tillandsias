@@ -7,6 +7,11 @@ methodology:
       instruction conflicts with it, follow this file and report methodology drift.
     non_authoritative_files:
       CLAUDE.md: "May summarize local tool notes; must not redefine methodology."
+    vocabulary: >
+      methodology/glossary.yaml is the binding project vocabulary (1908-9q4c):
+      new methodology, specs, skills, packets and messages use its terms, and
+      scripts/lua/check-glossary-retired-synonyms.lua flags a retired synonym on
+      an added line. A term marked open (lane) awaits an operator ruling.
 
   bootstrap:
     command: "/skills bootstrap"

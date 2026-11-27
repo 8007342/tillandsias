@@ -74,13 +74,21 @@ changing it is a seed edit reviewed like code.
 A request SHALL carry `argv`, `cwd`, the names (not values) of the
 environment it adds, `host_kind` (`bare-metal | forge | ci`), `platform`,
 `regime` (`interactive | gate | fixture | hook | relay`) and `caller`. Host
-kind SHALL be derived from `TILLANDSIAS_HOST_KIND` and the container
-runtime's record of the forge image (`image=` in `/run/.containerenv`)
-together, and a disagreement SHALL be reported in the decision. The record's
-presence alone is not forge evidence (every container has one: a toolbox is
-not a forge), and forge evidence SHALL never come from a file in the
-workspace or the caller's cwd, which any writer of that directory could
-plant (1467-c8qg). A rule MAY give a different decision per host
+kind `forge` SHALL be decided by the forge marker alone (operator ruling
+2026-11-27, order 2354-5biy): `/etc/tillandsias/forge`, baked into the forge
+image as a regular file owned by root, mode 0444, content `kind=forge`. It
+decides however the container started (the launcher, `podman exec` or
+`queue.submit`). A file at that path that is a symlink, is not root-owned, is
+writable, or has other content SHALL NOT be forge evidence. The launcher's
+read-only launch record (`/run/tillandsias/forge-launch`: `kind`, `image`,
+`version`, `project`, `launch_id`) carries the details; when it is present
+with the marker it SHALL agree with the marker and with `/run/.containerenv`,
+and a disagreement SHALL be reported. A launch record without the marker
+SHALL NOT be forge evidence. `TILLANDSIAS_HOST_KIND` and `/run/.containerenv`
+(even when it names the forge image) SHALL NOT make a forge on their own;
+each disagreement with the marker SHALL be reported in the decision. Forge
+evidence SHALL never come from a file in the workspace or the caller's cwd,
+which any writer of that directory could plant (1467-c8qg). A rule MAY give a different decision per host
 kind; the `hard-reset` class SHALL be `deny` in a forge and the
 `soft-reset` class SHALL be `allow` there.
 
@@ -93,6 +101,18 @@ kind; the `hard-reset` class SHALL be `deny` in a forge and the
 - **THEN** the answer is `refused:policy:hard-reset:not-grantable-in-forge`
 - **WHEN** `tillandsias --reset-state` is evaluated with host kind `forge`
 - **THEN** the answer is `ok:policy:soft-reset:forge-preauthorised`
+
+#### Scenario: The marker decides, nothing else does (2354-5biy)
+
+- **WHEN** an unprivileged process runs in a container whose image carries
+  the forge marker, with `TILLANDSIAS_HOST_KIND` unset
+- **THEN** the host kind is `forge`, `hard-reset` is
+  `refused:policy:hard-reset:not-grantable-in-forge`, and
+  `policy consent grant` answers `refused:consent:not-grantable-in-forge`
+- **WHEN** a bare-metal host carries a launch record at
+  `/run/tillandsias/forge-launch` but no marker
+- **THEN** the host kind is `bare-metal` and the decision reports that a
+  launch record is not forge evidence
 
 ### Requirement: Every refusal names why and what would clear it
 <!-- req-id: 274793c7 -->

@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: a-land-commit-records-the-lane-it-took
+    field: status
+    value: implemented
+    ts: "2026-11-27T12:20:45Z"
+    host: yoga
+events:
+  - packet_id: a-land-commit-records-the-lane-it-took
+    event: {type: implemented, ts: "2026-11-27T12:20:45Z", host: yoga, summary: "On work/2431-2yic: before each push attempt _land_trailers amends the land commit's MESSAGE (the gate stamp is a tree digest, so it holds) with git interpret-trailers --if-exists replace: Lane: full|plan-only, and for full Gate-Skipped: <class-selector skips> and Gate-Base: daily-proof|full; merge_sha is re-read so the landing proof names the amended commit. A land-train commit carries Lane: train. Red first: test-land-commit-records-lane.lua, 3 arms, all red on trunk. My first run requeued the full arm: merge_sha still named the pre-amend commit, so the is-ancestor proof failed; fixed."}

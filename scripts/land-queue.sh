@@ -656,6 +656,25 @@ gate_env_for() {
     fi
 }
 # not_run_line <gate log> — the land's not-run: line, naming every skipped step.
+# _land_trailers <pr> <lane> — ORDER 2431-2yic: the land commit names its lane, so an
+# audit needs no host's run logs (a week of plan-only lands read as gated, 2026-11-27).
+# Message only: the gate stamp is a digest of the tree, and the tree is unchanged.
+# Idempotent (replace), so a push retry that re-adopts and comes back here is safe.
+_land_trailers() {
+    local _msg _sk=0 _gb
+    _msg="$(git log -1 --format=%B HEAD 2>/dev/null)" || return 0
+    local -a _t=(--trailer "Lane: $2")
+    if [ "$2" = full ]; then
+        [ -f "$_RUNDIR/pr-$1-skips" ] && _sk="$(grep -c . "$_RUNDIR/pr-$1-skips" 2>/dev/null)" || true
+        case "$_daily_note" in "full:"*|"") _gb=full ;; *) _gb=daily-proof ;; esac
+        _t+=(--trailer "Gate-Skipped: ${_sk:-0}" --trailer "Gate-Base: $_gb")
+    fi
+    _msg="$(printf '%s\n' "$_msg" | git interpret-trailers --if-exists replace "${_t[@]}")" || return 0
+    git -c user.name=land-queue -c user.email=land-queue@localhost commit -q --amend -m "$_msg" >/dev/null 2>&1 \
+        || say "advisory:land-queue:$1:lane-trailer-not-written — the landing proceeds without it"
+    # The landing is PROVED by merge_sha reaching the remote, so it must name the amended commit.
+    merge_sha="$(git rev-parse HEAD)"
+}
 not_run_line() {
     local _sk
     _sk="$(grep -o 'skip:class-selector:[^ ]*' "$1" 2>/dev/null | sed 's/^skip:class-selector://' | LC_ALL=C sort -u | tr '\n' ' ')"
@@ -665,11 +684,13 @@ not_run_line() {
         printf '  not-run: nothing — tier=full runs the whole gate (%s)\n' "${_daily_note:-full}"
     fi
 }
-# --daily-full: gate the trunk tip with the selector OFF and publish the result.
-if [ "$DAILY_FULL" -eq 1 ]; then
-    git fetch -q "$REMOTE" "$TRUNK" || { say "could-not-run:host:daily-full:fetch-failed"; exit 3; }
+# daily_full_run — gate the trunk tip with the selector OFF and publish the result.
+# Returns 0 (green proof published), 1 (red published), 3 (could not run). Used by
+# --daily-full and, since 2432-ik2d, by an idle run whose newest proof is stale.
+daily_full_run() {
+    git fetch -q "$REMOTE" "$TRUNK" || { say "could-not-run:host:daily-full:fetch-failed"; return 3; }
     _dsha="$(git rev-parse "$REMOTE/$TRUNK")"
-    git checkout -q --detach "$_dsha" || { say "could-not-run:host:daily-full:checkout-failed"; exit 3; }
+    git checkout -q --detach "$_dsha" || { say "could-not-run:host:daily-full:checkout-failed"; return 3; }
     rm -f "$_RUNDIR/no-daily-proof"
     ( _gate_clean_env; export TILLANDSIAS_CLASS_SELECTOR=off TILLANDSIAS_FULL_GATE_MARKER="$_RUNDIR/no-daily-proof"
       # 2270-7gp6: the salvage-audit fixture's live 334-ref audit runs here, once a day.
@@ -683,15 +704,35 @@ if [ "$DAILY_FULL" -eq 1 ]; then
         say "dry-run: would publish $_dref -> ${_dsha:0:9} (gate rc=$_drc)"
     elif ! git push -q "$REMOTE" "$_dsha:$_dref" 2>/dev/null; then
         say "could-not-run:host:daily-full:push-failed:$_dref (gate rc=$_drc; log $_RUNDIR/daily-full-gate.log)"
-        exit 3
+        return 3
     fi
     if [ "$_drc" -eq 0 ]; then
         say "ok:land-queue:daily-full:${_dsha:0:9}:$_dref — land gates may skip unchanged steps against it for ${DAILY_MAX_AGE_S}s"
-        exit 0
+        return 0
     fi
     say "red:land-queue:daily-full:${_dsha:0:9}:rc=$_drc:$_dref — scoped lands freeze back to full until a green daily run (log $_RUNDIR/daily-full-gate.log)"
-    exit 1
+    return 1
+}
+if [ "$DAILY_FULL" -eq 1 ]; then
+    daily_full_run; exit $?
 fi
+# ORDER 2432-ik2d: AN IDLE QUEUE CUTS A STALE PROOF. Only a manual --daily-full did,
+# and a day without one froze every scoped land (2429-u3rp) without a word. Crons are
+# operator-only, so the queue does it on an EMPTY run, never with work waiting, never
+# in a dry run, never when a red daily run is newer (that needs a person, not a retry),
+# and never on main/release (daily_proof refuses those first). 0 turns it off.
+DAILY_AUTO="${TILLANDSIAS_LAND_QUEUE_DAILY_AUTO:-1}"
+daily_auto_cut() {
+    [ "$DAILY_AUTO" = 1 ] && [ "$DRY_RUN" -ne 1 ] || return 0
+    git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null || return 0
+    if daily_proof "$(git rev-parse "$REMOTE/$TRUNK")"; then return 0; fi
+    case "$_daily_why" in
+        no-daily-run|daily-run-stale:*|daily-run-not-on-*) ;;
+        *) say "daily-full:auto:not-cut:$_daily_why"; return 0 ;;
+    esac
+    say "daily-full:auto:cutting:$_daily_why — the queue is idle, so it proves trunk now (scoped lands are FULL until a fresh green proof exists)"
+    daily_full_run
+}
 
 read_queue() { # <first>
     local _qjson _qrc _qlen _all _prio _hold _drafts n h
@@ -750,6 +791,7 @@ read_queue 1 || exit 1
 
 if [ -z "$_cands" ]; then
     say "ok:land-queue:0 landed=0 evicted=0 requeued=0 skipped=0 — the queue is empty"
+    daily_auto_cut || true   # 2432-ik2d: its own verdict line says what it did
     exit 0
 fi
 
@@ -1163,7 +1205,8 @@ try_batch() {
     now="$(git rev-parse "$REMOTE/$TRUNK" 2>/dev/null)"
     parents=(-p "$base")
     for hs in "${heads[@]}"; do parents+=(-p "$hs"); done
-    c="$(printf 'land-train(%s): %d members into %s, one gate on the union\n\n%s\n' "$ids" "${#nums[@]}" "$TRUNK" "$carried" \
+    # 2431-2yic: the lane, in the trailer block (with Carried: when there is one).
+    c="$(printf 'land-train(%s): %d members into %s, one gate on the union\n\n%s%sLane: train\n' "$ids" "${#nums[@]}" "$TRUNK" "$carried" "${carried:+$'\n'}" \
         | GIT_AUTHOR_NAME=land-queue GIT_AUTHOR_EMAIL=land-queue@localhost \
           GIT_COMMITTER_NAME=land-queue GIT_COMMITTER_EMAIL=land-queue@localhost \
           git commit-tree "$union^{tree}" "${parents[@]}")" || { abandon commit-tree-failed; return 0; }
@@ -1787,6 +1830,7 @@ Full gate log kept on the landing host at \`$_glog\`.$(evict_marker "$num" "$hea
     # re-fetched, re-adopted and retried (bounded) instead of re-gated.
     _pushtry=1; _pushmax=3; _landed_ok=0; _pout=""
     while :; do
+        _land_trailers "$num" "$_lane"
         _pout="$(git push "$REMOTE" "HEAD:refs/heads/$TRUNK" 2>&1)"
         _prc=$?
         git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null || true
