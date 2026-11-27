@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: a-land-commit-records-the-lane-it-took
+    field: status
+    value: in_progress
+    ts: "2026-11-27T12:17:48Z"
+    host: yoga
+events:
+  - packet_id: a-land-commit-records-the-lane-it-took
+    event: {type: claimed, ts: "2026-11-27T12:17:48Z", host: yoga, summary: "claimed by yoga (coordinator 2026-11-27); work ref work/2431-2yic"}
