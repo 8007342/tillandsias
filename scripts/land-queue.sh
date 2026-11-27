@@ -229,6 +229,32 @@ say() { printf '%s\n' "$*"; }
 # prints nothing, so the last line names where it stopped.
 _lq_mark() { say "timing:land-queue:#$1:$2=$((SECONDS - ${_LQ_T:-$SECONDS}))s"; _LQ_T=$SECONDS; }
 
+# ORDER 2416-57a6: A NEW GATE STEP WHOSE PREFIX IS TAKEN MOVES INSIDE ITS OWN
+# LANDING. allocate-gate-step-prefix.sh (1162-qbrx) renames the added step to a
+# free slot; its only caller was land-on-platform-branch.sh, so two refs adding
+# one prefix both landed through this queue (960 collided 2026-11-26). Called on
+# the merge commit just made: <base> is the trunk it merged onto, <exclude> the
+# tree before this member (a train's earlier members keep their slots). The
+# renames are folded into that merge commit, so a train stays one merge per
+# member. rc 1 = the allocator refused; the tree is as the merge left it.
+_lq_alloc_steps() { # <num> <base> [<exclude>]
+    [ -f "$_SELF_DIR/allocate-gate-step-prefix.sh" ] || return 0
+    local _a=(--base "$2") _o _rc=0
+    [ -z "${3:-}" ] || _a+=(--exclude "$3")
+    _o="$(bash "$_SELF_DIR/allocate-gate-step-prefix.sh" "${_a[@]}" 2>&1)" || _rc=$?
+    _lq_alloc_verdict="${_o##*$'\n'}"
+    case "$_lq_alloc_verdict" in
+        ok:gate-step-prefix:reallocated:*)
+            git -c user.name=land-queue -c user.email=land-queue@localhost commit -q --amend --no-edit >/dev/null 2>&1 || {
+                git reset -q --hard HEAD 2>/dev/null; _lq_alloc_verdict="refused:gate-step-prefix:amend-failed"; return 1; }
+            printf '%s\n' "$_o" | sed -n "s/^gate-step-prefix: /gate-step-prefix:#$1: /p"
+            return 0 ;;
+        ok:*) return 0 ;;
+    esac
+    [ "$_rc" -ne 0 ] || _lq_alloc_verdict="refused:gate-step-prefix:no-verdict"
+    return 1
+}
+
 # ORDER 1375-2x4e: the queue JSON is read with `tillandsias-plan json get`, the jq
 # subset on the binary every gate host already has, not with jq. Resolved from
 # THIS script's CHECKOUT ROOT, not the caller's cwd (1461-5rm6): the fixture
@@ -1016,6 +1042,11 @@ try_batch() {
         pre="$(git rev-parse HEAD)"
         if git -c user.name=land-queue -c user.email=land-queue@localhost \
                 merge --no-ff -q --no-edit -m "train: #$n $h" "$hs" >/dev/null 2>&1; then
+            if ! _lq_alloc_steps "$n" "$base" "$pre"; then
+                say "train:skip:#$n $_lq_alloc_verdict — goes one at a time"
+                git reset -q --hard "$pre"
+                continue
+            fi
             tier="$(heavy_probe "$pre")"
             if [ "$tier" != light ]; then
                 if [ "$heavy_cap" -ge "$HEAVY_MAX" ]; then
@@ -1289,6 +1320,14 @@ This is the second identical conflict at this unchanged head (\`${head_sha:0:9}\
         continue
     fi
     rm -f "$_mlog"
+    if ! _lq_alloc_steps "$num" "$base_sha"; then
+        say "evict:land-queue:$num:$_lq_alloc_verdict"
+        pr_comment "$num" "Evicted from the landing queue: a gate step this PR adds shares a numeric prefix with one on \`$TRUNK\` at \`${base_sha:0:9}\`, and the queue could not move it to a free slot (\`$_lq_alloc_verdict\`).
+
+Renumber the step in \`scripts/gate-steps.d/\` to a free prefix and push; the queue will pick it up again.$(evict_marker "$num" "$head_sha" "$base_sha" "gate-step-prefix")"
+        evicted=$((evicted + 1))
+        continue
+    fi
     merge_sha="$(git rev-parse HEAD)"
 
     # ── A FROZEN TARGET HOLDS CODE (1255-s4im) ───────────────────────────────
