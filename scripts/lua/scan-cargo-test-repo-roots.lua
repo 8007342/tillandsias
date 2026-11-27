@@ -36,6 +36,7 @@
 -- Default (no args, as the gate step runs it): --check _CARGO_FEATURE_TEST_INPUTS
 -- against the tillandsias-headless closure. --list prints the scanned roots.
 local check, only, declvar = true, "tillandsias-headless", "_CARGO_FEATURE_TEST_INPUTS"
+local compileonly = false
 local showwhy = false
 local buildsh = "build.sh"  -- --build-sh FILE: judge a scratch copy (2239-5gb5 fixture)
 do
@@ -48,6 +49,10 @@ do
         elseif arg[i] == "--crate" then only = arg[i + 1]; i = i + 2
         elseif arg[i] == "--var" then declvar = arg[i + 1]; i = i + 2
         elseif arg[i] == "--build-sh" then buildsh = arg[i + 1]; i = i + 2
+        -- --compile-only (2440-8893): what COMPILES in, for clippy: in a source file only the
+        -- include*!(...) invocations; a build.rs whole (it reads at build time). Nothing a test
+        -- reads or executes at run time, because clippy runs nothing.
+        elseif arg[i] == "--compile-only" then compileonly = true; i = i + 1
         else i = i + 1 end
     end
 end
@@ -120,6 +125,11 @@ for _, f in ipairs(fs.walk("crates", { suffix = ".rs" })) do
     if not f:find("/target/", 1, true) and (not scope or (crate and scope[crate])) then
         files = files + 1
         local body = fs.read(f) or ""
+        if compileonly and not f:match("/build%.rs$") then
+            local inc = {}
+            for m in body:gmatch("include[%w_]*!%s*%b()") do inc[#inc + 1] = m end
+            body = table.concat(inc, "\n")
+        end
         local fdir = split(f); table.remove(fdir)
         local cdir = split(f:match("^(crates/[^/]+)/") or "crates")
         local rooted = body:find("CARGO_MANIFEST_DIR", 1, true) or body:find("repo_root", 1, true)
