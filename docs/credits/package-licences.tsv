@@ -2199,6 +2199,9 @@ vault	alpine	tzdata	2025a-r0	Public-Domain
 vault	alpine	utmps-libs	0.1.2.3-r2	ISC
 vault	alpine	zlib	1.3.1-r2	Zlib
 vault	alpine	zstd-libs	1.5.6-r2	BSD-3-Clause OR GPL-2.0-or-later
+warp	debian	lua-filesystem	1.8.0-3	unknown
+warp	debian	lua-lpeg	1.0.2-2	unknown
+warp	debian	lua5.4	5.4.4-3+deb12u1	unknown
 web	alpine	alpine-baselayout	3.6.5-r0	GPL-2.0-only
 web	alpine	alpine-baselayout-data	3.6.5-r0	GPL-2.0-only
 web	alpine	alpine-keys	2.4-r1	MIT
