@@ -13,8 +13,10 @@
 set -uo pipefail
 # 2373-zter: the land queue exports TILLANDSIAS_CLASS_SELECTOR=off around its gate,
 # which made S1 and N1 fail there and pass standalone. Each arm sets what it means
-# to test; nothing about the selector is inherited.
-unset TILLANDSIAS_CLASS_SELECTOR TILLANDSIAS_CLASS_BASE TILLANDSIAS_CHANGE_CLASS_REMOTE \
+# to test; nothing about the selector is inherited. 2443-r9sm: that includes
+# TILLANDSIAS_CLASS_UNGATED_PATHS, which the land queue exports since 1705 and
+# which evicted #1732 (N1 red only inside the queue).
+unset TILLANDSIAS_CLASS_SELECTOR TILLANDSIAS_CLASS_BASE TILLANDSIAS_CLASS_UNGATED_PATHS TILLANDSIAS_CHANGE_CLASS_REMOTE \
     TILLANDSIAS_TRUNK_BRANCH TILLANDSIAS_FULL_GATE_MARKER TILLANDSIAS_FULL_GATE_MAX_AGE_S
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
