@@ -1,0 +1,5899 @@
+//! `TrayActionHost` — the AppKit responder object that backs the
+//! interactive menu items (Start VM, Stop VM, Open Shell, GitHub login).
+//!
+//! Every clickable `NSMenuItem` needs a `target` that responds to its
+//! `action` selector. The Quit item uses `nil`-target + `terminate:` so
+//! AppKit walks the responder chain to `NSApplication`, but our custom
+//! actions can't piggy-back on a system selector — we need a concrete
+//! ObjC class with named selectors that AppKit can `respondsToSelector:`
+//! against.
+//!
+//! This file declares one such class with `objc2::declare_class!`:
+//!
+//!   Selector           Rust method     Slice 3 behavior
+//!   -----------------  --------------  -------------------------------
+//!   startVm:           start_vm        Tokio task → VzRuntime::start
+//!   stopVm:            stop_vm         Tokio task → VzRuntime::stop(60s)
+//!   openShell:         open_shell      eprintln stub (slice 4)
+//!   githubLogin:       github_login    eprintln stub (slice 5)
+//!
+//! ## Ivars
+//!
+//! `TrayActionHostIvars` carries the host's shared state:
+//!   - `runtime`: `Arc<tokio::runtime::Runtime>` — the per-process
+//!     Tokio runtime used to spawn async VM work without blocking the
+//!     AppKit main thread.
+//!   - `vm`: `Arc<Mutex<Option<Arc<VzRuntime>>>>` — the live VM handle
+//!     when `start` has succeeded, `None` otherwise. Shared with the
+//!     Tokio task so it can install/take the handle around the async
+//!     start/stop calls.
+//!   - `vm_busy`: `Arc<Mutex<bool>>` — re-entry gate so a repeated
+//!     click during an in-flight start/stop is a no-op.
+//!   - `image_root`: `PathBuf` — directory under which `VzRuntime`
+//!     looks for `rootfs.img` / `kernel` / `initrd`. Slice 3 just
+//!     reports "not provisioned" if the files are absent; the recipe
+//!     materializer (m5) eventually populates this directory.
+//!
+//! ## Lifetime
+//!
+//! Created once in `status_item::run()` and stored on the AppKit
+//! thread's stack for the lifetime of `NSApplication.run`. The
+//! `Retained<TrayActionHost>` is paired 1:1 with the
+//! `Retained<NSStatusItem>` so they're released together when the
+//! process exits.
+//!
+//! macOS-only. The non-macOS branch of the crate never compiles this
+//! module.
+//!
+//! @trace spec:macos-native-tray.ui.menu-actions@v1,
+//!        plan/steps/20-macos-tray-v0_0_1.md (Phase 1 m4 sub-task B)
+
+#![cfg(target_os = "macos")]
+
+use std::collections::HashSet;
+use std::io;
+use std::path::PathBuf;
+use std::pin::Pin;
+use std::sync::OnceLock;
+use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
+use std::time::Duration;
+use tillandsias_control_wire::secure_wire_mode::SecureWireMode;
+
+use objc2::rc::Retained;
+use objc2::runtime::{AnyObject, NSObject};
+use objc2::{ClassType, DeclaredClass, declare_class, msg_send_id, mutability};
+use objc2_app_kit::{NSMenuItem, NSStatusItem};
+use objc2_foundation::MainThreadMarker;
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+
+use tillandsias_control_wire::guest_transport::{GuestEndpoint, GuestTransport};
+use tillandsias_secure_channel::{EncryptedStream, HopId, channel_psk, client_handshake};
+use tillandsias_vm_layer::VmRuntime;
+use tillandsias_vm_layer::vz::VzRuntime;
+
+use crate::guest_binary::stage_embedded_guest_binary;
+use crate::main_thread::dispatch_to_main_thread;
+use tillandsias_host_shell::menu_state::{BOOT_STATUS_TEXT, clamp_tray_status_chip};
+
+/// Send/Sync wrappers around AppKit `Retained<…>` handles so they can
+/// sit in the action-host's ivars (the host is `MainThreadOnly`, but
+/// ivars get cloned across threads when worker callbacks move Arcs
+/// into background tasks before dispatching back to main).
+///
+/// SAFETY: every method on `NSStatusItem` / `NSMenuItem` MUST be
+/// called from the AppKit main thread. All touches in this crate go
+/// through `dispatch_to_main_thread`, so the contract holds. The
+/// wrappers exist purely to satisfy `Send + Sync`.
+mod appkit_handle {
+    use objc2::rc::Retained;
+    use objc2_app_kit::{NSMenuItem, NSStatusItem};
+    pub(crate) struct StatusItemHandle(pub Retained<NSStatusItem>);
+    // SAFETY: see module docstring.
+    unsafe impl Send for StatusItemHandle {}
+    unsafe impl Sync for StatusItemHandle {}
+    pub(crate) struct StatusMenuItemHandle(pub Retained<NSMenuItem>);
+    // SAFETY: see module docstring.
+    unsafe impl Send for StatusMenuItemHandle {}
+    unsafe impl Sync for StatusMenuItemHandle {}
+    /// A retained pointer to the TrayActionHost instance itself.
+    /// Used by the cloud-projects poller's menu-rebuild dispatch
+    /// to call back into TrayActionHost on the main thread so it
+    /// can wire `target = action_host` on each rebuilt NSMenuItem.
+    /// Set once at startup via `set_self_handle`; only the .0 is
+    /// dereffed inside a main-thread dispatch closure.
+    pub(crate) struct TrayActionHostHandle(pub Retained<super::TrayActionHost>);
+    // SAFETY: see module docstring.
+    unsafe impl Send for TrayActionHostHandle {}
+    unsafe impl Sync for TrayActionHostHandle {}
+}
+
+/// Apply a status-chip text update on the AppKit main thread.
+/// Updates the first-row menu item's title AND the menubar icon's
+/// tooltip so hover-over also reveals the live phase.
+///
+/// MUST be invoked from the main thread (the libdispatch contract
+/// in `dispatch_to_main_thread` enforces that for closure callers).
+/// Reading the Arc<Mutex<>> handles is cheap and non-blocking
+/// because nothing else holds them across long sections.
+fn apply_status_text_main_thread(
+    text: &str,
+    status_item: &Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
+    status_menu_item: &Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
+) {
+    use objc2_foundation::NSString;
+    // We're on main per the libdispatch contract.
+    let mtm = unsafe { MainThreadMarker::new_unchecked() };
+    let label = NSString::from_str(text);
+    if let Some(handle) = status_menu_item.lock().unwrap().as_ref() {
+        // 1420-v3zt: an attributed title (the progress bar) outranks the plain
+        // one, so clear it or the row would freeze on the last bar.
+        unsafe {
+            handle.0.setAttributedTitle(None);
+            handle.0.setTitle(&label);
+        }
+    }
+    if let Some(handle) = status_item.lock().unwrap().as_ref()
+        && let Some(button) = unsafe { handle.0.button(mtm) }
+    {
+        // Tooltip carries the build version + status so a hover confirms both
+        // (parity with windows-tray `compose_tooltip`). The menu row shows the
+        // bare chip; the tooltip prefixes "Tillandsias <version>".
+        let tooltip = NSString::from_str(&format!(
+            "Tillandsias {}\n{}",
+            tillandsias_secure_channel::workspace_version(),
+            text
+        ));
+        unsafe { button.setToolTip(Some(&tooltip)) };
+    }
+}
+
+/// 1420-v3zt: paint `segments` (see `provision_progress::menu_bar_segments`)
+/// beside the menu-bar icon and, followed by `label`, as the status row. An
+/// empty `segments` clears the menu-bar title (the icon stands alone again);
+/// the row is then left to the next `set_status_text`. Main thread only.
+fn apply_menu_bar_progress_main_thread(
+    segments: &[crate::provision_progress::BarSegment],
+    label: &str,
+    status_item: &Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
+    status_menu_item: &Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
+) {
+    use objc2::runtime::AnyObject;
+    use objc2_app_kit::{NSColor, NSForegroundColorAttributeName};
+    use objc2_foundation::{NSAttributedString, NSDictionary, NSMutableAttributedString, NSString};
+    let mtm = unsafe { MainThreadMarker::new_unchecked() };
+    let build = |prefix: &str, suffix: &str| {
+        let out = NSMutableAttributedString::from_nsstring(&NSString::from_str(prefix));
+        let mut out = out;
+        for seg in segments {
+            let text = NSString::from_str(&seg.text);
+            let piece = match seg.rgb {
+                Some((r, g, b)) => {
+                    let colour = unsafe {
+                        NSColor::colorWithSRGBRed_green_blue_alpha(
+                            f64::from(r) / 255.0,
+                            f64::from(g) / 255.0,
+                            f64::from(b) / 255.0,
+                            1.0,
+                        )
+                    };
+                    let colour: objc2::rc::Retained<AnyObject> =
+                        unsafe { objc2::rc::Retained::cast(colour) };
+                    let attrs = NSDictionary::from_vec(
+                        &[unsafe { NSForegroundColorAttributeName }],
+                        vec![colour],
+                    );
+                    unsafe { NSAttributedString::new_with_attributes(&text, &attrs) }
+                }
+                None => NSAttributedString::from_nsstring(&text),
+            };
+            unsafe { out.appendAttributedString(&piece) };
+        }
+        unsafe {
+            out.appendAttributedString(&NSAttributedString::from_nsstring(&NSString::from_str(
+                suffix,
+            )))
+        };
+        out
+    };
+    if let Some(handle) = status_item.lock().unwrap().as_ref()
+        && let Some(button) = unsafe { handle.0.button(mtm) }
+    {
+        if segments.is_empty() {
+            unsafe { button.setTitle(&NSString::from_str("")) };
+        } else {
+            unsafe { button.setAttributedTitle(&build(" ", "")) };
+        }
+    }
+    if !segments.is_empty()
+        && let Some(handle) = status_menu_item.lock().unwrap().as_ref()
+    {
+        unsafe {
+            handle
+                .0
+                .setAttributedTitle(Some(&build("", &format!("  {label}"))))
+        };
+    }
+}
+
+/// Fire a macOS Notification Center banner ("Tillandsias —
+/// Provisioning error / <reason>") so the user notices a failed VM
+/// boot even without hovering the menubar icon. Mirrors windows-
+/// tray's `show_balloon` (commit 8992652a item 1) but implemented
+/// via an `osascript -e 'display notification ...'` shell-out
+/// instead of `UNUserNotificationCenter` to avoid pulling
+/// `objc2-user-notifications` (which currently pins a different
+/// objc2 major than the workspace) and the permission-request
+/// plumbing.
+///
+/// Best-effort: spawn osascript detached, log any error, never
+/// block. The chip text remains the authoritative failure surface;
+/// the notification is purely a "look here" nudge.
+/// Spawn a fire-and-forget helper AND REAP IT (order 690-w94k).
+///
+/// THE BELIEF THIS REPLACES, quoted from the call site it replaced: "Detached —
+/// let it complete in the background." The second half of that reasoning is
+/// true — osascript notifications do fire near-instantly — and it is what made
+/// the first half sound reasonable. But dropping a `std::process::Child` on
+/// Unix does NOT detach the child. The handle goes away; the PROCESS stays in
+/// the table as a zombie until its parent exits, because nobody called
+/// `wait()`. The tray is long-lived by design, so that is one leaked entry per
+/// notification for the life of the process.
+///
+/// WHY A THREAD RATHER THAN `wait()` INLINE: these run on the tray's async
+/// workers and a notification must not block one. Thread-per-spawn is chosen
+/// deliberately over a shared reaper thread with a channel: there are three
+/// call sites, all rare and user-triggered, and a channel would add a lifetime
+/// and a shutdown question to save a thread that exists for milliseconds. If a
+/// hot path ever needs this, that trade flips.
+/// `what` is `&'static str` because it crosses into the reaper thread; every
+/// call site passes a literal, so this costs nothing and states the constraint
+/// in the signature rather than leaving it to a borrow error.
+fn spawn_and_reap(mut command: std::process::Command, what: &'static str) {
+    match command.spawn() {
+        Ok(child) => {
+            // The thread owns the handle and exits as soon as the child does.
+            std::thread::spawn(move || {
+                let mut child = child;
+                if let Err(err) = child.wait() {
+                    eprintln!("[tillandsias-tray] {what}: wait failed: {err}");
+                }
+            });
+        }
+        Err(err) => {
+            eprintln!("[tillandsias-tray] {what}: spawn failed: {err}");
+        }
+    }
+}
+
+/// 1642-cc54 (5b loop guard): the loud line for a second automatic rebuild in a
+/// row. It names the likely cause so the defect is visible in tray.log and in
+/// the record file `--diagnose` reports, instead of a silent loop that costs
+/// the sign-ins on every launch.
+fn consecutive_unclean_rebuild_line(image_root: &std::path::Path) -> String {
+    format!(
+        "[tillandsias-tray] DEFECT (1642-cc54): two unclean stops in a row, so the workspace \
+         was rebuilt again and the sign-ins lost again. Likely cause: the clean power-off \
+         path was not reached (no token-verified `tillandsias-clean-off` line on the console \
+         before the stop; check console.log and the `Quit:` lines). Every quit will keep \
+         rebuilding until it is fixed. Record: {}",
+        image_root
+            .join(tillandsias_vm_layer::vz::AUTO_REBUILD_RECORD_FILE)
+            .display()
+    )
+}
+
+// parity-surface: notification.provisioning-failed
+fn notify_provisioning_failed(reason: &str) {
+    // AppleScript single-quote-escape so a `'` in the reason doesn't
+    // terminate the literal. Then wrap the whole call in another
+    // outer escape layer because we pass it as -e arg.
+    let escaped = applescript_escape_single_quoted(reason);
+    let body = format!(
+        "display notification \"{escaped}\" with title \"Tillandsias\" \
+         subtitle \"Provisioning error\""
+    );
+    let mut command = std::process::Command::new("/usr/bin/osascript");
+    command.arg("-e").arg(&body);
+    spawn_and_reap(command, "notification");
+}
+
+/// Fire the guest crash-loop Notification Center banner — the single
+/// most-important tray notification (order 250 ultra-minimal UX: "the
+/// guest is crash-looping, reset it"). Mirrors windows-tray's
+/// `show_balloon(..., BalloonSeverity::Error)` crash-loop toast in
+/// title/body framing, delivered through the SAME osascript mechanism
+/// as `notify_provisioning_failed` (a subprocess spawn — no AppKit, so
+/// no main-thread dispatch needed; safe from any thread). Best-effort:
+/// the chip carries the same verdict authoritatively.
+///
+/// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+// parity-surface: notification.guest-crash-loop
+fn notify_crash_loop(reason: &str) {
+    let escaped = applescript_escape_single_quoted(reason);
+    let body = format!(
+        "display notification \"{escaped}\" with title \"Tillandsias\" \
+         subtitle \"Guest crash-loop\""
+    );
+    let mut command = std::process::Command::new("/usr/bin/osascript");
+    command.arg("-e").arg(&body);
+    spawn_and_reap(command, "crash-loop notification");
+}
+
+/// AppleScript double-quoted-string escaping: backslash + double-quote
+/// are the only metachars we need to handle inside `"..."`. Used by
+/// `notify_provisioning_failed` to embed a user-visible reason inside
+/// an AppleScript literal.
+fn applescript_escape_single_quoted(reason: &str) -> String {
+    let mut out = String::with_capacity(reason.len());
+    for c in reason.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            // Collapse newlines to spaces — AppleScript display
+            // notification renders newlines as control chars.
+            '\n' | '\r' => out.push(' '),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+/// Format a dispatcher `Error{code, message}` into a poller-side log
+/// string. Mirrors `tillandsias-windows-tray::notify_icon::
+/// describe_wire_error` (commit eddb5c00) so both trays surface
+/// identical operator-visible text when Linux's `decide_route`
+/// returns an Unsupported frame instead of dropping into the
+/// generic "unexpected reply" path.
+fn describe_wire_error(code: tillandsias_control_wire::ErrorCode, message: &str) -> String {
+    if message.is_empty() {
+        format!("dispatcher error {code:?}")
+    } else {
+        format!("dispatcher error {code:?}: {message}")
+    }
+}
+
+/// Condensed status-line text for a live VM phase + podman readiness.
+/// Drives the shared `ids::STATUS` chip (and the menubar tooltip) so
+/// the menu reflects real VM health — converges with the windows-tray
+/// helper of the same name (see `tillandsias-windows-tray::notify_icon::
+/// vm_phase_status_text`, commit c45f23ae). Keeping the two trays'
+/// phase strings byte-for-byte identical satisfies the 2026-05-27 UX
+/// hard requirement that all three platforms render the same chip text
+/// once the in-VM headless reports its phase. The macOS-specific
+/// pre-boot phase ("Setting up Fedora Linux…") sits outside this
+/// table because it has no Linux/Windows analogue.
+fn vm_phase_status_text(phase: tillandsias_control_wire::VmPhase, podman_ready: bool) -> String {
+    use tillandsias_control_wire::VmPhase;
+    match phase {
+        VmPhase::Ready if podman_ready => "\u{1F7E2} Ready".to_string(),
+        VmPhase::Ready => "\u{1F7E1} Ready (podman starting\u{2026})".to_string(),
+        VmPhase::Provisioning => "\u{1F535} Provisioning\u{2026}".to_string(),
+        VmPhase::Starting => "\u{1F535} Starting\u{2026}".to_string(),
+        VmPhase::Draining => "\u{1F7E0} Draining\u{2026}".to_string(),
+        VmPhase::Stopping => "\u{1F534} Stopping\u{2026}".to_string(),
+        VmPhase::Failed => "\u{1F534} VM failed".to_string(),
+    }
+}
+
+/// Append a non-empty `VmStatusReply.last_event` to the base chip
+/// string after a Unicode MIDDLE DOT so the live chip reflects in-VM
+/// activity (e.g. `🟢 Ready · forge-foo created`) rather than just
+/// the phase. `None` or whitespace-only `last_event` leaves the base
+/// untouched.
+///
+/// Mirrors `tillandsias-windows-tray::notify_icon::compose_chip_text`
+/// (commit 8992652a) byte-for-byte so both trays produce identical
+/// chip strings for identical `VmStatusReply` payloads.
+fn compose_chip_text(base: &str, last_event: Option<&str>) -> String {
+    let text = match last_event.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(evt) => format!("{base} \u{00B7} {evt}"),
+        None => base.to_string(),
+    };
+    clamp_tray_status_chip(text)
+}
+
+/// 972-umik: DELEGATES to the one reader in tillandsias-control-wire. This
+/// crate used to parse `TILLANDSIAS_SECURE_CONTROL_WIRE` itself, which is how
+/// six copies of one parse drifted apart. The `OnceLock` is kept — it memoises
+/// the RESULT, including the error, so a bad value fails identically on every
+/// call — but the environment is read once, inside the shared module.
+///
+/// The default is whatever the shared reader gives (Off today). It is NOT
+/// restated here: a local default is exactly the drift this conversion removes,
+/// and the flip to On belongs to the commit that converts the LAST reader.
+fn secure_control_wire_mode() -> Result<SecureWireMode, String> {
+    static MODE: OnceLock<Result<SecureWireMode, String>> = OnceLock::new();
+    MODE.get_or_init(tillandsias_control_wire::secure_wire_mode::secure_wire_mode)
+        .clone()
+}
+
+type GuestWireStream = Box<dyn tillandsias_control_wire::transport::AsyncReadWrite + Unpin + Send>;
+
+enum ControlWireStream {
+    Plain(GuestWireStream),
+    Secure(Box<EncryptedStream<GuestWireStream>>),
+}
+
+impl AsyncRead for ControlWireStream {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        out: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            ControlWireStream::Plain(stream) => Pin::new(stream).poll_read(cx, out),
+            ControlWireStream::Secure(stream) => Pin::new(stream).poll_read(cx, out),
+        }
+    }
+}
+
+impl AsyncWrite for ControlWireStream {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        match self.get_mut() {
+            ControlWireStream::Plain(stream) => Pin::new(stream).poll_write(cx, buf),
+            ControlWireStream::Secure(stream) => Pin::new(stream).poll_write(cx, buf),
+        }
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            ControlWireStream::Plain(stream) => Pin::new(stream).poll_flush(cx),
+            ControlWireStream::Secure(stream) => Pin::new(stream).poll_flush(cx),
+        }
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            ControlWireStream::Plain(stream) => Pin::new(stream).poll_shutdown(cx),
+            ControlWireStream::Secure(stream) => Pin::new(stream).poll_shutdown(cx),
+        }
+    }
+}
+
+/// How long the LONG-LIVED push subscription waits for the guest's Hello
+/// before giving up and letting the loop back off and resubscribe (733-mppc).
+///
+/// Deliberately longer than the 5s connect budget and than anything the
+/// interactive `--diagnose` path uses: this connection is not a one-shot an
+/// operator is waiting on, so failing it fast buys nothing. It is bounded at
+/// all only because the loop's own recovery is unreachable while the await
+/// never returns.
+const PUSH_HELLO_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// The bounded secure (Noise) handshake, in ONE place (733-mppc).
+///
+/// Both copies of `open_control_wire_stream` — this file's and diagnose.rs's —
+/// call it, so the bound and its message cannot drift between them. That
+/// duplication is why this packet had two sites in the first place: the same
+/// unbounded handshake was written twice and fixed neither time.
+///
+/// Kept as a named function rather than an inline `tokio::time::timeout` so the
+/// fixture can drive the REAL failure path against a real silent peer. Testing
+/// an inline copy of the composition would assert the test's own message and
+/// prove nothing about either call site — the "verified where it was written is
+/// not verified where it runs" trap this project keeps meeting.
+pub(crate) async fn secure_handshake_bounded<S>(
+    stream: S,
+    psk: &[u8; 32],
+    timeout: Duration,
+) -> Result<tillandsias_secure_channel::secure_stream::EncryptedStream<S>, String>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    match tokio::time::timeout(timeout, client_handshake(stream, psk)).await {
+        Ok(r) => r.map_err(|e| format!("secure control wire handshake failed: {e}")),
+        Err(_) => Err(format!(
+            "secure control wire handshake timed out after {timeout:?} — the guest accepted the \
+             connection and then went silent mid-handshake, which is neither a refused connection \
+             nor a stale session (733-mppc)"
+        )),
+    }
+}
+
+/// Order 1925-tdlv: collect a pending Vault handover over a short connection
+/// of its own, so the push reader's client is never shared. Best-effort and
+/// loud: the status stream must not be lost to a failed collect.
+async fn collect_vault_handover_on_ready(vz: &VzRuntime) {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_host_shell::vsock_client::Client;
+    let stream =
+        match open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(5)).await {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[tillandsias-tray] vault handover on Ready: connect: {e}");
+                return;
+            }
+        };
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: TILLANDSIAS_GUEST_CID,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    if let Err(e) = client.handshake().await {
+        eprintln!("[tillandsias-tray] vault handover on Ready: handshake: {e}");
+        return;
+    }
+    if let Err(e) = crate::installation_uuid::capture_vault_handover(&mut client).await {
+        eprintln!("[tillandsias-tray] vault handover on Ready: {e}");
+    }
+}
+
+async fn open_control_wire_stream(
+    vz: &VzRuntime,
+    port: u32,
+    timeout: Duration,
+) -> Result<ControlWireStream, String> {
+    let endpoint = GuestEndpoint::MacVz { port };
+    let stream = tokio::time::timeout(timeout, vz.open_stream(&endpoint))
+        .await
+        .map_err(|_| format!("MacVz GuestTransport open timed out after {timeout:?}"))?
+        .map_err(|e| format!("vsock connect: {e}"))?;
+
+    match secure_control_wire_mode()? {
+        SecureWireMode::Off => Ok(ControlWireStream::Plain(stream)),
+        SecureWireMode::On => {
+            // ORDER 1084-x8ya: key off the GUEST binary's digest, not this
+            // tray's own exe hash. The guest self-hashes what it runs; a tray
+            // and a musl guest are never byte-identical, so deriving from
+            // `channel_psk` here gave the two ends different keys and the
+            // handshake could not complete even with an identical version
+            // triple. On a debug build there is no baked digest and both ends
+            // use the dev seed, so fall back to the unkeyed derivation there.
+            let psk = match crate::guest_binary::bundled_guest_digest() {
+                Some(digest) => tillandsias_secure_channel::channel_psk_for_guest(
+                    &digest,
+                    tillandsias_secure_channel::workspace_version(),
+                    tillandsias_control_wire::WIRE_VERSION,
+                    HopId::HostGuest,
+                ),
+                // DEBUG ONLY, AND ENFORCED AS SUCH. On a release macOS tray
+                // this arm is unreachable by construction — build.rs refuses
+                // to produce one unless both digests are present AND 64 hex
+                // chars, which is exactly what bundled_guest_digest() needs to
+                // return Some. The refusal below is defence in depth: if that
+                // invariant is ever weakened, this path must FAIL LOUDLY
+                // rather than quietly derive from the host's own binary hash,
+                // because a silent fall-back here reinstates 1084-x8ya with no
+                // error anywhere — the guest simply never becomes reachable.
+                #[cfg(not(debug_assertions))]
+                None => {
+                    return Err("no embedded guest digest in a release tray: refusing the \
+                         unkeyed self-hash derivation (1084-x8ya) — rebuild through \
+                         scripts/build-macos-tray.sh"
+                        .to_string());
+                }
+                #[cfg(debug_assertions)]
+                None => channel_psk(
+                    tillandsias_secure_channel::workspace_version(),
+                    tillandsias_control_wire::WIRE_VERSION,
+                    HopId::HostGuest,
+                ),
+            };
+            // 733-mppc: the caller's budget covers CONNECT + HANDSHAKE, which is
+            // what it always claimed to cover and never did. The timeout above
+            // bounded only `vz.open_stream`; a guest that completed the socket
+            // and then stalled mid-Noise parked this forever, because every
+            // other bound on this seam lives on the DATA path and a connection
+            // that never establishes reaches none of them.
+            //
+            // Sharing the caller's Duration rather than inventing a second
+            // constant is deliberate: the caller already expressed how long it
+            // is willing to wait for a USABLE stream, and a stream that is
+            // connected but not handshaken is not usable. A separate constant
+            // would let the two drift and would silently re-introduce a
+            // component the caller cannot bound.
+            let secure = secure_handshake_bounded(stream, &psk, timeout).await?;
+            Ok(ControlWireStream::Secure(Box::new(secure)))
+        }
+    }
+}
+
+/// One-shot VmStatus poll over the in-VM control wire. Mirrors
+/// `tillandsias-windows-tray::notify_icon::refresh_vm_status` but
+/// drives the macOS-specific facade path:
+///
+///   1. `GuestTransport::open_stream(GuestEndpoint::MacVz { port })` to
+///      get an `AsyncRead + AsyncWrite` stream into the guest's port 42420.
+///   2. Wrap the stream in `Client::from_stream` so the standard
+///      Hello/HelloAck + request/recv code paths drive it.
+///   3. Send a `VmStatusRequest` and expect a `VmStatusReply`.
+///
+/// Returns the `(phase, podman_ready)` pair so the caller can render
+/// it via `vm_phase_status_text` + `apply_status_text_main_thread`.
+/// Best-effort: a transient wire error is returned as `Err(String)` so
+/// the caller can log + leave the last-known chip text untouched
+/// (matching the windows-tray policy of "transient error → no chip
+/// update"). The 5 s timeout covers connect + the secure handshake.
+///
+/// 733-mppc corrected this sentence. It read "connect + handshake + reply",
+/// and none of that was true: the Duration bounded ONLY `vz.open_stream`, so
+/// both the Noise handshake and the reply were unbounded. The handshake half is
+/// now genuinely covered (see `open_control_wire_stream`); the REPLY still is
+/// not, and the comment no longer claims otherwise. A doc comment that
+/// overstates a bound is worse than none — it is exactly what stops the next
+/// reader from checking.
+///
+/// @trace spec:vsock-transport,
+///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4)
+/// Tell the guest where the host-native inference endpoint is, and read its
+/// ONE answer (order 1509-kf4d). The guest acks with
+/// `IssueAck { seq_acked }` or answers `Error`. Anything else means the frame
+/// belongs to someone else, so say so instead of treating it as success.
+/// Best-effort: every outcome is logged and none fails the caller.
+async fn set_vsock_forward_target(
+    client: &mut tillandsias_host_shell::vsock_client::Client,
+    port: u32,
+) {
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+
+    let seq = client.allocate_seq();
+    let env = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        // CID 2 is the host as seen from the guest. Carried in the message
+        // rather than assumed guest-side so the value is greppable from one end.
+        body: ControlMessage::SetVsockForwardTarget { cid: 2, port },
+    };
+    match client.request(&env).await {
+        Ok(reply) => match reply.body {
+            ControlMessage::IssueAck { seq_acked } if seq_acked == seq => {}
+            ControlMessage::Error { code, message, .. } => tracing::warn!(
+                port,
+                error = %describe_wire_error(code, &message),
+                "the guest refused the host-native inference target"
+            ),
+            other => tracing::warn!(
+                port,
+                reply = ?other,
+                "unexpected reply to SetVsockForwardTarget (expected IssueAck for seq {seq})"
+            ),
+        },
+        Err(err) => {
+            tracing::warn!(%err, port, "could not set the guest's host-native inference target")
+        }
+    }
+}
+
+async fn poll_vm_status_once(
+    vz: &VzRuntime,
+) -> Result<(tillandsias_control_wire::VmPhase, bool, Option<String>), String> {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::Client;
+
+    let connect_timeout = Duration::from_secs(5);
+    let stream = open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, connect_timeout).await?;
+
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: TILLANDSIAS_GUEST_CID,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+
+    client
+        .handshake()
+        .await
+        .map_err(|e| format!("control-wire handshake: {e}"))?;
+
+    if let Err(err) =
+        crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await
+    {
+        tracing::warn!(%err, "credentials delivery / handover check failed during status poll");
+    }
+
+    // ORDER 1309-rb3p — tell the guest where the host-native inference endpoint
+    // is, closing 830-xsk2's last half.
+    //
+    // HERE, AND NOT AT LISTENER-BIND TIME. The host binds its vsock listener
+    // inside VzRuntime::start(), where the guest is not yet Ready and the
+    // control wire does not exist. This poll runs AFTER wait_phase_ready and
+    // already holds a handshaked client, so it is the first place the guest can
+    // actually be told.
+    //
+    // ON EVERY POLL, DELIBERATELY. The write is idempotent, and /run is tmpfs —
+    // so a guest that restarted under a still-running tray silently loses the
+    // file, and re-asserting is what repairs that without anyone noticing it
+    // broke. A send-once-at-Ready design would leave that guest configured in
+    // the tray's belief only.
+    //
+    // OPT-IN, matching the listener it pairs with: unset, nothing is sent and
+    // the guest starts its ordinary inference container. The lane costs nothing
+    // when it is off (the same discipline the listener's own comment insists on).
+    //
+    // BEST-EFFORT: a failure here is logged and does NOT fail the status poll.
+    // The poll's job is the VM's phase, and an inference lane that could not be
+    // configured must not cost the operator their status chip.
+    if let Ok(port_s) = std::env::var("TILLANDSIAS_HOST_VSOCK_PORT")
+        && let Ok(port) = port_s.trim().parse::<u32>()
+    {
+        set_vsock_forward_target(&mut client, port).await;
+    }
+
+    let envelope = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq: client.allocate_seq(),
+        body: ControlMessage::VmStatusRequest {
+            seq: client.allocate_seq(),
+        },
+    };
+    let reply = client
+        .request(&envelope)
+        .await
+        .map_err(|e| format!("VmStatusRequest: {e}"))?;
+
+    match reply.body {
+        ControlMessage::VmStatusReply {
+            phase,
+            podman_ready,
+            last_event,
+            ..
+        } => Ok((phase, podman_ready, last_event)),
+        // Linux's convergence-packet item 3 (commit 4eb0baff) wires
+        // decide_route into the vsock dispatcher so requests with no
+        // inner handler return Error{code, message} frames carrying
+        // the dispatcher's own naming ("Unsupported: variant X not
+        // wired on vsock"). Surface that explicitly instead of
+        // dropping into the generic "unexpected reply" path —
+        // mirrors windows-tray's eddb5c00 (item 4).
+        ControlMessage::Error { code, message, .. } => Err(describe_wire_error(code, &message)),
+        other => Err(format!("unexpected reply to VmStatusRequest: {other:?}")),
+    }
+}
+
+/// Send a wire-level `VmShutdownRequest` to the in-VM headless so it
+/// can drain podman containers + sessions BEFORE VZ tears down the
+/// VM. Mirrors `tillandsias-windows-tray::wsl_lifecycle::
+/// request_vm_shutdown` (commit `80eceb0b`) but uses macOS's
+/// `GuestTransport` backend over `VZVirtioSocketConnection`.
+///
+/// Bounded by `RTT_BUDGET` (3 s) — a wedged in-VM headless cannot
+/// delay Quit indefinitely; the caller follows up with VZ-level
+/// `requestStop` which carries its own deadline. Returns `Err` on
+/// connect/handshake/reply failures + on the dispatcher's own
+/// `Error{Unsupported}` reply (which is the expected state until
+/// Linux ships the vsock-side inner handler — at which point this
+/// auto-upgrades with no tray change).
+///
+/// `drain_timeout` is encoded as the request's `drain_timeout_ms`
+/// hint for the in-VM headless so it knows the host's overall
+/// shutdown budget.
+///
+/// @trace spec:vsock-transport,
+///        plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q2),
+///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 20)
+async fn request_vm_shutdown(
+    vz: &VzRuntime,
+    drain_timeout: Duration,
+    progress: &ShutdownProgress,
+) -> Result<(), String> {
+    use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+
+    const RTT_BUDGET: Duration = Duration::from_secs(3);
+
+    shutdown_over(
+        open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, RTT_BUDGET),
+        drain_timeout,
+        progress,
+        SHUTDOWN_HANDSHAKE_BUDGET,
+    )
+    .await
+}
+
+/// ORDER 1498-fn96. The step of the in-VM shutdown request in flight. Quit
+/// bounds the whole request at 10 s, and before this a timeout said only "no
+/// reply within 10s": every Quit during a forge build force-stopped the VM with
+/// no named cause. The marker lets the timeout line say WHICH step stalled.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ShutdownStage {
+    Connect = 0,
+    Handshake = 1,
+    Request = 2,
+    Reply = 3,
+}
+
+impl ShutdownStage {
+    fn from_u8(v: u8) -> Self {
+        match v {
+            1 => Self::Handshake,
+            2 => Self::Request,
+            3 => Self::Reply,
+            _ => Self::Connect,
+        }
+    }
+
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Connect => "connect",
+            Self::Handshake => "handshake",
+            Self::Request => "request",
+            Self::Reply => "reply",
+        }
+    }
+
+    fn meaning(self) -> &'static str {
+        match self {
+            Self::Connect => "the vsock connect to the guest's control wire did not complete",
+            Self::Handshake => "connected, but the guest sent no HelloAck",
+            Self::Request => "the guest is not reading the shutdown request",
+            Self::Reply => "the guest took the shutdown request and sent no reply",
+        }
+    }
+}
+
+/// Shared between the bounded request and the caller that reports its timeout.
+#[derive(Clone, Default)]
+pub(crate) struct ShutdownProgress(Arc<std::sync::atomic::AtomicU8>);
+
+impl ShutdownProgress {
+    fn set(&self, stage: ShutdownStage) {
+        self.0
+            .store(stage as u8, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub(crate) fn get(&self) -> ShutdownStage {
+        ShutdownStage::from_u8(self.0.load(std::sync::atomic::Ordering::SeqCst))
+    }
+}
+
+/// The plain Hello/HelloAck is bounded on its own: it was unbounded, so a guest
+/// that accepted the connection and stayed silent ate the whole 10 s Quit budget.
+const SHUTDOWN_HANDSHAKE_BUDGET: Duration = Duration::from_secs(3);
+
+/// What the Quit drain logs when the whole request outruns its budget.
+pub(crate) fn shutdown_no_reply_line(budget: Duration, stage: ShutdownStage) -> String {
+    format!(
+        "[tillandsias-tray] Quit: in-VM shutdown request got no reply within {}s — stalled at \
+         stage {}: {} (proceeding to VZ.requestStop)",
+        budget.as_secs(),
+        stage.name(),
+        stage.meaning()
+    )
+}
+
+/// The guest's VmShutdownRequest arm closes the connection without replying
+/// (headless vsock_server.rs: "closing connection (drain happens via signal
+/// path)"). That is an ack in all but name, so it is named, not reported as a
+/// failed read.
+pub(crate) const SHUTDOWN_CLOSED_WITHOUT_ACK: &str = "the guest closed the control wire without an \
+     ack after taking the shutdown request (its VmShutdownRequest arm drains via the signal path)";
+
+/// The staged request over any opener, so a fake guest can drive every stage.
+async fn shutdown_over<F, S>(
+    open: F,
+    drain_timeout: Duration,
+    progress: &ShutdownProgress,
+    handshake_budget: Duration,
+) -> Result<(), String>
+where
+    F: std::future::Future<Output = Result<S, String>>,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::Client;
+
+    progress.set(ShutdownStage::Connect);
+    let stream = open.await.map_err(|e| format!("stage connect: {e}"))?;
+
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: TILLANDSIAS_GUEST_CID,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    progress.set(ShutdownStage::Handshake);
+    match tokio::time::timeout(handshake_budget, client.handshake()).await {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => return Err(format!("stage handshake: control-wire handshake: {e}")),
+        Err(_) => {
+            return Err(format!(
+                "stage handshake: the guest sent no HelloAck within {}s",
+                handshake_budget.as_secs()
+            ));
+        }
+    }
+
+    let seq = client.allocate_seq();
+    let envelope = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        body: ControlMessage::VmShutdownRequest {
+            seq,
+            drain_timeout_ms: drain_timeout.as_millis().min(u32::MAX as u128) as u32,
+        },
+    };
+    progress.set(ShutdownStage::Request);
+    client
+        .send_envelope(&envelope)
+        .await
+        .map_err(|e| format!("stage request: VmShutdownRequest: {e}"))?;
+    progress.set(ShutdownStage::Reply);
+    let reply = match client.next_envelope().await {
+        Ok(reply) => reply,
+        Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+            return Err(SHUTDOWN_CLOSED_WITHOUT_ACK.to_string());
+        }
+        Err(e) => return Err(format!("stage reply: VmShutdownRequest: {e}")),
+    };
+
+    match reply.body {
+        // Per the wire convention (other handlers' shape): an Ok
+        // shutdown ack is signalled either by a tailored reply
+        // variant when Linux adds one, OR — for v0.0.1 where the
+        // vsock inner arm isn't shipped yet — by a clean
+        // Error{Unsupported}/etc. We treat ANY non-Error reply as
+        // OK so this auto-upgrades when the inner arm lands.
+        ControlMessage::Error { code, message, .. } => Err(describe_wire_error(code, &message)),
+        _other => Ok(()),
+    }
+}
+
+/// Map a wire `CloudProjectEntry` ({label, owner, repo,
+/// default_branch}) onto the shared menu `ProjectEntry` the cloud-
+/// projects submenu renders. `ProjectEntry::path` is the `owner/repo`
+/// slug per its doc; `ready` is always false for cloud projects
+/// (they have no in-VM forge container). Mirrors windows-tray's
+/// `cloud_entry_to_menu` (commit b0cdcdee) byte-for-byte so both
+/// trays produce identical ProjectEntry rows from the same wire
+/// reply.
+fn cloud_entry_to_menu(
+    entry: &tillandsias_control_wire::CloudProjectEntry,
+) -> tillandsias_host_shell::menu_state::ProjectEntry {
+    tillandsias_host_shell::menu_state::ProjectEntry {
+        name: entry.label.clone(),
+        path: format!("{}/{}", entry.owner, entry.repo),
+        ready: false,
+        full_name: None,
+    }
+}
+
+/// One-shot CloudRefreshRequest over the in-VM control wire. Mirrors
+/// `tillandsias-windows-tray::notify_icon::refresh_cloud_projects`
+/// (commit b0cdcdee) but drives the macOS-specific `GuestTransport`
+/// backend over VZ virtio-vsock. Reuses the standard
+/// `Client::from_stream` + handshake + request path slice 4
+/// introduced.
+///
+/// Returns the mapped `Vec<ProjectEntry>` so the caller can write it
+/// into the held `MenuState.cloud_projects` and re-render the menu.
+/// Best-effort: a transient wire error / unauthenticated `gh` in the
+/// VM returns `Err(String)` so the caller can log + leave the last-
+/// known cloud list untouched (matches windows-tray's policy).
+///
+/// 5 s overall timeout (connect + handshake + reply) — `gh repo list`
+/// inside the VM is the slowest input but Linux's e1a190d4 caches
+/// the underlying calls; if it still races the timeout the user just
+/// sees the prior list.
+///
+/// @trace spec:host-shell-architecture,
+///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 8a)
+async fn poll_cloud_projects_once(
+    vz: &VzRuntime,
+) -> Result<(Vec<tillandsias_host_shell::menu_state::ProjectEntry>, bool), String> {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::Client;
+
+    let connect_timeout = Duration::from_secs(5);
+    let stream = open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, connect_timeout).await?;
+
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: TILLANDSIAS_GUEST_CID,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    client
+        .handshake()
+        .await
+        .map_err(|e| format!("control-wire handshake: {e}"))?;
+
+    if let Err(err) =
+        crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await
+    {
+        tracing::warn!(%err, "credentials delivery / handover check failed during cloud projects poll");
+    }
+
+    let seq = client.allocate_seq();
+    let envelope = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        body: ControlMessage::CloudRefreshRequest { seq },
+    };
+    let reply = client
+        .request(&envelope)
+        .await
+        .map_err(|e| format!("CloudRefreshRequest: {e}"))?;
+
+    match reply.body {
+        // 731-eupn: the bool is whether this list is an ANSWER. Returning it
+        // beside the list rather than folding it in keeps the caller unable to
+        // forget it — an `Ok(list)` that silently meant "or maybe the fetch
+        // died" is what this packet is about.
+        ControlMessage::CloudRefreshReply {
+            projects, outcome, ..
+        } => Ok((
+            projects.iter().map(cloud_entry_to_menu).collect(),
+            outcome.is_confirmed(),
+        )),
+        // See poll_vm_status_once for context on the dispatcher Error
+        // frame (Linux convergence-packet items 2 + 3, commits
+        // aeb5499a / 4eb0baff). Surface code + message via the shared
+        // describe_wire_error helper.
+        ControlMessage::Error { code, message, .. } => Err(describe_wire_error(code, &message)),
+        other => Err(format!(
+            "unexpected reply to CloudRefreshRequest: {other:?}"
+        )),
+    }
+}
+
+/// Order 1719-83po: one-shot CloudflareLoginStatusRequest, asked only on an
+/// event (the login session closing). Every failure maps to Unknown: a guest
+/// that doesn't advertise the request, a wire error, or an Error reply. The
+/// item is then shown disabled, never as a login the tray hasn't ruled out.
+async fn poll_cloudflare_login_once(
+    vz: &VzRuntime,
+) -> tillandsias_host_shell::menu_state::CloudflareLoginState {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::menu_state::CloudflareLoginState;
+    use tillandsias_host_shell::vsock_client::Client;
+    let Ok(stream) =
+        open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(5)).await
+    else {
+        return CloudflareLoginState::Unknown;
+    };
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: TILLANDSIAS_GUEST_CID,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    if client.handshake().await.is_err()
+        || !client
+            .server_caps()
+            .iter()
+            .any(|c| c == "CloudflareLoginStatusRequest")
+    {
+        return CloudflareLoginState::Unknown;
+    }
+    let seq = client.allocate_seq();
+    let envelope = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        body: ControlMessage::CloudflareLoginStatusRequest { seq },
+    };
+    match client.request(&envelope).await.map(|r| r.body) {
+        Ok(ControlMessage::CloudflareLoginStatusReply { logged_in, .. }) => {
+            CloudflareLoginState::from_reply(logged_in)
+        }
+        _ => CloudflareLoginState::Unknown,
+    }
+}
+
+/// Order 1955-cfhf: hand the host-held loopback callback line to the guest's
+/// waiting `--cloudflare-login` (`CloudflareCallbackForward`, acked with
+/// `IssueAck`). Sent only when the guest advertises the variant. The line is
+/// a single-use code, never a token; it is not logged here.
+async fn forward_cloudflare_callback(
+    vz: &VzRuntime,
+    cb: &tillandsias_host_shell::cloudflare_callback::Callback,
+) -> Result<(), String> {
+    use tillandsias_control_wire::ControlMessage;
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_host_shell::vsock_client::Client;
+    let stream = open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(5))
+        .await
+        .map_err(|e| format!("control wire: {e}"))?;
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: TILLANDSIAS_GUEST_CID,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    client
+        .handshake()
+        .await
+        .map_err(|e| format!("handshake: {e}"))?;
+    if !client
+        .server_caps()
+        .iter()
+        .any(|c| c == "CloudflareCallbackForward")
+    {
+        return Err("the guest does not accept CloudflareCallbackForward (older headless)".into());
+    }
+    let seq = client.allocate_seq();
+    let envelope = tillandsias_host_shell::cloudflare_callback::forward_envelope(seq, cb);
+    match client.request(&envelope).await.map(|r| r.body) {
+        Ok(ControlMessage::IssueAck { .. }) => Ok(()),
+        Ok(other) => Err(format!("unexpected reply {}", other.kind())),
+        Err(e) => Err(format!("request: {e}")),
+    }
+}
+
+/// Order 1719-83po: write an observed Cloudflare login state; true when the
+/// menu must be rebuilt. Answers arrive only on events (Ready, the login
+/// session closing), each final, so a confirmed answer always replaces the
+/// local LoggingIn, and Unknown never overwrites a confirmed answer (the
+/// shared `CloudflareLoginState::settled_by`, also used by the Windows tray).
+fn apply_cloudflare_login_state(
+    observed: tillandsias_host_shell::menu_state::CloudflareLoginState,
+    menu_state: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+) -> bool {
+    let mut guard = menu_state.lock().unwrap();
+    let next = guard.cloudflare_login.settled_by(observed);
+    if guard.cloudflare_login == next {
+        return false;
+    }
+    guard.cloudflare_login = next;
+    true
+}
+
+/// One-shot GithubLoginStatusRequest over the in-VM control wire. Mirrors
+/// `tillandsias-windows-tray::notify_icon::refresh_github_login` but
+/// drives the macOS-specific `GuestTransport` backend over VZ virtio-vsock.
+///
+/// Returns the mapped `GithubLoginState` so the caller can write it into the
+/// held `MenuState.login` and re-render the menu.
+/// Best-effort: a transient wire error / Error{Unsupported} returns `Err(String)`
+/// so the caller can log + leave the last-known login state untouched (matches
+/// windows-tray's policy).
+async fn poll_github_login_once(
+    vz: &VzRuntime,
+) -> Result<tillandsias_host_shell::menu_state::GithubLoginState, String> {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::Client;
+
+    let connect_timeout = Duration::from_secs(5);
+    let stream = open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, connect_timeout).await?;
+
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: TILLANDSIAS_GUEST_CID,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    client
+        .handshake()
+        .await
+        .map_err(|e| format!("control-wire handshake: {e}"))?;
+
+    if let Err(err) =
+        crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await
+    {
+        tracing::warn!(%err, "credentials delivery / handover check failed during github login poll");
+    }
+
+    let seq = client.allocate_seq();
+    let envelope = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        body: ControlMessage::GithubLoginStatusRequest { seq },
+    };
+    let reply = client
+        .request(&envelope)
+        .await
+        .map_err(|e| format!("GithubLoginStatusRequest: {e}"))?;
+
+    match reply.body {
+        ControlMessage::GithubLoginStatusReply {
+            logged_in, handle, ..
+        } => {
+            if logged_in {
+                Ok(
+                    tillandsias_host_shell::menu_state::GithubLoginState::LoggedIn {
+                        handle: handle.unwrap_or_default(),
+                    },
+                )
+            } else {
+                Ok(tillandsias_host_shell::menu_state::GithubLoginState::LoggedOut)
+            }
+        }
+        ControlMessage::Error { code, message, .. } => Err(describe_wire_error(code, &message)),
+        other => Err(format!(
+            "unexpected reply to GithubLoginStatusRequest: {other:?}"
+        )),
+    }
+}
+
+/// Default vsock CID for the Tillandsias guest. Matches what the
+/// in-VM headless binds; the host always connects to this CID.
+const TILLANDSIAS_GUEST_CID: u32 = 3;
+
+/// Status-chip text the wire-degradation branch of
+/// `spawn_vm_status_poller` writes when `poll_vm_status_once` fails
+/// (handshake / connect / request error). Pinned as a `const` —
+/// not an inline literal — because `tillandsias-windows-tray::
+/// notify_icon::mark_wire_unreachable` writes the SAME string. If
+/// either tray drifts (e.g. someone localises one side or changes
+/// the emoji), the cross-tray UX-parity invariant silently
+/// breaks. The unit test
+/// `wire_unreachable_chip_text_pinned` asserts the exact byte
+/// sequence (windows-260722-5 Tlatoāni-approved wording: U+1F7E0
+/// LARGE ORANGE CIRCLE + " Reconnecting to your workspace…").
+const WIRE_UNREACHABLE_CHIP_TEXT: &str = "\u{1F7E0} Reconnecting to your workspace\u{2026}";
+
+/// Curated chip shown after the VM process starts, while the host waits for the
+/// in-VM headless to answer on vsock (spec vm-provisioning-lifecycle
+/// ux.condensed-status "Connecting…"). Distinct from
+/// `WIRE_UNREACHABLE_CHIP_TEXT`, which is a *mid-session* loss after the guest
+/// was already ready.
+const CONNECTING_CHIP_TEXT: &str = "\u{1F535} Connecting\u{2026}";
+
+/// How long `VzRuntime::stop` waits for an orderly drain before
+/// escalating to a force-stop. Documented in
+/// `cheatsheets/runtime/tray-state-machine.md` as 60s for the
+/// production tray; the spike used 30s and hit the force-path on
+/// Fedora's ACPI shutdown.
+const VM_STOP_DRAIN: Duration = Duration::from_secs(60);
+
+type ProjectLaunchSet = Arc<Mutex<HashSet<String>>>;
+
+/// Per-project lease held while a project PTY launch is in flight.
+/// Dropping it clears the slot so a retry can proceed after success or
+/// failure.
+struct ProjectLaunchLease {
+    in_flight: ProjectLaunchSet,
+    project: String,
+}
+
+impl Drop for ProjectLaunchLease {
+    fn drop(&mut self) {
+        if let Ok(mut in_flight) = self.in_flight.lock() {
+            in_flight.remove(&self.project);
+        }
+    }
+}
+
+fn try_acquire_project_launch(
+    in_flight: &ProjectLaunchSet,
+    project: &str,
+) -> Option<ProjectLaunchLease> {
+    let mut guard = in_flight.lock().ok()?;
+    if !guard.insert(project.to_string()) {
+        return None;
+    }
+    Some(ProjectLaunchLease {
+        in_flight: in_flight.clone(),
+        project: project.to_string(),
+    })
+}
+
+/// State shared across the host's selector handlers. Lives inside
+/// the declared class via `DeclaredClass::Ivars`.
+pub struct TrayActionHostIvars {
+    runtime: Arc<tokio::runtime::Runtime>,
+    vm: Arc<Mutex<Option<Arc<VzRuntime>>>>,
+    vm_busy: Arc<Mutex<bool>>,
+    image_root: PathBuf,
+    /// The NSStatusItem the action host's tooltip updates apply to.
+    /// Set once at startup via `attach_status_handles`; stays `None`
+    /// only briefly between TrayActionHost::new and the subsequent
+    /// attach call from `status_item::run`.
+    status_item: Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
+    /// The first-row "status chip" NSMenuItem whose `title` reflects
+    /// the current lifecycle phase. Held directly so `set_status_text`
+    /// just calls `setTitle:` on it (cheaper + simpler than rebuilding
+    /// the whole menu). Set alongside `status_item`.
+    status_menu_item: Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
+    /// Current first-row status text. Stored for any future
+    /// non-AppKit consumer (logs, tests). The actual UI source of
+    /// truth is `status_menu_item.title`; we keep this string in
+    /// sync so off-thread reads stay safe.
+    status_text: Arc<Mutex<String>>,
+    /// Held menu-state snapshot. Updated by the poller tasks when
+    /// they learn the in-VM truth (cloud_projects from
+    /// `poll_cloud_projects_once`; eventually podman_ready + login).
+    /// Slice 8b stages this for slice 8c's menu re-render path.
+    menu_state: Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+    /// `Retained<TrayActionHost>` to self, populated once via
+    /// `set_self_handle` right after construction. Held so the
+    /// cloud-projects poller's rebuild dispatch can re-bind every
+    /// new NSMenuItem's `target` back to the live action host
+    /// without needing a Retained<Self> threaded through Send-able
+    /// closures (which doesn't work — Retained<TrayActionHost>
+    /// isn't Send because of the UnsafeCell layout). Wrapping in
+    /// `TrayActionHostHandle` is the safe seam.
+    self_handle: Arc<Mutex<Option<appkit_handle::TrayActionHostHandle>>>,
+    /// Project names with an in-flight Attach/Maintain launch.
+    /// Prevents a same-project double-click from spawning two competing
+    /// guest launch flows.
+    project_launches: ProjectLaunchSet,
+}
+
+/// ORDERS 1426-cb6g + 1244-9dx3 — THE ONE GRACEFUL QUIT.
+///
+/// The menu's Quit drained the VM (in-VM shutdown request, then `vz.stop()`,
+/// which also removes the per-launch `vm-swap.img`) and exited. Nothing else
+/// did: SIGTERM — install-macos.sh's own stop escalation — killed the process
+/// with no handler, and a quit Apple event reached AppKit's default
+/// `terminate:`, which exits without draining. MEASURED on the v56.9.27.1 smoke:
+/// after `pkill -TERM` the VM was torn down by the XPC service, but vm-swap.img
+/// survived, while the graceful path removed it.
+///
+/// So the drain lives here, reachable without the (main-thread-only) action
+/// host object: the menu Quit, a SIGTERM listener, and the app delegate's
+/// `applicationShouldTerminate:` all call [`request_graceful_quit`], and it
+/// runs at most once however many of them fire.
+struct QuitDrain {
+    runtime: Arc<tokio::runtime::Runtime>,
+    vm: Arc<Mutex<Option<Arc<VzRuntime>>>>,
+    vm_busy: Arc<Mutex<bool>>,
+}
+
+static QUIT_DRAIN: OnceLock<QuitDrain> = OnceLock::new();
+static QUIT_STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Start the graceful drain-then-exit. Returns `true` when a drain is (now or
+/// already) in progress, `false` when the tray has no action host yet — the
+/// caller should then let the process terminate the ordinary way.
+pub(crate) fn request_graceful_quit(source: &str) -> bool {
+    let Some(q) = QUIT_DRAIN.get() else {
+        return false;
+    };
+    if QUIT_STARTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        eprintln!("[tillandsias-tray] Quit ({source}): a drain is already in progress");
+        return true;
+    }
+    // Take the live VM out of the slot so a stray retry click can't
+    // double-stop. With no VM (quit before boot completes) we still exit:
+    // Quit must always terminate the app.
+    let vm_taken = q.vm.lock().unwrap().take();
+    // Mark busy so concurrent click paths skip out fast; exit(0) ends it.
+    *q.vm_busy.lock().unwrap() = true;
+    eprintln!(
+        "[tillandsias-tray] Quit ({source}): draining (timeout={}s)",
+        VM_STOP_DRAIN.as_secs()
+    );
+    let runtime_for_stop = q.runtime.clone();
+    q.runtime.spawn(async move {
+        if let Some(vm) = vm_taken {
+            // Two-step graceful shutdown (mirrors windows-tray 80eceb0b Q2):
+            // the wire-level VmShutdownRequest lets the in-VM headless drain
+            // its containers first (bounded), then VZ.requestStop with its own
+            // VM_STOP_DRAIN deadline, escalating to force-stop.
+            // BOUND THE WHOLE REQUEST, not just the connect. request_vm_shutdown
+            // bounds only its 3 s connect; the handshake and the reply were
+            // unbounded, so a guest that never answers (the in-VM handler for
+            // VmShutdownRequest does not exist yet) parked Quit FOREVER and
+            // vm.stop never ran. MEASURED on the 1426-cb6g live arm: a SIGTERM
+            // drain logged "draining" and nothing else for 4+ minutes, both
+            // tokio workers idle (one parked, one in kevent). The guest has no
+            // handler for this request today, so waiting the full drain budget
+            // only delays the real stop: the live arm took 131 s (65 s here, then
+            // 60 s of requestStop) against the installer's 150 s before SIGKILL.
+            // A short bound keeps Quit well inside it; VZ.requestStop below still
+            // gives the guest VM_STOP_DRAIN to shut down.
+            let budget = Duration::from_secs(10);
+            // 1498-fn96: the stage marker names WHICH step a timeout stalled at.
+            let progress = ShutdownProgress::default();
+            match tokio::time::timeout(budget, request_vm_shutdown(&vm, VM_STOP_DRAIN, &progress)).await {
+                Ok(Ok(())) => eprintln!("[tillandsias-tray] Quit: in-VM headless acked shutdown request"),
+                Ok(Err(e)) => eprintln!(
+                    "[tillandsias-tray] Quit: in-VM shutdown request: {e} (proceeding to VZ.requestStop)"
+                ),
+                Err(_) => eprintln!("{}", shutdown_no_reply_line(budget, progress.get())),
+            }
+            // VZ.requestStop ON THE MAIN THREAD. The VM lives on the main
+            // dispatch queue, and VzRuntime::stop calls requestStopWithError and
+            // then pumps the CALLING thread's CFRunLoop. Called from this tokio
+            // worker it hit dispatch_assert_queue and the process died with
+            // SIGTRAP (crash report tillandsias-tray-2026-09-26-211531.ips,
+            // frame -[VZVirtualMachine requestStopWithError:]) before it could
+            // remove vm-swap.img — the real reason no tray quit ever did.
+            // --exec-guest stops cleanly because it calls stop() from the CLI's
+            // main thread. The main thread is not a tokio thread, so block_on is
+            // allowed there, and blocking it is fine: the app is exiting.
+            let rt = runtime_for_stop;
+            crate::main_thread::dispatch_to_main_thread(move || {
+                match rt.block_on(vm.stop(VM_STOP_DRAIN)) {
+                    Ok(()) => eprintln!("[tillandsias-tray] Quit: VM drained cleanly"),
+                    Err(e) => eprintln!("[tillandsias-tray] Quit: drain failed: {e}"),
+                }
+                crate::guest_exec_relay::remove();
+                // Bypass AppKit cleanup: the VM drain is the only critical
+                // shutdown step; NSApplication owns nothing we must flush.
+                std::process::exit(0);
+            });
+        } else {
+            eprintln!("[tillandsias-tray] Quit: no live VM, skipping drain");
+            crate::guest_exec_relay::remove();
+            std::process::exit(0);
+        }
+    });
+    true
+}
+
+/// Register the shared quit and start the SIGTERM listener (1426-cb6g). Once
+/// tokio installs its handler, SIGTERM no longer kills the process outright; it
+/// runs the same drain as the menu Quit. A second SIGTERM during the drain is
+/// absorbed; `pkill -KILL` remains the operator's hard stop.
+fn install_graceful_quit(q: QuitDrain) {
+    let runtime = q.runtime.clone();
+    if QUIT_DRAIN.set(q).is_err() {
+        return;
+    }
+    runtime.spawn(async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut term) => {
+                while term.recv().await.is_some() {
+                    let _ = request_graceful_quit("SIGTERM");
+                }
+            }
+            Err(e) => eprintln!("[tillandsias-tray] could not install the SIGTERM handler: {e}"),
+        }
+    });
+}
+
+declare_class!(
+    /// AppKit responder for Tillandsias tray menu actions. Lives on
+    /// the main thread; receives selector dispatch from `NSMenuItem`.
+    pub struct TrayActionHost;
+
+    unsafe impl ClassType for TrayActionHost {
+        type Super = NSObject;
+        type Mutability = mutability::MainThreadOnly;
+        const NAME: &'static str = "TillandsiasTrayActionHost";
+    }
+
+    impl DeclaredClass for TrayActionHost {
+        type Ivars = TrayActionHostIvars;
+    }
+
+    unsafe impl TrayActionHost {
+        #[method(startVm:)]
+        fn start_vm(&self, _sender: Option<&AnyObject>) {
+            // Thin selector wrapper around the shared boot path. The
+            // menu item that triggers this selector is on its way out
+            // (slice 3 of the auto-start UX redesign — the user
+            // doesn't manually drive VM lifecycle), but keeping the
+            // selector alive lets the existing Start VM menu item +
+            // any external `[host startVm:]` callers still work
+            // during the transition.
+            self.boot_vm_async("Start VM");
+        }
+
+        #[method(stopVm:)]
+        fn stop_vm(&self, _sender: Option<&AnyObject>) {
+            let ivars = self.ivars();
+
+            // Re-entry gate (shared with startVm).
+            {
+                let mut busy = ivars.vm_busy.lock().unwrap();
+                if *busy {
+                    eprintln!("[tillandsias-tray] Stop VM: already in progress, ignoring");
+                    return;
+                }
+                *busy = true;
+            }
+            // No-op if no live VM handle.
+            let vm_taken = ivars.vm.lock().unwrap().take();
+            let Some(vm) = vm_taken else {
+                *ivars.vm_busy.lock().unwrap() = false;
+                eprintln!("[tillandsias-tray] Stop VM: no live VM, ignoring");
+                return;
+            };
+
+            let runtime = ivars.runtime.clone();
+            let vm_busy = ivars.vm_busy.clone();
+
+            eprintln!(
+                "[tillandsias-tray] Stop VM: spawning worker (drain={}s)",
+                VM_STOP_DRAIN.as_secs()
+            );
+            runtime.spawn(async move {
+                let result = vm.stop(VM_STOP_DRAIN).await;
+                dispatch_to_main_thread(move || {
+                    *vm_busy.lock().unwrap() = false;
+                    match result {
+                        Ok(()) => eprintln!("[tillandsias-tray] Stop VM: VM stopped"),
+                        Err(e) => eprintln!("[tillandsias-tray] Stop VM failed: {e}"),
+                    }
+                });
+            });
+        }
+
+        #[method(quitWithDrain:)]
+        fn quit_with_drain(&self, _sender: Option<&AnyObject>) {
+            // User-visible feedback: chip immediately flips to Stopping.
+            // The tooltip mirrors so even with the menu closed the
+            // menubar icon hover surface reflects the drain.
+            self.set_status_text("\u{1F534} Stopping\u{2026}");
+
+            // 1426-cb6g / 1244-9dx3: the ONE graceful quit, shared with SIGTERM and
+            // the quit Apple event, so every way of asking the tray to stop drains
+            // the VM (vz stop() removes vm-swap.img) before exit.
+            let _ = request_graceful_quit("menu Quit");
+        }
+
+        #[method(openShell:)]
+        fn open_shell(&self, _sender: Option<&AnyObject>) {
+            self.attach_pty(
+                "Open Shell",
+                tillandsias_host_shell::pty::PtyIntent::Shell,
+                None,
+            );
+        }
+
+        #[method(githubLogin:)]
+        fn github_login(&self, _sender: Option<&AnyObject>) {
+            self.attach_pty(
+                "GitHub login",
+                tillandsias_host_shell::pty::PtyIntent::GithubLogin,
+                None,
+            );
+        }
+
+        /// Generic shared-MenuStructure click dispatcher. Every menu
+        /// item built from the shared `MenuStructure` (except Quit,
+        /// which uses the responder-chain `terminate:`) has its
+        /// `action = sel!(trayAction:)` + `target = action_host` +
+        /// `representedObject = NSString::from_str(spec.id)`. On
+        /// click, AppKit delivers `sender = NSMenuItem`; we read the
+        /// id string, resolve to `MenuAction` via the shared
+        /// `menu_action::resolve` table, and dispatch — mirroring
+        /// `tillandsias-windows-tray::notify_icon::dispatch_action`.
+        #[method(trayAction:)]
+        fn tray_action(&self, sender: Option<&AnyObject>) {
+            use objc2::msg_send_id;
+            use objc2_app_kit::NSMenuItem;
+            use objc2_foundation::NSString;
+
+            let Some(sender) = sender else { return };
+            let item: &NSMenuItem = unsafe { &*(sender as *const AnyObject).cast() };
+            // SAFETY: representedObject returns Option<Retained<NSObject>>.
+            // We set it to an NSString at menu-build time, so the downcast
+            // is safe for our menu items. msg_send_id! handles the +0/+1
+            // retain conventions correctly for `representedObject`.
+            let rep: Option<Retained<NSString>> =
+                unsafe { msg_send_id![item, representedObject] };
+            let id_owned = match rep {
+                Some(s) => s.to_string(),
+                None => return,
+            };
+            self.dispatch_menu_action(&id_owned);
+        }
+    }
+);
+
+impl TrayActionHost {
+    /// Shared composition body for the PTY-attach selectors
+    /// (`openShell:` and `githubLogin:`). Gates on a live VM handle,
+    /// spawns a Tokio worker that runs `run_pty_attach`, and
+    /// dispatches the result back to the main thread to either
+    /// spawn Terminal.app on the slave PTY path or pop a stub
+    /// window with the error.
+    ///
+    /// `label` is the user-facing action name used in stderr logs
+    /// and the stub fallback message. `intent` is the canonical
+    /// `PtyIntent` consumed by `launch_spec`. `project` (m10): when
+    /// `Some(p)`, `launch_spec` wraps the in-VM command with `podman
+    /// exec -it tillandsias-<p>-forge …` so the PTY lands inside the
+    /// project's forge container (cross-host agreement: the user's
+    /// files + dev tooling live in the forge, not on the bare VM).
+    /// When `None`, the bare-VM command runs — the deliberate
+    /// VM-debug escape hatch for `Shell` + the user-level path for
+    /// `GithubLogin`. See `tillandsias_host_shell::pty::intent_for_action`
+    /// for the canonical `MenuAction` → `(intent, project)` mapping.
+    fn attach_pty(
+        &self,
+        label: &'static str,
+        intent: tillandsias_host_shell::pty::PtyIntent,
+        project: Option<String>,
+    ) {
+        let ivars = self.ivars();
+        let vz = match ivars.vm.lock().unwrap().clone() {
+            Some(vz) => vz,
+            None => {
+                eprintln!("[tillandsias-tray] {label}: no VM running. Start VM first.");
+                return;
+            }
+        };
+        let runtime = ivars.runtime.clone();
+        let project_launch_lease = match project.as_deref() {
+            Some(project_name) => {
+                match try_acquire_project_launch(&ivars.project_launches, project_name) {
+                    Some(lease) => Some(lease),
+                    None => {
+                        eprintln!(
+                            "[tillandsias-tray] {label}: project launch already in progress \
+                             for {project_name:?}; ignoring duplicate click"
+                        );
+                        return;
+                    }
+                }
+            }
+            None => None,
+        };
+        eprintln!("[tillandsias-tray] {label}: spawning attach worker (project={project:?})");
+        let ask_cloudflare_after = matches!(
+            intent,
+            tillandsias_host_shell::pty::PtyIntent::CloudflareLogin
+        );
+        let menu_state = ivars.menu_state.clone();
+        let status_item = ivars.status_item.clone();
+        let status_menu_item = ivars.status_menu_item.clone();
+        let self_handle = ivars.self_handle.clone();
+        let vz_after = vz.clone();
+        // Order 1955-cfhf: for Cloudflare Login the HOST holds the loopback
+        // listener (the guest's 127.0.0.1 is unreachable from Safari) and
+        // tells the guest its port through the launch environment; the one
+        // callback is forwarded over the control wire. Bound BEFORE the
+        // guest launch so the redirect names a port that already listens.
+        let host_callback = if ask_cloudflare_after {
+            match tillandsias_host_shell::cloudflare_callback::HostCallbackListener::bind() {
+                Ok(l) => Some(l),
+                Err(e) => {
+                    eprintln!(
+                        "[tillandsias-tray] cloudflare-login: no host loopback listener ({e}); the guest falls back to the QR relay"
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        let extra_env: Vec<(String, String)> = host_callback.iter().map(|l| l.env_pair()).collect();
+        if let Some(listener) = host_callback {
+            let vz_forward = vz.clone();
+            runtime.spawn(async move {
+                let deadline = std::time::Instant::now() + Duration::from_secs(300);
+                let served =
+                    tokio::task::spawn_blocking(move || listener.serve_one(deadline)).await;
+                match served {
+                    Ok(Ok(cb)) => {
+                        if let Err(e) = forward_cloudflare_callback(&vz_forward, &cb).await {
+                            eprintln!(
+                                "[tillandsias-tray] cloudflare-login: callback forward failed ({e})"
+                            );
+                        }
+                    }
+                    Ok(Err(e)) => {
+                        eprintln!("[tillandsias-tray] cloudflare-login: host listener ended ({e})")
+                    }
+                    Err(e) => eprintln!(
+                        "[tillandsias-tray] cloudflare-login: host listener task failed ({e})"
+                    ),
+                }
+            });
+        }
+        runtime.spawn(async move {
+            let result = match run_pty_attach(vz, intent, project, extra_env).await {
+                Ok((slave_path, pump_join)) => {
+                    if ask_cloudflare_after {
+                        // Order 1719-83po: when the login session closes, ask
+                        // the guest ONCE whether a Cloudflare login is now
+                        // stored. Event-driven: no poll, no timer.
+                        tokio::spawn(async move {
+                            let _ = pump_join.await;
+                            let cf = poll_cloudflare_login_once(&vz_after).await;
+                            eprintln!(
+                                "[tillandsias-tray] cloudflare-login: session closed; state {cf:?}"
+                            );
+                            if apply_cloudflare_login_state(cf, &menu_state) {
+                                dispatch_rebuild(
+                                    &menu_state,
+                                    &status_item,
+                                    &status_menu_item,
+                                    &self_handle,
+                                );
+                            }
+                        });
+                    }
+                    Ok(slave_path)
+                }
+                Err(e) => Err(e),
+            };
+            dispatch_to_main_thread(move || {
+                let _project_launch_lease = project_launch_lease;
+                match result {
+                    Ok(slave_path) => {
+                        // Terminal.app + `screen` are now spawned inside
+                        // run_pty_attach (before the guest launch) so the forge
+                        // is seeded at the operator's real terminal geometry.
+                        eprintln!("[tillandsias-tray] {label}: PTY attached at {slave_path}");
+                    }
+                    Err(e) => {
+                        eprintln!("[tillandsias-tray] {label} failed: {e}");
+                        let stub = format!(
+                            "Tillandsias — {label} could not attach. \
+                             Error: {e}\n\nLive PTY attach needs a booted VM \
+                             with a working in-VM headless on vsock port \
+                             42420 (gated on m5 recipe-artifact fetch)."
+                        );
+                        let _ = crate::terminal_attach::spawn_terminal_stub_window(&stub);
+                    }
+                }
+            });
+        });
+    }
+}
+
+/// Shared worker body for the PTY-attach selectors. Composes the
+/// PTY-over-vsock chain: open vsock stream → handshake + framing →
+/// host PTY master → PtySession::open(launch_spec(intent, ...)) →
+/// pump_io. Returns the slave PTY path so the main-thread dispatch
+/// can spawn Terminal.app pointed at it via `screen`.
+///
+/// `intent` selects the in-VM command — `Shell` for /bin/bash -l,
+/// `GithubLogin` for `gh auth login`, etc. `project` (m10): when
+/// `Some(p)`, `launch_spec` wraps the command in `podman exec -it
+/// tillandsias-<p>-forge …` so it lands inside that project's forge
+/// container; when `None`, the bare-VM command runs (Shell = VM-debug
+/// escape; GithubLogin = user-level pre-attach).
+///
+/// Each spawned tokio task (the bridge writer/reader, pump_io's two
+/// halves) runs detached for v0.0.1; they unwind naturally when the
+/// session closes (PTY EOF, vsock drop, or Terminal.app `screen`
+/// session exits).
+async fn run_pty_attach(
+    vz: std::sync::Arc<VzRuntime>,
+    intent: tillandsias_host_shell::pty::PtyIntent,
+    project: Option<String>,
+    extra_env: Vec<(String, String)>,
+) -> Result<(String, tokio::task::JoinHandle<()>), String> {
+    use std::sync::Arc;
+    use std::time::Duration;
+    use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+    use tillandsias_host_shell::pty::unix::UnixPtyMaster;
+    use tillandsias_host_shell::pty::{
+        PtyRouter, PtySession, SessionIdAllocator, launch_spec, pump_io,
+    };
+
+    let stream =
+        open_control_wire_stream(&vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30)).await?;
+
+    let router = Arc::new(PtyRouter::new());
+    let alloc = SessionIdAllocator::default();
+    let (transport, bridge_join, _wire_version) = crate::pty_vsock_bridge::connect_pty_bridge(
+        stream,
+        router.clone(),
+        32,
+        "tillandsias-macos-tray".to_string(),
+        vec!["pty.attach@v1".to_string()],
+    )
+    .await
+    .map_err(|e| format!("control-wire handshake: {e}"))?;
+
+    let master = UnixPtyMaster::open(24, 80).map_err(|e| format!("openpty: {e}"))?;
+    let slave_path = master.slave_path().to_string();
+
+    // Per-session control socket: the in-window attach client reports its
+    // Hello/Resize geometry events here (event subscription — the tray is a
+    // GUI process with no controlling tty, so SIGWINCH can only be observed
+    // by the client that owns the window's tty). Bind BEFORE spawning
+    // Terminal.app so the client never races the listener.
+    // @trace spec:macos-native-tray.lifecycle.terminal-attach@v2,
+    //        plan/issues/macos-terminal-management-audit-2026-07-27.md (D1)
+    let sock_path = {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static ATTACH_SOCK_SEQ: AtomicU64 = AtomicU64::new(0);
+        std::env::temp_dir().join(format!(
+            "tillandsias-pty-{}-{}.sock",
+            std::process::id(),
+            ATTACH_SOCK_SEQ.fetch_add(1, Ordering::Relaxed)
+        ))
+    };
+    let _ = std::fs::remove_file(&sock_path);
+    let listener = tokio::net::UnixListener::bind(&sock_path)
+        .map_err(|e| format!("session socket bind {}: {e}", sock_path.display()))?;
+    let sock_path_str = sock_path.to_string_lossy().into_owned();
+
+    // Whether a WINDOW WAS ASKED FOR is the discriminator the geometry
+    // fallback below needs (702-6jza D2): if this spawn failed there is no
+    // window to interrogate, and asking anyway is how a headless launch turns
+    // into a hang.
+    let terminal_spawned =
+        match crate::terminal_attach::spawn_terminal_pty_attach(&slave_path, &sock_path_str) {
+            Ok(()) => true,
+            Err(e) => {
+                eprintln!("[tillandsias-tray] terminal spawn failed: {e}");
+                false
+            }
+        };
+
+    // Event-driven geometry gate (replaces the former 100ms seed poll): the
+    // attach client's Hello carries the window's true size the instant the
+    // client owns the tty, so the guest forge PTY is BORN at the real
+    // geometry — first frame correct, no grow. Bounded: a never-attached
+    // path (Terminal.app failed, operator closed the window early) falls
+    // back to 24x80 after the timeout and a late client reconciles below.
+    use tillandsias_host_shell::pty::attach_client::{
+        SESSION_MSG_LEN, SessionMsg, decode_session_msg,
+    };
+    let mut seed: (u16, u16) = (24, 80);
+    let mut early_client: Option<tokio::net::UnixStream> = None;
+    match tokio::time::timeout(Duration::from_secs(10), listener.accept()).await {
+        Ok(Ok((mut stream, _))) => {
+            use tokio::io::AsyncReadExt;
+            let mut buf = [0u8; SESSION_MSG_LEN];
+            match tokio::time::timeout(Duration::from_secs(5), stream.read_exact(&mut buf)).await {
+                Ok(Ok(_)) => match decode_session_msg(&buf) {
+                    Some(SessionMsg::Hello { rows, cols })
+                    | Some(SessionMsg::Resize { rows, cols })
+                        if rows > 0 && cols > 0 =>
+                    {
+                        seed = (rows, cols);
+                    }
+                    _ => eprintln!("[tillandsias-tray] pty-attach: malformed Hello; 24x80 seed"),
+                },
+                _ => eprintln!("[tillandsias-tray] pty-attach: no Hello from client; 24x80 seed"),
+            }
+            early_client = Some(stream);
+        }
+        _ => {
+            // ORDER 702-6jza D2. The client never reported. Do NOT birth the
+            // guest PTY at 24x80 that a real window contradicts: ASK THE
+            // WINDOW. Measured on this host 2026-09-02 — Terminal.app's actual
+            // window was 39x131 and its default profile 30x120, so 24x80 was
+            // wrong on both axes and the forge's first frame was laid out for
+            // a terminal nobody had.
+            //
+            // Only when a window was actually requested, and always bounded:
+            // see query_tagged_window_geometry on why the budget IS the
+            // headless negative control.
+            let queried = if terminal_spawned {
+                crate::terminal_attach::query_tagged_window_geometry(
+                    &sock_path_str,
+                    Duration::from_secs(3),
+                )
+                .await
+            } else {
+                None
+            };
+            match queried {
+                Some((rows, cols)) => {
+                    eprintln!(
+                        "[tillandsias-tray] pty-attach: no attach client within 10s; \
+                         seeding at the window's own {rows}x{cols} (a late client \
+                         will reconcile via resize)"
+                    );
+                    seed = (rows, cols);
+                }
+                None => eprintln!(
+                    "[tillandsias-tray] pty-attach: no attach client within 10s and no \
+                     window geometry (terminal_spawned={terminal_spawned}); launching at \
+                     24x80 (a late client will reconcile via resize)"
+                ),
+            }
+        }
+    }
+    eprintln!(
+        "[tillandsias-tray] pty-attach: seeding forge at {}x{} (attach-client geometry)",
+        seed.0, seed.1
+    );
+
+    // A project name that cannot cross the guest launch path safely is REFUSED
+    // here, before any PTY or socket exists — see `validate_project_name`.
+    let opts = match launch_spec(&intent, project.as_deref(), seed.0, seed.1) {
+        Ok(mut o) => {
+            // 1955-cfhf: the guest child's environment is exactly `env`.
+            o.env.extend(extra_env);
+            o
+        }
+        Err(refused) => {
+            eprintln!("[tillandsias-tray] pty-attach: {refused}");
+            let _ = std::fs::remove_file(&sock_path);
+            bridge_join.abort();
+            return Err(refused.to_string());
+        }
+    };
+    let session = match PtySession::open(Arc::new(transport), &alloc, &router, &opts) {
+        Ok(s) => s,
+        Err(e) => {
+            // The session-control task (sole owner of the socket-file
+            // cleanup) is never spawned on this path — unlink here or the
+            // bound socket file leaks per failed attach (review F5). The
+            // per-attach connection is useless without a session: drop it.
+            let _ = std::fs::remove_file(&sock_path);
+            bridge_join.abort();
+            return Err(format!("PtyOpen: {e}"));
+        }
+    };
+
+    // Session-control task (replaces the former 400ms winsize poll —
+    // event-driven, per the no-polling policy). Each socket message is a
+    // discrete client event: Resize (and a late Hello) → wire `PtyResize`
+    // (guest applies TIOCSWINSZ; kernel raises SIGWINCH; podman forwards
+    // into the container; TUI reflows). Socket EOF is the detach signal:
+    // the window closed or the client died. All sends ride the lossless
+    // transport path (audit D3), but bounded — a send parked past its
+    // timeout means the writer queue is wedged (deferred D6), and the
+    // teardown below still must run.
+    {
+        let control = session.resize_sender();
+        let sock_cleanup = sock_path.clone();
+        tokio::spawn(async move {
+            use tillandsias_control_wire::PtyExit;
+            use tokio::io::AsyncReadExt;
+            let stream = match early_client {
+                Some(s) => Some(s),
+                // Late-attach lane (cold Terminal.app slower than the seed
+                // gate): one bounded wait, not a loop. The client's Hello
+                // arrives in the message loop below and reconciles size.
+                None => {
+                    match tokio::time::timeout(Duration::from_secs(120), listener.accept()).await {
+                        Ok(Ok((s, _))) => Some(s),
+                        _ => None,
+                    }
+                }
+            };
+            drop(listener); // one client per session
+            if let Some(mut stream) = stream {
+                let mut buf = [0u8; SESSION_MSG_LEN];
+                // A failed read = client gone (window closed / session over).
+                'msgs: while stream.read_exact(&mut buf).await.is_ok() {
+                    match decode_session_msg(&buf) {
+                        Some(SessionMsg::Hello { rows, cols })
+                        | Some(SessionMsg::Resize { rows, cols }) => {
+                            if rows == 0 || cols == 0 {
+                                continue;
+                            }
+                            // Bounded: a resize parked >5s = wedged writer
+                            // queue → stop consuming, fall to teardown.
+                            match tokio::time::timeout(
+                                Duration::from_secs(5),
+                                control.resize(rows, cols),
+                            )
+                            .await
+                            {
+                                Ok(Ok(())) => {}
+                                _ => break 'msgs,
+                            }
+                        }
+                        None => break, // protocol violation → detach
+                    }
+                }
+            }
+            // Detach teardown — UNCONDITIONAL (review F1/F2): the guest
+            // child was launched by PtyOpen even if no client ever attached
+            // (TCC-denied osascript, window closed pre-connect), and this
+            // is the only reaper. In-band close first (graceful SIGTERM
+            // path; idempotent if the session already ended)…
+            let closed = tokio::time::timeout(
+                Duration::from_secs(5),
+                control.close(PtyExit {
+                    code: 0,
+                    signal: Some(1), // SIGHUP: the terminal went away
+                }),
+            )
+            .await;
+            if matches!(closed, Ok(Ok(()))) {
+                // One bounded grace so the bridge writer can flush the
+                // enqueued close frame before the abort below.
+                tokio::time::sleep(Duration::from_millis(250)).await;
+            }
+            // …then drop the per-attach vsock connection: it has no purpose
+            // beyond this session, and the guest's connection-scoped
+            // shutdown_all is the out-of-band reaper whenever the in-band
+            // close could not be delivered (wedged queue, D6).
+            bridge_join.abort();
+            let _ = std::fs::remove_file(&sock_cleanup);
+        });
+    }
+
+    // Order 1719-83po: the pump ends when the guest closes the session, the
+    // event the Cloudflare login waits on (no timer).
+    let pump_join = pump_io(session, master);
+    Ok((slave_path, pump_join))
+}
+
+/// Worker body for `startVm:`. Constructs the VzRuntime, fails fast
+/// if its required image files are missing (recipe materializer not
+/// yet run), then drives `VmRuntime::start`. On success, installs the
+/// `Arc<VzRuntime>` into the shared slot so subsequent `stopVm:` can
+/// take it. On failure, leaves the slot empty so a retry click works.
+async fn run_start(
+    image_root: PathBuf,
+    vm_slot: Arc<Mutex<Option<Arc<VzRuntime>>>>,
+    on_phase: &(dyn Fn(&str) + Send + Sync),
+    // 1420-v3zt: typed first-provision progress, painted as the menu-bar bar.
+    on_progress: &(dyn Fn(&tillandsias_control_wire::ProgressEvent) + Send + Sync),
+) -> Result<(), String> {
+    match stage_embedded_guest_binary() {
+        Ok(Some(dest)) => {
+            eprintln!(
+                "[tillandsias-tray] staged embedded guest binary at {}",
+                dest.display()
+            );
+        }
+        Ok(None) => {
+            eprintln!(
+                "[tillandsias-tray] no embedded guest binary resource found; falling back to fetch"
+            );
+        }
+        Err(err) => {
+            return Err(crate::provision_error::failure_text(
+                crate::provision_error::Stage::GuestBinary,
+                &format!("stage embedded guest binary: {err}"),
+            ));
+        }
+    }
+    let vz = Arc::new(VzRuntime::new(TILLANDSIAS_GUEST_CID, image_root));
+
+    // 690-cb62 criterion 2 — tray-mode serial routing, DECIDED (2026-08-17).
+    //
+    // The flag was previously left unset here, which routed the guest's
+    // virtio-console stream to this process's stderr for the life of the VM.
+    // The stated rationale for that default was "keep the getty's
+    // terminal-probe escapes off the user's terminal" — but in tray mode there
+    // is no such terminal, and the destination turns out not to exist:
+    //
+    //   * the tray ships as an LSUIElement .app (status_item.rs:56) launched
+    //     from Finder or a LaunchAgent, so it has no controlling terminal;
+    //   * nothing on this side ever writes a log file. Every `tray.log`
+    //     writer in the tree belongs to tillandsias-windows-tray
+    //     (notify_icon.rs:533-552, with its own rotation); the macOS tray has
+    //     no equivalent, and no StandardErrorPath is set anywhere;
+    //   * MenuAction::OpenLog (:1508-1518) opens ~/Library/Logs/Tillandsias,
+    //     a directory that does not exist on a host that has been running
+    //     this tray — confirmed absent on the filing host.
+    //
+    // So the default sent the guest's entire boot and getty stream somewhere
+    // unreadable, while console.log — which 690-cb62 criterion 1 had just
+    // bounded to two generations of 4 MiB with rotation (vz.rs:1398-1415) —
+    // stayed empty in precisely the mode users run. The reason to defer this
+    // was that the log was unbounded; that reason is gone.
+    //
+    // Routing it to the rotated log therefore loses nothing and makes the one
+    // artifact a macOS user can actually be asked for ("send me console.log")
+    // the one that contains the boot. Bounded by construction, so it cannot
+    // grow without limit, and best-effort on the VM start path: a logging
+    // failure must never stop a VM booting.
+    vz.set_serial_to_log(true);
+
+    // First-launch flow (m9 Fedora pivot): if no rootfs.img is present
+    // yet, fetch Fedora's official Cloud qcow2 via the bundled manifest
+    // and convert it to the raw disk image VZ boots. The macOS tray
+    // bundles the manifest at build time (include_str!) so the .app
+    // doesn't need network for the manifest itself, only for the image.
+    //
+    // Once a successful fetch lands, subsequent launches hit the
+    // cache (download_verified short-circuits when dest sha matches)
+    // so startup is fast.
+    // ORDER 1082-9rub. A PRESENT rootfs.img DOES NOT MEAN THE GUEST WAS
+    // PROVISIONED. is_provisioned() is a stat(); a guest that booted, created
+    // its image and then aborted during cloud-init satisfies it completely. This
+    // branch used to send such a guest straight to boot, where it never reaches
+    // Ready and the operator is told nothing about why.
+    //
+    // Deliberately NOT re-fetching in that case: the image is usually intact and
+    // only the in-guest script aborted, so a re-fetch would spend a download to
+    // fix nothing. What was missing was that the condition was SILENT. Say it,
+    // and name the record that says so.
+    if vz.is_provisioned() && !vz.provisioning_completed() {
+        eprintln!(
+            "[tillandsias-tray] Start VM: rootfs.img is present at {} but the \
+             guest recorded NO provisioning completion ({}). The image exists; \
+             provisioning did not finish. If the guest does not reach Ready, \
+             this is why — read the provision record before suspecting the \
+             control wire (1082-9rub, 1055-e8ie).",
+            vz.rootfs_image_path().display(),
+            vz.provision_state_path().display()
+        );
+    }
+    if !vz.is_provisioned() {
+        eprintln!(
+            "[tillandsias-tray] Start VM: rootfs.img missing at {}; \
+             attempting Fedora Cloud image fetch",
+            vz.rootfs_image_path().display()
+        );
+        let manifest = tillandsias_vm_layer::recipe::Manifest::from_toml(BUNDLED_MANIFEST_TOML)
+            .map_err(|e| {
+                crate::provision_error::failure_text(
+                    crate::provision_error::Stage::ImageSetup,
+                    &format!("bundled manifest parse: {e}"),
+                )
+            })?;
+        // 1420-x6rz: the chip's percent comes from the typed event's own
+        // fraction, not from a formatted string vm-layer used to build.
+        vz.fetch_fedora_cloud_image(
+            &manifest,
+            on_phase,
+            // 1420-v3zt: the bar (menu bar + status row) is painted from the
+            // event itself; the plain chip no longer carries the percent.
+            &|ev: tillandsias_control_wire::ProgressEvent| on_progress(&ev),
+        )
+        .await
+        .map_err(|e| {
+            // NO LONGER TELLS THE OPERATOR TO INSTALL QEMU (980-xcaf).
+            // That advice could never have worked from a GUI launch: the
+            // tray's PATH is /usr/bin:/bin:/usr/sbin:/sbin, so a
+            // Homebrew-installed qemu-img was never reachable, and the
+            // operator who followed it hit the identical failure and
+            // reasonably concluded the install had not taken. Conversion
+            // is in-process now, so any failure here is ours.
+            format!(
+                "Fedora Cloud image fetch failed: {e}\n\n\
+                     This is a download or disk-space problem, not a missing \
+                     tool — image conversion no longer needs anything \
+                     installed on the host. Check connectivity and free space, \
+                     then retry Start VM."
+            )
+        })?;
+        eprintln!("[tillandsias-tray] Start VM: Fedora Cloud image ready");
+        crate::diagnose::forget_stale_vault_credentials();
+    }
+
+    // Host-visible boot phases (parity with windows-tray's StartingVm/
+    // Connecting reports): the guest OS boot + first vsock-agent handshake is a
+    // multi-second (longer when cold) window that was previously silent on the
+    // chip. Emit the curated phases so the status keeps moving instead of
+    // looking stalled.
+    on_phase("Starting Fedora Linux");
+    // Order 690-w94k criterion 2. `VzRuntime::start` states its own contract
+    // in-body: it bridges VZ's dispatch-queue completion handler through an
+    // mpsc channel and PUMPS CFRunLoop on the calling thread until the result
+    // arrives or 30s elapses, so "the caller must run start() on
+    // `tokio::task::spawn_blocking` if invoked from an async runtime."
+    // Awaiting it directly here parked a tokio worker for that entire window
+    // while `on_phase` consumers were live on the same runtime. `VzRuntime` is
+    // `Send + 'static` (compile-asserted below), so the contract is honourable
+    // rather than merely documented.
+    // 1915-vzbt: the vz-boot span starts here and ends at the first
+    // Ready-with-podman status (apply_vm_status) or a start failure.
+    crate::bringup_timer::vz_boot_started();
+    {
+        let vz = Arc::clone(&vz);
+        let handle = tokio::runtime::Handle::current();
+        let started = tokio::task::spawn_blocking(move || handle.block_on(vz.start())).await;
+        if !matches!(started, Ok(Ok(()))) {
+            crate::bringup_timer::vz_boot_finished(1);
+        }
+        started
+            .map_err(|e| {
+                crate::provision_error::failure_text(
+                    crate::provision_error::Stage::VmStart,
+                    &format!("VM start task panicked: {e}"),
+                )
+            })?
+            .map_err(|e| {
+                crate::provision_error::failure_text(
+                    crate::provision_error::Stage::VmStart,
+                    &e.to_string(),
+                )
+            })?;
+    }
+    on_phase("Connecting");
+    *vm_slot.lock().unwrap() = Some(vz);
+    Ok(())
+}
+
+/// Manifest bundled at build time so the .app doesn't depend on the
+/// repo or network presence to know its artifact-URL template + pinned
+/// SHAs. The compiled-in copy is what's checked into the repo at
+/// `images/vm/manifest.toml` at the commit the .app was built from.
+/// Updating the manifest (e.g. SHA pin after CI run) requires a
+/// rebuild of the macOS tray.
+const BUNDLED_MANIFEST_TOML: &str = include_str!("../../../images/vm/manifest.toml");
+
+pub(crate) const FEDORA_BASELINE: &str = "fedora-44";
+
+impl TrayActionHost {
+    /// Construct on the AppKit main thread. `mtm` proves we're on the
+    /// right OS thread for the `MainThreadOnly` mutability contract.
+    /// The Tokio `runtime` is shared across the process. `image_root`
+    /// is where `VzRuntime` looks for the boot artifacts produced by
+    /// the recipe materializer.
+    pub fn new(
+        mtm: MainThreadMarker,
+        runtime: Arc<tokio::runtime::Runtime>,
+        image_root: PathBuf,
+    ) -> Retained<Self> {
+        let ivars = TrayActionHostIvars {
+            runtime,
+            vm: Arc::new(Mutex::new(None)),
+            vm_busy: Arc::new(Mutex::new(false)),
+            image_root,
+            status_item: Arc::new(Mutex::new(None)),
+            status_menu_item: Arc::new(Mutex::new(None)),
+            menu_state: Arc::new(Mutex::new({
+                let mut s = tillandsias_host_shell::menu_state::MenuState::initial();
+                s.target = tillandsias_host_shell::menu_state::TargetSurface::MacosTray;
+                s
+            })),
+            self_handle: Arc::new(Mutex::new(None)),
+            status_text: Arc::new(Mutex::new(BOOT_STATUS_TEXT.to_string())),
+            project_launches: Arc::new(Mutex::new(HashSet::new())),
+        };
+        // SAFETY: `mtm` proves main-thread; allocation + init is the
+        // standard ObjC two-step. `set_ivars` populates the declared
+        // class ivars before init runs.
+        install_graceful_quit(QuitDrain {
+            runtime: ivars.runtime.clone(),
+            vm: ivars.vm.clone(),
+            vm_busy: ivars.vm_busy.clone(),
+        });
+        let this = mtm.alloc::<Self>().set_ivars(ivars);
+        unsafe { msg_send_id![super(this), init] }
+    }
+
+    /// Resolve a menu-item id to its `MenuAction` and dispatch.
+    /// Mirrors `tillandsias-windows-tray::notify_icon::dispatch_action`
+    /// so the per-host implementations of the shared menu agree on
+    /// what each item does.
+    ///
+    /// Slice scope (this iter): handle the items Windows actually
+    /// has a side-effect for today (Retry, Open URLs, Open Log), log
+    /// the others honestly (don't pretend Attach/GithubLogin work
+    /// without the in-VM headless + status state). Subsequent
+    /// slices add SelectAgent + menu re-render, Quit drain, and the
+    /// real Attach/Maintain/GithubLogin PTY path once the macOS tray
+    /// holds enough state to identify the active project.
+    pub fn dispatch_menu_action(&self, id: &str) {
+        use tillandsias_host_shell::menu_action::{self, MenuAction};
+
+        let action = menu_action::resolve(id);
+        eprintln!("[tillandsias-tray] click: id={id} action={action:?}");
+        match action {
+            MenuAction::Quit => {
+                // The menu's Quit item already wires `terminate:`
+                // directly (responder chain → NSApplication), so this
+                // arm typically isn't reached. Defensive log only.
+                eprintln!("[tillandsias-tray] Quit dispatched via trayAction (unexpected)");
+            }
+            MenuAction::Retry => {
+                // Mirror Windows: re-trigger provisioning. boot_vm_async
+                // is idempotent + busy-gated, so a click while already
+                // booting is a no-op.
+                self.boot_vm_async("Retry");
+            }
+            MenuAction::OpenLog => {
+                // Open ~/Library/Logs/Tillandsias/tray.log (or its
+                // parent if the file isn't yet written). Best-effort:
+                // shell out to `open` so the user's default text editor
+                // takes over. Mirrors Windows's `open_log_file`.
+                // 1420-inak: the tray now WRITES tray.log (tray_log.rs), so open
+                // the file itself; before, this opened a directory nothing wrote.
+                if let Some(log) = crate::tray_log::tray_log_path() {
+                    let target = if log.exists() {
+                        log
+                    } else {
+                        let dir = log
+                            .parent()
+                            .map(std::path::Path::to_path_buf)
+                            .unwrap_or(log);
+                        let _ = std::fs::create_dir_all(&dir);
+                        dir
+                    };
+                    let mut command = std::process::Command::new("/usr/bin/open");
+                    command.arg(&target);
+                    spawn_and_reap(command, "open log");
+                }
+            }
+            MenuAction::OpenObservatorium
+            | MenuAction::OpenOpenCodeWeb
+            | MenuAction::ProjectObservatorium { .. }
+            | MenuAction::ProjectOpenCodeWeb { .. } => {
+                // Same gating as Windows today: no URL exists until the
+                // VM + router are up (gui-passthrough is v2 per the
+                // macos-tray spec). Log + skip; the menu items also
+                // come in with `enabled=false` from
+                // `menu_disabled_v2::render`, so this arm shouldn't be
+                // reachable in practice — defensive only.
+                eprintln!("[tillandsias-tray] {action:?}: no URL yet (gui-passthrough is v2)");
+            }
+            MenuAction::SelectAgent(agent) => {
+                // m11: mutate held MenuState via `apply_menu_action_state`
+                // (mirror of windows-tray's `apply_menu_action_state` at
+                // notify_icon.rs:1674), then trigger an immediate NSMenu
+                // rebuild on the main thread so the checkmark moves on
+                // the current click. Unlike windows's HMENU which the
+                // system re-paints on next hover, an NSMenu is built
+                // once and stays static until `setMenu:` swaps it —
+                // so explicit rebuild here is required for visible UX.
+                //
+                // `apply_menu_action_state` is a no-op (returns false)
+                // when the agent is unchanged, so spamming the same
+                // agent doesn't churn the menu.
+                let changed = {
+                    let mut state = match self.ivars().menu_state.lock() {
+                        Ok(g) => g,
+                        Err(_) => {
+                            eprintln!("[tillandsias-tray] SelectAgent: menu_state poisoned");
+                            return;
+                        }
+                    };
+                    apply_menu_action_state(&mut state, &action)
+                };
+                if changed {
+                    eprintln!("[tillandsias-tray] SelectAgent({agent:?}): updated + rebuilding");
+                    let ivars = self.ivars();
+                    let menu_state = ivars.menu_state.clone();
+                    let status_item = ivars.status_item.clone();
+                    let status_menu_item = ivars.status_menu_item.clone();
+                    let self_handle = ivars.self_handle.clone();
+                    dispatch_to_main_thread(move || {
+                        rebuild_menu_main_thread(
+                            &menu_state,
+                            &status_item,
+                            &status_menu_item,
+                            &self_handle,
+                        );
+                    });
+                } else {
+                    eprintln!("[tillandsias-tray] SelectAgent({agent:?}): already selected");
+                }
+            }
+            MenuAction::Attach { .. } | MenuAction::Maintain { .. } => {
+                // m10: resolve (intent, project) via the shared
+                // `intent_for_action` table — same canonical mapping
+                // windows-tray uses (notify_icon.rs:1604
+                // `launch_open_shell_terminal`). Attach maps to
+                // `Agent(<selected_agent>)`; Maintain maps to `Shell`;
+                // both carry the project name as `Some(p)` so
+                // `launch_spec` wraps the command in `podman exec -it
+                // tillandsias-<p>-forge …` against the in-VM forge.
+                // `selected_agent` is read from the held
+                // `MenuState.selected_agent` (the same slot the
+                // SelectAgent arm will eventually mutate).
+                let agent = self
+                    .ivars()
+                    .menu_state
+                    .lock()
+                    .map(|s| s.selected_agent)
+                    .unwrap_or_else(|_| {
+                        tillandsias_host_shell::menu_state::MenuState::initial().selected_agent
+                    });
+                if let Some((intent, project)) =
+                    tillandsias_host_shell::pty::intent_for_action(&action, agent)
+                {
+                    let label: &'static str = match action {
+                        MenuAction::Attach { .. } => "Attach",
+                        MenuAction::Maintain { .. } => "Maintain",
+                        _ => unreachable!(),
+                    };
+                    self.attach_pty(label, intent, project);
+                } else {
+                    eprintln!("[tillandsias-tray] {action:?}: no PTY intent (unexpected)");
+                }
+            }
+            MenuAction::GithubLogin => {
+                // windows-260719-2: flip the menu to the transitional
+                // "Logging in…" state IMMEDIATELY — a purely local signal,
+                // before any wire round-trip. An NSMenu is static until
+                // rebuilt, so trigger the rebuild explicitly (we are on the
+                // main thread here, same as the SelectAgent arm's rebuild).
+                // The confirming probe (LoginStatePush / login poll) maps
+                // only to LoggedIn/LoggedOut via map_login_state, so a
+                // confirmed reply always clears this: success renders the
+                // logged-in body, an invalid/missing token falls back to
+                // the actionable GitHub Login leaf.
+                let flipped = {
+                    let mut state = self.ivars().menu_state.lock().unwrap();
+                    if state.login
+                        == tillandsias_host_shell::menu_state::GithubLoginState::LoggedOut
+                    {
+                        state.login =
+                            tillandsias_host_shell::menu_state::GithubLoginState::LoggingIn;
+                        true
+                    } else {
+                        false
+                    }
+                };
+                if flipped {
+                    // Anchor the login grace window (see apply_login_state) so the
+                    // prompt confirm-poll doesn't revert this fresh LoggingIn to
+                    // LoggedOut before the user finishes the interactive paste.
+                    mark_login_started();
+                    let ivars = self.ivars();
+                    dispatch_rebuild(
+                        &ivars.menu_state,
+                        &ivars.status_item,
+                        &ivars.status_menu_item,
+                        &ivars.self_handle,
+                    );
+                }
+                // Top-level GitHub login. Same gate as Attach —
+                // needs the in-VM headless to be Ready. Defer to the
+                // existing `attach_pty(GithubLogin)` path, which
+                // already logs "no VM running" cleanly when the VM
+                // isn't up yet. project=None: `gh auth login` is
+                // user-level so it runs in the bare VM pre-attach.
+                self.attach_pty(
+                    "GitHub login",
+                    tillandsias_host_shell::pty::PtyIntent::GithubLogin,
+                    None,
+                );
+            }
+            MenuAction::CloudflareLogin => {
+                // Order 1719-83po: mirror GitHub Login. Flip to the local
+                // "Logging in…" state, rebuild, then open the VM terminal
+                // running the paste-mode login. The answer that clears it
+                // comes when the login session closes (attach_pty).
+                let flipped = {
+                    let mut state = self.ivars().menu_state.lock().unwrap();
+                    if state.cloudflare_login
+                        == tillandsias_host_shell::menu_state::CloudflareLoginState::LoggedOut
+                    {
+                        state.cloudflare_login =
+                            tillandsias_host_shell::menu_state::CloudflareLoginState::LoggingIn;
+                        true
+                    } else {
+                        false
+                    }
+                };
+                if flipped {
+                    let ivars = self.ivars();
+                    dispatch_rebuild(
+                        &ivars.menu_state,
+                        &ivars.status_item,
+                        &ivars.status_menu_item,
+                        &ivars.self_handle,
+                    );
+                }
+                self.attach_pty(
+                    "Cloudflare login",
+                    tillandsias_host_shell::pty::PtyIntent::CloudflareLogin,
+                    None,
+                );
+            }
+            // NOTE: there is deliberately NO menu arm for the guest reset —
+            // the `reset-guest` leaf was an UNAPPROVED UX surface, removed
+            // by operator order 2026-07-22 (tray-ux "UX curation
+            // governance"). The reset stays reachable via the `--reset-guest`
+            // CLI verb (`diagnose::reset_guest_main`), never a menu click.
+            MenuAction::CloudOverflow | MenuAction::Inert => {
+                // Informational / overflow placeholders. No action.
+            }
+        }
+    }
+
+    /// Stash AppKit handles so subsequent `set_status_text` calls
+    /// can update the first-row chip + the tooltip in-place. Called
+    /// once from `status_item::run` right after both handles exist.
+    /// Must be invoked from the main thread (`MainThreadOnly`
+    /// contract on `TrayActionHost`).
+    pub fn attach_status_handles(
+        &self,
+        status_item: Retained<NSStatusItem>,
+        status_menu_item: Retained<NSMenuItem>,
+    ) {
+        let ivars = self.ivars();
+        *ivars.status_item.lock().unwrap() = Some(appkit_handle::StatusItemHandle(status_item));
+        *ivars.status_menu_item.lock().unwrap() =
+            Some(appkit_handle::StatusMenuItemHandle(status_menu_item));
+    }
+
+    /// Stash a Retained handle to `self` so off-thread workers (the
+    /// cloud-projects poller's rebuild dispatch) can re-borrow it on
+    /// the main thread to call methods like `build_menu_item` that
+    /// need `&TrayActionHost` for `setTarget:`. Call once from
+    /// `status_item::run` right after `TrayActionHost::new`.
+    pub fn set_self_handle(&self, this: Retained<Self>) {
+        *self.ivars().self_handle.lock().unwrap() = Some(appkit_handle::TrayActionHostHandle(this));
+    }
+
+    /// Update the first-row status chip + the menubar tooltip to
+    /// `text`. Records the string in `ivars.status_text` and
+    /// dispatches an AppKit `setTitle:` / `setToolTip:` call on the
+    /// main thread. Fire from any thread; the AppKit work happens
+    /// on main.
+    ///
+    /// Slice 2 scope: macOS-local lifecycle phases the host owns —
+    /// Provisioning, Booting, Ready, Error. Once the in-VM headless
+    /// reports its own status over vsock (ControlMessage::VmStatus
+    /// subscription), those will feed into the same path.
+    pub fn set_status_text(&self, text: impl Into<String>) {
+        let ivars = self.ivars();
+        let text = clamp_tray_status_chip(text.into());
+        *ivars.status_text.lock().unwrap() = text.clone();
+        // Keep MenuState's status row in sync so a menu rebuild during this
+        // phase doesn't snap the chip back to a stale label (parity with
+        // apply_vm_status, which already syncs it on the poll/push path).
+        if let Ok(mut guard) = ivars.menu_state.lock() {
+            guard.status_text = text.clone();
+        }
+        let status_item = ivars.status_item.clone();
+        let status_menu_item = ivars.status_menu_item.clone();
+        dispatch_to_main_thread(move || {
+            apply_status_text_main_thread(&text, &status_item, &status_menu_item);
+        });
+    }
+
+    /// Shared boot-the-VM path. Called by the `startVm:` selector AND
+    /// directly from `status_item::run()` on app launch so the user
+    /// never has to manually click Start VM (the lifecycle is
+    /// automatic; the menu chip — slice 2 — reflects current state).
+    ///
+    /// `label` is the user-facing action name used in stderr logs so
+    /// the auto-launch path and any legacy menu-click path stay
+    /// distinguishable while we still have both.
+    ///
+    /// Safe to call multiple times: the busy gate + handle-already-
+    /// installed check make repeat calls no-ops.
+    pub fn boot_vm_async(&self, label: &str) {
+        let ivars = self.ivars();
+
+        // Re-entry gate: ignore the call if a start/stop is already
+        // in flight. We run on the main thread; the worker clears
+        // the flag via dispatch_to_main_thread.
+        {
+            let mut busy = ivars.vm_busy.lock().unwrap();
+            if *busy {
+                eprintln!("[tillandsias-tray] {label}: already in progress, ignoring");
+                return;
+            }
+            *busy = true;
+        }
+        // Order 1919-keyc: a booting guest holds no credentials yet, so the
+        // next status poll must deliver them rather than skip the Keychain.
+        crate::installation_uuid::note_vm_boot();
+        // Idempotency: if we already hold a live VM handle, just log
+        // and bail (without touching the busy flag race).
+        if ivars.vm.lock().unwrap().is_some() {
+            *ivars.vm_busy.lock().unwrap() = false;
+            eprintln!("[tillandsias-tray] {label}: VM already running, ignoring");
+            return;
+        }
+
+        let runtime = ivars.runtime.clone();
+        let vm_slot = ivars.vm.clone();
+        let vm_busy = ivars.vm_busy.clone();
+        let image_root = ivars.image_root.clone();
+        let label_owned = label.to_string();
+        let label_done = label_owned.clone();
+
+        // Status chip: show that we've started. The Provisioning phase
+        // bundles fetch + decompress + verify + boot until the
+        // in-VM headless's vsock handshake completes (slice gates on
+        // that signal). Granularity will increase when we wire
+        // `download_verified::on_progress` (next slice).
+        self.set_status_text(BOOT_STATUS_TEXT);
+
+        // Clone the Arc-based status handles so the completion callback
+        // can update the chip from the main-thread dispatch without
+        // needing a Retained<Self> (which isn't Send). The closure
+        // re-runs `apply_status_text_main_thread` on the main thread
+        // exactly like `set_status_text` would.
+        let status_text_slot = ivars.status_text.clone();
+        let status_item_slot = ivars.status_item.clone();
+        let status_menu_item_slot = ivars.status_menu_item.clone();
+        let menu_state_slot = ivars.menu_state.clone();
+        let self_handle_slot = ivars.self_handle.clone();
+
+        eprintln!(
+            "[tillandsias-tray] {label_owned}: spawning worker (image_root={})",
+            image_root.display()
+        );
+        // Phase callback: each call to on_phase("Downloading rootfs")
+        // etc. dispatches an `apply_status_text_main_thread` so the
+        // user sees the chip update during a cold first launch
+        // (74 MB download → xz decompress → SHA-256 verify). Subsequent
+        // launches hit the rootfs.img cache and the phase callback
+        // never fires.
+        let phase_status_text = status_text_slot.clone();
+        let phase_status_item = status_item_slot.clone();
+        let phase_status_menu_item = status_menu_item_slot.clone();
+        let phase_menu_state = menu_state_slot.clone();
+        let on_phase: Box<dyn Fn(&str) + Send + Sync> = Box::new(move |phase: &str| {
+            let text = format!("\u{1F535} {phase}\u{2026}");
+            let text_for_dispatch = text.clone();
+            let status_text = phase_status_text.clone();
+            let status_item = phase_status_item.clone();
+            let status_menu_item = phase_status_menu_item.clone();
+            // Sync MenuState so a mid-provision rebuild keeps this live phase
+            // instead of snapping back to the initial boot label.
+            if let Ok(mut guard) = phase_menu_state.lock() {
+                guard.status_text = text.clone();
+            }
+            dispatch_to_main_thread(move || {
+                *status_text.lock().unwrap() = text_for_dispatch.clone();
+                apply_status_text_main_thread(&text_for_dispatch, &status_item, &status_menu_item);
+            });
+        });
+
+        // 1420-v3zt: typed download/expand events -> palette bar beside the
+        // icon and in the status row, repainted once per whole percent.
+        let bar_status_item = status_item_slot.clone();
+        let bar_status_menu_item = status_menu_item_slot.clone();
+        let bar_gate = Arc::new(Mutex::new(crate::provision_progress::PercentGate::default()));
+        let on_progress: Box<dyn Fn(&tillandsias_control_wire::ProgressEvent) + Send + Sync> =
+            Box::new(move |ev| {
+                let segments = match ev.kind {
+                    tillandsias_control_wire::ProgressKind::Done
+                    | tillandsias_control_wire::ProgressKind::Failed { .. } => Vec::new(),
+                    ref kind => match kind.fraction() {
+                        Some(f) if bar_gate.lock().unwrap().changed(&ev.task, f) => {
+                            crate::provision_progress::menu_bar_segments(f, 10)
+                        }
+                        _ => return,
+                    },
+                };
+                let label = ev.label.clone();
+                let status_item = bar_status_item.clone();
+                let status_menu_item = bar_status_menu_item.clone();
+                dispatch_to_main_thread(move || {
+                    apply_menu_bar_progress_main_thread(
+                        &segments,
+                        &label,
+                        &status_item,
+                        &status_menu_item,
+                    );
+                });
+            });
+        let bar_clear_item = status_item_slot.clone();
+        let bar_clear_menu_item = status_menu_item_slot.clone();
+
+        runtime.spawn(async move {
+            // 1642-cc54 (5b, option C): never boot a disk whose previous run
+            // did not stop cleanly. Rebuild it first, as the operator chose.
+            let rebuilt = if tillandsias_vm_layer::vz::previous_stop_was_unclean(&image_root) {
+                on_phase(crate::reset_state::REBUILD_STATUS.trim_end_matches('\u{2026}'));
+                let vz = VzRuntime::new(TILLANDSIAS_GUEST_CID, image_root.clone());
+                // Asked BEFORE the wipe (1642-cc54): it decides whether the
+                // keychain's share is kept (store on the identity disk) or
+                // cleared (store on the rootfs being destroyed).
+                let store_survives = vz.vault_store_survives_rebuild();
+                let rebuilt = crate::reset_state::run_unclean_stop_rebuild_in(
+                    crate::installation_uuid::KEYCHAIN_SERVICE,
+                    &tillandsias_core::cache_root::cache_root(),
+                    store_survives,
+                    || vz.wipe_provisioned_artifacts().map_err(|e| e.to_string()),
+                );
+                if rebuilt.is_ok() {
+                    // Fresh guest => fresh crash-loop history.
+                    let _ = std::fs::remove_file(crate::diagnose::crashloop_state_path());
+                    // Loop guard: if the clean power-off ever regresses, every
+                    // quit is unclean and every launch silently costs the
+                    // sign-ins. Two in a row is made loud, never silent.
+                    match tillandsias_vm_layer::vz::note_auto_rebuild(&image_root) {
+                        Ok(true) => eprintln!("{}", consecutive_unclean_rebuild_line(&image_root)),
+                        Ok(false) => eprintln!(
+                            "[tillandsias-tray] rebuilt the workspace after an unclean stop \
+                             (recorded in {})",
+                            image_root
+                                .join(tillandsias_vm_layer::vz::AUTO_REBUILD_RECORD_FILE)
+                                .display()
+                        ),
+                        Err(e) => eprintln!(
+                            "[tillandsias-tray] could not record the unclean-stop rebuild: {e}"
+                        ),
+                    }
+                }
+                rebuilt
+            } else {
+                Ok(())
+            };
+            let result = match rebuilt {
+                Ok(()) => {
+                    run_start(
+                        image_root,
+                        vm_slot.clone(),
+                        on_phase.as_ref(),
+                        on_progress.as_ref(),
+                    )
+                    .await
+                }
+                Err(e) => Err(e),
+            };
+            // 1420-v3zt: whatever the outcome, the icon stands alone again; the
+            // chip below carries the result.
+            dispatch_to_main_thread(move || {
+                apply_menu_bar_progress_main_thread(&[], "", &bar_clear_item, &bar_clear_menu_item);
+            });
+
+            // On success, snapshot the Arc<VzRuntime> for the poller
+            // BEFORE handing ownership to the dispatch closure. On
+            // failure, the slot stays empty and the poller is skipped.
+            let vz_for_poller: Option<Arc<VzRuntime>> = match &result {
+                Ok(()) => vm_slot.lock().unwrap().as_ref().cloned(),
+                Err(_) => None,
+            };
+
+            // Initial post-boot chip text. Mirrors Windows' framing:
+            // Starting until the in-VM headless replies via VmStatus.
+            let initial_text = match &result {
+                Ok(()) => {
+                    eprintln!("[tillandsias-tray] {label_done}: VM is running");
+                    // The VM process is up; we're now waiting for the in-VM
+                    // headless to answer on vsock. Show "Connecting…" (not a
+                    // static "Starting…") so the boot→ready window reads as
+                    // active progress, not a stall. The poller/push flips this
+                    // to the live VmPhase the moment the guest replies.
+                    CONNECTING_CHIP_TEXT.to_string()
+                }
+                Err(e) => {
+                    eprintln!("[tillandsias-tray] {label_done} failed: {e}");
+                    // Surface the failure via a Notification Center
+                    // banner so the user notices even without hovering
+                    // the menubar icon (Action Center carries the most-
+                    // recent banner across screen-locks too). Mirrors
+                    // windows-tray's show_balloon (commit 8992652a
+                    // item 1). Best-effort: a failed osascript shell-
+                    // out is logged + ignored, the chip is the
+                    // authoritative surface.
+                    notify_provisioning_failed(e);
+                    clamp_tray_status_chip(format!("\u{1F534} {e}"))
+                }
+            };
+
+            // Stage Arcs for the initial dispatch (these clones get
+            // consumed; the originals stay for the poller spawn).
+            let initial_status_text_slot = status_text_slot.clone();
+            let initial_status_item_slot = status_item_slot.clone();
+            let initial_status_menu_item_slot = status_menu_item_slot.clone();
+            let initial_text_for_dispatch = initial_text.clone();
+            dispatch_to_main_thread(move || {
+                *vm_busy.lock().unwrap() = false;
+                *initial_status_text_slot.lock().unwrap() = initial_text_for_dispatch.clone();
+                apply_status_text_main_thread(
+                    &initial_text_for_dispatch,
+                    &initial_status_item_slot,
+                    &initial_status_menu_item_slot,
+                );
+            });
+
+            // 980-ja2m slice (b). HEARTBEAT, ON A TIMER, INDEPENDENT OF PUSHES
+            // AND OF WHETHER THE VM CAME UP.
+            //
+            // Measured on macneo 2026-09-05: a healthy, Ready, podman-ready
+            // guest emitted exactly ONE vm-status line in 25m34s and then
+            // nothing, because SC-07 demotes the polls while the subscription
+            // is healthy. A timestamp written only when a push arrives is
+            // therefore 25 minutes stale on a system with nothing wrong, and a
+            // separate `--diagnose`, which cannot reach the VM at all (no
+            // AF_VSOCK), cannot tell that from a dead guest.
+            //
+            // SPAWNED OUTSIDE THE `vz_for_poller` GATE DELIBERATELY. The first
+            // placement was inside the poller, which only runs when auto-boot
+            // SUCCEEDED — so a live tray whose VM failed to start wrote no
+            // heartbeat at all and `--diagnose` reported "no heartbeat file".
+            // That is the least informative answer available in exactly the
+            // case an operator is most likely to be looking: the tray is up,
+            // the guest is not. Caught by running the live arm rather than
+            // reasoning about it. Here the tray reports what it believes for
+            // as long as it is alive, and only a tray that is GONE is silent.
+            //
+            // Best-effort by construction: a failed write must never disturb
+            // the tray, and a heartbeat that stops is the signal itself.
+            {
+                let hb_status = status_text_slot.clone();
+                tokio::spawn(async move {
+                    let mut ticker = tokio::time::interval(Duration::from_secs(
+                        crate::diagnose::HEARTBEAT_PERIOD_SECS,
+                    ));
+                    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+                    loop {
+                        ticker.tick().await;
+                        let status_line = hb_status
+                            .lock()
+                            .ok()
+                            .map(|t| heartbeat_status_line(&t))
+                            .unwrap_or_else(|| "(status unreadable)".to_string());
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_secs())
+                            .unwrap_or(0);
+                        let path = crate::diagnose::heartbeat_state_path();
+                        if let Some(parent) = path.parent() {
+                            let _ = std::fs::create_dir_all(parent);
+                        }
+                        let _ = std::fs::write(
+                            &path,
+                            crate::diagnose::heartbeat_state_string(&status_line, now),
+                        );
+                    }
+                });
+            }
+
+            // Live status: kick off the 30s VmStatus poller. Holds
+            // the Arc<VzRuntime> for its lifetime; the task lives for
+            // the app lifetime (no cancellation in v0.0.1 — the Tokio
+            // runtime drop on process exit takes it down).
+            if let Some(vz) = vz_for_poller {
+                spawn_vm_status_poller(
+                    vz,
+                    status_text_slot,
+                    status_item_slot,
+                    status_menu_item_slot,
+                    menu_state_slot,
+                    self_handle_slot,
+                );
+            }
+        });
+    }
+
+    /// Intentional EPHEMERAL RESET (windows-260717-4): stop the running VM
+    /// (bounded drain), delete the provisioned boot artifacts via
+    /// `VzRuntime::wipe_provisioned_artifacts` (rootfs.img — and with it the
+    /// in-VM vault — plus vmlinuz/initramfs.img), clear the persisted
+    /// crash-loop state (a fresh guest has a fresh history), then re-enter
+    /// the exact same `boot_vm_async` path a first launch uses — which
+    /// reprovisions from scratch because `is_provisioned()` is now false.
+    /// Destructive BY DESIGN per the operator's ephemeral doctrine; the only
+    /// cost is one re-authentication.
+    ///
+    /// Mirrors the `stopVm:` worker shape (busy gate, take-the-handle, tokio
+    /// worker, main-thread completion dispatch); the completion re-borrows
+    /// the action host through `self_handle` — the same seam the menu
+    /// rebuild dispatch uses — to call `boot_vm_async` on the main thread.
+    ///
+    /// Known benign interplay: the status poller/push listener spawned by
+    /// the previous boot hold their own `Arc<VzRuntime>` and keep polling
+    /// the stopped VM until process exit (no cancellation in v1); their wire
+    /// errors leave last-known state untouched, and the fresh boot spawns
+    /// its own poller which owns the chip from then on.
+    ///
+    /// NOTE: no menu path reaches this worker any more — the `Reset Guest…`
+    /// leaf was removed by operator order 2026-07-22 (tray-ux "UX curation
+    /// governance"). Retained (dead-code-allowed) as the stop→wipe→reboot
+    /// worker for future RUNTIME wiring (e.g. the cross-platform bounded
+    /// auto-reset policy in control-wire); the manual affordance today is
+    /// the `--reset-guest` CLI verb (`diagnose::reset_guest_main`).
+    ///
+    /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    #[allow(dead_code)]
+    pub fn reset_guest_async(&self) {
+        let ivars = self.ivars();
+
+        // Re-entry gate (shared with startVm/stopVm).
+        {
+            let mut busy = ivars.vm_busy.lock().unwrap();
+            if *busy {
+                eprintln!("[tillandsias-tray] Reset guest: already in progress, ignoring");
+                return;
+            }
+            *busy = true;
+        }
+        let vm_taken = ivars.vm.lock().unwrap().take();
+
+        let runtime = ivars.runtime.clone();
+        let vm_busy = ivars.vm_busy.clone();
+        let image_root = ivars.image_root.clone();
+        let self_handle = ivars.self_handle.clone();
+
+        eprintln!(
+            "[tillandsias-tray] Reset guest: discarding the local guest and its cached \
+             credentials (everything lives in the cloud — you'll re-authenticate once)"
+        );
+        self.set_status_text("\u{267B}\u{FE0F} Resetting guest\u{2026}");
+
+        runtime.spawn(async move {
+            if let Some(vm) = vm_taken
+                && let Err(e) = vm.stop(VM_STOP_DRAIN).await
+            {
+                eprintln!(
+                    "[tillandsias-tray] Reset guest: stop failed ({e}); wiping anyway \
+                     (a wedged guest is the reset use-case)"
+                );
+            }
+            // File-only wipe; the CID is irrelevant here (path accessors only).
+            let vz = VzRuntime::new(TILLANDSIAS_GUEST_CID, image_root);
+            let wipe = vz.wipe_provisioned_artifacts();
+            if wipe.is_ok() {
+                // Fresh guest ⇒ fresh crash-loop history for --diagnose.
+                let _ = std::fs::remove_file(crate::diagnose::crashloop_state_path());
+            }
+            dispatch_to_main_thread(move || {
+                *vm_busy.lock().unwrap() = false;
+                match wipe {
+                    Ok(()) => {
+                        let guard = self_handle.lock().unwrap();
+                        if let Some(host) = guard.as_ref() {
+                            eprintln!(
+                                "[tillandsias-tray] Reset guest: wipe complete — \
+                                 reprovisioning from scratch"
+                            );
+                            host.0.boot_vm_async("Reset guest");
+                        } else {
+                            eprintln!(
+                                "[tillandsias-tray] Reset guest: self_handle not set; \
+                                 wipe done but reboot must be triggered manually"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[tillandsias-tray] Reset guest: wipe failed: {e}");
+                    }
+                }
+            });
+        });
+    }
+}
+
+// (orphaned doc-block from an earlier refactor; the canonical
+// docstring for `spawn_vm_status_poller` lives at the function
+// itself further down. Converted from `///` to `//` so clippy's
+// `empty_line_after_doc_comments` lint stays happy in the gap
+// between the next two functions.)
+//
+// Spawn the 30s VmStatus poller. Mirrors windows-tray's
+// `spawn_provisioning` Ready branch (commit c45f23ae): every 30s,
+// call `poll_vm_status_once`, render the result through
+// `vm_phase_status_text`, and patch the chip via a main-thread
+// dispatch. A transient wire error leaves the last-known chip text
+// untouched (matching the windows policy).
+//
+// @trace spec:vsock-transport,
+//        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 5)
+
+/// Apply the state-mutating effect of a menu action to the held
+/// `MenuState`. Currently only `SelectAgent` mutates state (sets
+/// `selected_agent`); returns `true` if `state` was actually changed
+/// — `false` for an idempotent re-select of the same agent or for
+/// any other action variant.
+///
+/// Mirrors windows-tray's `apply_menu_action_state` at
+/// `notify_icon.rs:1674` byte-for-shape so the cross-tray state-
+/// mutation contract is symmetric. Factored out of the dispatcher
+/// so the rule is unit-testable without driving AppKit.
+///
+/// @trace spec:macos-native-tray.ui.menu-parity@v1
+fn apply_menu_action_state(
+    state: &mut tillandsias_host_shell::menu_state::MenuState,
+    action: &tillandsias_host_shell::menu_action::MenuAction,
+) -> bool {
+    use tillandsias_host_shell::menu_action::MenuAction;
+    match action {
+        MenuAction::SelectAgent(agent) if state.selected_agent != *agent => {
+            state.selected_agent = *agent;
+            true
+        }
+        _ => false,
+    }
+}
+
+/// Rebuild the NSMenu on the AppKit main thread from the held
+/// MenuState and swap it in via `NSStatusItem.setMenu:`. Re-attaches
+/// `status_menu_item` to the new first-row item (the chip), since
+/// the old NSMenuItem instance is replaced by a fresh one inside
+/// the new menu and any future `setTitle:` calls must target the
+/// new instance.
+///
+/// MUST be invoked on the main thread (the libdispatch contract in
+/// `dispatch_to_main_thread` enforces that for callers).
+///
+/// If `self_handle` hasn't been populated (i.e. someone forgot to
+/// call `set_self_handle` from `status_item::run`), the rebuild is
+/// skipped with a log line — better than panicking the AppKit
+/// thread mid-loop.
+///
+/// @trace spec:macos-native-tray.ui.menu-parity@v1,
+///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 8c)
+fn rebuild_menu_main_thread(
+    menu_state: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+    status_item: &Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
+    status_menu_item: &Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
+    self_handle: &Arc<Mutex<Option<appkit_handle::TrayActionHostHandle>>>,
+) {
+    use tillandsias_host_shell::menu_state as menu_state_mod;
+    let mtm = unsafe { MainThreadMarker::new_unchecked() };
+
+    let state_snapshot: menu_state_mod::MenuState = menu_state.lock().unwrap().clone();
+    let structure = menu_state_mod::build(&state_snapshot);
+
+    let host_guard = self_handle.lock().unwrap();
+    let Some(host_handle) = host_guard.as_ref() else {
+        eprintln!("[tillandsias-tray] menu-rebuild: self_handle not set, skipping");
+        return;
+    };
+    let host: &TrayActionHost = &host_handle.0;
+
+    let (menu, new_status_row) =
+        crate::status_item::build_menu_with_status_row(mtm, &structure, host);
+
+    if let Some(item_handle) = status_item.lock().unwrap().as_ref() {
+        unsafe { item_handle.0.setMenu(Some(&menu)) };
+    }
+    if let Some(row) = new_status_row {
+        *status_menu_item.lock().unwrap() = Some(appkit_handle::StatusMenuItemHandle(row));
+    }
+}
+
+// True while the dedicated push subscription (order 155 slices 1+2) is
+// connected and delivering frames. Gates the steady-state fallback polls:
+// while the push stream is healthy, `VmStatusRequest` is never sent (SC-07)
+// and the 10-tick `GithubLoginStatusRequest`/`CloudRefreshRequest` polls are
+// suppressed too (slice 2 — all three topics ride this one connection);
+// when the stream drops, the tick loop resumes polling until the listener
+// resubscribes. Grew out of windows-tray's `VM_STATUS_PUSH_HEALTHY`
+// (b6ca3290, VmStatus-only) — windows adopts the widened gate in its own
+// slice 2 so the two trays keep structurally identical stream architectures.
+//
+// Slice 3 (SC-16): the signal is a shared watch-backed
+// [`tillandsias_host_shell::subscription_health::SubscriptionHealth`]
+// (created in `spawn_vm_status_poller`, written by `run_push_listener`) —
+// not an `AtomicBool` the tick loop re-reads after each sleep. The tick
+// loop selects on the health transition, so a subscription drop triggers
+// an immediate fallback poll round instead of surfacing up to 300s later
+// on the 10-tick login/cloud cadence.
+
+/// SC-07 gate: every steady-state request poll (VmStatus each tick,
+/// LoginState/CloudProjects on the 10-tick cadence) is fallback-only —
+/// suppressed whenever the push subscription is delivering.
+fn should_poll_fallback(push_stream_healthy: bool) -> bool {
+    !push_stream_healthy
+}
+
+// Tick-wait semantics (TickWake, wait_tick_or_subscription_drop,
+// tick_after_wake) were hoisted into the shared
+// tillandsias_host_shell::subscription_health module so the macOS (order
+// 155) and windows (order 154) tick loops cannot drift. Use the shared
+// copies directly; this crate keeps no local duplicate.
+use tillandsias_host_shell::subscription_health::{
+    TickWake, tick_after_wake, wait_tick_drop_or_request,
+};
+
+/// The exact topic set the dedicated push connection subscribes to. Slice 2
+/// widened this from `[VmStatus]` to the guest push sources of orders 230/231;
+/// pinned by `push_subscribe_topics_has_no_local_projects`.
+///
+/// ORDER 997-e4v2 REMOVED LocalProjects. The tray no longer consumes local
+/// projects at all — Cloud is the only project path — so subscribing would ask
+/// the guest to push a list nothing reads. The wire VARIANT still exists and is
+/// deliberately untouched here: it comes out with the headless side once
+/// host-shell drops its consumer, because removing it before then breaks all
+/// three trays at once.
+fn push_subscribe_topics() -> Vec<tillandsias_control_wire::SubscriptionTopic> {
+    vec![
+        tillandsias_control_wire::SubscriptionTopic::VmStatus,
+        tillandsias_control_wire::SubscriptionTopic::LoginState,
+        tillandsias_control_wire::SubscriptionTopic::CloudProjects,
+    ]
+}
+
+/// 1420-4grt: throttles guest `ProgressPush` events into tray.log lines —
+/// one per task per whole-ten-percent step, plus every terminal or
+/// indeterminate transition, so a 500-step build writes ~10 lines, not 500.
+#[derive(Default)]
+struct ProgressLog {
+    last_decile: std::collections::HashMap<String, u8>,
+}
+
+impl ProgressLog {
+    fn observe(&mut self, ev: &tillandsias_control_wire::ProgressEvent) -> Option<String> {
+        use tillandsias_control_wire::ProgressKind;
+        match &ev.kind {
+            ProgressKind::Done => {
+                self.last_decile.remove(&ev.task);
+                Some(format!("progress {}: done", ev.label))
+            }
+            ProgressKind::Failed { reason } => {
+                self.last_decile.remove(&ev.task);
+                Some(format!("progress {}: FAILED — {reason}", ev.label))
+            }
+            kind => match kind.fraction() {
+                Some(f) => {
+                    let decile = (f * 10.0).floor() as u8;
+                    if self.last_decile.get(&ev.task) == Some(&decile) {
+                        return None;
+                    }
+                    self.last_decile.insert(ev.task.clone(), decile);
+                    Some(format!(
+                        "progress {}: {}%",
+                        ev.label,
+                        u32::from(decile) * 10
+                    ))
+                }
+                None => {
+                    if self.last_decile.contains_key(&ev.task) {
+                        return None;
+                    }
+                    self.last_decile.insert(ev.task.clone(), u8::MAX);
+                    Some(format!("progress {}: working", ev.label))
+                }
+            },
+        }
+    }
+}
+
+/// Map a `GithubLoginStatusReply`/`LoginStatePush` payload to the menu's
+/// login state. Shared by the fallback poll and the push listener (order 155
+/// slice 2) so both surfaces stay byte-identical.
+fn map_login_state(
+    logged_in: bool,
+    handle: Option<String>,
+) -> tillandsias_host_shell::menu_state::GithubLoginState {
+    if logged_in {
+        tillandsias_host_shell::menu_state::GithubLoginState::LoggedIn {
+            handle: handle.unwrap_or_default(),
+        }
+    } else {
+        tillandsias_host_shell::menu_state::GithubLoginState::LoggedOut
+    }
+}
+
+/// Unix-epoch milliseconds of the most recent GitHub-login click that flipped
+/// the chip to the transitional `LoggingIn` state (0 = no login in flight).
+/// Anchors the grace window in [`apply_login_state`] so the prompt login-confirm
+/// poll doesn't downgrade a fresh `LoggingIn` to `LoggedOut` while the user is
+/// still completing the interactive `gh auth login` paste. macOS analog of the
+/// windows-tray login fast-poll guard (wave-review 2026-07-22 finding #2).
+static LOGIN_STARTED_AT_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How long after a login click a `LoggedOut` observation is treated as "the
+/// user hasn't finished the interactive paste yet" and ignored. `LoggedIn` is
+/// always applied immediately, so a real login still resolves in ~1-2s.
+///
+/// Kept modest (covers the name+email+PAT prompt sequence) but bounded: if the
+/// login FAILS to persist a token, this window would otherwise mask the failure
+/// as "Logging In". The authoritative failure surface is the login terminal
+/// itself (it now stays open ~10s with the error — see pty/mod.rs), so the chip
+/// only needs to hold long enough to avoid mid-interaction flicker, then fall
+/// back to the actionable "GitHub Login" leaf. (A tighter fix — ending the grace
+/// exactly when the login PTY session closes — is a follow-up.)
+const LOGIN_GRACE: Duration = Duration::from_secs(60);
+
+/// Record that a GitHub-login flow just started (chip flipped to `LoggingIn`).
+fn mark_login_started() {
+    LOGIN_STARTED_AT_MS.store(now_unix_ms(), std::sync::atomic::Ordering::SeqCst);
+}
+
+fn now_unix_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Apply a live login-state observation — from a poll reply or an
+/// unrequested `LoginStatePush` frame — to the shared `MenuState`. Returns
+/// whether the menu needs a rebuild (state changed); idempotent on repeat.
+///
+/// Grace window (login-stuck fix 2026-07-23): while a login click is fresh, a
+/// `LoggedOut` observation means "the interactive paste isn't done yet", not
+/// "logged out" — ignore it so the ~2s prompt-confirm poll can't flip the
+/// transitional `LoggingIn` chip back to `LoggedOut` mid-flow. `LoggedIn` is
+/// always applied immediately; `LoggedOut` applies once the grace window ends.
+fn apply_login_state(
+    login: tillandsias_host_shell::menu_state::GithubLoginState,
+    menu_state: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+) -> bool {
+    use tillandsias_host_shell::menu_state::GithubLoginState;
+    let mut guard = menu_state.lock().unwrap();
+    if matches!(login, GithubLoginState::LoggedOut) && guard.login == GithubLoginState::LoggingIn {
+        let started = LOGIN_STARTED_AT_MS.load(std::sync::atomic::Ordering::SeqCst);
+        if started != 0 && now_unix_ms().saturating_sub(started) < LOGIN_GRACE.as_millis() as u64 {
+            // Still within the grace window — keep showing LoggingIn.
+            return false;
+        }
+    }
+    if guard.login == login {
+        return false;
+    }
+    if matches!(
+        login,
+        GithubLoginState::LoggedOut | GithubLoginState::LoggedIn { .. }
+    ) {
+        // A login TRANSITION invalidates the previous session's cloud verdict,
+        // in BOTH directions. We are past the equality early-return above, so
+        // reaching here means the state actually changed.
+        //
+        // Logout is the obvious half: the next login must re-fetch, so the
+        // submenu shows "(loading repos…)" rather than a stale "(no repos)" or
+        // a previous user's repo list.
+        //
+        // LOGIN IS THE HALF THAT WAS MISSING, and it inverted the flag's whole
+        // purpose. The push listener primes an UNCONDITIONAL CloudRefreshRequest
+        // at subscription setup, before any login answer exists. With no token
+        // the guest's gh call fails, and cloud_projects.rs collapses every
+        // failure into an empty list — "CloudRefreshReply is always
+        // well-formed". So apply_cloud_projects latches cloud_projects_loaded =
+        // true seconds after every cold start, from a reply that confirmed
+        // nothing.
+        //
+        // The reset then fired only when the NEW state was LoggedOut, so a
+        // LoggedOut -> LoggedIn transition kept that latched flag. The cloud
+        // submenu is rendered ONLY in the LoggedIn arm, so the very first time
+        // the user could see it, it said "(no repos)" — with the post-login
+        // fetch still in flight, to an account that may have hundreds.
+        //
+        // That is the exact falsehood the flag was introduced to prevent
+        // (operator report 2026-07-28), pointing the other way. Linux avoids it
+        // structurally by stamping last_fetched only on a SUCCESSFUL fetch and
+        // keeping the old list on failure, "so the menu doesn't flicker into
+        // (no repos)" (tillandsias-headless/src/tray/cloud.rs).
+        //
+        // Windows carries the identical LoggedOut-only condition in
+        // notify_icon::apply_github_login and needs the same change; filed
+        // separately, since this crate cannot fix it.
+        guard.cloud_projects_loaded = false;
+        guard.cloud_projects = Vec::new();
+    }
+    guard.login = login;
+    drop(guard);
+    // Login resolved (or otherwise changed) — clear the grace anchor so later
+    // observations apply immediately.
+    LOGIN_STARTED_AT_MS.store(0, std::sync::atomic::Ordering::SeqCst);
+    eprintln!("[tillandsias-tray] github-login: menu_state updated");
+    true
+}
+
+/// Apply a live cloud-projects observation — from a poll reply or an
+/// unrequested `CloudProjectsPush` frame (full replacement list) — to the
+/// shared `MenuState`. Returns whether the menu needs a rebuild; idempotent
+/// on repeat.
+fn apply_cloud_projects(
+    projects: Vec<tillandsias_host_shell::menu_state::ProjectEntry>,
+    confirmed: bool,
+    menu_state: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+) -> bool {
+    let new_count = projects.len();
+    // 731-eupn: AN UNCONFIRMED REPLY IS NOT AN ANSWER. This function used to
+    // latch `cloud_projects_loaded = true` for every reply that arrived,
+    // because the wire could not say otherwise — so a failed fetch published
+    // an empty list and the submenu rendered "(no repos)" with the tooltip
+    // "no GitHub repos visible to the in-VM gh client", a confirmation nobody
+    // made. Now the reply carries a discriminator and a failure is DISCARDED:
+    // keep whatever was there and leave the flag alone, which is the
+    // defensive position Linux already took by stamping last_fetched only on
+    // success. Doing nothing is the truthful response to being told nothing.
+    if !confirmed {
+        eprintln!(
+            "[tillandsias-tray] cloud-projects: fetch unconfirmed; keeping previous list \
+             (not rendering '(no repos)')"
+        );
+        return false;
+    }
+    let mut guard = menu_state.lock().unwrap();
+    // A confirmed answer (even an empty one) flips the cloud submenu from
+    // "(loading repos…)" to real entries / "(no repos)" — mirrors the Windows
+    // wiring in notify_icon::apply_cloud_projects. The equality early-return
+    // must not swallow that first empty reply, so "just loaded" forces a
+    // rebuild even when the list itself is unchanged.
+    let newly_loaded = !guard.cloud_projects_loaded;
+    guard.cloud_projects_loaded = true;
+    if !newly_loaded && guard.cloud_projects == projects {
+        return false;
+    }
+    guard.cloud_projects = projects;
+    drop(guard);
+    eprintln!("[tillandsias-tray] cloud-projects: menu_state updated ({new_count} entries)");
+    true
+}
+
+/// Process-global live crash-loop detector, seeded once from the persisted
+/// state file (`crate::diagnose::crashloop_state_path()`) so a loop that
+/// tripped before the tray last restarted is still in view. std `Mutex` —
+/// observations are infrequent (per-phase-change, not per-frame). Mirrors
+/// windows-tray's `CRASH_LOOP_DETECTOR` (notify_icon.rs) byte-for-byte in
+/// spirit; the detector itself lives in control-wire so the two hosts
+/// cannot drift.
+///
+/// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+static CRASH_LOOP_DETECTOR: std::sync::LazyLock<
+    Mutex<tillandsias_control_wire::crashloop::CrashLoopDetector>,
+> = std::sync::LazyLock::new(|| {
+    Mutex::new(
+        tillandsias_control_wire::crashloop::CrashLoopDetector::load(
+            &crate::diagnose::crashloop_state_path(),
+        ),
+    )
+});
+
+/// Edge-trigger guard so the crash-loop banner (the single most-important
+/// tray notification) fires once per trip, not on every subsequent push
+/// while the loop persists. Re-armed when the verdict clears. Mirrors
+/// windows-tray's `CRASH_LOOP_NOTIFIED`.
+static CRASH_LOOP_NOTIFIED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+fn unix_now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Feed one live VM-status observation into the crash-loop detector, persist
+/// the updated state so a separate `--diagnose` process (static /
+/// filesystem-only on macOS) reads the SAME verdict the live tray just
+/// computed, and — on a NEW trip — surface the crash-loop as the single
+/// most-important notification: a Notification Center banner plus a chip
+/// overwrite with the pinned-grammar verdict (`🔴 crash-loop:<subsystem>`,
+/// matching windows' framing). Called LAST inside [`apply_vm_status`] so the
+/// verdict overwrites the ordinary phase chip, same as windows'
+/// chip-overwrite-last ordering. The terminal verdict clearing re-arms the
+/// edge trigger so a later recurrence toasts again.
+///
+/// This is the WRITE side that closes the wave-1 gap: `--diagnose` already
+/// knew how to READ `crashloop.state`, but the live tray never wrote it.
+///
+/// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+fn note_crashloop_observation(
+    phase: tillandsias_control_wire::VmPhase,
+    last_event: Option<&str>,
+    menu_state: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+    status_text: &Arc<Mutex<String>>,
+    status_item: &Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
+    status_menu_item: &Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
+) {
+    use std::sync::atomic::Ordering::SeqCst;
+    let verdict = {
+        let Ok(mut det) = CRASH_LOOP_DETECTOR.lock() else {
+            return;
+        };
+        let v = det.observe_phase(phase, last_event, unix_now_secs());
+        if let Err(e) = det.save(&crate::diagnose::crashloop_state_path()) {
+            eprintln!("[tillandsias-tray] could not persist crash-loop state: {e}");
+        }
+        v
+    };
+    if verdict.is_crash_loop() {
+        // A crash-loop is THE single most-important state: overwrite the
+        // chip (and MenuState's status row, so a menu rebuild does not
+        // resurrect the ordinary phase text — same clobber class
+        // apply_vm_status fixes for the healthy path).
+        let chip = clamp_tray_status_chip(format!("\u{1F534} {}", verdict.verdict()));
+        {
+            let mut guard = menu_state.lock().unwrap();
+            if guard.status_text != chip {
+                guard.status_text = chip.clone();
+            }
+        }
+        let chip_for_dispatch = chip.clone();
+        let chip_status_text = status_text.clone();
+        let chip_status_item = status_item.clone();
+        let chip_status_menu_item = status_menu_item.clone();
+        dispatch_to_main_thread(move || {
+            *chip_status_text.lock().unwrap() = chip_for_dispatch.clone();
+            apply_status_text_main_thread(
+                &chip_for_dispatch,
+                &chip_status_item,
+                &chip_status_menu_item,
+            );
+        });
+        if !CRASH_LOOP_NOTIFIED.swap(true, SeqCst) {
+            eprintln!(
+                "[tillandsias-tray] guest crash-loop detected: {}",
+                verdict.verdict()
+            );
+            // osascript subprocess — no AppKit, so no main-thread dispatch
+            // needed (same as notify_provisioning_failed).
+            notify_crash_loop(&format!(
+                "The guest is crash-looping ({}) — it is not converging. \
+                 Reset the guest to recover; everything lives in the cloud, \
+                 you'll re-authenticate once.",
+                verdict.verdict()
+            ));
+        }
+    } else {
+        CRASH_LOOP_NOTIFIED.store(false, SeqCst);
+    }
+}
+
+/// The last VM status event written to the tray log (order 1571-lgex), shared
+/// by the poll and push surfaces like `last_logged_phase`.
+static LAST_LOGGED_EVENT: Mutex<Option<String>> = Mutex::new(None);
+
+/// The tray-log line for a VM status event change, or `None` when the event is
+/// unchanged or absent. Pure, so the "an expired sign-in is visible in the log"
+/// property is testable without AppKit (order 1571-lgex).
+fn event_change_line(logged: Option<&str>, current: Option<&str>) -> Option<String> {
+    let current = current.filter(|e| !e.is_empty())?;
+    (logged != Some(current)).then(|| format!("[tillandsias-tray] vm-status: event={current}"))
+}
+
+/// Apply a live `VmStatus` observation — from a poll reply or an unrequested
+/// `VmStatusPush` frame — to the shared `MenuState` and status chip. Returns
+/// whether the menu needs a rebuild (podman_ready / login gating changed).
+/// Shared by the 30s fallback poll and `run_push_listener` (order 155
+/// slice 1) so both surfaces stay byte-identical; mirrors windows-tray's
+/// `apply_vm_status` (b6ca3290).
+///
+/// `last_logged_phase` is shared across both sources so a phase transition is
+/// logged exactly once regardless of which surface observed it first (m8 F2:
+/// a Failed VM must never be silent in the log).
+#[allow(clippy::too_many_arguments)]
+fn apply_vm_status(
+    phase: tillandsias_control_wire::VmPhase,
+    podman_ready: bool,
+    last_event: Option<&str>,
+    last_logged_phase: &Arc<Mutex<Option<tillandsias_control_wire::VmPhase>>>,
+    menu_state: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+    status_text: &Arc<Mutex<String>>,
+    status_item: &Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
+    status_menu_item: &Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
+) -> bool {
+    let mut phase_changed = false;
+    {
+        let mut logged = last_logged_phase.lock().unwrap();
+        if *logged != Some(phase) {
+            *logged = Some(phase);
+            phase_changed = true;
+            eprintln!(
+                "[tillandsias-tray] vm-status: phase={phase:?} podman_ready={podman_ready}{}",
+                last_event
+                    .map(|e| format!(" event={e}"))
+                    .unwrap_or_default()
+            );
+        }
+    }
+    {
+        // ORDER 1571-lgex: a phase-only log hid every event change inside
+        // Ready — an expired sign-in left "Building Forge" on the chip and
+        // nothing in this log. Log each distinct event once.
+        let mut logged_event = LAST_LOGGED_EVENT.lock().unwrap();
+        if let Some(line) = event_change_line(logged_event.as_deref(), last_event) {
+            eprintln!("{line}");
+            *logged_event = last_event.map(str::to_string);
+        }
+    }
+    let mut base = vm_phase_status_text(phase, podman_ready);
+    // 1420-inak: a guest that FAILED provisioning used to render a bare
+    // "🔴 VM failed". The guest's own record names the failing step; read it
+    // only on Failed (a file read per status push would be wasteful) and put
+    // the step on the chip. The full text also goes to the tray log once.
+    if matches!(phase, tillandsias_control_wire::VmPhase::Failed) {
+        let record = std::fs::read_to_string(crate::diagnose::provision_state_path())
+            .map(|t| crate::diagnose::provision_record_from(&t));
+        if let Ok(crate::diagnose::ProvisionRecord::Failed { line, rc, cmd, .. }) = record {
+            let full = crate::provision_error::failure_text(
+                crate::provision_error::Stage::GuestProvisioning,
+                &crate::provision_error::guest_failure_detail(
+                    line.as_deref(),
+                    rc.as_deref(),
+                    cmd.as_deref(),
+                ),
+            );
+            if phase_changed {
+                eprintln!("[tillandsias-tray] {full}");
+            }
+            base = clamp_tray_status_chip(format!("\u{1F534} {full}"));
+        }
+    }
+    let text_for_dispatch = compose_chip_text(&base, last_event);
+    let mut rebuild_needed = false;
+    {
+        let mut guard = menu_state.lock().unwrap();
+        let new_login_runtime_ready =
+            matches!(phase, tillandsias_control_wire::VmPhase::Ready) && podman_ready;
+        if guard.podman_ready != podman_ready
+            || guard.login_runtime_ready != new_login_runtime_ready
+        {
+            guard.podman_ready = podman_ready;
+            guard.login_runtime_ready = new_login_runtime_ready;
+            rebuild_needed = true;
+            if new_login_runtime_ready {
+                crate::bringup_timer::vz_boot_finished(0);
+            }
+        }
+        // The status row is re-rendered from MenuState on every rebuild
+        // (render() reads state.status_text). Without this write the state
+        // keeps its BOOT_STATUS_TEXT default, so the rebuild triggered by
+        // the very transition we're applying (e.g. -> Ready) clobbers the
+        // chip back to "Booting…" right after the direct setTitle below —
+        // the 2026-07-10 attended smoke caught the menu stuck there while
+        // stderr showed phase=Ready (m8 F2 class: status must never lie).
+        if guard.status_text != text_for_dispatch {
+            guard.status_text = text_for_dispatch.clone();
+        }
+    }
+    let chip_status_text = status_text.clone();
+    let chip_status_item = status_item.clone();
+    let chip_status_menu_item = status_menu_item.clone();
+    dispatch_to_main_thread(move || {
+        *chip_status_text.lock().unwrap() = text_for_dispatch.clone();
+        apply_status_text_main_thread(
+            &text_for_dispatch,
+            &chip_status_item,
+            &chip_status_menu_item,
+        );
+    });
+    // Feed the same observation into the crash-loop detector LAST: on a trip
+    // it overwrites the chip set above with the crash-loop verdict (the
+    // single most-important surface) and persists state for `--diagnose`.
+    // Mirrors windows-tray's chip-overwrite-last ordering in apply_vm_status.
+    note_crashloop_observation(
+        phase,
+        last_event,
+        menu_state,
+        status_text,
+        status_item,
+        status_menu_item,
+    );
+    rebuild_needed
+}
+
+/// Dedicated push listener (order 155 slices 1+2): a persistent reader task
+/// on its own control-wire connection. Connect → handshake →
+/// `Subscribe{[VmStatus, LoginState, CloudProjects]}` → `SubscribeAck` →
+/// loop `next_envelope`, applying each push frame to the chip/menu within
+/// milliseconds of the guest-side change (SC-09, <500ms end-to-end) instead
+/// of up to 30s (VmStatus) or 300s (login/cloud) later on a poll tick.
+///
+/// A separate connection (not the per-poll one-shots) is deliberate: the
+/// request/reply helpers would mis-consume an unsolicited push frame arriving
+/// between a request and its reply. The headless broadcasts pushes to every
+/// subscribed client, so a dedicated connection gets the stream without
+/// racing the request path. Started as a mirror of windows-tray
+/// `run_vm_status_push_listener` (b6ca3290) on the macOS `GuestTransport`/VZ
+/// stream + secure-wire path; slice 2 widened it to all three topics
+/// (windows follows in its own slice 2).
+///
+/// Reconnects forever with the shared `BACKOFF_SCHEDULE` (250ms→4s), then
+/// holds at 30s between attempts — while down, the shared
+/// [`SubscriptionHealth`](tillandsias_host_shell::subscription_health::SubscriptionHealth)
+/// signal is false and the tick loop's fallback polls cover freshness.
+#[allow(clippy::too_many_arguments)]
+async fn run_push_listener(
+    vz: Arc<VzRuntime>,
+    status_text: Arc<Mutex<String>>,
+    status_item: Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
+    status_menu_item: Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
+    menu_state: Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+    self_handle: Arc<Mutex<Option<appkit_handle::TrayActionHostHandle>>>,
+    last_logged_phase: Arc<Mutex<Option<tillandsias_control_wire::VmPhase>>>,
+    vm_ever_ready: Arc<std::sync::atomic::AtomicBool>,
+    health: Arc<tillandsias_host_shell::subscription_health::SubscriptionHealth>,
+) {
+    use std::sync::atomic::Ordering;
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::{BACKOFF_SCHEDULE, Client};
+
+    let mut backoff_idx: usize = 0;
+    loop {
+        health.set(false);
+        let established = async {
+            let stream =
+                open_control_wire_stream(&vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(5))
+                    .await?;
+            let mut client = Client::from_stream(
+                Box::new(stream),
+                Transport::Vsock {
+                    cid: TILLANDSIAS_GUEST_CID,
+                    port: CONTROL_WIRE_VSOCK_PORT,
+                },
+            );
+            // 733-mppc: bound the control-wire Hello too. `open_control_wire_stream`
+            // above now bounds connect + Noise, but this is a SECOND handshake on
+            // the same seam — the Hello/HelloAck exchange — and it was untimed. A
+            // guest that finishes Noise and then never answers Hello parked this
+            // subscription loop forever with `health` stuck false, so the tray
+            // showed a stale chip and never resubscribed.
+            //
+            // PUSH_HELLO_TIMEOUT rather than the 5s connect budget above: this
+            // connection is LONG-LIVED, and the packet is explicit that a push
+            // subscription "should not" fail as fast as an interactive tool. It
+            // still must fail EVENTUALLY, because the loop's own recovery —
+            // backoff and resubscribe — is unreachable while this await never
+            // returns. The bound exists to reach that recovery, not to be strict.
+            let (_, guest_version) =
+                match tokio::time::timeout(PUSH_HELLO_TIMEOUT, client.handshake()).await {
+                    Ok(r) => r.map_err(|e| format!("handshake: {e}"))?,
+                    Err(_) => {
+                        return Err(format!(
+                            "push subscription: guest completed the connection but never \
+                             answered the Hello handshake within {PUSH_HELLO_TIMEOUT:?} — \
+                             backing off and resubscribing (733-mppc)"
+                        ));
+                    }
+                };
+            if let Some(ref gv) = guest_version
+                && gv != tillandsias_secure_channel::workspace_version()
+            {
+                tracing::warn!(
+                    "build version skew: tray={} guest={}",
+                    tillandsias_secure_channel::workspace_version(),
+                    gv
+                );
+            }
+            if let Ok(mut guard) = menu_state.lock() {
+                guard.guest_version = guest_version;
+            }
+            // ORDER 1309-rb3p — tell the guest where the host-native inference
+            // endpoint is, on EVERY (re)connection.
+            //
+            // HERE AND NOT ONLY IN poll_vm_status_once, and this placement was
+            // MEASURED rather than reasoned: the poll is suppressed entirely
+            // while the push subscription is delivering ("SC-07", the fallback
+            // branch below), so a send that lives only in the poll never fires
+            // on a healthy tray. A first cut did exactly that and the guest's
+            // target file was still MISSING after 240s.
+            //
+            // A RECONNECT IS THE POINT, not an accident of placement: /run is
+            // tmpfs, so a guest that restarted under a still-running tray loses
+            // the file, and the reconnect that follows is precisely when it must
+            // be told again.
+            if let Ok(port_s) = std::env::var("TILLANDSIAS_HOST_VSOCK_PORT")
+                && let Ok(port) = port_s.trim().parse::<u32>()
+            {
+                // Best-effort: the subscription is what this connection is
+                // for, and an inference lane that could not be configured
+                // must not cost the operator their status pushes.
+                set_vsock_forward_target(&mut client, port).await;
+            }
+
+            // Order 1925-tdlv: deliver the Vault credentials on EVERY
+            // (re)connection, for the same reason as the inference target
+            // above: SC-07 suppresses the polls that used to deliver, so a
+            // delivery living only there never fires on a healthy tray, and
+            // Vault holds Ready forever. Best-effort: the subscription must
+            // not be lost to a failed delivery, and the failure is loud.
+            if let Err(e) =
+                crate::installation_uuid::deliver_credentials_on_connect(&mut client).await
+            {
+                eprintln!("[tillandsias-tray] vault credential delivery on connect: {e}");
+            }
+
+            let sub = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: client.allocate_seq(),
+                // 1420-4grt: Progress is added ONLY when this guest advertised
+                // CAP_PROGRESS_PUSH_V1; an old guest never sees the topic.
+                body: ControlMessage::Subscribe {
+                    topics: tillandsias_control_wire::subscription_topics(
+                        &push_subscribe_topics(),
+                        client.server_caps(),
+                    ),
+                },
+            };
+            let reply = client
+                .request(&sub)
+                .await
+                .map_err(|e| format!("subscribe: {e}"))?;
+            match reply.body {
+                ControlMessage::SubscribeAck => Ok(client),
+                other => Err(format!("expected SubscribeAck, got {}", other.kind())),
+            }
+        }
+        .await;
+
+        let mut client = match established {
+            Ok(c) => c,
+            Err(err) => {
+                // Routine while the VM boots — the fallback poll owns
+                // loud logging for a genuinely stuck wire (m8 F2).
+                tracing::debug!(%err, "vm-status push subscription unavailable; will retry");
+                let wait = BACKOFF_SCHEDULE
+                    .get(backoff_idx)
+                    .copied()
+                    .unwrap_or(Duration::from_secs(30));
+                backoff_idx = backoff_idx.saturating_add(1);
+                tokio::time::sleep(wait).await;
+                continue;
+            }
+        };
+
+        backoff_idx = 0;
+        health.set(true);
+        eprintln!(
+            "[tillandsias-tray] push subscription established \
+             (vm-status/login/cloud/local polls demoted to fallback, SC-07)"
+        );
+
+        // Initial sync on the SAME connection: pushes are change-gated
+        // (the guest sources emit only on transitions), so a subscriber
+        // joining a steady-state VM would otherwise render nothing until
+        // the next transition — while SC-07 suppresses the fallback polls
+        // precisely because this stream is healthy. One request per topic
+        // primes the state; the reader loop below accepts the replies
+        // alongside pushes, so an interleaved push can never be
+        // mis-consumed as a reply. A failed login/cloud prime is tolerated
+        // (e.g. Error frame while logged out — the reader loop debug-logs
+        // it); only a dead wire on send forces a reconnect.
+        let seq = client.allocate_seq();
+        let prime = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: client.allocate_seq(),
+            body: ControlMessage::VmStatusRequest { seq },
+        };
+        if let Err(err) = client.send_envelope(&prime).await {
+            tracing::debug!(%err, "vm-status initial-sync request failed; reconnecting");
+            continue;
+        }
+        let seq = client.allocate_seq();
+        let prime_login = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: client.allocate_seq(),
+            body: ControlMessage::GithubLoginStatusRequest { seq },
+        };
+        if let Err(err) = client.send_envelope(&prime_login).await {
+            tracing::debug!(%err, "login initial-sync request failed; reconnecting");
+            continue;
+        }
+        let seq = client.allocate_seq();
+        let prime_cloud = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: client.allocate_seq(),
+            body: ControlMessage::CloudRefreshRequest { seq },
+        };
+        if let Err(err) = client.send_envelope(&prime_cloud).await {
+            tracing::debug!(%err, "cloud-projects initial-sync request failed; reconnecting");
+            continue;
+        }
+        // Order 1719-83po: the Ready event asks once whether a Cloudflare login
+        // is stored, and ONLY a guest that advertises the request is asked, so
+        // an older guest never sees a variant it cannot decode (the item stays
+        // Unknown, shown disabled). The reply is read by the loop below.
+        if client
+            .server_caps()
+            .iter()
+            .any(|c| c == "CloudflareLoginStatusRequest")
+        {
+            let seq = client.allocate_seq();
+            let prime_cloudflare = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: client.allocate_seq(),
+                body: ControlMessage::CloudflareLoginStatusRequest { seq },
+            };
+            if let Err(err) = client.send_envelope(&prime_cloudflare).await {
+                tracing::debug!(%err, "cloudflare-login initial-sync request failed; reconnecting");
+                continue;
+            }
+        }
+
+        let mut progress_log = ProgressLog::default();
+        let mut was_ready = false;
+        loop {
+            match client.next_envelope().await {
+                Ok(env) => match env.body {
+                    ControlMessage::VmStatusPush {
+                        phase,
+                        podman_ready,
+                        last_event,
+                        ..
+                    }
+                    | ControlMessage::VmStatusReply {
+                        phase,
+                        podman_ready,
+                        last_event,
+                        ..
+                    } => {
+                        vm_ever_ready.store(true, Ordering::SeqCst);
+                        // Order 1925-tdlv: Ready means Vault is unsealed, and
+                        // a Vault the guest just initialised or healed holds a
+                        // handover the host must collect before the VM stops.
+                        // The polls that collected it are suppressed under
+                        // SC-07, so collect on the transition, once.
+                        let ready_now = matches!(phase, tillandsias_control_wire::VmPhase::Ready);
+                        if ready_now && !was_ready {
+                            collect_vault_handover_on_ready(&vz).await;
+                        }
+                        was_ready = ready_now;
+                        let rebuild_needed = apply_vm_status(
+                            phase,
+                            podman_ready,
+                            last_event.as_deref(),
+                            &last_logged_phase,
+                            &menu_state,
+                            &status_text,
+                            &status_item,
+                            &status_menu_item,
+                        );
+                        if rebuild_needed {
+                            dispatch_rebuild(
+                                &menu_state,
+                                &status_item,
+                                &status_menu_item,
+                                &self_handle,
+                            );
+                        }
+                    }
+                    ControlMessage::CloudflareLoginStatusReply { logged_in, .. } => {
+                        let cf =
+                            tillandsias_host_shell::menu_state::CloudflareLoginState::from_reply(
+                                logged_in,
+                            );
+                        if apply_cloudflare_login_state(cf, &menu_state) {
+                            dispatch_rebuild(
+                                &menu_state,
+                                &status_item,
+                                &status_menu_item,
+                                &self_handle,
+                            );
+                        }
+                    }
+                    ControlMessage::LoginStatePush {
+                        logged_in, handle, ..
+                    }
+                    | ControlMessage::GithubLoginStatusReply {
+                        logged_in, handle, ..
+                    } => {
+                        let changed =
+                            apply_login_state(map_login_state(logged_in, handle), &menu_state);
+                        if changed {
+                            dispatch_rebuild(
+                                &menu_state,
+                                &status_item,
+                                &status_menu_item,
+                                &self_handle,
+                            );
+                        }
+                        // Login-transition burst (2026-07-10 attended smoke):
+                        // the cloud list is auth-derived, but its ONLY push
+                        // source is the CloudRefreshRequest handler and SC-07
+                        // suppresses the tray's fallback poll while this
+                        // stream is healthy — without this prime a fresh
+                        // login renders "no repos" until the subscription
+                        // reconnects. One request on this same connection;
+                        // the reply routes through the CloudProjectsPush/
+                        // CloudRefreshReply arm below. Mirrors the windows
+                        // fast-poll-burst intent (order 154) push-natively.
+                        // windows-260719-2: `changed` covers BOTH the
+                        // LoggedOut→LoggedIn and the local
+                        // LoggingIn→LoggedIn transitions (apply_login_state
+                        // compares against whatever the menu currently
+                        // holds), so cloud projects refresh promptly on the
+                        // confirmed flip either way.
+                        if changed && logged_in {
+                            let seq = client.allocate_seq();
+                            let prime_cloud = ControlEnvelope {
+                                wire_version: WIRE_VERSION,
+                                seq: client.allocate_seq(),
+                                body: ControlMessage::CloudRefreshRequest { seq },
+                            };
+                            if let Err(err) = client.send_envelope(&prime_cloud).await {
+                                tracing::debug!(
+                                    %err,
+                                    "post-login cloud prime failed; reconnecting"
+                                );
+                                break;
+                            }
+                        }
+                    }
+                    // Split from CloudRefreshReply (731-eupn): a PUSH is only
+                    // emitted from guest state that a confirmed fetch already
+                    // wrote, so it is confirmed by construction. A REPLY
+                    // carries its own discriminator and may not be.
+                    ControlMessage::CloudProjectsPush { projects, .. } => {
+                        let mapped = projects.iter().map(cloud_entry_to_menu).collect();
+                        if apply_cloud_projects(mapped, true, &menu_state) {
+                            dispatch_rebuild(
+                                &menu_state,
+                                &status_item,
+                                &status_menu_item,
+                                &self_handle,
+                            );
+                        }
+                    }
+                    ControlMessage::CloudRefreshReply {
+                        projects, outcome, ..
+                    } => {
+                        let mapped = projects.iter().map(cloud_entry_to_menu).collect();
+                        if apply_cloud_projects(mapped, outcome.is_confirmed(), &menu_state) {
+                            dispatch_rebuild(
+                                &menu_state,
+                                &status_item,
+                                &status_menu_item,
+                                &self_handle,
+                            );
+                        }
+                    }
+                    // 1420-4grt: guest image-build progress. Logged (tray.log)
+                    // at whole-ten-percent steps per task; the menu bar/menu
+                    // rendering of the same events is 1420-v3zt.
+                    ControlMessage::ProgressPush { event, .. } => {
+                        if let Some(line) = progress_log.observe(&event) {
+                            eprintln!("[tillandsias-tray] {line}");
+                        }
+                    }
+                    other => {
+                        tracing::debug!("push stream: ignoring frame {}", other.kind());
+                    }
+                },
+                Err(err) => {
+                    tracing::debug!(%err, "vm-status push stream dropped; resubscribing");
+                    break;
+                }
+            }
+        }
+    }
+}
+
+/// The tray's own status text, reduced to one safe line for the heartbeat.
+///
+/// 980-ja2m. The heartbeat records WHAT THE TRAY BELIEVES, not a fresh probe —
+/// the tray is the only process holding the wire, so its own view is the best
+/// available fact, and the timestamp beside it is what makes that view
+/// falsifiable.
+///
+/// IT RECORDS THE CHIP TEXT VERBATIM RATHER THAN MAPPING IT TO A VOCABULARY.
+/// The first version matched a hand-written needle list (ready/building/
+/// starting/booting/stopped/error) and mapped anything else to "unknown". Run
+/// live, it wrote `phase unknown` for the whole session while the tray was
+/// displaying a perfectly good status, because the real chip strings are
+/// emoji-prefixed human text and my list was a guess about them. A lossy map
+/// between two things that drift independently is a second source of truth,
+/// and its failure mode is silent: it reports "unknown" about a system that
+/// knows exactly what it is doing, which is this packet's own defect
+/// reintroduced one layer down.
+///
+/// Only sanitisation is applied: collapse whitespace so the value stays on one
+/// line of a line-based format. Nothing is interpreted.
+fn heartbeat_status_line(status_text: &str) -> String {
+    let collapsed = status_text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.is_empty() {
+        "(tray has not set a status yet)".to_string()
+    } else {
+        collapsed
+    }
+}
+
+/// The VM whose clock the next wake corrects (1503-qrgz). Replaced on every
+/// boot, so a re-provisioned guest is the one that gets the host's time.
+static WAKE_CLOCK_VM: Mutex<Option<Arc<VzRuntime>>> = Mutex::new(None);
+
+/// Tell the guest the host's wall clock every time the Mac wakes (1503-qrgz).
+///
+/// MEASURED 2026-09-29: the VM does not run while the Mac sleeps, so its clock
+/// falls behind by the sleep, and chrony then takes about 3.5 min to re-acquire
+/// and hours to slew (see `ControlMessage::HostClockSync`). The host knows the
+/// right time at wake; this carries it.
+///
+/// EVENT-DRIVEN, NO POLLING: one NSWorkspace did-wake observer, registered once
+/// per process. Its block only forwards the event to a channel; a tokio task
+/// does the connect, handshake and request. The observer is kept for the life
+/// of the process (the tray never stops caring about wakes).
+fn spawn_host_clock_sync_on_wake(vz: Arc<VzRuntime>) {
+    *WAKE_CLOCK_VM.lock().unwrap() = Some(vz);
+    static REGISTERED: OnceLock<()> = OnceLock::new();
+    if REGISTERED.set(()).is_err() {
+        return;
+    }
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+    let block = block2::RcBlock::new(
+        move |_note: std::ptr::NonNull<objc2_foundation::NSNotification>| {
+            let _ = tx.send(());
+        },
+    );
+    // SAFETY: the shared workspace and its notification centre are process-wide
+    // singletons; the observer token is leaked deliberately (see above).
+    unsafe {
+        let center = objc2_app_kit::NSWorkspace::sharedWorkspace().notificationCenter();
+        let token = center.addObserverForName_object_queue_usingBlock(
+            Some(objc2_app_kit::NSWorkspaceDidWakeNotification),
+            None,
+            None,
+            &block,
+        );
+        std::mem::forget(token);
+    }
+    tokio::spawn(async move {
+        while rx.recv().await.is_some() {
+            let Some(vz) = WAKE_CLOCK_VM.lock().unwrap().clone() else {
+                continue;
+            };
+            match send_host_clock_once(&vz).await {
+                Ok(()) => eprintln!(
+                    "[tillandsias-tray] wake: sent the host clock to the guest (1503-qrgz)"
+                ),
+                Err(e) => eprintln!(
+                    "[tillandsias-tray] wake: could not send the host clock to the guest: {e}"
+                ),
+            }
+        }
+    });
+}
+
+/// One `HostClockSync` over a fresh control-wire connection.
+///
+/// MIXED VERSIONS. The host↔guest PSK is derived from the SHA-256 of the guest
+/// binary shipped with THIS tray build (`channel_psk_for_guest`) plus the build
+/// and wire versions (`derive_psk`), so a guest from another build fails the
+/// handshake closed and never sees this variant. Every step is time-bounded
+/// and there is no retry: a mismatched or wedged guest costs one logged
+/// failure per wake, never a hang or a storm.
+async fn send_host_clock_once(vz: &VzRuntime) -> Result<(), String> {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::Client;
+
+    let stream =
+        open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(5)).await?;
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: TILLANDSIAS_GUEST_CID,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    tokio::time::timeout(Duration::from_secs(5), client.handshake())
+        .await
+        .map_err(|_| "control-wire handshake: no answer within 5 s".to_string())?
+        .map_err(|e| format!("control-wire handshake: {e}"))?;
+    let host_unix_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("host clock before 1970: {e}"))?
+        .as_millis() as u64;
+    let seq = client.allocate_seq();
+    let env = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        body: ControlMessage::HostClockSync { seq, host_unix_ms },
+    };
+    let reply = tokio::time::timeout(Duration::from_secs(5), client.request(&env))
+        .await
+        .map_err(|_| "no reply within 5 s".to_string())?
+        .map_err(|e| format!("HostClockSync: {e}"))?;
+    match reply.body {
+        ControlMessage::IssueAck { .. } => Ok(()),
+        ControlMessage::Error { message, .. } => Err(message),
+        other => Err(format!("unexpected reply {}", other.kind())),
+    }
+}
+
+fn spawn_vm_status_poller(
+    vz: Arc<VzRuntime>,
+    status_text: Arc<Mutex<String>>,
+    status_item: Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
+    status_menu_item: Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
+    menu_state: Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+    self_handle: Arc<Mutex<Option<appkit_handle::TrayActionHostHandle>>>,
+) {
+    // Shared across the push listener and the fallback poll so phase
+    // transitions log exactly once and early poll-noise suppression
+    // works no matter which surface saw the VM first.
+    let last_logged_phase: Arc<Mutex<Option<tillandsias_control_wire::VmPhase>>> =
+        Arc::new(Mutex::new(None));
+    let vm_ever_ready = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+    // Push-first (order 155 slices 1+2): the dedicated reader task applies
+    // VmStatusPush/LoginStatePush/CloudProjectsPush frames as they arrive;
+    // the tick loop below polls only while that subscription is down (SC-07).
+    // Slice 3 (SC-16): subscription health is a shared watch signal — the
+    // listener writes it, the tick loop both reads it at poll decision
+    // points and selects on its transitions while waiting.
+    let health = Arc::new(tillandsias_host_shell::subscription_health::SubscriptionHealth::new());
+    let mut health_rx = health.subscribe();
+    // Wake source for an explicit fallback-round request while the tick
+    // timer is suppressed (SC-11 / 690-xeda). No macOS site raises it today
+    // — the burst intent is served push-natively (login-transition
+    // CloudRefreshRequest); see the comment at the wait site.
+    let poll_request = tokio::sync::Notify::new();
+    spawn_host_clock_sync_on_wake(vz.clone());
+    // Order 1794-rf3a (b): this Mac's browser reaches a guest preview through
+    // the loopback listener and the guest's vsock relay.
+    let relay_vz = vz.clone();
+    crate::preview_relay::spawn(move || {
+        let vz = relay_vz.clone();
+        async move {
+            open_control_wire_stream(
+                &vz,
+                crate::preview_relay::PREVIEW_RELAY_VSOCK_PORT,
+                Duration::from_secs(10),
+            )
+            .await
+        }
+    });
+    // Order 1897-y7j2: `--exec-guest` reaches the guest through this tray
+    // instead of refusing while the tray owns the VM.
+    let exec_vz = vz.clone();
+    crate::guest_exec_relay::spawn(move || {
+        let vz = exec_vz.clone();
+        async move {
+            open_control_wire_stream(
+                &vz,
+                tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT,
+                Duration::from_secs(30),
+            )
+            .await
+        }
+    });
+    tokio::spawn(run_push_listener(
+        vz.clone(),
+        status_text.clone(),
+        status_item.clone(),
+        status_menu_item.clone(),
+        menu_state.clone(),
+        self_handle.clone(),
+        last_logged_phase.clone(),
+        vm_ever_ready.clone(),
+        health.clone(),
+    ));
+
+    tokio::spawn(async move {
+        // Tick counter for the cloud-projects cadence. Matches windows-
+        // tray's "first tick + every 10 ticks" pattern (commit
+        // b0cdcdee) — first poll happens before the initial 30 s sleep,
+        // subsequent polls every ~5 min (10 * 30 s = 300 s). gh repo
+        // list is a slower-changing input than VmStatus so we don't
+        // need every-tick granularity.
+        let mut tick: u32 = 0;
+        // Cold-boot warmup gate: the host marks the VM "running" the instant the
+        // VZ process spawns, but the in-guest vsock agent only binds once the
+        // guest OS finishes booting (~10s+ later). The projects/github pollers
+        // fire at tick 0 and predictably hit "Connection reset by peer" until
+        // then. Those errors are benign (each poller leaves last-known state
+        // untouched) but printed loudly on every boot. Suppress the *projects/
+        // github* connect errors until the VM has reported ready at least once;
+        // the vm-status poll below keeps logging its own errors, so a genuinely
+        // stuck boot still surfaces. See plan: macos-tray/cold-boot-vsock-poll-races.
+        // (Shared with the push listener — a healthy push subscription also
+        // proves the VM came up, and the poll may be suppressed by SC-07.)
+        loop {
+            // Cloud + local projects: first tick + every 10 ticks.
+            // The cadence rationale (slower than VmStatus) is in the
+            // cloud-poll docstring — `gh repo list` is slow-changing
+            // relative to phase. Order 997-e4v2 removed the local-projects
+            // poll that used to lead this block: there is no local project
+            // path any more.
+            let mut rebuild_needed = false;
+            if tick.is_multiple_of(10) {
+                // SC-07 (slice 3): the remaining slow-cadence polls — cloud
+                // and login — are fallback-only. While the push subscription is delivering,
+                // the reader task owns every topic and this whole block is
+                // skipped; the tick loop is a pure fallback path (SC-01/02).
+                if should_poll_fallback(health.is_healthy()) {
+                    match poll_cloud_projects_once(&vz).await {
+                        Ok((projects, confirmed)) => {
+                            if apply_cloud_projects(projects, confirmed, &menu_state) {
+                                rebuild_needed = true;
+                            }
+                        }
+                        Err(e) => {
+                            if vm_ever_ready.load(std::sync::atomic::Ordering::SeqCst) {
+                                eprintln!("[tillandsias-tray] cloud-projects poll: {e}");
+                            }
+                        }
+                    }
+                    match poll_github_login_once(&vz).await {
+                        Ok(login_state) => {
+                            if apply_login_state(login_state, &menu_state) {
+                                rebuild_needed = true;
+                            }
+                        }
+                        Err(e) => {
+                            if vm_ever_ready.load(std::sync::atomic::Ordering::SeqCst) {
+                                eprintln!("[tillandsias-tray] github-login poll: {e}");
+                            }
+                        }
+                    }
+                }
+            }
+
+            // SC-16: not a plain sleep — a healthy→down transition of the
+            // push subscription ends the wait immediately and rewinds to
+            // tick 0, so the full fallback round (local + cloud + login
+            // above, VmStatus below) runs now instead of up to 300s later.
+            //
+            // SC-11 / 690-xeda (order 154's tick retirement, macOS
+            // adoption): while the subscription is healthy every fallback
+            // gate in this loop body is closed — should_poll_fallback
+            // suppresses all three slow-cadence polls above AND the
+            // VmStatus poll below — so a timer wake would find nothing to
+            // do. Suppress the timer for exactly that state: the wait then
+            // ends only on a healthy→down transition (or a closed health
+            // channel, which re-arms the timer — see the shared helper's
+            // pins). A fully idle, fully healthy tray no longer wakes
+            // twice a minute to decide to do nothing.
+            //
+            // The `request` wake source is unused on macOS: the windows
+            // fast-poll burst exists to force a confirming FALLBACK round
+            // after a user action, while this tray primes the same intent
+            // push-natively (the login-transition CloudRefreshRequest on
+            // the subscription connection, above). A future raiser plumbs
+            // a reference to this Notify; today nothing signals it.
+            let wake = wait_tick_drop_or_request(
+                Duration::from_secs(30),
+                health.is_healthy(),
+                &mut health_rx,
+                &poll_request,
+            )
+            .await;
+            tick = tick_after_wake(tick, &wake);
+
+            // SC-07: while the push subscription is delivering, the poll is
+            // suppressed entirely — the reader task owns status freshness.
+            if !should_poll_fallback(health.is_healthy()) {
+                if rebuild_needed {
+                    dispatch_rebuild(&menu_state, &status_item, &status_menu_item, &self_handle);
+                }
+                continue;
+            }
+
+            match poll_vm_status_once(&vz).await {
+                Ok((phase, podman_ready, last_event)) => {
+                    // A successful VmStatus reply means the in-guest vsock agent
+                    // is up; from here on the projects/github poll errors are
+                    // real (mid-session) and worth logging — end cold-boot
+                    // warmup suppression.
+                    vm_ever_ready.store(true, std::sync::atomic::Ordering::SeqCst);
+                    if apply_vm_status(
+                        phase,
+                        podman_ready,
+                        last_event.as_deref(),
+                        &last_logged_phase,
+                        &menu_state,
+                        &status_text,
+                        &status_item,
+                        &status_menu_item,
+                    ) {
+                        rebuild_needed = true;
+                    }
+                }
+                Err(e) => {
+                    // Mid-session wire failure (headless crash, VM
+                    // terminated externally, lost handshake). Without
+                    // an explicit chip update the user would see the
+                    // last-known Ready forever. Mirrors windows-tray
+                    // `mark_wire_unreachable` (commit d2cf10f0):
+                    //   1. clear podman_ready so per-project actions
+                    //      correctly re-gate off after the rebuild
+                    //   2. flip the chip to the curated reconnecting
+                    //      state (byte-identical to windows)
+                    //   3. trigger a rebuild so the menu re-renders
+                    //      the now-gated state
+                    // The next successful poll restores phase +
+                    // podman naturally — bounded chip flicker only on
+                    // actual error ticks, no flapping when the wire
+                    // is steady-state ok or steady-state broken.
+                    eprintln!("[tillandsias-tray] vm-status poll: {e}");
+                    // First-boot poll errors mean the guest vsock agent hasn't
+                    // bound yet — that is "still Connecting…", NOT a lost
+                    // connection. Only show the reconnecting chip once the guest
+                    // has answered at least once (vm_ever_ready); before that,
+                    // leave the curated Starting/Connecting chip in place so a
+                    // slow first boot never looks unhealthy.
+                    if vm_ever_ready.load(std::sync::atomic::Ordering::SeqCst) {
+                        {
+                            let mut guard = menu_state.lock().unwrap();
+                            if guard.podman_ready || guard.login_runtime_ready {
+                                guard.podman_ready = false;
+                                guard.login_runtime_ready = false;
+                                rebuild_needed = true;
+                            }
+                            // Keep MenuState's status row in sync so the rebuild
+                            // below doesn't resurrect a stale label (same clobber
+                            // class apply_vm_status fixes for the healthy path).
+                            if guard.status_text != WIRE_UNREACHABLE_CHIP_TEXT {
+                                guard.status_text = WIRE_UNREACHABLE_CHIP_TEXT.to_string();
+                            }
+                        }
+                        let text = WIRE_UNREACHABLE_CHIP_TEXT.to_string();
+                        let text_for_dispatch = text.clone();
+                        let chip_status_text = status_text.clone();
+                        let chip_status_item = status_item.clone();
+                        let chip_status_menu_item = status_menu_item.clone();
+                        dispatch_to_main_thread(move || {
+                            *chip_status_text.lock().unwrap() = text_for_dispatch.clone();
+                            apply_status_text_main_thread(
+                                &text_for_dispatch,
+                                &chip_status_item,
+                                &chip_status_menu_item,
+                            );
+                        });
+                    }
+                }
+            }
+
+            // If either cloud_projects or podman_ready changed this
+            // iteration, rebuild the NSMenu on the main thread so
+            // the menu reflects the new state. Note: the rebuild
+            // happens AFTER the chip dispatch — they're independent
+            // main-thread tasks and the chip update doesn't depend
+            // on the new menu being installed.
+            if rebuild_needed {
+                dispatch_rebuild(&menu_state, &status_item, &status_menu_item, &self_handle);
+            }
+        }
+    });
+}
+
+/// Queue an NSMenu rebuild on the AppKit main thread from the held
+/// MenuState. Shared by the fallback-poll tick loop and the push
+/// listener so both trigger the identical rebuild path.
+fn dispatch_rebuild(
+    menu_state: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+    status_item: &Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
+    status_menu_item: &Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
+    self_handle: &Arc<Mutex<Option<appkit_handle::TrayActionHostHandle>>>,
+) {
+    let rebuild_menu_state = menu_state.clone();
+    let rebuild_status_item = status_item.clone();
+    let rebuild_status_menu_item = status_menu_item.clone();
+    let rebuild_self_handle = self_handle.clone();
+    dispatch_to_main_thread(move || {
+        rebuild_menu_main_thread(
+            &rebuild_menu_state,
+            &rebuild_status_item,
+            &rebuild_status_menu_item,
+            &rebuild_self_handle,
+        );
+    });
+}
+
+#[cfg(test)]
+mod tests {
+
+    /// ORDER 1498-fn96. Quit's no-reply timeout must name the stage that
+    /// stalled. Pre-fix it printed only "got no reply within 10s". The WORDING
+    /// is asserted on the line `shutdown_no_reply_line` builds (shutdown_stages
+    /// below); this arm pins only the drain's WIRING to it, by source, because
+    /// the drain cannot run without AppKit and a signed VM (the same reason as
+    /// the three-quit-routes test below). It compiles, and fails, pre-fix.
+    #[test]
+    fn the_quit_no_reply_timeout_names_the_stalled_stage() {
+        let host = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/action_host.rs"));
+        let production = host
+            .split("\n#[cfg(test)]\nmod tests {")
+            .next()
+            .expect("production half");
+        let drain = production
+            .split("pub(crate) fn request_graceful_quit(")
+            .nth(1)
+            .expect("drain fn");
+        let drain = &drain[..drain.find("\n}\n").expect("end of drain fn")];
+        assert!(
+            // source-pin-ok: the drain is AppKit+VM-only, so its wiring to the stage marker is the contract and cannot be driven in a unit test
+            drain.contains("shutdown_no_reply_line(budget, progress.get())"),
+            "the Quit drain's timeout arm must report the stage marker (1498-fn96)"
+        );
+    }
+
+    /// ORDER 1498-fn96: a fake guest that stalls at each stage in turn.
+    mod shutdown_stages {
+        use super::super::{
+            SHUTDOWN_CLOSED_WITHOUT_ACK, ShutdownProgress, ShutdownStage, shutdown_no_reply_line,
+            shutdown_over,
+        };
+        use futures_util::{SinkExt, StreamExt};
+        use std::time::Duration;
+        use tillandsias_control_wire::{
+            ControlEnvelope, ControlMessage, WIRE_VERSION, decode, encode,
+        };
+        use tokio::io::DuplexStream;
+
+        type Io = tokio_util::codec::Framed<DuplexStream, tokio_util::codec::LengthDelimitedCodec>;
+
+        #[derive(Clone, Copy)]
+        enum Guest {
+            /// Reads the Hello and never answers it.
+            SilentAfterHello,
+            /// Acks the Hello, then never reads again.
+            DeafAfterAck,
+            /// Acks, reads the request, never replies.
+            MuteAfterRequest,
+            /// Acks, reads the request, closes (the real guest's arm).
+            CloseAfterRequest,
+            /// Acks and replies (any non-Error reply is an ack).
+            Acks,
+        }
+
+        async fn recv(io: &mut Io) -> ControlEnvelope {
+            let frame = io.next().await.expect("frame").expect("read");
+            decode(&frame).expect("decode")
+        }
+
+        async fn reply(io: &mut Io, body: ControlMessage) {
+            let env = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 1,
+                body,
+            };
+            io.send(encode(&env).expect("encode").into())
+                .await
+                .expect("send");
+        }
+
+        /// Spawn the fake guest; returns the host end. The pipe holds 4 bytes,
+        /// less than any frame, so a guest that stops reading stalls the send.
+        fn guest(kind: Guest) -> DuplexStream {
+            let (host, guest) = tokio::io::duplex(4);
+            tokio::spawn(async move {
+                let mut io: Io = tokio_util::codec::Framed::new(
+                    guest,
+                    tillandsias_control_wire::transport::control_frame_codec(),
+                );
+                let _hello = recv(&mut io).await;
+                if matches!(kind, Guest::SilentAfterHello) {
+                    std::future::pending::<()>().await;
+                }
+                reply(
+                    &mut io,
+                    ControlMessage::HelloAck {
+                        wire_version: WIRE_VERSION,
+                        server_caps: vec![],
+                        build_version: None,
+                    },
+                )
+                .await;
+                if matches!(kind, Guest::DeafAfterAck) {
+                    let _keep = io;
+                    std::future::pending::<()>().await;
+                    return;
+                }
+                let req = recv(&mut io).await;
+                assert!(matches!(req.body, ControlMessage::VmShutdownRequest { .. }));
+                match kind {
+                    Guest::MuteAfterRequest => {
+                        let _keep = io;
+                        std::future::pending::<()>().await;
+                    }
+                    Guest::CloseAfterRequest => drop(io),
+                    _ => reply(&mut io, ControlMessage::IssueAck { seq_acked: 2 }).await,
+                }
+            });
+            host
+        }
+
+        /// Run the request under a short outer bound, as Quit does with 10 s.
+        async fn stall_stage(
+            open: impl std::future::Future<Output = Result<DuplexStream, String>>,
+        ) -> ShutdownStage {
+            let progress = ShutdownProgress::default();
+            let outer = Duration::from_millis(400);
+            let r = tokio::time::timeout(
+                outer,
+                shutdown_over(
+                    open,
+                    Duration::from_secs(60),
+                    &progress,
+                    Duration::from_secs(30),
+                ),
+            )
+            .await;
+            assert!(r.is_err(), "the fake guest must stall the request: {r:?}");
+            let stage = progress.get();
+            let line = shutdown_no_reply_line(outer, stage);
+            assert!(line.contains(&format!("stage {}", stage.name())), "{line}");
+            stage
+        }
+
+        #[tokio::test]
+        async fn a_stall_at_each_stage_is_named() {
+            assert_eq!(
+                stall_stage(std::future::pending::<Result<DuplexStream, String>>()).await,
+                ShutdownStage::Connect
+            );
+            assert_eq!(
+                stall_stage(async { Ok(guest(Guest::SilentAfterHello)) }).await,
+                ShutdownStage::Handshake
+            );
+            assert_eq!(
+                stall_stage(async { Ok(guest(Guest::DeafAfterAck)) }).await,
+                ShutdownStage::Request
+            );
+            assert_eq!(
+                stall_stage(async { Ok(guest(Guest::MuteAfterRequest)) }).await,
+                ShutdownStage::Reply
+            );
+        }
+
+        /// The handshake has its own bound now, inside Quit's 10 s.
+        #[tokio::test]
+        async fn a_silent_handshake_is_bounded_on_its_own() {
+            let progress = ShutdownProgress::default();
+            let err = shutdown_over(
+                async { Ok(guest(Guest::SilentAfterHello)) },
+                Duration::from_secs(60),
+                &progress,
+                Duration::from_millis(200),
+            )
+            .await
+            .expect_err("a silent handshake must fail at its own bound");
+            assert!(err.starts_with("stage handshake:"), "{err}");
+        }
+
+        /// The real guest's arm closes without a reply; that is named, not a read error.
+        #[tokio::test]
+        async fn a_close_without_ack_is_named() {
+            let progress = ShutdownProgress::default();
+            let err = shutdown_over(
+                async { Ok(guest(Guest::CloseAfterRequest)) },
+                Duration::from_secs(60),
+                &progress,
+                Duration::from_secs(2),
+            )
+            .await
+            .expect_err("a close is not an ack");
+            assert_eq!(err, SHUTDOWN_CLOSED_WITHOUT_ACK);
+        }
+
+        /// NEGATIVE CONTROL: a guest that answers is an ack.
+        #[tokio::test]
+        async fn a_guest_that_answers_is_an_ack() {
+            let progress = ShutdownProgress::default();
+            shutdown_over(
+                async { Ok(guest(Guest::Acks)) },
+                Duration::from_secs(60),
+                &progress,
+                Duration::from_secs(2),
+            )
+            .await
+            .expect("an answered request is an ack");
+            assert_eq!(progress.get(), ShutdownStage::Reply);
+        }
+    }
+
+    /// ORDER 1571-lgex. An event change INSIDE one phase reaches the tray log.
+    /// Measured 2026-10-09: the chip moved nowhere and the log said nothing for
+    /// the 170 s between the expired sign-in and the user's quit, because only
+    /// phase changes were logged.
+    #[test]
+    fn an_event_change_inside_one_phase_is_logged_once() {
+        use super::event_change_line;
+        assert_eq!(
+            event_change_line(Some("Building Forge"), Some("Sign-in did not finish")).as_deref(),
+            Some("[tillandsias-tray] vm-status: event=Sign-in did not finish"),
+        );
+        assert_eq!(
+            event_change_line(None, Some("Building Forge")).as_deref(),
+            Some("[tillandsias-tray] vm-status: event=Building Forge"),
+        );
+        // Once: the same event again, an absent event and an empty one are silent.
+        assert_eq!(
+            event_change_line(Some("Building Forge"), Some("Building Forge")),
+            None
+        );
+        assert_eq!(event_change_line(Some("Building Forge"), None), None);
+        assert_eq!(event_change_line(Some("Building Forge"), Some("")), None);
+    }
+
+    /// 1426-cb6g / 1244-9dx3. Before an action host exists there is nothing to
+    /// drain, so the shared quit must report "not handled" and let the caller
+    /// terminate normally — never swallow a quit it cannot perform. (Unit tests
+    /// never construct the AppKit host, so QUIT_DRAIN is unset here.)
+    #[test]
+    fn a_quit_before_the_host_exists_is_not_swallowed() {
+        assert!(!super::request_graceful_quit("test"));
+    }
+
+    /// The three quit routes share ONE drain. Pinned by source because two of
+    /// them (SIGTERM, the quit Apple event) cannot be driven without AppKit and
+    /// a signed VM; the live arm is recorded on 1426-cb6g.
+    #[test]
+    fn every_quit_route_reaches_the_shared_drain() {
+        let host = include_str!("action_host.rs");
+        let delegate = include_str!("app_delegate.rs");
+        let run = include_str!("status_item.rs");
+        let new_body = host
+            .split("    pub fn new(")
+            .nth(1)
+            .expect("TrayActionHost::new");
+        let new_body = &new_body[..new_body.find("\n    }\n").expect("end of new()")];
+        assert!(
+            new_body.contains("install_graceful_quit("),
+            "new() must register the shared quit"
+        );
+        assert!(
+            host.contains("SignalKind::terminate()")
+                && host.contains("request_graceful_quit(\"SIGTERM\")"),
+            "SIGTERM must route into the shared drain"
+        );
+        let menu = host
+            .split("fn quit_with_drain(")
+            .nth(1)
+            .expect("quit_with_drain");
+        let menu = &menu[..menu.find("\n        }\n").expect("end of quit_with_drain")];
+        assert!(
+            menu.contains("request_graceful_quit(\"menu Quit\")"),
+            "the menu Quit uses the shared drain"
+        );
+        assert!(
+            delegate.contains("applicationShouldTerminate:")
+                && delegate.contains("request_graceful_quit(\"quit Apple event\")")
+                && delegate.contains("NSTerminateCancel"),
+            "a quit Apple event must cancel AppKit's immediate terminate and drain instead"
+        );
+        assert!(
+            run.contains("app_delegate::install(mtm, &app)"),
+            "run() must install the delegate"
+        );
+        // The drain is the one that removes vm-swap.img: it must call vm.stop.
+        let drain = host
+            .split("pub(crate) fn request_graceful_quit(")
+            .nth(1)
+            .expect("drain fn");
+        let drain = &drain[..drain.find("\n}\n").expect("end of drain fn")];
+        assert!(
+            drain.contains("vm.stop(VM_STOP_DRAIN)"),
+            "the shared drain must stop the VM"
+        );
+        // And the in-VM request before it must be BOUNDED as a whole: an unbounded
+        // reply parked Quit forever in the live arm and vm.stop never ran.
+        assert!(
+            drain.contains("tokio::time::timeout(budget, request_vm_shutdown("),
+            "the in-VM shutdown request must be bounded as a whole, or a silent guest wedges Quit"
+        );
+        // And vm.stop must run on the MAIN thread: VZ traps (SIGTRAP in
+        // dispatch_assert_queue) when requestStopWithError comes from a worker.
+        let main_hop = drain
+            .find("dispatch_to_main_thread(")
+            .expect("the stop must hop to the main thread");
+        let stop_at = drain
+            .find("vm.stop(VM_STOP_DRAIN)")
+            .expect("the drain must stop the VM");
+        assert!(
+            main_hop < stop_at,
+            "vm.stop must be called inside the main-thread dispatch"
+        );
+    }
+
+    /// Order 690-w94k criterion 2. `VzRuntime::start` pumps CFRunLoop on the
+    /// CALLING thread for up to 30s, and says so in its own body: "the caller
+    /// must run start() on `tokio::task::spawn_blocking` if invoked from an
+    /// async runtime." `run_start` awaited it directly, parking a tokio worker
+    /// for that whole window.
+    ///
+    /// Anchored on the CALL, not on a line number, and the anchor is asserted
+    /// to exist before the window is scanned — otherwise a rename turns this
+    /// into a test that passes while checking nothing (the 828-itr9 failure
+    /// mode, per `live_boot_spec_derives_sizing_from_the_host_not_a_literal`).
+    #[test]
+    fn run_start_drives_the_cfrunloop_pump_off_the_async_worker() {
+        let source = include_str!("action_host.rs");
+        let anchor = "async fn run_start(";
+        assert!(
+            source.contains(anchor),
+            "run_start moved or was renamed — this scan checks nothing until \
+             it is repointed"
+        );
+        let window = source
+            .split(anchor)
+            .nth(1)
+            .and_then(|t| t.split("\n}\n").next())
+            .expect("run_start must have a body");
+        assert!(
+            window.contains("spawn_blocking"),
+            "run_start must honour VzRuntime::start's documented contract and \
+             run it on the blocking pool (690-w94k)"
+        );
+        assert!(
+            !window.contains("vz.start().await"),
+            "a bare `vz.start().await` parks a tokio worker for up to 30s \
+             while the CFRunLoop pump runs (690-w94k)"
+        );
+    }
+
+    /// The contract above is only honourable because `VzRuntime` can cross to
+    /// a blocking-pool thread. Pinned here so a future field that is not
+    /// `Send` fails at compile time with this reason attached, rather than as
+    /// an unexplained error inside `run_start`.
+    const _: fn() = || {
+        fn assert_send_static<T: Send + 'static>() {}
+        assert_send_static::<tillandsias_vm_layer::vz::VzRuntime>();
+    };
+    use super::*;
+
+    /// Count this process's OWN children that are zombies (state `Z`).
+    ///
+    /// `ps -o ppid=,stat= -ax` rather than a `/proc` read: darwin has no
+    /// /proc, which is the same absent-primitive class the dispatch reaper
+    /// hit. Filtering on OUR pid matters — a test that counted every zombie
+    /// on the machine would be measuring the operator's other work.
+    #[cfg(unix)]
+    fn own_zombie_children() -> usize {
+        let me = std::process::id().to_string();
+        let out = std::process::Command::new("/bin/ps")
+            .args(["-o", "ppid=,stat=", "-ax"])
+            .output()
+            .expect("ps must run; without it this test measures nothing");
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .filter_map(|l| {
+                let mut f = l.split_whitespace();
+                Some((f.next()?, f.next()?))
+            })
+            .filter(|(ppid, stat)| *ppid == me && stat.starts_with('Z'))
+            .count()
+    }
+
+    /// ORDER 690-w94k, exit criterion 4: spawned helpers are REAPED.
+    ///
+    /// WHY THIS COUNTS PROCESSES INSTEAD OF ASSERTING WE CALLED `wait()`.
+    /// The defect is a property of the PROCESS TABLE, not of the source: a
+    /// dropped `Child` leaves a zombie until the parent exits, and the call
+    /// site that caused it was commented "Detached — let it complete in the
+    /// background", so source-level intent was exactly what was wrong. A test
+    /// that greps for `.wait()` would have passed on the broken code the
+    /// moment someone wrote a comment claiming detachment.
+    ///
+    /// The mutation control is the raw-spawn loop below: it uses the SAME
+    /// binary and count, drops each Child, and must leave zombies behind. If
+    /// it ever stops doing so, this platform has started auto-reaping and the
+    /// positive arm proves nothing — so the test fails rather than passing
+    /// vacuously.
+    #[cfg(unix)]
+    #[test]
+    fn spawned_helpers_are_reaped_and_do_not_accumulate_zombies() {
+        const N: usize = 8;
+        let before = own_zombie_children();
+
+        // MUTATION CONTROL FIRST: raw spawn, Child dropped — the old behaviour.
+        //
+        // The pid is CAPTURED before the handle is dropped, so the reap below can
+        // target these children specifically. See that reap's comment for why
+        // that matters.
+        let mut control_pids: Vec<u32> = Vec::with_capacity(N);
+        for _ in 0..N {
+            if let Ok(child) = std::process::Command::new("/usr/bin/true").spawn() {
+                control_pids.push(child.id());
+                drop(child);
+            }
+        }
+        let mut leaked = 0;
+        for _ in 0..50 {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            leaked = own_zombie_children().saturating_sub(before);
+            if leaked >= N {
+                break;
+            }
+        }
+        assert!(
+            leaked > 0,
+            "the control produced NO zombies, so this platform reaps dropped \
+             children on its own and the arm below cannot distinguish a reaper \
+             from nothing (saw {leaked} of {N})"
+        );
+
+        // Reap the control's zombies so they cannot be counted as the helper's,
+        // TARGETING THEM BY PID.
+        //
+        // This was `waitpid(-1)`, which reaps ANY child of this process — and in
+        // a parallel test binary that is every other test's children too. It
+        // stole the `security` child of
+        // installation_uuid::tests::keychain_persists_credentials_across_calls,
+        // whose own wait then failed ECHILD "No child processes". The tests pass
+        // individually and the suite fails, which is the worst shape of flake:
+        // it looks like the OTHER test is broken. Measured 2026-09-16, one cycle
+        // after this test landed.
+        for pid in &control_pids {
+            unsafe {
+                let mut status: i32 = 0;
+                libc_waitpid(*pid as i32, &mut status as *mut i32, 0);
+            }
+        }
+
+        // THE ARM: the same spawns through spawn_and_reap must leave nothing.
+        let baseline = own_zombie_children();
+        for _ in 0..N {
+            spawn_and_reap(std::process::Command::new("/usr/bin/true"), "test helper");
+        }
+        let mut remaining = usize::MAX;
+        for _ in 0..50 {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            remaining = own_zombie_children().saturating_sub(baseline);
+            if remaining == 0 {
+                break;
+            }
+        }
+        assert_eq!(
+            remaining, 0,
+            "spawn_and_reap left {remaining} zombie(s) of {N}; a dropped Child \
+             is not detached on Unix and the tray is long-lived (690-w94k)"
+        );
+    }
+
+    #[cfg(unix)]
+    unsafe extern "C" {
+        #[link_name = "waitpid"]
+        fn libc_waitpid(pid: i32, status: *mut i32, options: i32) -> i32;
+    }
+
+    /// 733-mppc criterion 3. A peer that ACCEPTS the connection and then goes
+    /// silent must fail within a bounded time, naming the stage.
+    ///
+    /// Driven against a REAL socket with a REAL silent peer, not a mock: the
+    /// listener accepts and then holds the connection without writing a byte,
+    /// which is exactly the guest behaviour the packet describes ("reachable and
+    /// silent, which is neither a refused connection nor a stale session").
+    /// Before the fix this await never returned.
+    ///
+    /// The clock is paused so the 30s bound is asserted without waiting 30s;
+    /// tokio auto-advances when every task is idle, which a silent peer
+    /// guarantees. That is what makes the SILENT case deterministic rather than
+    /// timing-dependent.
+    #[tokio::test(flavor = "current_thread", start_paused = true)]
+    async fn silent_peer_fails_the_secure_handshake_within_the_bound() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        // Accept and then say nothing, forever, holding the connection open.
+        let _peer = tokio::spawn(async move {
+            let (sock, _) = listener.accept().await.unwrap();
+            std::future::pending::<()>().await;
+            drop(sock);
+        });
+
+        let client = tokio::net::TcpStream::connect(addr).await.unwrap();
+        let psk = [7u8; 32];
+        // `EncryptedStream` is not Debug, so map to () before asserting rather
+        // than reaching for expect_err/unwrap_err.
+        let err = match secure_handshake_bounded(client, &psk, Duration::from_secs(30)).await {
+            Ok(_) => panic!("a silent peer must NOT complete the handshake"),
+            Err(e) => e,
+        };
+
+        assert!(
+            err.contains("timed out"),
+            "the failure must say it timed out, not surface as a generic io error: {err}"
+        );
+        assert!(
+            err.contains("went silent mid-handshake"),
+            "the failure must NAME THE STAGE — 'the connection failed' sends an operator to the \
+             network when the peer is reachable: {err}"
+        );
+    }
+
+    /// 733-mppc criterion 4, the NEGATIVE CONTROL. A responsive peer completes
+    /// the handshake untouched.
+    ///
+    /// Without this, a `secure_handshake_bounded` hard-wired to return Err would
+    /// satisfy the silent-peer test above while breaking every real connection
+    /// the tray makes. Runs on the REAL clock — pausing it here would let the
+    /// bound fire before the genuine handshake I/O completes and turn a passing
+    /// control into a false failure.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn responsive_peer_completes_the_secure_handshake_untouched() {
+        use tillandsias_secure_channel::secure_stream::server_handshake;
+
+        let psk = [7u8; 32];
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (sock, _) = listener.accept().await.unwrap();
+            server_handshake(sock, &psk).await.map(|_| ())
+        });
+
+        let client = tokio::net::TcpStream::connect(addr).await.unwrap();
+        // Discard the Ok payload: EncryptedStream is not Debug.
+        let out = secure_handshake_bounded(client, &psk, Duration::from_secs(30))
+            .await
+            .map(|_| ());
+
+        assert!(
+            out.is_ok(),
+            "a responsive peer must complete the handshake untouched — the bound exists to catch \
+             silence, not to break working connections: {out:?}"
+        );
+        assert!(server.await.unwrap().is_ok(), "the server side must agree");
+    }
+
+    /// SC-07 pin: the fallback polls run exactly when the push
+    /// subscription is NOT delivering. Mirrors windows-tray's gate
+    /// (order 154/155 parity).
+    #[test]
+    fn should_poll_fallback_is_pure_fallback_gate() {
+        assert!(!should_poll_fallback(true));
+        assert!(should_poll_fallback(false));
+    }
+
+    // The tick-wait pins (tick_wait_wakes_early_only_on_subscription_drop,
+    // tick_after_wake_rewinds_on_drop_and_advances_on_timer) now live in
+    // tillandsias_host_shell::subscription_health alongside the hoisted
+    // implementations — no local duplicate here.
+
+    /// Topic pin: the dedicated push connection subscribes to exactly the
+    /// topics the reader loop consumes. Fails loud if the list drifts without
+    /// matching reader-loop consumers (each topic here MUST have an arm in
+    /// run_push_listener + an initial-sync prime).
+    ///
+    /// ORDER 997-e4v2 dropped LocalProjects, so this asserts its ABSENCE as
+    /// well as the remaining three. Asserting only the three would pass on a
+    /// list that had quietly regained a fourth, which is the shape this pin
+    /// exists to catch — the tray would resubscribe to a topic whose arm no
+    /// longer exists and silently drop every frame.
+    /// Order 1925-tdlv: the push subscription delivers the Vault credentials
+    /// on every (re)connect, BEFORE it subscribes, and collects the handover on
+    /// the transition to Ready. SC-07 suppresses the polls that used to do
+    /// both, so a delivery living only in a poll never fires on a healthy tray
+    /// (v56.11.1.1: Vault held Ready for good on every tray launch).
+    #[test]
+    fn the_push_subscription_delivers_and_collects_vault_credentials() {
+        // source-pin-ok: the property is placement inside run_push_listener, which only the source shows
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let source =
+            std::fs::read_to_string(std::path::Path::new(&manifest).join("src/action_host.rs"))
+                .expect("read action_host.rs");
+        let start = source
+            .find("async fn run_push_listener(")
+            .expect("run_push_listener exists");
+        let body = &source[start..];
+        let body = &body[..body.find("\n}\n").expect("function end")];
+        let deliver = body
+            .find("deliver_credentials_on_connect(&mut client)")
+            .expect("run_push_listener must deliver on (re)connect");
+        let subscribe = body
+            .find("ControlMessage::Subscribe {")
+            .expect("run_push_listener subscribes");
+        assert!(
+            deliver < subscribe,
+            "the delivery must precede the Subscribe"
+        );
+        assert!(
+            body.contains("collect_vault_handover_on_ready(&vz)"),
+            "run_push_listener must collect the handover on the Ready transition"
+        );
+    }
+
+    #[test]
+    fn push_subscribe_topics_has_no_local_projects() {
+        assert_eq!(
+            push_subscribe_topics(),
+            vec![
+                tillandsias_control_wire::SubscriptionTopic::VmStatus,
+                tillandsias_control_wire::SubscriptionTopic::LoginState,
+                tillandsias_control_wire::SubscriptionTopic::CloudProjects,
+            ]
+        );
+    }
+
+    /// 1420-4grt: Progress rides the subscription only for a capable guest.
+    #[test]
+    fn progress_topic_is_opt_in_by_guest_capability() {
+        use tillandsias_control_wire::{
+            CAP_PROGRESS_PUSH_V1, SubscriptionTopic, subscription_topics,
+        };
+        assert_eq!(
+            subscription_topics(&push_subscribe_topics(), &[]),
+            push_subscribe_topics()
+        );
+        let with = subscription_topics(
+            &push_subscribe_topics(),
+            &[CAP_PROGRESS_PUSH_V1.to_string()],
+        );
+        assert_eq!(with.last(), Some(&SubscriptionTopic::Progress));
+    }
+
+    /// 1420-4grt: one tray.log line per whole-ten-percent step, not per event.
+    #[test]
+    fn progress_log_throttles_to_deciles() {
+        use tillandsias_control_wire::{ProgressEvent, ProgressKind, ProgressUnit};
+        let ev = |kind| ProgressEvent {
+            task: "image/forge".into(),
+            parent: None,
+            label: "Build forge image".into(),
+            kind,
+            ts_unix_ms: 0,
+        };
+        let step = |done| ProgressKind::Determinate {
+            done,
+            total: Some(100),
+            unit: ProgressUnit::Steps,
+        };
+        let mut log = ProgressLog::default();
+        let lines: Vec<_> = (0..=100)
+            .filter_map(|d| log.observe(&ev(step(d))))
+            .collect();
+        assert_eq!(lines.len(), 11, "{lines:?}");
+        assert_eq!(lines[3], "progress Build forge image: 30%");
+        assert_eq!(
+            log.observe(&ev(ProgressKind::Done)).as_deref(),
+            Some("progress Build forge image: done")
+        );
+    }
+
+    /// 731-eupn, THE EXIT CRITERION: confirmed-empty renders `(no repos)`;
+    /// failed-fetch does NOT. Both arms in one test because the pair IS the
+    /// property — either alone passes for a implementation that ignores the
+    /// discriminator entirely, in one direction or the other.
+    #[test]
+    fn failed_fetch_does_not_render_no_repos_but_confirmed_empty_does() {
+        let menu_state = Arc::new(Mutex::new(
+            tillandsias_host_shell::menu_state::MenuState::initial(),
+        ));
+
+        // A FAILED fetch: no rebuild, and the loaded flag stays FALSE so the
+        // submenu keeps saying "(loading repos…)" rather than asserting a
+        // zero nobody confirmed.
+        assert!(
+            !apply_cloud_projects(Vec::new(), false, &menu_state),
+            "an unconfirmed empty reply must NOT request a rebuild"
+        );
+        assert!(
+            !menu_state.lock().unwrap().cloud_projects_loaded,
+            "an unconfirmed reply must NOT latch cloud_projects_loaded — that latch \
+             is what rendered a confident '(no repos)' for a broken gh"
+        );
+
+        // A CONFIRMED empty answer: rebuild, and the flag latches. Same input
+        // list, opposite outcome, opposite behaviour — which is the whole
+        // point of the discriminator.
+        assert!(
+            apply_cloud_projects(Vec::new(), true, &menu_state),
+            "a confirmed empty answer must request a rebuild (loading → no repos)"
+        );
+        assert!(
+            menu_state.lock().unwrap().cloud_projects_loaded,
+            "a confirmed empty answer must latch cloud_projects_loaded"
+        );
+    }
+
+    /// A failed fetch must not DESTROY a good list either — the Linux
+    /// position ("keep the previous list on failure so the menu doesn't
+    /// flicker into (no repos)"), now enforced on macOS.
+    #[test]
+    fn failed_fetch_preserves_a_previously_confirmed_list() {
+        let menu_state = Arc::new(Mutex::new(
+            tillandsias_host_shell::menu_state::MenuState::initial(),
+        ));
+        let projects = vec![tillandsias_host_shell::menu_state::ProjectEntry {
+            name: "tillandsias".to_string(),
+            path: "octocat/tillandsias".to_string(),
+            ready: false,
+            full_name: Some("octocat/tillandsias".to_string()),
+        }];
+        assert!(apply_cloud_projects(projects.clone(), true, &menu_state));
+        assert_eq!(menu_state.lock().unwrap().cloud_projects.len(), 1);
+
+        // Now the fetch breaks mid-session — the operator-reported symptom.
+        assert!(!apply_cloud_projects(Vec::new(), false, &menu_state));
+        assert_eq!(
+            menu_state.lock().unwrap().cloud_projects.len(),
+            1,
+            "a failed fetch must not replace a good list with an empty one"
+        );
+        assert!(
+            menu_state.lock().unwrap().cloud_projects_loaded,
+            "and must not un-latch a flag a real answer had earned"
+        );
+    }
+
+    /// M5 pin (598-kibt): a confirmed cloud reply — even an EMPTY one — must
+    /// mark `cloud_projects_loaded` so the submenu renders "(no repos)"
+    /// instead of "(loading repos…)" forever, and a fresh logout must reset
+    /// it so the next login re-shows the loading state. Mirrors the Windows
+    /// wiring (notify_icon::apply_cloud_projects / apply_github_login).
+    #[test]
+    fn apply_cloud_projects_empty_reply_marks_loaded_and_logout_resets() {
+        use tillandsias_host_shell::menu_state::GithubLoginState;
+        let menu_state = Arc::new(Mutex::new(
+            tillandsias_host_shell::menu_state::MenuState::initial(),
+        ));
+        assert!(
+            apply_cloud_projects(Vec::new(), true, &menu_state),
+            "first empty cloud reply must request a rebuild (loading → no repos)"
+        );
+        assert!(
+            menu_state.lock().unwrap().cloud_projects_loaded,
+            "a confirmed empty answer must mark cloud_projects_loaded"
+        );
+        assert!(
+            !apply_cloud_projects(Vec::new(), true, &menu_state),
+            "identical empty reply must not re-request a rebuild"
+        );
+        // Log in, then out: the logout must clear the loaded flag and list.
+        apply_login_state(
+            GithubLoginState::LoggedIn {
+                handle: "octocat".into(),
+            },
+            &menu_state,
+        );
+        apply_login_state(GithubLoginState::LoggedOut, &menu_state);
+        let guard = menu_state.lock().unwrap();
+        assert!(
+            !guard.cloud_projects_loaded,
+            "fresh logout must reset cloud_projects_loaded"
+        );
+        assert!(
+            guard.cloud_projects.is_empty(),
+            "fresh logout must clear the cloud project list"
+        );
+    }
+
+    /// M5 CLOSURE EVIDENCE (598-kibt). Operator ruling 2026-08-14: a GitHub
+    /// account with zero visible repositories cannot be provisioned, so the
+    /// runtime check this criterion originally demanded is unobtainable and
+    /// these tests ARE the closure standard.
+    ///
+    /// That ruling raises the bar on them, because until now the two halves of
+    /// M5 were pinned SEPARATELY and nothing crossed the seam between them:
+    ///
+    ///   half 1  `apply_cloud_projects` flips `cloud_projects_loaded`
+    ///           (pinned here, in this module)
+    ///   half 2  `build()` renders "(no repos)" once that flag is set
+    ///           (pinned in tillandsias-host-shell::menu_state)
+    ///
+    /// That seam is exactly where M5's defect lived. The flag was correct on
+    /// Windows and macOS never set it, and the workspace still compiled and
+    /// still passed because the macOS TEST literal had been patched to `true`
+    /// while the runtime was never wired — two green halves either side of a
+    /// broken join. A test per half cannot detect that; only one that composes
+    /// the real macOS entry point with the real shared renderer can.
+    ///
+    /// Looks up the submenu by ID rather than by position, so a reordering of
+    /// the menu retires this pin honestly instead of silently asserting about
+    /// some other row.
+    #[test]
+    fn empty_cloud_reply_renders_no_repos_through_the_real_build() {
+        use tillandsias_host_shell::menu_state::{
+            GithubLoginState, MenuStructure, TargetSurface, build, ids,
+        };
+
+        fn cloud_children(
+            menu_state: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+        ) -> Vec<(String, String)> {
+            let snapshot = menu_state.lock().unwrap().clone();
+            let items = match build(&snapshot) {
+                MenuStructure::Ready { items } => items,
+                other => panic!("expected a Ready menu, got {other:?}"),
+            };
+            let cloud = items
+                .iter()
+                .find(|i| i.id == ids::CLOUD_PROJECTS)
+                .expect("the Ready menu must carry a cloud-projects submenu");
+            cloud
+                .children
+                .iter()
+                .map(|c| (c.id.clone(), c.label.clone()))
+                .collect()
+        }
+
+        let menu_state = Arc::new(Mutex::new(
+            tillandsias_host_shell::menu_state::MenuState::initial(),
+        ));
+        // MenuState::initial() is WindowsTray; the macOS runtime sets MacosTray
+        // in both places it builds this state (see set_menu_target callers).
+        // build() genuinely branches on target, so without this line the test
+        // would assert the WINDOWS rendering of a macOS claim — passing today
+        // only because build_cloud_projects' empty branch happens not to
+        // consult target, which is a coincidence, not a contract.
+        menu_state.lock().unwrap().target = TargetSurface::MacosTray;
+        apply_login_state(
+            GithubLoginState::LoggedIn {
+                handle: "octocat".into(),
+            },
+            &menu_state,
+        );
+
+        // NEGATIVE CONTROL, and the load-bearing half of this test: BEFORE any
+        // confirmed reply the submenu must say "(loading repos…)". Without it a
+        // renderer that always emitted "(no repos)" would satisfy the assertion
+        // below — and claiming emptiness mid-fetch is the exact failure the
+        // loaded flag exists to prevent. A zero-repo account and a slow fetch
+        // look identical on screen without this distinction.
+        assert_eq!(
+            cloud_children(&menu_state),
+            vec![(
+                ids::CLOUD_PROJECTS_LOADING.to_string(),
+                "(loading repos\u{2026})".to_string()
+            )],
+            "before any confirmed reply the submenu must show the loading row"
+        );
+
+        // THE M5 EVENT: a confirmed reply that happens to be empty — what a
+        // zero-repo account produces.
+        assert!(
+            apply_cloud_projects(Vec::new(), true, &menu_state),
+            "the first confirmed reply must request a rebuild even when empty"
+        );
+        assert_eq!(
+            cloud_children(&menu_state),
+            vec![(
+                ids::CLOUD_PROJECTS_EMPTY.to_string(),
+                "(no repos)".to_string()
+            )],
+            "a confirmed empty reply must render (no repos), not (loading repos…) forever"
+        );
+
+        // A fresh logout must return the submenu to the loading state, so the
+        // next login cannot show a stale "(no repos)" for an account that has
+        // repositories.
+        apply_login_state(GithubLoginState::LoggedOut, &menu_state);
+        apply_login_state(
+            GithubLoginState::LoggedIn {
+                handle: "octocat".into(),
+            },
+            &menu_state,
+        );
+        assert_eq!(
+            cloud_children(&menu_state),
+            vec![(
+                ids::CLOUD_PROJECTS_LOADING.to_string(),
+                "(loading repos\u{2026})".to_string()
+            )],
+            "after logout the next session must re-show loading, never a stale (no repos)"
+        );
+    }
+
+    /// M5, THE INVERSE DEFECT (598-kibt). Found by adversarially attacking the
+    /// M5 closure rather than by the criterion itself, which is why it is worth
+    /// a separate test: the criterion asks "does a confirmed-empty account
+    /// render (no repos)?" and the answer became yes — while the SAME flag
+    /// started rendering "(no repos)" to accounts that have repositories.
+    ///
+    /// This reproduces the real production ordering, which the other M5 test
+    /// does not: the push listener primes an UNCONDITIONAL CloudRefreshRequest
+    /// at subscription setup, BEFORE any login answer exists. With no token the
+    /// guest's gh call fails and returns an empty list — every failure mode
+    /// collapses to `Vec::new()` there — so the flag gets latched by a reply
+    /// that confirmed nothing. The reset then fired only on a transition TO
+    /// LoggedOut, so signing in kept the latch, and the cloud submenu (rendered
+    /// only in the LoggedIn arm) said "(no repos)" the first moment it was
+    /// visible.
+    ///
+    /// The other test starts from LoggedIn and so encodes the returning-user
+    /// ordering, where the bug is invisible. Order matters here, and that is
+    /// the whole point of this one.
+    #[test]
+    fn cloud_reply_received_while_logged_out_does_not_survive_the_next_sign_in() {
+        use tillandsias_host_shell::menu_state::{
+            GithubLoginState, MenuStructure, TargetSurface, build, ids,
+        };
+
+        let menu_state = Arc::new(Mutex::new(
+            tillandsias_host_shell::menu_state::MenuState::initial(),
+        ));
+        menu_state.lock().unwrap().target = TargetSurface::MacosTray;
+
+        // Production ordering, step 1: the login probe resolves LoggedOut.
+        apply_login_state(GithubLoginState::LoggedOut, &menu_state);
+
+        // Step 2: the unconditional cloud prime's reply lands. It is EMPTY —
+        // not because the account has no repos, but because gh had no token.
+        // Nothing on the wire distinguishes those two, which is exactly why
+        // this reply must not be treated as a confirmed answer for the session
+        // that has not started yet.
+        apply_cloud_projects(Vec::new(), true, &menu_state);
+
+        // Step 3: the user signs in. The submenu becomes visible for the first
+        // time and MUST show the loading row, because the post-login fetch has
+        // not returned.
+        apply_login_state(
+            GithubLoginState::LoggedIn {
+                handle: "octocat".into(),
+            },
+            &menu_state,
+        );
+
+        let snapshot = menu_state.lock().unwrap().clone();
+        let items = match build(&snapshot) {
+            MenuStructure::Ready { items } => items,
+            other => panic!("expected a Ready menu, got {other:?}"),
+        };
+        let cloud = items
+            .iter()
+            .find(|i| i.id == ids::CLOUD_PROJECTS)
+            .expect("a LoggedIn menu must carry the cloud-projects submenu");
+        let rows: Vec<(&str, &str)> = cloud
+            .children
+            .iter()
+            .map(|c| (c.id.as_str(), c.label.as_str()))
+            .collect();
+        assert_eq!(
+            rows,
+            vec![(ids::CLOUD_PROJECTS_LOADING, "(loading repos\u{2026})")],
+            "a pre-login empty reply must not make the first post-login render \
+             claim (no repos) — that tells a user with repositories they have none"
+        );
+        assert!(
+            !menu_state.lock().unwrap().cloud_projects_loaded,
+            "signing in must clear a loaded flag latched before the session began"
+        );
+    }
+
+    /// `map_login_state` mapping pin: logged_in with a handle, logged_in
+    /// with a missing handle (defaults empty), and logged_out — identical
+    /// to the poll path's historical mapping.
+    #[test]
+    fn map_login_state_covers_all_reply_shapes() {
+        use tillandsias_host_shell::menu_state::GithubLoginState;
+        assert_eq!(
+            map_login_state(true, Some("octocat".into())),
+            GithubLoginState::LoggedIn {
+                handle: "octocat".into()
+            }
+        );
+        assert_eq!(
+            map_login_state(true, None),
+            GithubLoginState::LoggedIn { handle: "".into() }
+        );
+        assert_eq!(map_login_state(false, None), GithubLoginState::LoggedOut);
+        assert_eq!(
+            map_login_state(false, Some("stale".into())),
+            GithubLoginState::LoggedOut
+        );
+    }
+
+    /// `apply_login_state` reports a rebuild exactly on change and is
+    /// idempotent on repeat (order 155 slice 2 — shared by poll + push).
+    /// Order 1719-83po: answers arrive only on events and each is final, so
+    /// a confirmed answer always lands; an unreadable one (Unknown) never
+    /// overwrites a confirmed answer, but does end a LoggingIn whose session
+    /// closed. Rebuild only on change.
+    #[test]
+    fn apply_cloudflare_login_state_follows_confirmed_answers() {
+        use tillandsias_host_shell::menu_state::CloudflareLoginState as Cf;
+        let menu_state = Arc::new(Mutex::new(
+            tillandsias_host_shell::menu_state::MenuState::initial(),
+        ));
+        let now = |m: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>| {
+            m.lock().unwrap().cloudflare_login
+        };
+        assert_eq!(now(&menu_state), Cf::Unknown);
+        assert!(!apply_cloudflare_login_state(Cf::Unknown, &menu_state));
+        assert!(apply_cloudflare_login_state(Cf::LoggedOut, &menu_state));
+        assert!(!apply_cloudflare_login_state(Cf::LoggedOut, &menu_state));
+        assert!(
+            !apply_cloudflare_login_state(Cf::Unknown, &menu_state),
+            "an unreadable answer keeps a confirmed LoggedOut"
+        );
+        assert_eq!(now(&menu_state), Cf::LoggedOut);
+        // The click flips LoggedOut -> LoggingIn locally; the answer at session
+        // close is final either way.
+        menu_state.lock().unwrap().cloudflare_login = Cf::LoggingIn;
+        assert!(apply_cloudflare_login_state(Cf::LoggedIn, &menu_state));
+        assert_eq!(now(&menu_state), Cf::LoggedIn);
+        assert!(!apply_cloudflare_login_state(Cf::Unknown, &menu_state));
+        assert_eq!(
+            now(&menu_state),
+            Cf::LoggedIn,
+            "Unknown never hides a stored login's absence"
+        );
+        menu_state.lock().unwrap().cloudflare_login = Cf::LoggingIn;
+        assert!(apply_cloudflare_login_state(Cf::Unknown, &menu_state));
+        assert_eq!(
+            now(&menu_state),
+            Cf::Unknown,
+            "a closed session can't stay LoggingIn"
+        );
+        // The click maps to the paste-mode login intent.
+        let (intent, project) = tillandsias_host_shell::pty::intent_for_action(
+            &tillandsias_host_shell::menu_action::MenuAction::CloudflareLogin,
+            tillandsias_host_shell::menu_state::SelectedAgent::Claude,
+        )
+        .expect("an intent");
+        assert!(matches!(
+            intent,
+            tillandsias_host_shell::pty::PtyIntent::CloudflareLogin
+        ));
+        assert_eq!(project, None);
+    }
+
+    #[test]
+    fn apply_login_state_reports_rebuild_only_on_change() {
+        use tillandsias_host_shell::menu_state::GithubLoginState;
+        let menu_state = Arc::new(Mutex::new(
+            tillandsias_host_shell::menu_state::MenuState::initial(),
+        ));
+        // initial() starts Unknown (626-r7kq): the FIRST confirmed
+        // LoggedOut observation resolves the "Checking your account…" row
+        // into the actionable login leaf — that IS a change and must
+        // rebuild. Only a repeat of the same confirmed state is a no-op.
+        assert!(apply_login_state(GithubLoginState::LoggedOut, &menu_state));
+        assert!(!apply_login_state(GithubLoginState::LoggedOut, &menu_state));
+        let logged_in = GithubLoginState::LoggedIn {
+            handle: "octocat".into(),
+        };
+        assert!(apply_login_state(logged_in.clone(), &menu_state));
+        assert_eq!(menu_state.lock().unwrap().login, logged_in);
+        assert!(!apply_login_state(logged_in, &menu_state));
+        assert!(apply_login_state(GithubLoginState::LoggedOut, &menu_state));
+    }
+
+    /// `apply_cloud_projects` reports a rebuild exactly on change
+    /// (full-replacement list semantics) and is idempotent on repeat.
+    /// "Change" includes the `cloud_projects_loaded` flip: the FIRST
+    /// confirmed reply — even an empty one — must rebuild so the submenu
+    /// leaves "(loading repos…)" (tray-parity required row; see
+    /// `apply_cloud_projects_empty_reply_marks_loaded_and_logout_resets`).
+    #[test]
+    fn apply_cloud_projects_reports_rebuild_only_on_change() {
+        use tillandsias_host_shell::menu_state::ProjectEntry;
+        let menu_state = Arc::new(Mutex::new(
+            tillandsias_host_shell::menu_state::MenuState::initial(),
+        ));
+        // First confirmed reply: the loaded flip is itself a change.
+        assert!(apply_cloud_projects(Vec::new(), true, &menu_state));
+        // Identical empty repeat: loaded already set, list unchanged.
+        assert!(!apply_cloud_projects(Vec::new(), true, &menu_state));
+        let projects = vec![ProjectEntry {
+            name: "tillandsias".into(),
+            path: "8007342/tillandsias".into(),
+            ready: false,
+            full_name: None,
+        }];
+        assert!(apply_cloud_projects(projects.clone(), true, &menu_state));
+        assert_eq!(menu_state.lock().unwrap().cloud_projects, projects);
+        assert!(!apply_cloud_projects(projects, true, &menu_state));
+        assert!(apply_cloud_projects(Vec::new(), true, &menu_state));
+    }
+
+    /// `apply_vm_status` flips MenuState gating + reports a rebuild
+    /// exactly on change (idempotent on repeat). Chip dispatch is
+    /// queued to the (never-running-in-tests) main queue — harmless.
+    #[test]
+    fn apply_vm_status_updates_menu_state_and_reports_rebuild_on_change() {
+        // Order 1127-xm3m, same reason as the sibling test below: every
+        // apply_vm_status call reaches the crash-loop save. This one was
+        // initially missed because a second-granularity mtime comparison
+        // showed "unchanged" when both writes landed inside one second — a
+        // false negative that only a delete-and-check-existence probe caught.
+        let tmp = tempfile::tempdir().expect("temp image root");
+        let _root = crate::diagnose::ImageRootGuard::set(tmp.path().to_path_buf());
+
+        let last_logged = Arc::new(Mutex::new(None));
+        let menu_state = Arc::new(Mutex::new(
+            tillandsias_host_shell::menu_state::MenuState::initial(),
+        ));
+        let status_text = Arc::new(Mutex::new(String::new()));
+        let status_item = Arc::new(Mutex::new(None));
+        let status_menu_item = Arc::new(Mutex::new(None));
+
+        let first = apply_vm_status(
+            tillandsias_control_wire::VmPhase::Ready,
+            true,
+            Some("Securing Vault"),
+            &last_logged,
+            &menu_state,
+            &status_text,
+            &status_item,
+            &status_menu_item,
+        );
+        assert!(first, "Ready+podman transition must request a rebuild");
+        {
+            let guard = menu_state.lock().unwrap();
+            assert!(guard.podman_ready);
+            assert!(guard.login_runtime_ready);
+        }
+
+        let second = apply_vm_status(
+            tillandsias_control_wire::VmPhase::Ready,
+            true,
+            Some("Securing Vault"),
+            &last_logged,
+            &menu_state,
+            &status_text,
+            &status_item,
+            &status_menu_item,
+        );
+        assert!(!second, "unchanged status must not re-request a rebuild");
+    }
+
+    /// Chip-clobber regression pin (2026-07-10 attended smoke): render()
+    /// re-derives the status row from MenuState.status_text on every
+    /// rebuild, so apply_vm_status MUST write the composed chip text into
+    /// MenuState — otherwise the rebuild its own transition triggers
+    /// resurrects the BOOT_STATUS_TEXT default and the menu shows
+    /// "Booting…" forever while stderr says Ready.
+    #[test]
+    fn apply_vm_status_syncs_menu_state_status_text_for_rebuilds() {
+        // Order 1127-xm3m: apply_vm_status reaches note_crashloop_observation,
+        // which SAVES crash-loop state. Without this guard that save lands in
+        // the developer's own ~/Library/Application Support/tillandsias/
+        // crashloop.state — this test wrote `ever_ready 1 / last_phase ready`
+        // over live guest history on every `./build.sh --check`.
+        let tmp = tempfile::tempdir().expect("temp image root");
+        let _root = crate::diagnose::ImageRootGuard::set(tmp.path().to_path_buf());
+
+        let last_logged = Arc::new(Mutex::new(None));
+        let menu_state = Arc::new(Mutex::new(
+            tillandsias_host_shell::menu_state::MenuState::initial(),
+        ));
+        let status_text = Arc::new(Mutex::new(String::new()));
+        let status_item = Arc::new(Mutex::new(None));
+        let status_menu_item = Arc::new(Mutex::new(None));
+
+        assert_eq!(
+            menu_state.lock().unwrap().status_text,
+            tillandsias_host_shell::menu_state::BOOT_STATUS_TEXT,
+            "precondition: fresh MenuState carries the boot default"
+        );
+        apply_vm_status(
+            tillandsias_control_wire::VmPhase::Ready,
+            true,
+            None,
+            &last_logged,
+            &menu_state,
+            &status_text,
+            &status_item,
+            &status_menu_item,
+        );
+        let synced = menu_state.lock().unwrap().status_text.clone();
+        assert_ne!(
+            synced,
+            tillandsias_host_shell::menu_state::BOOT_STATUS_TEXT,
+            "apply_vm_status left MenuState.status_text at the boot default — \
+             the next rebuild will clobber the chip back to Booting…"
+        );
+        assert_eq!(
+            synced,
+            compose_chip_text(
+                &vm_phase_status_text(tillandsias_control_wire::VmPhase::Ready, true),
+                None
+            ),
+            "MenuState.status_text must carry the same composed chip text \
+             the direct setTitle path applies"
+        );
+    }
+
+    #[test]
+    fn project_launch_lease_rejects_duplicate_until_released() {
+        let in_flight = Arc::new(Mutex::new(HashSet::new()));
+        let first = try_acquire_project_launch(&in_flight, "tillandsias")
+            .expect("first project launch should acquire the slot");
+
+        assert!(
+            try_acquire_project_launch(&in_flight, "tillandsias").is_none(),
+            "same-project double-click must not acquire a second launch slot"
+        );
+        assert!(
+            try_acquire_project_launch(&in_flight, "other-project").is_some(),
+            "a different project has an independent launch slot"
+        );
+
+        drop(first);
+
+        assert!(
+            try_acquire_project_launch(&in_flight, "tillandsias").is_some(),
+            "slot must clear after the in-flight launch finishes"
+        );
+    }
+
+    /// Smoke: the class registers under the expected ObjC name. Does
+    /// NOT require main-thread (only touches `Self::class()`), so it
+    /// runs from cargo's test threads.
+    #[test]
+    fn tray_action_host_class_registers() {
+        let cls = TrayActionHost::class();
+        assert_eq!(cls.name(), "TillandsiasTrayActionHost");
+    }
+
+    /// `applescript_escape_single_quoted` defangs the AppleScript
+    /// double-quoted-string metacharacters (`\` and `"`) and
+    /// collapses newlines to spaces. Guards against
+    /// `notify_provisioning_failed` accidentally crafting a script
+    /// that breaks out of the literal.
+    #[test]
+    fn applescript_escape_handles_metas_and_newlines() {
+        assert_eq!(applescript_escape_single_quoted("plain"), "plain");
+        assert_eq!(
+            applescript_escape_single_quoted("has \"quotes\""),
+            "has \\\"quotes\\\""
+        );
+        assert_eq!(applescript_escape_single_quoted("has\\back"), "has\\\\back");
+        // Newlines collapse to spaces.
+        assert_eq!(applescript_escape_single_quoted("two\nlines"), "two lines");
+        assert_eq!(
+            applescript_escape_single_quoted("carriage\rreturn"),
+            "carriage return"
+        );
+        // Combined: a realistic error string.
+        assert_eq!(
+            applescript_escape_single_quoted(
+                "recipe-artifact fetch failed: \"rootfs.img\" missing"
+            ),
+            "recipe-artifact fetch failed: \\\"rootfs.img\\\" missing"
+        );
+    }
+
+    /// `WIRE_UNREACHABLE_CHIP_TEXT` is the byte-identical chip
+    /// string both macOS and windows trays emit on wire failure
+    /// (slice 21 / windows commit d2cf10f0). Drift-protection
+    /// litmus: if a future refactor changes the emoji or wording
+    /// on either side, the cross-tray UX-parity invariant silently
+    /// breaks — operators get different text on the same failure
+    /// class. This test asserts the exact byte sequence so any
+    /// such drift fails the build here AND in the windows-tray
+    /// suite (which would need a corresponding test added when
+    /// they adopt this pattern).
+    #[test]
+    fn wire_unreachable_chip_text_pinned() {
+        // Pin the expanded string literal so a partial typo (e.g. dropping
+        // the space, or swapping the emoji codepoint) is caught.
+        // windows-260722-5 curated wording (Tlatoāni-approved 'Workspace'
+        // family): the transient state is ORANGE and says the app is
+        // reconnecting BY ITSELF — 'Wire unreachable' was internals
+        // vocabulary with no user-actionable meaning (tray-ux governance).
+        assert_eq!(
+            WIRE_UNREACHABLE_CHIP_TEXT.as_bytes(),
+            "\u{1F7E0} Reconnecting to your workspace\u{2026}".as_bytes()
+        );
+        // Emoji codepoint is the LARGE ORANGE CIRCLE (transient, not the
+        // red terminal state). Windows tray's mark_wire_unreachable uses
+        // the exact same codepoint — keep these in lockstep.
+        let first_char = WIRE_UNREACHABLE_CHIP_TEXT.chars().next().unwrap();
+        assert_eq!(first_char, '\u{1F7E0}');
+    }
+
+    /// `describe_wire_error` pins the operator-visible format of a
+    /// dispatcher Error frame so both trays surface identical text.
+    /// Mirrors the windows-tray test
+    /// `describe_wire_error_includes_code_and_message` (commit
+    /// eddb5c00) — divergence would fail either suite.
+    #[test]
+    fn describe_wire_error_includes_code_and_message() {
+        use tillandsias_control_wire::ErrorCode;
+        let s = describe_wire_error(ErrorCode::Unsupported, "variant X not wired on vsock");
+        assert!(s.contains("Unsupported"), "code missing: {s}");
+        assert!(
+            s.contains("variant X not wired on vsock"),
+            "message missing: {s}"
+        );
+    }
+
+    /// An empty message must not leave a dangling colon (e.g.
+    /// `"dispatcher error Internal: "`). Pins the empty-message
+    /// branch so a future refactor doesn't accidentally append the
+    /// colon unconditionally.
+    #[test]
+    fn describe_wire_error_no_trailing_colon_on_empty_message() {
+        use tillandsias_control_wire::ErrorCode;
+        let s = describe_wire_error(ErrorCode::Internal, "");
+        assert!(s.contains("Internal"), "code missing: {s}");
+        assert!(!s.ends_with(':'), "trailing colon: {s}");
+        assert!(!s.contains(": "), "spurious colon-space: {s}");
+    }
+
+    /// The AppKit action host must resolve the macOS control-wire stream
+    /// through the normalized GuestTransport facade instead of opening a
+    /// VZ-specific stream directly.
+    ///
+    /// @trace spec:host-guest-transport
+    #[test]
+    fn action_host_control_wire_opener_uses_guest_transport_facade() {
+        let source = include_str!("action_host.rs");
+        let window = source
+            .split("async fn open_control_wire_stream(")
+            .nth(1)
+            .and_then(|s| s.split("\n///").next())
+            .expect("open_control_wire_stream source");
+        assert!(
+            window.contains("GuestEndpoint::MacVz"),
+            "opener must construct the MacVz endpoint: {window}"
+        );
+        assert!(
+            window.contains(".open_stream(&endpoint)"),
+            "opener must use GuestTransport::open_stream: {window}"
+        );
+        assert!(
+            !window.contains(".open_vsock_stream("),
+            "opener must not bypass the GuestTransport facade: {window}"
+        );
+    }
+
+    /// `compose_chip_text` appends a non-empty `last_event` after a
+    /// MIDDLE DOT so the live chip surfaces in-VM activity. Mirrors
+    /// the windows-tray test `compose_chip_text_appends_last_event`
+    /// (commit 8992652a) — divergence between the two trays' chip
+    /// composition would fail either suite.
+    #[test]
+    fn a_vault_locked_guest_chip_still_says_vault_after_the_clamp() {
+        // ORDER 1752-nd3t: the guest's event for a rejected unseal key must
+        // survive the 37-character chip clamp on both phases it rides with.
+        let evt = "Vault locked: unseal key rejected; sign-ins are kept, not lost";
+        for phase in [
+            tillandsias_control_wire::VmPhase::Failed,
+            tillandsias_control_wire::VmPhase::Starting,
+        ] {
+            let chip = compose_chip_text(&vm_phase_status_text(phase, true), Some(evt));
+            assert!(chip.contains("Vault locked"), "{phase:?}: {chip}");
+        }
+    }
+
+    #[test]
+    fn compose_chip_text_appends_last_event() {
+        let base = "\u{1F7E2} Ready";
+        // None: base unchanged.
+        assert_eq!(compose_chip_text(base, None), base);
+        // Empty: base unchanged (whitespace trim ⇒ empty ⇒ None).
+        assert_eq!(compose_chip_text(base, Some("")), base);
+        assert_eq!(compose_chip_text(base, Some("   ")), base);
+        // Non-empty: MIDDLE DOT + event appended.
+        assert_eq!(
+            compose_chip_text(base, Some("forge-foo created")),
+            "\u{1F7E2} Ready \u{00B7} forge-foo created"
+        );
+        // Surrounding whitespace on event is trimmed.
+        assert_eq!(
+            compose_chip_text(base, Some("  forge-bar started  ")),
+            "\u{1F7E2} Ready \u{00B7} forge-bar started"
+        );
+    }
+
+    #[test]
+    fn compose_chip_text_caps_overlong_payloads() {
+        let base = "\u{1F7E2} Ready";
+        let long_event = "x".repeat(200);
+        let text = compose_chip_text(base, Some(&long_event));
+        assert!(
+            text.chars().count() <= tillandsias_host_shell::menu_state::TRAY_STATUS_CHIP_MAX_CHARS,
+            "chip must stay within budget: {text:?}"
+        );
+        assert!(text.ends_with('…'), "long event should ellipsize: {text:?}");
+    }
+
+    /// `cloud_entry_to_menu` produces the byte-identical `ProjectEntry`
+    /// shape windows-tray produces from the same wire input (commit
+    /// b0cdcdee), so the cross-platform menu submenu rows agree on
+    /// (name, path, ready) without either tray drifting.
+    #[test]
+    fn cloud_entry_maps_to_owner_slash_repo_slug() {
+        let wire = tillandsias_control_wire::CloudProjectEntry {
+            label: "tillandsias".to_string(),
+            owner: "8007342".to_string(),
+            repo: "tillandsias".to_string(),
+            default_branch: "main".to_string(),
+        };
+        let menu = cloud_entry_to_menu(&wire);
+        assert_eq!(menu.name, "tillandsias");
+        assert_eq!(menu.path, "8007342/tillandsias");
+        assert!(!menu.ready, "cloud projects have no in-VM forge yet");
+    }
+
+    /// The live status line distinguishes VM phases + podman readiness,
+    /// so the shared `ids::STATUS` chip reflects real VM health
+    /// (Ready vs podman-starting vs draining/failed) rather than a
+    /// single static "Ready". Mirrors the windows-tray test in
+    /// `notify_icon::tests::vm_phase_status_text_reflects_phase_and_podman`
+    /// — keeping the two assertions identical guards the cross-platform
+    /// UX-parity invariant.
+    /// m11: `apply_menu_action_state` mutates `MenuState.selected_agent`
+    /// when a `SelectAgent` click carries a different agent than the
+    /// currently-held one; returns `false` (no-op) when the agent is
+    /// unchanged or the action is not `SelectAgent`. Mirrors windows-
+    /// tray's `apply_menu_action_state` behaviour at notify_icon.rs:1674.
+    #[test]
+    fn apply_menu_action_state_mutates_only_on_agent_change() {
+        use tillandsias_host_shell::menu_action::MenuAction;
+        use tillandsias_host_shell::menu_state::{MenuState, SelectedAgent};
+
+        let mut state = MenuState::initial();
+        let initial_agent = state.selected_agent;
+
+        // Idempotent: re-selecting the current agent is a no-op.
+        assert!(
+            !apply_menu_action_state(&mut state, &MenuAction::SelectAgent(initial_agent)),
+            "re-selecting current agent must not mutate state"
+        );
+        assert_eq!(state.selected_agent, initial_agent);
+
+        // Different agent flips state + returns true.
+        let other_agent = if initial_agent == SelectedAgent::OpenCode {
+            SelectedAgent::Claude
+        } else {
+            SelectedAgent::OpenCode
+        };
+        assert!(
+            apply_menu_action_state(&mut state, &MenuAction::SelectAgent(other_agent)),
+            "switching agent must return true"
+        );
+        assert_eq!(state.selected_agent, other_agent);
+
+        // Other actions don't touch agent state.
+        assert!(
+            !apply_menu_action_state(&mut state, &MenuAction::Quit),
+            "Quit must not mutate menu state"
+        );
+        assert!(
+            !apply_menu_action_state(&mut state, &MenuAction::GithubLogin),
+            "GithubLogin must not mutate menu state"
+        );
+        assert_eq!(state.selected_agent, other_agent, "state unchanged");
+    }
+
+    /// m10: pin the dispatcher's `Attach`/`Maintain` arm contract — every
+    /// click on a per-project menu row resolves via the shared
+    /// `intent_for_action` table to a `(PtyIntent, Some(project))` tuple
+    /// that `attach_pty` threads into `launch_spec`, producing the
+    /// orchestrated verbatim-argv launch
+    /// (`/usr/local/bin/tillandsias-headless --cloud <p> …`, order
+    /// 823-u5zf) rather than a bare-VM shell. A future refactor of either
+    /// `intent_for_action` or the dispatcher's resolve path that lost
+    /// the project would silently dump users into the wrong shell.
+    ///
+    /// The host-shell crate already byte-pins `launch_spec`'s vector for
+    /// `project=Some` (`launch_spec_routes_project_clicks_through_
+    /// orchestrated_launch` in pty/mod.rs). This macOS-side test
+    /// pins the LINK: the macOS dispatcher invokes `intent_for_action`
+    /// with the right arguments to produce a non-None project.
+    #[test]
+    fn attach_action_resolves_to_project_via_intent_for_action() {
+        use tillandsias_host_shell::menu_action::{MenuAction, ProjectScope};
+        use tillandsias_host_shell::menu_state::SelectedAgent;
+        use tillandsias_host_shell::pty::{PtyIntent, intent_for_action};
+
+        let action = MenuAction::Attach {
+            scope: ProjectScope::Cloud,
+            name: "myproj".to_string(),
+            agent: SelectedAgent::OpenCode,
+        };
+        let (intent, project) = intent_for_action(&action, SelectedAgent::OpenCode)
+            .expect("Attach must yield Some((intent, project))");
+        assert!(
+            matches!(intent, PtyIntent::Agent(SelectedAgent::OpenCode)),
+            "Attach must map to Agent(<selected_agent>), got: {intent:?}"
+        );
+        assert_eq!(
+            project.as_deref(),
+            Some("myproj"),
+            "Attach must thread the project name into launch_spec"
+        );
+
+        let maintain = MenuAction::Maintain {
+            scope: ProjectScope::Cloud,
+            name: "myproj".to_string(),
+        };
+        let (m_intent, m_project) = intent_for_action(&maintain, SelectedAgent::OpenCode)
+            .expect("Maintain must yield Some((intent, project))");
+        assert!(
+            matches!(m_intent, PtyIntent::Shell),
+            "Maintain must map to Shell (forge-shell, not agent)"
+        );
+        assert_eq!(
+            m_project.as_deref(),
+            Some("myproj"),
+            "Maintain must thread the project name into launch_spec"
+        );
+
+        // GithubLogin remains project-less (gh auth login is user-level
+        // pre-attach — runs in the bare VM, not the forge container).
+        let github = MenuAction::GithubLogin;
+        let (g_intent, g_project) =
+            intent_for_action(&github, SelectedAgent::OpenCode).expect("GithubLogin yields Some");
+        assert!(matches!(g_intent, PtyIntent::GithubLogin));
+        assert_eq!(g_project, None, "GithubLogin must NOT thread a project");
+    }
+
+    #[test]
+    fn vm_phase_status_text_reflects_phase_and_podman() {
+        use tillandsias_control_wire::VmPhase;
+        assert!(vm_phase_status_text(VmPhase::Ready, true).contains("Ready"));
+        // Ready-with-podman is visibly distinct from Ready-without-podman.
+        assert_ne!(
+            vm_phase_status_text(VmPhase::Ready, true),
+            vm_phase_status_text(VmPhase::Ready, false)
+        );
+        assert!(
+            vm_phase_status_text(VmPhase::Draining, true)
+                .to_lowercase()
+                .contains("drain")
+        );
+        assert!(
+            vm_phase_status_text(VmPhase::Failed, false)
+                .to_lowercase()
+                .contains("fail")
+        );
+    }
+
+    /// FULL E2E exercise of the run_start path against the LIVE
+    /// release asset — `#[ignore]` because:
+    ///   - it actually fetches 74 MB from a real release,
+    ///   - decompresses to an 8 GB sparse `.img` (~30s),
+    ///   - SHA-256-streams the decompressed bytes against the pin
+    ///     (~10s more),
+    ///   - and finally `vz.start()` requires the
+    ///     `com.apple.security.virtualization` entitlement (only
+    ///     present on the codesigned `.app` bundle, NOT on
+    ///     `cargo test` binaries), so the start step always errors
+    ///     in the test harness even when the fetch chain succeeds.
+    ///
+    /// Run manually with: `cargo test -p tillandsias-macos-tray
+    /// --bin tillandsias-tray run_start_full_e2e -- --ignored
+    /// --nocapture`. On 2026-05-27 this test ran to the
+    /// `Start VM: rootfs.img fetched successfully` line, proving the
+    /// .img.xz fetch + decompress + verify chain works end-to-end
+    /// against a live release asset (Apple Silicon, Tlatoanis-MacBook-
+    /// Air). The subsequent entitlement error is expected in cargo
+    /// test; the codesigned .app bundle clears that gate.
+    #[tokio::test]
+    #[ignore = "slow (~5min), network, needs com.apple.security.virtualization entitlement (.app only)"]
+    async fn run_start_full_e2e() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vm_slot = Arc::new(Mutex::new(None));
+        let result = run_start(tmp.path().to_path_buf(), vm_slot.clone(), &|_| {}, &|_| {}).await;
+        match result {
+            Err(err) => {
+                assert!(
+                    err.contains("recipe-artifact fetch failed"),
+                    "expected fetch-failed wrapping, got: {err}"
+                );
+                assert!(
+                    err.contains("pending-ci") || err.contains("l9 step 5"),
+                    "expected user-actionable hint, got: {err}"
+                );
+                assert!(
+                    vm_slot.lock().unwrap().is_none(),
+                    "slot should stay empty on err"
+                );
+            }
+            Ok(()) => {
+                // If the network + xz + start actually succeeded, the
+                // VM is now running. Take the Arc out of the slot
+                // BEFORE awaiting so we don't hold the std::sync Mutex
+                // across an `.await` (clippy::await_holding_lock).
+                let vz_taken = vm_slot.lock().unwrap().take();
+                if let Some(vz) = vz_taken {
+                    let _ = vz.stop(std::time::Duration::from_secs(60)).await;
+                }
+            }
+        }
+    }
+}

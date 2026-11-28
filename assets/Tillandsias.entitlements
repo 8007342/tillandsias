@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Tillandsias macOS tray entitlements (v0.0.1, ad-hoc signed).
+
+  com.apple.security.virtualization is REQUIRED at runtime by
+  Virtualization.framework — without it, VZVirtualMachineConfiguration.validate
+  fails with "the process doesn't have the 'com.apple.security.virtualization'
+  entitlement." See cheatsheets/runtime/vz-framework-provisioning.md.
+
+  com.apple.security.get-task-allow is dev-mode only (lets a debugger attach).
+  Removed in any Developer-ID-signed build.
+
+  @trace spec:macos-tray-build-and-release, spec:macos-native-tray
+-->
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.virtualization</key>
+    <true/>
+    <key>com.apple.security.get-task-allow</key>
+    <true/>
+</dict>
+</plist>
