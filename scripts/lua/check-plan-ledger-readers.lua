@@ -56,12 +56,14 @@ local function is_content_read(line)
     return false
 end
 
-local files = {}
+local files, walked = {}, {}
 for _, dir in ipairs({ "scripts", "images", "crates", "skills", "methodology" }) do
-    for _, f in ipairs(fs.walk(dir, {}) or {}) do
-        local ok, body = pcall(fs.read, f)
-        if ok and body and body:find(TOKEN, 1, true) then files[#files + 1] = { f, body } end
-    end
+    for _, f in ipairs(fs.walk(dir, {}) or {}) do walked[#walked + 1] = f end
+end
+local SRC = require("common.listed_read").read_all("plan-ledger-readers", walked)
+for _, f in ipairs(walked) do
+    local body = SRC[f]
+    if body and body:find(TOKEN, 1, true) then files[#files + 1] = { f, body } end
 end
 
 local violations = 0

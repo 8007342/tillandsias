@@ -1,0 +1,344 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Order 2081: provider gateways. Forges stop holding provider sign-in files.
+# Design: openspec/changes/provider-gateway/. Operator direction 2026-11-11:
+# simple standalone gateways in Rust or Go, reachable only from the forges they
+# serve, small cached Vault reads plus refresh write-back, no plaintext at rest,
+# and agents never start a sign-in.
+packets:
+  # ---------------------------------------------------------------- spikes
+  - packet_id: spike-claude-code-works-in-subscription-mode-through-a-local-forwarding-gateway-holding-the-real-token
+    order: 2081-qymn
+    status: ready
+    kind: research
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [research, claude-code, provider-sign-in, networking, security]
+    estimated_hours: 2
+    title: |
+      SPIKE - Does Claude Code work in subscription sign-in mode with ANTHROPIC_BASE_URL pointed at a local forwarding gateway that holds the real token, with only a placeholder in the forge?
+    context: |
+      Today the forge gets the full Claude sign-in file, refresh token included. A gateway outside the forge would swap a placeholder for the real token and forward upstream (openspec/changes/provider-gateway). This spike answers only whether the CLI allows it. Use a throwaway probe forwarder (Rust or Go, no bash or python) on a scratch network, outside the checkout. Use an existing operator sign-in. Never start a sign-in; if none exists, record that and stop.
+    exit_criteria:
+      - 'openspec/changes/provider-gateway/design.md has a "Spike result: Claude" section recording yes or no, the claude CLI version, the exact env and config used (placeholder value, base URL), and on "no" the observed failure verbatim with no token bytes. Pre-fix: FAILS, the section does not exist.'
+      - 'No code beyond the throwaway probe is committed; the probe source is not in the checkout.'
+    verifiable_closure: 'grep -c "^## Spike result: Claude" openspec/changes/provider-gateway/design.md prints 1. Pre-fix: prints 0.'
+    unscoreable: |
+      research-spike: the deliverable is a recorded verdict on third-party CLI behaviour, not a code property; there is no repository test to pin.
+    next_action: 'Nothing is done. Write a throwaway forwarder, start claude in a scratch forge with ANTHROPIC_BASE_URL set and a placeholder credential, run one prompt, and record the verdict section in design.md.'
+    provenance: operator direction 2026-11-11 (provider gateways), order 2081.
+    depends_on: []
+    related: [2080-7euu, high-forge-vault-policies-cannot-write-a-provider-sign-in, 2080-cdvm]
+    events:
+      - {type: filed, ts: '2026-11-11T20:07:49Z', host: macuahuitl, summary: filed ready as the first provider-gateway spike}
+
+  - packet_id: spike-codex-works-in-subscription-mode-through-a-local-forwarding-gateway-holding-the-real-token
+    order: 2081-f8qf
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [research, codex, provider-sign-in, networking, security]
+    estimated_hours: 2
+    title: |
+      SPIKE - Does Codex work in ChatGPT subscription sign-in mode with its API base URL pointed at a local forwarding gateway that holds the real token, with only a placeholder in the forge?
+    context: |
+      Same question as the Claude spike, for the codex CLI (its auth.json carries the refresh token today). Find the base-URL setting the CLI honours in subscription mode (env or config.toml) and record which one. Throwaway probe only, outside the checkout. Never start a sign-in.
+    exit_criteria:
+      - 'openspec/changes/provider-gateway/design.md has a "Spike result: Codex" section recording yes or no, the codex CLI version, the env and config used, and on "no" the observed failure verbatim with no token bytes. Pre-fix: FAILS, the section does not exist.'
+      - 'No code beyond the throwaway probe is committed.'
+    verifiable_closure: 'grep -c "^## Spike result: Codex" openspec/changes/provider-gateway/design.md prints 1. Pre-fix: prints 0.'
+    unscoreable: |
+      research-spike: the deliverable is a recorded verdict on third-party CLI behaviour; there is no repository test to pin.
+    next_action: 'Nothing is done. Find the codex base-URL setting for subscription mode, run one prompt through a throwaway forwarder with a placeholder, and record the verdict section.'
+    provenance: operator direction 2026-11-11 (provider gateways), order 2081.
+    depends_on: []
+    related: [2081-qymn, 2076-w7kd]
+    events:
+      - {type: filed, ts: '2026-11-11T20:07:49Z', host: macuahuitl, summary: filed ready as a provider-gateway spike}
+
+  - packet_id: spike-copilot-works-in-subscription-mode-through-a-local-forwarding-gateway-holding-the-real-token
+    order: 2081-xufm
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [research, copilot, provider-sign-in, networking, security]
+    estimated_hours: 2
+    title: |
+      SPIKE - Does the Copilot CLI work in subscription sign-in mode with its API base URL pointed at a local forwarding gateway that holds the real token, with only a placeholder in the forge?
+    context: |
+      Same question for the GitHub Copilot CLI (lane from 2063-nfag). Copilot exchanges a GitHub token for a short-lived Copilot token; record which of the two the gateway would have to hold, and which endpoint(s) it would front. Throwaway probe only. Never start a sign-in.
+    exit_criteria:
+      - 'openspec/changes/provider-gateway/design.md has a "Spike result: Copilot" section recording yes or no, the copilot CLI version, the env and config used, which token the gateway holds, and on "no" the observed failure verbatim with no token bytes. Pre-fix: FAILS, the section does not exist.'
+      - 'No code beyond the throwaway probe is committed.'
+    verifiable_closure: 'grep -c "^## Spike result: Copilot" openspec/changes/provider-gateway/design.md prints 1. Pre-fix: prints 0.'
+    unscoreable: |
+      research-spike: the deliverable is a recorded verdict on third-party CLI behaviour; there is no repository test to pin.
+    next_action: 'Nothing is done. Find the copilot CLI endpoint override, run one prompt through a throwaway forwarder with a placeholder, and record the verdict section.'
+    provenance: operator direction 2026-11-11 (provider gateways), order 2081.
+    depends_on: []
+    related: [2081-qymn, 2063-nfag]
+    events:
+      - {type: filed, ts: '2026-11-11T20:07:49Z', host: macuahuitl, summary: filed ready as a provider-gateway spike}
+
+  - packet_id: spike-opencode-works-in-subscription-mode-through-a-local-forwarding-gateway-holding-the-real-token
+    order: 2081-fuae
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [research, opencode, provider-sign-in, networking, security]
+    estimated_hours: 2
+    title: |
+      SPIKE - Does OpenCode work in subscription sign-in mode with its provider base URL pointed at a local forwarding gateway that holds the real token, with only a placeholder in the forge?
+    context: |
+      Same question for OpenCode, whose auth.json can hold several providers' sign-ins. Record which provider entry was tested and the baseURL option used. Mind the opencode.ai rate-limit pause in operator memory: test against a subscription provider, not the opencode.ai zen endpoint. Throwaway probe only. Never start a sign-in.
+    exit_criteria:
+      - 'openspec/changes/provider-gateway/design.md has a "Spike result: OpenCode" section recording yes or no, the opencode version, the provider entry and config used, and on "no" the observed failure verbatim with no token bytes. Pre-fix: FAILS, the section does not exist.'
+      - 'No code beyond the throwaway probe is committed.'
+    verifiable_closure: 'grep -c "^## Spike result: OpenCode" openspec/changes/provider-gateway/design.md prints 1. Pre-fix: prints 0.'
+    unscoreable: |
+      research-spike: the deliverable is a recorded verdict on third-party CLI behaviour; there is no repository test to pin.
+    next_action: 'Nothing is done. Point one opencode provider baseURL at a throwaway forwarder with a placeholder key, run one prompt, and record the verdict section.'
+    provenance: operator direction 2026-11-11 (provider gateways), order 2081.
+    depends_on: []
+    related: [2081-qymn]
+    events:
+      - {type: filed, ts: '2026-11-11T20:07:49Z', host: macuahuitl, summary: filed ready as a provider-gateway spike}
+
+  # ---------------------------------------------------------------- design
+  - packet_id: the-provider-gateway-openspec-change-states-the-standalone-forge-only-gateway-as-normative
+    order: 2081-4rer
+    status: ready
+    kind: spec
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [openspec, security, design]
+    estimated_hours: 2
+    title: |
+      The provider-gateway OpenSpec change states the operator's gateway requirements as normative, with a threat model and a one-page readme plan
+    context: |
+      A first draft of openspec/changes/provider-gateway (proposal, design, tasks, specs/provider-gateway/spec.md) is filed with this order. This row reviews and completes it: one small standalone binary per host or per forge network, one upstream per provider, listening only on the forge network, peer identity = the network or socket a request arrives on, no admin API, no header or body logging, token cached in memory with a TTL, serialized refresh with Vault write-back, a documented threat model, and a one-page "how it works" readme. It also folds in the spike results as they arrive. Rust or Go only; no bash, python or jq.
+    exit_criteria:
+      - 'openspec validate provider-gateway --strict passes (or, where the CLI is absent, every requirement in specs/provider-gateway/spec.md has at least one "#### Scenario:"). Pre-fix: FAILS, the change does not exist on linux-next.'
+      - 'specs/provider-gateway/spec.md has a requirement for each of: standalone binary, one upstream per provider, forge-only reachability, placeholder in the forge, cached Vault reads with serialized refresh, no header or body logging. design.md has a "## Threat model" section.'
+    verifiable_closure: 'grep -c "^### Requirement:" openspec/changes/provider-gateway/specs/provider-gateway/spec.md prints at least 6, and grep -c "^## Threat model" openspec/changes/provider-gateway/design.md prints 1. Pre-fix on linux-next: FAILS, no such file.'
+    unscoreable: |
+      spec-text: the deliverable is a specification document; its checks are textual and recorded in verifiable_closure.
+    next_action: 'Draft filed with this order. Left to do: review it against the operator direction of 2026-11-11, run openspec validate if the CLI is present, and add each spike result as it lands.'
+    provenance: operator direction 2026-11-11 (provider gateways), order 2081.
+    depends_on: []
+    related: [2081-qymn, 2081-f8qf, 2081-xufm, 2081-fuae, 2080-7euu]
+    events:
+      - {type: filed, ts: '2026-11-11T20:07:49Z', host: macuahuitl, summary: filed ready with the first draft of the change}
+
+  # ---------------------------------------------------------------- builds
+  - packet_id: the-provider-gateway-forwards-claude-requests-with-the-real-token-and-the-forge-holds-only-a-placeholder
+    order: 2081-4wf4
+    status: pending
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [rust, security, networking, vault, claude-code]
+    estimated_hours: 8
+    title: |
+      The provider gateway exists (core plus the Claude upstream): a Claude forge request carrying a placeholder reaches upstream with the real token, and the gateway is reachable only from that forge's network
+    context: |
+      First build packet; it builds the gateway core (openspec/changes/provider-gateway tasks 2.x) and the Claude upstream (3.1). Pending until the Claude spike records "yes". Follow the spec: listen only on the forge network, no admin API, no header or body logging, in-memory TTL cache, serialized refresh with Vault write-back, README.md and THREAT-MODEL.md beside the source.
+    exit_criteria:
+      - 'A test sends a request with a placeholder through the gateway to a mock upstream; the upstream sees the real token and the response holds no token bytes. Pre-fix: FAILS, no gateway exists.'
+      - 'A test configures a listener on 0.0.0.0 and on 127.0.0.1; the gateway refuses to start for both with a named error.'
+      - 'A test sends ten concurrent requests after expiry; the mock provider sees exactly one refresh and the mock Vault one write.'
+      - 'A test captures the log; neither the placeholder nor the real token appears in it.'
+    verifiable_closure: 'cargo test for the gateway crate names the four tests above, added with the fix. Pre-fix: FAILS, the crate does not exist.'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the tests named in the exit criteria in the same commit (1136-n8sh).
+    next_action: 'WAIT for the Claude spike verdict. On yes: write the four tests first, watch them fail, then build the core and the Claude upstream. On no: close this row as not-feasible with the recorded failure.'
+    provenance: operator direction 2026-11-11 (provider gateways), order 2081.
+    depends_on: [spike-claude-code-works-in-subscription-mode-through-a-local-forwarding-gateway-holding-the-real-token, the-provider-gateway-openspec-change-states-the-standalone-forge-only-gateway-as-normative]
+    related: [2081-qymn]
+    events:
+      - {type: filed, ts: '2026-11-11T20:07:49Z', host: macuahuitl, summary: filed pending on the Claude spike verdict}
+
+  - packet_id: the-provider-gateway-forwards-codex-requests-with-the-real-token-and-the-forge-holds-only-a-placeholder
+    order: 2081-usun
+    status: pending
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [rust, security, networking, vault, codex]
+    estimated_hours: 4
+    title: |
+      The provider gateway gains a Codex upstream: a Codex forge request carrying a placeholder reaches upstream with the real token
+    context: |
+      openspec/changes/provider-gateway task 3.2. Pending until the Codex spike records "yes". Builds on the gateway core from the Claude build packet.
+    exit_criteria:
+      - 'A test sends a codex-shaped request with a placeholder through the gateway to a mock upstream; the upstream sees the real token, and a refresh uses the codex refresh endpoint once. Pre-fix: FAILS, no codex upstream exists.'
+    verifiable_closure: 'cargo test for the gateway crate names a codex upstream test, added with the fix. Pre-fix: FAILS.'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the test in the same commit (1136-n8sh).
+    next_action: 'WAIT for the Codex spike verdict and the Claude build. On yes: write the test first, then add the upstream.'
+    provenance: operator direction 2026-11-11 (provider gateways), order 2081.
+    depends_on: [spike-codex-works-in-subscription-mode-through-a-local-forwarding-gateway-holding-the-real-token, the-provider-gateway-forwards-claude-requests-with-the-real-token-and-the-forge-holds-only-a-placeholder]
+    related: [2081-f8qf]
+    events:
+      - {type: filed, ts: '2026-11-11T20:07:49Z', host: macuahuitl, summary: filed pending on the Codex spike verdict}
+
+  - packet_id: the-provider-gateway-forwards-copilot-requests-with-the-real-token-and-the-forge-holds-only-a-placeholder
+    order: 2081-zepm
+    status: pending
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [rust, security, networking, vault, copilot]
+    estimated_hours: 4
+    title: |
+      The provider gateway gains a Copilot upstream: a Copilot forge request carrying a placeholder reaches upstream with the real token
+    context: |
+      openspec/changes/provider-gateway task 3.3. Pending until the Copilot spike records "yes"; the spike names which token the gateway holds.
+    exit_criteria:
+      - 'A test sends a copilot-shaped request with a placeholder through the gateway to a mock upstream; the upstream sees the real token. Pre-fix: FAILS, no copilot upstream exists.'
+    verifiable_closure: 'cargo test for the gateway crate names a copilot upstream test, added with the fix. Pre-fix: FAILS.'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the test in the same commit (1136-n8sh).
+    next_action: 'WAIT for the Copilot spike verdict and the Claude build. On yes: write the test first, then add the upstream.'
+    provenance: operator direction 2026-11-11 (provider gateways), order 2081.
+    depends_on: [spike-copilot-works-in-subscription-mode-through-a-local-forwarding-gateway-holding-the-real-token, the-provider-gateway-forwards-claude-requests-with-the-real-token-and-the-forge-holds-only-a-placeholder]
+    related: [2081-xufm, 2063-nfag]
+    events:
+      - {type: filed, ts: '2026-11-11T20:07:49Z', host: macuahuitl, summary: filed pending on the Copilot spike verdict}
+
+  - packet_id: the-provider-gateway-forwards-opencode-requests-with-the-real-token-and-the-forge-holds-only-a-placeholder
+    order: 2081-ivus
+    status: pending
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [rust, security, networking, vault, opencode]
+    estimated_hours: 4
+    title: |
+      The provider gateway gains an OpenCode upstream: an OpenCode forge request carrying a placeholder reaches upstream with the real token
+    context: |
+      openspec/changes/provider-gateway task 3.4. Pending until the OpenCode spike records "yes"; the spike names the provider entry.
+    exit_criteria:
+      - 'A test sends an opencode-shaped request with a placeholder through the gateway to a mock upstream; the upstream sees the real token. Pre-fix: FAILS, no opencode upstream exists.'
+    verifiable_closure: 'cargo test for the gateway crate names an opencode upstream test, added with the fix. Pre-fix: FAILS.'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the test in the same commit (1136-n8sh).
+    next_action: 'WAIT for the OpenCode spike verdict and the Claude build. On yes: write the test first, then add the upstream.'
+    provenance: operator direction 2026-11-11 (provider gateways), order 2081.
+    depends_on: [spike-opencode-works-in-subscription-mode-through-a-local-forwarding-gateway-holding-the-real-token, the-provider-gateway-forwards-claude-requests-with-the-real-token-and-the-forge-holds-only-a-placeholder]
+    related: [2081-fuae]
+    events:
+      - {type: filed, ts: '2026-11-11T20:07:49Z', host: macuahuitl, summary: filed pending on the OpenCode spike verdict}
+
+  # ---------------------------------------------------------------- cleanups
+  - packet_id: a-claude-forge-no-longer-receives-the-claude-sign-in-file-only-the-gateway-url-and-a-placeholder
+    order: 2081-v9dq
+    status: pending
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [security, forge, vault, claude-code, rust]
+    estimated_hours: 3
+    title: |
+      A Claude forge no longer receives the Claude sign-in file (not even read-only); it gets only ANTHROPIC_BASE_URL for its gateway and a placeholder
+    context: |
+      openspec/changes/provider-gateway task 4.1. Removes the forge's read-only copy left by 2080-7euu once the gateway serves Claude. Agents never start a sign-in; the operator signs in from the tray.
+    exit_criteria:
+      - 'A test over the Claude forge launch spec asserts no mount, env or secret carries the Claude sign-in document, and ANTHROPIC_BASE_URL names the gateway listener. Pre-fix: FAILS, the forge receives the sign-in file.'
+      - 'A Claude forge answers one prompt through the gateway.'
+    verifiable_closure: 'A headless launch-spec test for the Claude lane naming the absent sign-in, added with the fix. Pre-fix: FAILS.'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the launch-spec test in the same commit (1136-n8sh).
+    next_action: 'WAIT for 2080-7euu (high-forge-vault-policies-cannot-write-a-provider-sign-in, filed on PR 1087 and not yet on linux-next; add it to depends_on in a correction fragment once it lands) and the Claude gateway build. Then write the launch-spec test, watch it fail, and stop handing the sign-in to the forge.'
+    provenance: operator direction 2026-11-11 (provider gateways), order 2081.
+    depends_on: [the-provider-gateway-forwards-claude-requests-with-the-real-token-and-the-forge-holds-only-a-placeholder]
+    related: [2080-7euu, high-forge-vault-policies-cannot-write-a-provider-sign-in]
+    events:
+      - {type: filed, ts: '2026-11-11T20:07:49Z', host: macuahuitl, summary: filed pending on 2080-7euu and the Claude gateway build}
+
+  - packet_id: a-codex-forge-no-longer-receives-the-codex-sign-in-file-only-the-gateway-url-and-a-placeholder
+    order: 2081-hk7n
+    status: pending
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [security, forge, vault, codex, rust]
+    estimated_hours: 3
+    title: |
+      A Codex forge no longer receives the Codex sign-in file (not even read-only); it gets only the gateway base URL and a placeholder
+    context: |
+      openspec/changes/provider-gateway task 4.2. Also retires the forge-side harvest of a rotated codex sign-in, since rotation now happens in the gateway.
+    exit_criteria:
+      - 'A test over the Codex forge launch spec asserts no mount, env or secret carries the Codex sign-in document, and the base URL names the gateway listener. Pre-fix: FAILS, the forge receives auth.json.'
+    verifiable_closure: 'A headless launch-spec test for the Codex lane naming the absent sign-in, added with the fix. Pre-fix: FAILS.'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the launch-spec test in the same commit (1136-n8sh).
+    next_action: 'WAIT for 2080-7euu (high-forge-vault-policies-cannot-write-a-provider-sign-in, filed on PR 1087 and not yet on linux-next; add it to depends_on in a correction fragment once it lands) and the Codex gateway build. Then write the launch-spec test, watch it fail, and stop handing the sign-in to the forge.'
+    provenance: operator direction 2026-11-11 (provider gateways), order 2081.
+    depends_on: [the-provider-gateway-forwards-codex-requests-with-the-real-token-and-the-forge-holds-only-a-placeholder]
+    related: [2080-7euu, high-forge-vault-policies-cannot-write-a-provider-sign-in, 2076-w7kd]
+    events:
+      - {type: filed, ts: '2026-11-11T20:07:49Z', host: macuahuitl, summary: filed pending on 2080-7euu and the Codex gateway build}
+
+  - packet_id: a-copilot-forge-no-longer-receives-the-copilot-sign-in-only-the-gateway-url-and-a-placeholder
+    order: 2081-3b4z
+    status: pending
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [security, forge, vault, copilot, rust]
+    estimated_hours: 3
+    title: |
+      A Copilot forge no longer receives the Copilot sign-in (not even read-only); it gets only the gateway base URL and a placeholder
+    context: |
+      openspec/changes/provider-gateway task 4.3.
+    exit_criteria:
+      - 'A test over the Copilot forge launch spec asserts no mount, env or secret carries the Copilot sign-in, and the base URL names the gateway listener. Pre-fix: FAILS, the forge receives the sign-in.'
+    verifiable_closure: 'A headless launch-spec test for the Copilot lane naming the absent sign-in, added with the fix. Pre-fix: FAILS.'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the launch-spec test in the same commit (1136-n8sh).
+    next_action: 'WAIT for 2080-7euu (high-forge-vault-policies-cannot-write-a-provider-sign-in, filed on PR 1087 and not yet on linux-next; add it to depends_on in a correction fragment once it lands) and the Copilot gateway build. Then write the launch-spec test, watch it fail, and stop handing the sign-in to the forge.'
+    provenance: operator direction 2026-11-11 (provider gateways), order 2081.
+    depends_on: [the-provider-gateway-forwards-copilot-requests-with-the-real-token-and-the-forge-holds-only-a-placeholder]
+    related: [2080-7euu, high-forge-vault-policies-cannot-write-a-provider-sign-in, 2063-nfag]
+    events:
+      - {type: filed, ts: '2026-11-11T20:07:49Z', host: macuahuitl, summary: filed pending on 2080-7euu and the Copilot gateway build}
+
+  - packet_id: an-opencode-forge-no-longer-receives-the-opencode-sign-in-file-only-the-gateway-url-and-a-placeholder
+    order: 2081-s524
+    status: pending
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [security, forge, vault, opencode, rust]
+    estimated_hours: 3
+    title: |
+      An OpenCode forge no longer receives the OpenCode sign-in file (not even read-only); it gets only the gateway baseURL and a placeholder
+    context: |
+      openspec/changes/provider-gateway task 4.4.
+    exit_criteria:
+      - 'A test over the OpenCode forge launch spec asserts no mount, env or secret carries the OpenCode auth.json, and the provider baseURL names the gateway listener. Pre-fix: FAILS, the forge receives the sign-in file.'
+    verifiable_closure: 'A headless launch-spec test for the OpenCode lane naming the absent sign-in, added with the fix. Pre-fix: FAILS.'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the launch-spec test in the same commit (1136-n8sh).
+    next_action: 'WAIT for 2080-7euu (high-forge-vault-policies-cannot-write-a-provider-sign-in, filed on PR 1087 and not yet on linux-next; add it to depends_on in a correction fragment once it lands) and the OpenCode gateway build. Then write the launch-spec test, watch it fail, and stop handing the sign-in to the forge.'
+    provenance: operator direction 2026-11-11 (provider gateways), order 2081.
+    depends_on: [the-provider-gateway-forwards-opencode-requests-with-the-real-token-and-the-forge-holds-only-a-placeholder]
+    related: [2080-7euu, high-forge-vault-policies-cannot-write-a-provider-sign-in]
+    events:
+      - {type: filed, ts: '2026-11-11T20:07:49Z', host: macuahuitl, summary: filed pending on 2080-7euu and the OpenCode gateway build}

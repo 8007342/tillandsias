@@ -105,6 +105,9 @@ for f in plan-binary-probe.sh gate-stamp.sh common.sh check-issue-citation-conve
 done
 # ORDER 1570-mxcg: the status-loss guard is Lua; the lane runs it from scripts/lua/.
 mkdir -p scripts/lua && cp "$ROOT/scripts/lua/check-fragment-status-loss.lua" scripts/lua/ 2>/dev/null || true
+# 2417-jzhh: a checkout carries the library its checkers require; this copy of
+# the checker resolves common.listed_read from this scratch, not from $ROOT.
+mkdir -p lib/lua/common && cp "$ROOT/lib/lua/common/listed_read.lua" lib/lua/common/ 2>/dev/null || true
 chmod +x scripts/*.sh scripts/hooks/*.sh 2>/dev/null
 printf 'packets: []\n' > plan/index.yaml
 # The Lua status-loss guard runs through proc.run, whose command-policy gate

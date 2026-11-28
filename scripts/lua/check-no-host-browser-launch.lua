@@ -113,9 +113,10 @@ end
 
 -- sites[rel][pat] = { "path:line: text", ... }
 local sites, total = {}, 0
+local SRC = require("common.listed_read").read_all("no-host-browser-launch", files, function(f) return f.path end)
 for _, f in ipairs(files) do
-    local ok, src = pcall(fs.read, f.path)
-    if ok and src then
+    local src = SRC[f.path]
+    if src then
         local rel = f.path:sub(#f.root + 2)
         for i, raw in ipairs(text.lines(src)) do
             if raw:find("#[cfg(test)]", 1, true) then break end

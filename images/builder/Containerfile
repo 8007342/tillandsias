@@ -19,7 +19,7 @@ FROM registry.fedoraproject.org/fedora-minimal:44
 LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 # curl + jq: required by the prefetch fallback (scripts/nix-build-container.sh,
 # TILLANDSIAS_NIX_PREFETCH=1) which downloads flake inputs with system curl.
-RUN microdnf -y install nix git curl jq && microdnf clean all
+RUN microdnf -y install nix git curl jq lua lua-filesystem lua-lpeg && microdnf clean all
 COPY nix.conf /etc/nix/nix.conf
 # with-nix-builder.sh drives every run as: <image> -c "cd /work && ...", so the
 # entrypoint must be a bash that accepts -c.

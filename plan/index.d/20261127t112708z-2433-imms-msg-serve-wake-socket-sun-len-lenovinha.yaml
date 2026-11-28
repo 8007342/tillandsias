@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: msg-serve-wake-socket-exceeds-sun-len-under-a-deep-checkout
+    order: "2433-imms"
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [linux, fleet-msg, litmus]
+    estimated_hours: 2
+    title: "msg-serve's wake socket exceeds SUN_LEN under a deep checkout, so litmus:fleet-msg-same-host goes red by path length"
+    context: |
+      Seen in relay-preflight of #1708 (2354-5biy) at e98e0684d from
+      ~/claudia/tillandsias/target/work/w5biy: "refused: the mover never bound its wake socket:
+      [msg-serve] no wake socket at …/target/plan-scratch/s85707881/run/tillandsias/msg.sock (path must
+      be shorter than SUN_LEN)", then refused:fleet-msg-same-host:setup-failed. The same test at the same
+      commit from a short-path worktree (~/claudia/w5) passed (passed=1 failed=0). The tray already
+      binds under a short runtime root for the same reason (1581-sunl, tray/mod.rs); msg-serve does not.
+    exit_criteria:
+      - "msg-serve binds its wake socket under a short fallback root (e.g. $XDG_RUNTIME_DIR) when the derived path would exceed SUN_LEN, and says which path it bound."
+      - "litmus:fleet-msg-same-host passes from a checkout whose scratch socket path exceeds 108 bytes, and fails with the fallback removed."
+    unscoreable: "pinned when the litmus arm exists"
+    next_action: "Find msg-serve's wake-socket path derivation; reuse the 1581-sunl short-root rule."
+    provenance: "coordinator macuahuitl-fedora 2026-11-27, from #1708 preflight"
+    related: [a-forge-queue-jobs-audit-record-says-bare-metal]
+    events:
+      - {type: filed, ts: "2026-11-27T11:27:08Z", host: lenovinha, summary: "filed at p3 on the coordinator's word"}

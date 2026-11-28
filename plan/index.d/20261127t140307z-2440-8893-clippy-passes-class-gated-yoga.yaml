@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: both-clippy-passes-skip-when-no-compile-time-input-changed
+    order: "2440-8893"
+    status: in_progress
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [gate, velocity, cargo]
+    estimated_hours: 4
+    owned_files: [build.sh, scripts/lua/scan-cargo-test-repo-roots.lua]
+    title: "clippy strict and clippy+vsock skip a whole compile when no compile-time input changed (rust, include_str!/include_bytes!, build.rs reads)"
+    context: |
+      Part 2 of 2437-v9vv (coordinator 2026-11-27). macuahuitl's trace: clippy strict 82 s, clippy+vsock 48 s, on
+      every land, scripts-only included. Clippy compiles; it reads no repo file at run time, only what compiles in.
+    exit_criteria:
+      - "The scanner gains --compile-only (include_str!/include_bytes!/include! literals and build.rs rerun-if-changed/read paths); _CARGO_CLIPPY_INPUTS is generated from it and step 954 --checks it."
+      - "Both clippy passes ask _class_may_skip against it and name themselves on not-run: when skipped."
+      - "Red first (wiring red on trunk); MUTANT: a planted include_str! of an unlisted scripts/ file is refused by the --check."
+    unscoreable: "fixture-scored"
+    provenance: "coordinator 2026-11-27; yoga"
+    related: [2437-v9vv, 2438-kfgv]
+    events:
+      - {type: claimed, ts: "2026-11-27T14:03:07Z", host: yoga, summary: "claimed; work ref work/2440-8893"}

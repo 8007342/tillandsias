@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: medium-github-and-each-model-provider-can-be-signed-out-from-the-tray
+    field: context
+    value: |-
+      Audit finding M10. Only Cloudflare has a sign-out (cloudflare_login logout with cloudflare_oauth revoke). GitHub and the four model providers have none, so the only way to drop one sign-in is to wipe all of them. A device-flow client cannot revoke a GitHub App user token; what GitHub sign-out means is operator decision D5. The operator signs out from the tray; no agent verb is added.
+
+
+      [2026-11-11T19:15:00Z macuahuitl] Operator ruling on D5, relayed by the coordinator 2026-11-11, approved. GitHub sign-out means delete locally and show the GitHub settings page, with that wording. No upstream revocation is attempted for GitHub.
+    ts: "2026-11-11T19:15:00Z"
+    host: macuahuitl
+
+events:
+  - packet_id: medium-github-and-each-model-provider-can-be-signed-out-from-the-tray
+    event:
+      type: note
+      ts: "2026-11-11T19:15:00Z"
+      host: macuahuitl
+      summary: |-
+        D5 answered

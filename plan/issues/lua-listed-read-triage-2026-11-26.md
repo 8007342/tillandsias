@@ -17,6 +17,7 @@ A checker that wraps each read of a LISTED file in `pcall(fs.read)` and drops th
 Batch 1 is done: scripts/lua/test-listed-read-blocks-batch1.lua (gate step 962), red 8/8 first. check-centicolon-ratchet:71 and check-cheatsheet-source-anchors:72 moved to A while it was built (they fail safe).
 Batch 2 is done: test-listed-read-blocks-batch2.lua (gate step 961, #1692), red 10/10 first.
 Batch 3 is done: test-listed-read-blocks-batch3.lua (gate step 941), red 8/8 first. common.listed_read now names a repeated unreadable path once. check-guest-unit-hardening:30 moved to A (it fails safe). check-no-base64-script-injection also blocks when its git grep fails on an unreadable file, which it used to swallow as no candidates.
+Batch 4 is done: test-listed-read-blocks-batch4.lua (gate step 943), red 9/9 first.
 
 ## Batches (8–10 checkers per PR, each red first on a planted unreadable listed file)
 

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: cheatsheet-provenance-make-the-validator-honest-then-sign-a-manifest
+    field: next_action
+    value: 'Slice 1 (exit criterion 1) is draft PR #1729 at 5f81ea9aa: unhashed bundled sheets render [bundled, unverified] (171), and check-cheatsheet-tiers --require-fingerprints refuses them; plain --strict is unchanged so the gate stays green. Next: compute status from last_verified, then the signed manifest gating the bake, then the in-body banner.'
+    ts: "2026-11-28T02:38:57Z"
+    host: lenovinha
+
+events:
+  - packet_id: cheatsheet-provenance-make-the-validator-honest-then-sign-a-manifest
+    event:
+      type: note
+      ts: "2026-11-28T02:38:57Z"
+      host: lenovinha
+      summary: |-
+        slice 1 pushed

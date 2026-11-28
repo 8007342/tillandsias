@@ -60,11 +60,23 @@ local SELF_ROOT = ok(top) and text.trim(top.stdout or "") or ""
 if SELF_ROOT == "" then cnr("not-in-a-checkout") end
 
 -- An absolute path without resolving symlinks, as `cd DIR && pwd` gives.
+-- Lexical, in Lua: `realpath -s` is GNU-only (macOS's realpath has no -s and
+-- refused every --root, 2426-pyf6, measured on tlatoanis-macbook-air), and a
+-- resolving realpath would turn darwin's /tmp into /private/tmp.
 local function absdir(d)
     if not ok(proc.run({ argv = { "test", "-d", d }, timeout_ms = 10000 })) then return nil end
-    local r = proc.run({ argv = { "realpath", "-s", "--", d }, timeout_ms = 10000 })
-    if not ok(r) then return nil end
-    return text.trim(r.stdout or "")
+    local p = d:gsub("\\", "/")
+    if not (p:sub(1, 1) == "/" or p:match("^%a:/")) then
+        local r = proc.run({ argv = { "pwd" }, timeout_ms = 10000 })
+        if not ok(r) then return nil end
+        p = text.trim(r.stdout or "") .. "/" .. p
+    end
+    local lead, parts = p:match("^(%a:)") or "", {}
+    for seg in p:sub(#lead + 1):gmatch("[^/]+") do
+        if seg == ".." then if #parts > 0 then parts[#parts] = nil end
+        elseif seg ~= "." then parts[#parts + 1] = seg end
+    end
+    return lead .. "/" .. table.concat(parts, "/")
 end
 
 local ROOT = SELF_ROOT

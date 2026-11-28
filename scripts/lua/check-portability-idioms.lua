@@ -178,9 +178,10 @@ local function flag(f, n, idiom, portable)
     if class_of(f) == "silent" then silent[#silent + 1] = e else loud[#loud + 1] = e end
 end
 
+local SRC = require("common.listed_read").read_all("portability-idioms", files, rooted)
 for _, f in ipairs(files) do
-    local ok_r, content = pcall(fs.read, rooted(f))
-    if ok_r then
+    local content = SRC[rooted(f)]
+    if content then
         local rvars = remote_vars_of(text.lines(content))
         local dialect_left = 0
         for _, cl in ipairs(code_lines(content)) do

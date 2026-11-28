@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: medium-a-vault-wipe-is-a-tray-event-with-a-cause-class
+    field: verifiable_closure
+    value: |-
+      A headless test for the wipe event, added with the fix. Pre-fix: FAILS.
+
+      [2026-11-11T19:15:06Z macuahuitl] Added by the D6 ruling, a second test asserts the field allowlist of the persisted wipe record, exactly cause class, timestamp and version, and fails when any other field is written. Pre-fix FAILS, no record exists.
+    ts: "2026-11-11T19:15:06Z"
+    host: macuahuitl
+
+events:
+  - packet_id: medium-a-vault-wipe-is-a-tray-event-with-a-cause-class
+    event:
+      type: note
+      ts: "2026-11-11T19:15:06Z"
+      host: macuahuitl
+      summary: |-
+        D6 requires a field-allowlist test

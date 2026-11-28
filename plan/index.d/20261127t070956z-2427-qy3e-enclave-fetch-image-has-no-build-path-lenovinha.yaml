@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: enclave-fetch-image-has-no-build-path
+    order: "2427-qy3e"
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [images, build]
+    estimated_hours: 3
+    owned_paths: [images/enclave-fetch/Containerfile, scripts/build-image.sh, scripts/build-sidecar.sh]
+    title: "images/enclave-fetch has no build path: nothing stages the musl tillandsias-enclave-fetch binary its Containerfile COPYs"
+    context: |
+      Found on lenovinha 2026-11-27 while measuring 2413-dvmn (#1702). The Containerfile COPYs
+      tillandsias-enclave-fetch from its build context "the same way the router's sidecar is (scripts/build-sidecar.sh)",
+      but no script, build.sh lane or headless code stages that binary or builds the image (git grep finds the name only in
+      the crate and one fixture), and build-package-licence-register.lua did not list the image. To measure, the binary was
+      built by hand: cargo build --release --target x86_64-unknown-linux-musl -p tillandsias-enclave-fetch.
+    exit_criteria:
+      - "one tracked command builds the enclave-fetch image from a clean checkout (stages the musl binary, builds, removes the staged copy), and a fixture or litmus pins that it runs"
+    unscoreable: "no-litmus-yet: closure is the build command plus the fixture that pins it."
+    next_action: "decide with the coordinator whether build-image.sh or a build-sidecar.sh-style stager owns it; then wire and pin it."
+    provenance: filed by lenovinha at macuahuitl's request, from 2413-dvmn.
+    related: [2413-dvmn, 2041-csm4]
+    events:
+      - {type: filed, ts: '2026-11-27T07:09:56Z', host: lenovinha, summary: enclave-fetch image has no build path}

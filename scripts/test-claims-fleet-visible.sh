@@ -133,6 +133,12 @@ for f in scripts/lua/check-no-base64-script-injection.lua scripts/lua/check-frag
     cp "$ROOT/$f" "$f" 2>/dev/null || true
     [ -f "$f" ] || { echo "FAIL: fixture scratch is missing $f (source: $ROOT/$f)"; exit 2; }
 done
+# 2417-jzhh: a checkout carries the library its checkers require. These are
+# COPIES of the checkers, so they resolve common.listed_read from this scratch
+# (the runner's script-checkout fallback finds this scratch too, not $ROOT).
+mkdir -p lib/lua/common
+cp "$ROOT/lib/lua/common/listed_read.lua" lib/lua/common/listed_read.lua 2>/dev/null || true
+[ -f lib/lua/common/listed_read.lua ] || { echo "FAIL: fixture scratch is missing lib/lua/common/listed_read.lua (source: $ROOT/lib/lua/common/listed_read.lua)"; exit 2; }
 chmod +x scripts/*.sh scripts/hooks/*.sh 2>/dev/null || true
 cat > plan/index.yaml <<'EOF'
 packets:

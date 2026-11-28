@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-real-ledger-compaction-test-stops-setting-the-workspace-run-critical-path
+    order: "2439-8t6v"
+    status: ready
+    kind: debt
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [tests, velocity]
+    estimated_hours: 2
+    owned_files: [crates/tillandsias-plan/src/fragments.rs]
+    title: "fragments::compaction_on_the_real_ledger_preserves_every_comment_and_item takes 22.8 s and sets the workspace nextest run's critical path"
+    context: |
+      MEASURED on idle yoga 2026-11-27: `cargo nextest run --workspace` 31.5 s wall for 3610 tests; this one test is
+      22.8 s, the next 13.0 s. It compacts the whole real ledger. Every gate's workspace pass pays it, skip or not.
+    exit_criteria:
+      - "The test keeps its property (every comment and item survives compaction of the real ledger) and runs in under 5 s on idle yoga, e.g. by compacting each fragment family in parallel or asserting on a fixed sample plus a full-ledger digest; the nextest wall drops by the difference, measured."
+    unscoreable: "a measurement: the evidence is the before/after nextest wall"
+    provenance: "coordinator 2026-11-27; yoga"
+    related: [2437-v9vv]

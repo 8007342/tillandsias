@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: land-gate-class-selector-judges-the-candidate-not-the-day
+    field: status
+    value: implemented
+    ts: "2026-11-27T10:50:06Z"
+    host: yoga
+events:
+  - packet_id: land-gate-class-selector-judges-the-candidate-not-the-day
+    event:
+      type: implemented
+      ts: "2026-11-27T10:50:06Z"
+      host: yoga
+      summary: |
+        On work/2429-u3rp. gate_env_for exports TILLANDSIAS_CLASS_BASE=<the trunk being gated> and
+        TILLANDSIAS_CLASS_UNGATED_PATHS=<paths of single-parent first-parent commits since the proof>;
+        change_class_paths adds that file and fails (FULL) when it is named but unreadable. The proof still decides
+        WHETHER skipping is allowed (fresh, green, an ancestor); it no longer decides WHAT changed.
+        Red first: test-land-gate-class-base-is-the-candidate.lua arm 2 (a scripts-only candidate on a trunk whose
+        proof range holds a Rust land) read build-scripts plan-ledger rust on trunk; with the fix build-scripts and
+        plan-ledger only. 5 arms. Sibling fixtures: see the PR.

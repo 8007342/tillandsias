@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: command-policy-audit-log-rotates-by-size-and-keeps-its-window
+    field: status
+    value: implemented
+    ts: "2026-11-27T11:11:10Z"
+    host: yoga
+events:
+  - packet_id: command-policy-audit-log-rotates-by-size-and-keeps-its-window
+    event: {type: implemented, ts: "2026-11-27T11:11:10Z", host: yoga, summary: "On work/2430-s7ii: audit_rotate renames the live log to a timestamped generation past TILLANDSIAS_POLICY_AUDIT_MAX_BYTES (256 MiB), pruning a generation only when the total is over TILLANDSIAS_POLICY_AUDIT_TOTAL_MAX_BYTES (4 GiB) AND it is older than 30 days; audit_summary streams every generation plus the live file. 4 unit tests; 3 mutants (summary reads only live / prune ignores age / never rotate) each caught; test-command-policy-audit.lua green."}

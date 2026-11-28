@@ -532,7 +532,7 @@ pub fn run_cli(args: &[String]) -> i32 {
         debug,
         may_start_vault: true,
     };
-    let host_is_forge = std::env::var("TILLANDSIAS_HOST_KIND").as_deref() == Ok("forge");
+    let host_is_forge = tillandsias_core::forge_marker::refuse_as_forge();
     let mut stdout = std::io::stdout();
     let result = match cmd {
         Command::Logout => logout(&store, host_is_forge, &mut stdout),

@@ -40,13 +40,11 @@ if not ok_walk or files == nil then
     return
 end
 
+local rs = {}
+for _, f in ipairs(files) do if f:sub(-3) == ".rs" then rs[#rs + 1] = f end end
+local SRC = require("common.listed_read").read_all("exec-argv", rs)
 local sources = {}
-for _, f in ipairs(files) do
-    if f:sub(-3) == ".rs" then
-        local ok, content = pcall(fs.read, f)
-        if ok and content then sources[#sources + 1] = { f, content } end
-    end
-end
+for _, f in ipairs(rs) do sources[#sources + 1] = { f, SRC[f] } end
 
 local violations = 0
 for _, sym in ipairs(RETIRED_SYMBOLS) do

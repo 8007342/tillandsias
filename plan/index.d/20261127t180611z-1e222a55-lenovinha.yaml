@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: images-warp-has-no-lua-runtime
+    field: status
+    value: completed
+    ts: "2026-11-27T18:06:11Z"
+    host: lenovinha
+
+events:
+  - packet_id: images-warp-has-no-lua-runtime
+    event:
+      type: completed
+      ts: "2026-11-27T18:06:11Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 763e9411771d930e0adc831b885d7caab94fb36b
+  - packet_id: images-warp-has-no-lua-runtime
+    event:
+      type: note
+      ts: "2026-11-27T18:06:11Z"
+      host: lenovinha
+      summary: |-
+        landed: #1725 as 763e94117 on origin/linux-next; warp runs lua -e (Lua 5.4, lfs 1.8.0, lpeg 1.0.2), +822,388 bytes

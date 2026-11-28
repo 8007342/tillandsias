@@ -87,9 +87,10 @@ local total = 0
 local missing_lines = {}
 local contents = {}
 
+local SRC = require("common.listed_read").read_all("requirement-ids", specs)
 for _, f in ipairs(specs) do
-    local ok_r, content = pcall(fs.read, f)
-    if ok_r then
+    local content = SRC[f]
+    if content then
         contents[f] = content
         local lines = text.lines(content)
         local n = #lines

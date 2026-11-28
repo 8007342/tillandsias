@@ -92,10 +92,11 @@ T:arm("6 minting through an agent door is refused", x.rc == 1 and x.out == "refu
 a, b = grant("hard-reset"), grant("everything", { "true" })
 T:arm("7 a grant with no argv, or an unknown class, is refused by name", a.rc == 1 and a.out == "refused:consent:no-argv" and b.rc == 1 and b.out == "refused:consent:unknown-class:everything", a.why .. b.why)
 
-local rec = T:run{ "cat", "/run/.containerenv" }
-local img = rec.code == 0 and ("\n" .. (rec.stdout or "")):match('\nimage="([^"\n]*)"') or ""
-local base = img:match("([^/]*)$")
-if base:match("^tillandsias%-forge$") or base:match("^tillandsias%-forge[:@]") then
+-- A forge is a container whose image carries the root-owned forge marker (the policy's own
+-- evidence since 2354-5biy; the image name alone no longer is). The marker is outside fs's scope,
+-- so cat reads it.
+local rec = T:run{ "cat", "/etc/tillandsias/forge", timeout_ms = 10000 }
+if rec.code == 0 and ("\n" .. (rec.stdout or "")):match("\nkind=forge\n") then
     plant("workspace-destroy-planted", "workspace-destroy", HOST, "2099-01-01T00:00:00Z")
     x = eval{ "rm", "-rf", "/srv/elsewhere" }
     T:arm("8 in a forge a planted token is not honoured and not spent", x.rc == 4 and x.out == "consent:policy:workspace-destroy" and planted("workspace-destroy-planted"), x.why)
