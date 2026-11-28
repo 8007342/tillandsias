@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: smoke-record.lua, from refs/attest/smoke/darwin/6a242328cd60d32750c92b90da7987790b3e83c6 70f1b371c4f2d749b727c83c3e9ea5c6039778a0
+packets:
+  - packet_id: smoke-v56-11-28-1
+    order: "2252-c47e"
+    status: pending
+    kind: research
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [release, smoke]
+    estimated_hours: 1
+    title: "Smoke records of v56.11.28.1, one per platform (the promote gate reads this row)"
+    context: "The hosts that smoke v56.11.28.1 append smoke-record events here. Not work to claim."
+    exit_criteria:
+      - "linux, darwin and windows each have a smoke-record for v56.11.28.1."
+    unscoreable: "a record row: check-promote-gate.lua is what reads it"
+events:
+  - packet_id: smoke-v56-11-28-1
+    event:
+      type: smoke-record
+      ts: "2026-11-28T08:31:26Z"
+      host: tlatoanis-macbook-air
+      summary: "smoke darwin v56.11.28.1 fail:forge-lane-vsock-idle-timeout regime=darwin:darwin-arm64"
+  - packet_id: smoke-v56-11-28-1
+    event:
+      type: note
+      ts: "2026-11-28T08:31:26Z"
+      host: tlatoanis-macbook-air
+      summary: "evidence for darwin v56.11.28.1 is refs/attest/smoke/darwin/6a242328cd60d32750c92b90da7987790b3e83c6 at 70f1b371c4f2d749b727c83c3e9ea5c6039778a0"
