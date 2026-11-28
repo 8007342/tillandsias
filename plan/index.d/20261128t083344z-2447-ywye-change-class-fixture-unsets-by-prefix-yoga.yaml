@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: test-change-class-unsets-every-class-variable-by-prefix
+    order: "2447-ywye"
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, testing]
+    estimated_hours: 1
+    owned_files: [scripts/test-change-class.sh]
+    title: "test-change-class.sh unsets every TILLANDSIAS_CLASS_* variable by prefix, so the next selector variable cannot leak in from the land queue"
+    context: |
+      #1732 was evicted (land run 115) because the fixture inherited TILLANDSIAS_CLASS_UNGATED_PATHS from the land
+      queue's gate env; a0935fe80 added that one name to the unset list. A list of names is the same trap for the next
+      variable the selector adds. Coordinator 2026-11-28.
+    exit_criteria:
+      - "The fixture unsets every exported TILLANDSIAS_CLASS_* by prefix (compgen -e or equivalent), keeping the explicit non-prefix names it already unsets."
+      - "MUTANT: an exported TILLANDSIAS_CLASS_PLANTED_X that change-class.sh is made to read is unset before any arm runs; 28/28 with it set."
+    unscoreable: "fixture-scored"
+    provenance: "coordinator 2026-11-28; yoga"
+    related: [2443-r9sm, 2373-zter]
+    events:
+      - {type: filed, ts: "2026-11-28T08:33:44Z", host: yoga, summary: "filed after #1732's eviction"}
