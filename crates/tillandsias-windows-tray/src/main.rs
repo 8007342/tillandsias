@@ -55,6 +55,10 @@ mod tray_phase_icon;
 // GUI startup. The rules are portable and tested everywhere; only the startup
 // step (path resolution, logging, the shared-VM restart) is Windows-only.
 mod wslconfig_ensure;
+// ORDER 2456-lrly: the host relay from forges to Lemonade on 127.0.0.1:13305.
+// The policy core is portable and tested everywhere; only the hvsocket
+// listener inside is Windows-only.
+mod lemonade_relay;
 
 // Linux stub modules so unit tests + portable code paths compile cleanly.
 #[cfg(not(target_os = "windows"))]

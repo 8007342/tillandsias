@@ -841,6 +841,24 @@ pub enum ControlMessage {
     ///
     /// @trace order:1955-cfhf, spec:cloudflare-auth
     CloudflareCallbackForward { seq: u64, line: String },
+    /// Host -> in-VM headless, vsock only (order 2456-lrly): "the host's
+    /// Lemonade relay listens on vsock `port` at `cid`". The sibling of
+    /// [`ControlMessage::SetVsockForwardTarget`] for a SEPARATE enclave alias,
+    /// `lemonade:13305`, so Ollama keeps `inference:11434` and both coexist.
+    ///
+    /// The guest records it under /run/tillandsias/lemonade-forward (tmpfs)
+    /// and starts `tillandsias-lemonade-forwarder` from it. The relay at the
+    /// other end, not this message, decides what a forge may reach: nothing
+    /// the guest sends names a host-side host or port.
+    ///
+    /// The guest answers exactly one frame: `IssueAck { seq_acked }` or
+    /// `Error`, like `SetVsockForwardTarget` (1509-kf4d).
+    ///
+    /// New trailing variant (additive, no WIRE_VERSION bump); same
+    /// no-capability-bit argument as `SetVsockForwardTarget`.
+    ///
+    /// @trace order:2456-lrly, spec:vsock-transport
+    SetLemonadeForwardTarget { cid: u32, port: u32 },
 }
 
 /// What the guest established about a PTY session's foreground process.
@@ -1214,6 +1232,7 @@ impl ControlMessage {
             ControlMessage::CloudflareLoginStatusReply { .. } => "CloudflareLoginStatusReply",
             ControlMessage::CloudflareLoginStored { .. } => "CloudflareLoginStored",
             ControlMessage::CloudflareCallbackForward { .. } => "CloudflareCallbackForward",
+            ControlMessage::SetLemonadeForwardTarget { .. } => "SetLemonadeForwardTarget",
         }
     }
 }
@@ -2967,6 +2986,13 @@ mod tests {
                 },
                 "CloudflareCallbackForward",
             ),
+            (
+                ControlMessage::SetLemonadeForwardTarget {
+                    cid: 2,
+                    port: 42431,
+                },
+                "SetLemonadeForwardTarget",
+            ),
         ]
     }
 
@@ -3249,6 +3275,8 @@ mod tests {
             ControlMessage::CloudflareLoginStored { .. } => 39,
             // 1955-cfhf: trailing addition.
             ControlMessage::CloudflareCallbackForward { .. } => 40,
+            // 2456-lrly: trailing addition.
+            ControlMessage::SetLemonadeForwardTarget { .. } => 41,
         }
     }
 
@@ -3283,7 +3311,7 @@ mod tests {
         /// The number of `ControlMessage` variants. An independent literal for
         /// the same reason the discriminants are: anything computed from the
         /// enum agrees with the enum by construction.
-        const DECLARED_VARIANTS: usize = 41;
+        const DECLARED_VARIANTS: usize = 42;
 
         let samples = one_sample_per_variant();
         assert_eq!(

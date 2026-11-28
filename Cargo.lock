@@ -3725,6 +3725,7 @@ dependencies = [
  "chrono",
  "embed-resource",
  "futures-util",
+ "httparse",
  "png 0.17.16",
  "resvg",
  "serde",

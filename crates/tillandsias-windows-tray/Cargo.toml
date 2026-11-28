@@ -43,6 +43,9 @@ serde_json = { workspace = true }
 # already in the workspace graph — it adds no OS import to the tray binary,
 # which is the surface this packet's litmus pins.
 chrono = { workspace = true }
+# 2456-lrly: the Lemonade relay parses guest HTTP with ONE implementation.
+# httparse is already in Cargo.lock (via hyper), so this resolves offline.
+httparse = "1.10"
 # 1420-ev7i: the tillandsia-palette renderer (1420-9vpk) for the
 # --provision-once / --reset-state console. Portable, so provision_console's
 # tests run on every host.
