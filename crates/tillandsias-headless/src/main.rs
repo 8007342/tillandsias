@@ -872,6 +872,9 @@ fn main() {
     let bash = user_args.iter().any(|a| a == "--bash");
     let antigravity = user_args.iter().any(|a| a == "--antigravity");
     let copilot = user_args.iter().any(|a| a == "--copilot");
+    // @trace order:2454-lhar, order:2455-lomp: local-model (Lemonade) lanes.
+    let pi = user_args.iter().any(|a| a == "--pi");
+    let omp = user_args.iter().any(|a| a == "--omp");
     let opencode_web = user_args.iter().any(|a| a == "--opencode-web");
     // 1860-auhm: `--studio <id>` opens the project in a registered web studio.
     let studio_id: Option<String> = match user_args.iter().position(|a| a == "--studio") {
@@ -1179,6 +1182,8 @@ fn main() {
         "--bash",
         "--antigravity",
         "--copilot",
+        "--pi",
+        "--omp",
         "--opencode-web",
         "--studio",
         "--observatorium",
@@ -1237,6 +1242,8 @@ fn main() {
         || bash
         || antigravity
         || copilot
+        || pi
+        || omp
         || opencode_web
         // 1953-stsk: --studio was missing, so a studio launch SIGTERMed the
         // running tray (lenovinha 2026-11-01).
@@ -1695,6 +1702,8 @@ fn main() {
             (claude, "--claude"),
             (antigravity, "--antigravity"),
             (copilot, "--copilot"),
+            (pi, "--pi"),
+            (omp, "--omp"),
             (bash, "--bash"),
         ]
         .into_iter()
@@ -2167,6 +2176,8 @@ fn print_usage(version: &str) {
     println!("       tillandsias --claude <project> [--no-remote-control] [--debug|--diagnostics]");
     println!("       tillandsias --bash <project> [--debug|--diagnostics]");
     println!("       tillandsias --copilot <project> [--debug|--diagnostics]");
+    println!("       tillandsias --pi <project> [--debug|--diagnostics]");
+    println!("       tillandsias --omp <project> [--debug|--diagnostics]");
     println!(
         "       tillandsias --opencode-web <project> [--prompt <text>] [--debug|--diagnostics]"
     );
@@ -2181,6 +2192,8 @@ fn print_usage(version: &str) {
     println!("  --claude       Launch Claude Code inside the forge for a project");
     println!("  --antigravity  Launch Antigravity inside the forge for a project");
     println!("  --copilot      Launch the GitHub Copilot CLI inside the forge for a project");
+    println!("  --pi           Launch Pi inside the forge on local Lemonade models only");
+    println!("  --omp          Launch Oh My Pi inside the forge on local Lemonade models only");
     println!("  --bash         Launch the forge welcome shell for a project");
     println!("  --opencode-web Launch OpenCode Web plus isolated browser");
     println!("  --observatorium Launch the project Observatorium viewer");
@@ -21346,6 +21359,10 @@ pub(crate) enum ForgeAgentMode {
     Antigravity,
     /// ORDER 2063-nfag: GitHub's official copilot CLI.
     Copilot,
+    /// ORDER 2454-lhar: the Pi coding agent, local Lemonade models only.
+    Pi,
+    /// ORDER 2455-lomp: Oh My Pi, local Lemonade models only.
+    Omp,
     Maintenance,
 }
 
@@ -21357,6 +21374,8 @@ impl ForgeAgentMode {
             ForgeAgentMode::OpenCode => "/usr/local/bin/entrypoint-forge-opencode.sh",
             ForgeAgentMode::Antigravity => "/usr/local/bin/entrypoint-forge-antigravity.sh",
             ForgeAgentMode::Copilot => "/usr/local/bin/entrypoint-forge-copilot.sh",
+            ForgeAgentMode::Pi => "/usr/local/bin/entrypoint-forge-pi.sh",
+            ForgeAgentMode::Omp => "/usr/local/bin/entrypoint-forge-omp.sh",
             ForgeAgentMode::Maintenance => "/usr/local/bin/entrypoint-terminal.sh",
         }
     }
@@ -21368,6 +21387,8 @@ impl ForgeAgentMode {
             ForgeAgentMode::OpenCode => "opencode",
             ForgeAgentMode::Antigravity => "antigravity",
             ForgeAgentMode::Copilot => "copilot",
+            ForgeAgentMode::Pi => "pi",
+            ForgeAgentMode::Omp => "omp",
             ForgeAgentMode::Maintenance => "maintenance",
         }
     }
@@ -21386,6 +21407,8 @@ impl ForgeAgentMode {
                 ("Antigravity session open", "Antigravity session ended")
             }
             ForgeAgentMode::Copilot => ("Copilot session open", "Copilot session ended"),
+            ForgeAgentMode::Pi => ("Pi session open", "Pi session ended"),
+            ForgeAgentMode::Omp => ("Oh My Pi session open", "Oh My Pi session ended"),
             ForgeAgentMode::Maintenance => ("Terminal open", "Terminal closed"),
         }
     }
@@ -21400,6 +21423,8 @@ impl ForgeAgentMode {
             ForgeAgentMode::OpenCode => "opencode",
             ForgeAgentMode::Antigravity => "antigravity",
             ForgeAgentMode::Copilot => "copilot",
+            ForgeAgentMode::Pi => "pi",
+            ForgeAgentMode::Omp => "omp",
             ForgeAgentMode::Maintenance => "terminal",
         }
     }
@@ -21415,6 +21440,8 @@ fn forge_agent_lane(args: &[String]) -> Option<(ForgeAgentMode, &'static str)> {
         ("--claude", ForgeAgentMode::Claude),
         ("--antigravity", ForgeAgentMode::Antigravity),
         ("--copilot", ForgeAgentMode::Copilot),
+        ("--pi", ForgeAgentMode::Pi),
+        ("--omp", ForgeAgentMode::Omp),
         ("--bash", ForgeAgentMode::Maintenance),
     ]
     .into_iter()
@@ -23271,14 +23298,7 @@ fn build_forge_agent_run_args_with_vault(
     // Inject provider API keys from Vault as env vars so forge agents can call
     // LLM APIs without interactive auth inside the container.
     // @trace plan/issues/forge-harness-auth-vault-proxy-2026-06-27.md
-    let provider_api = match mode {
-        ForgeAgentMode::Claude => Some(crate::vault_bootstrap::ProviderId::Anthropic),
-        ForgeAgentMode::Codex => Some(crate::vault_bootstrap::ProviderId::Openai),
-        ForgeAgentMode::Antigravity => Some(crate::vault_bootstrap::ProviderId::Gemini),
-        // 2063-nfag: copilot has no API-key provider; its token is restored
-        // inside its own forge from secret/copilot/oauth.
-        ForgeAgentMode::OpenCode | ForgeAgentMode::Copilot | ForgeAgentMode::Maintenance => None,
-    };
+    let provider_api = lane_api_provider(mode);
     if let Some(p) = provider_api
         && let Ok(key) = crate::vault_bootstrap::read_provider_api_key(p, debug)
         && !key.is_empty()
@@ -23437,6 +23457,24 @@ pub(crate) fn build_forge_agent_run_argv(
     argv
 }
 
+/// The API-key provider whose Vault key is injected into a lane's forge.
+fn lane_api_provider(mode: ForgeAgentMode) -> Option<crate::vault_bootstrap::ProviderId> {
+    match mode {
+        ForgeAgentMode::Claude => Some(crate::vault_bootstrap::ProviderId::Anthropic),
+        ForgeAgentMode::Codex => Some(crate::vault_bootstrap::ProviderId::Openai),
+        ForgeAgentMode::Antigravity => Some(crate::vault_bootstrap::ProviderId::Gemini),
+        // 2063-nfag: copilot has no API-key provider; its token is restored
+        // inside its own forge from secret/copilot/oauth.
+        // 2454-lhar / 2455-lomp: Pi and Oh My Pi use local Lemonade models
+        // only, so no cloud key ever reaches their forge.
+        ForgeAgentMode::OpenCode
+        | ForgeAgentMode::Copilot
+        | ForgeAgentMode::Pi
+        | ForgeAgentMode::Omp
+        | ForgeAgentMode::Maintenance => None,
+    }
+}
+
 /// Map an agent mode to its (OAuth provider, API-key provider) pair.
 /// OpenCode has a separate Gemini-to-auth-content adapter; Maintenance needs
 /// no provider credential.
@@ -23458,7 +23496,11 @@ fn mode_provider_pair(
         )),
         // 2063-nfag: copilot signs in by device code only (no API key).
         ForgeAgentMode::Copilot => Some((ProviderId::Copilot, None)),
-        ForgeAgentMode::OpenCode | ForgeAgentMode::Maintenance => None,
+        // 2454-lhar / 2455-lomp: local models only, no provider sign-in.
+        ForgeAgentMode::OpenCode
+        | ForgeAgentMode::Pi
+        | ForgeAgentMode::Omp
+        | ForgeAgentMode::Maintenance => None,
     }
 }
 
@@ -29184,6 +29226,8 @@ mod tests {
             "bash",
             "antigravity",
             "copilot",
+            "pi",
+            "omp",
             "opencode_web",
             "observatorium",
             "inference_tier",
@@ -36187,6 +36231,45 @@ esac
         assert_eq!(sel(&["--bash", "/p"]), Some(("maintenance", "--bash")));
         assert_eq!(sel(&["--opencode", "/p"]), None);
         assert_eq!(sel(&["--copilot-login"]), None, "the login is not the lane");
+    }
+
+    /// ORDER 2454-lhar / 2455-lomp. `--pi` and `--omp` select their own
+    /// local-model lanes (own entrypoint, own identity) and carry NO cloud
+    /// provider credential: both map to no ProviderId at all.
+    /// @trace order:2454-lhar, order:2455-lomp
+    #[test]
+    fn the_pi_and_omp_flags_select_local_model_lanes_without_providers() {
+        let sel = |a: &[&str]| {
+            let v: Vec<String> = a.iter().map(|s| s.to_string()).collect();
+            forge_agent_lane(&v)
+        };
+        assert_eq!(sel(&["--pi", "/p"]), Some((ForgeAgentMode::Pi, "--pi")));
+        assert_eq!(
+            sel(&["--cloud", "owner/repo", "--omp"]),
+            Some((ForgeAgentMode::Omp, "--omp"))
+        );
+        assert_eq!(
+            ForgeAgentMode::Pi.entrypoint(),
+            "/usr/local/bin/entrypoint-forge-pi.sh"
+        );
+        assert_eq!(
+            ForgeAgentMode::Omp.entrypoint(),
+            "/usr/local/bin/entrypoint-forge-omp.sh"
+        );
+        assert_eq!(ForgeAgentMode::Pi.agent_identity(), "pi");
+        assert_eq!(ForgeAgentMode::Omp.agent_identity(), "omp");
+        for mode in [ForgeAgentMode::Pi, ForgeAgentMode::Omp] {
+            assert!(
+                mode_provider_pair(mode).is_none(),
+                "{mode:?} must carry no cloud provider credential"
+            );
+            assert!(lane_api_provider(mode).is_none());
+        }
+        // Existing lanes keep their flags.
+        assert_eq!(
+            sel(&["--copilot", "/p"]),
+            Some((ForgeAgentMode::Copilot, "--copilot"))
+        );
     }
 
     #[test]

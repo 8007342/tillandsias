@@ -1,0 +1,36 @@
+# @trace spec:default-image
+# @trace order:2454-lhar, order:2455-lomp
+#
+# The Pi and Oh My Pi lanes run on LOCAL models only, served by the host's
+# Lemonade Server (TILLANDSIAS_LEMONADE_URL, default http://lemonade:13305/api/v1).
+# Pi has no model discovery, so its models.json is generated from Lemonade's
+# /models answer; omp discovers through one lemonade provider and disables
+# every built-in provider. Red before 2454-lhar/2455-lomp: all seven arms fail
+# (no images/default/lib-local-models.sh, no entrypoints).
+name: litmus:forge-pi-omp-harness
+spec: default-image
+phase: pre-build
+description: Pi's generated models.json names only the lemonade provider and only downloaded chat or tool-calling models (no image, audio, tts, transcription, embeddings or 3d), with openai-completions, contextWindow from context_length and a capped maxTokens; its settings enable lemonade/* only. omp's models.yml names only lemonade (auth none, openai-models-list) and its config.yml disables every cloud provider. An injecting base URL is refused, the entrypoints give each harness its own PI_CODING_AGENT_DIR, omp is pinned by version and sha256, and no cloud model API host appears in the lane's files.
+severity: high
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary), bash and jq; a stub Lemonade /models answer written to a scratch file (no network)
+
+critical_path:
+  - step: "pi models.json filtered to local chat models; pi settings default to lemonade; empty answer refused; omp lemonade-only with every cloud provider disabled; unsafe URL refused; entrypoints wired and omp pinned; no cloud host"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-pi-omp-harness.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:forge-pi-omp-harness:7 arms"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+  expected_log: "seven arms: PI-FILTER, PI-SHAPE, PI-EMPTY, OMP, URL, WIRED, NO-CLOUD"
+  log_fields:
+    spec: "default-image"
+    test: "forge-pi-omp-harness"
+
+rollback:
+  on_failure: "read the FAIL lines; the generators are lemonade_pi_config and lemonade_omp_config in images/default/lib-local-models.sh, the installers require_pi and require_omp in images/default/lib-common.sh"
+  command: "grep -nE 'lemonade_(pi|omp)_config|require_(pi|omp)|OMP_LINUX_X64_SHA256|PI_NPM_INTEGRITY' images/default/lib-local-models.sh images/default/lib-common.sh"

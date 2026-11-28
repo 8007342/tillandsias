@@ -63,6 +63,8 @@ images/default/entrypoint-forge-codex.sh
 images/default/entrypoint-forge-copilot.sh
 images/default/entrypoint-forge-opencode-web.sh
 images/default/entrypoint-forge-opencode.sh
+images/default/entrypoint-forge-omp.sh
+images/default/entrypoint-forge-pi.sh
 images/default/entrypoint-terminal.sh
 images/default/entrypoint.sh
 images/git/entrypoint.sh

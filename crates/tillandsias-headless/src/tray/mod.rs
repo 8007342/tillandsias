@@ -331,6 +331,10 @@ enum LaunchKind {
     Antigravity,
     /// GitHub Copilot CLI lane (2063-nfag).
     Copilot,
+    /// Pi on local Lemonade models (@trace order:2454-lhar).
+    Pi,
+    /// Oh My Pi on local Lemonade models (@trace order:2455-lomp).
+    Omp,
     Maintenance,
 }
 
@@ -2251,6 +2255,8 @@ fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, k
                 LaunchKind::OpenCode => "--opencode",
                 LaunchKind::Antigravity => "--antigravity",
                 LaunchKind::Copilot => "--copilot",
+                LaunchKind::Pi => "--pi",
+                LaunchKind::Omp => "--omp",
                 LaunchKind::Maintenance => "--bash",
                 LaunchKind::OpenCodeWeb => "--opencode-web",
                 LaunchKind::Observatorium => "--observatorium",
@@ -2465,18 +2471,22 @@ enum LeafAction {
     OpenCode,
     Antigravity,
     Copilot,
+    Pi,
+    Omp,
     OpenCodeWeb,
     Observatorium,
     Maintenance,
 }
 
 impl LeafAction {
-    const ALL: [LeafAction; 8] = [
+    const ALL: [LeafAction; 10] = [
         LeafAction::Claude,
         LeafAction::Codex,
         LeafAction::OpenCode,
         LeafAction::Antigravity,
         LeafAction::Copilot,
+        LeafAction::Pi,
+        LeafAction::Omp,
         LeafAction::OpenCodeWeb,
         LeafAction::Observatorium,
         LeafAction::Maintenance,
@@ -2492,6 +2502,10 @@ impl LeafAction {
             LeafAction::Observatorium => 5,
             LeafAction::Maintenance => 6,
             LeafAction::Copilot => 7,
+            // 2454-lhar / 2455-lomp: 8 is the submenu node, so the new
+            // leaves take 9 and 10 and no older id moves.
+            LeafAction::Pi => 9,
+            LeafAction::Omp => 10,
         }
     }
 
@@ -2502,6 +2516,8 @@ impl LeafAction {
             LeafAction::OpenCode => "\u{1F4BB} OpenCode",
             LeafAction::Antigravity => "\u{1FA90} Antigravity",
             LeafAction::Copilot => "\u{1F6E9}\u{FE0F} Copilot",
+            LeafAction::Pi => "\u{1F967} Pi",
+            LeafAction::Omp => "\u{1F370} Oh My Pi",
             LeafAction::OpenCodeWeb => "\u{1F4D0} OpenCode Web",
             LeafAction::Observatorium => "\u{1F52D} Observatorium",
             LeafAction::Maintenance => "\u{1F527} Maintenance",
@@ -2510,6 +2526,23 @@ impl LeafAction {
 
     fn from_offset(offset: i32) -> Option<LeafAction> {
         Self::ALL.iter().copied().find(|a| a.offset() == offset)
+    }
+}
+
+impl From<LeafAction> for LaunchKind {
+    fn from(action: LeafAction) -> Self {
+        match action {
+            LeafAction::Claude => LaunchKind::Claude,
+            LeafAction::OpenCode => LaunchKind::OpenCode,
+            LeafAction::Antigravity => LaunchKind::Antigravity,
+            LeafAction::Copilot => LaunchKind::Copilot,
+            LeafAction::Pi => LaunchKind::Pi,
+            LeafAction::Omp => LaunchKind::Omp,
+            LeafAction::OpenCodeWeb => LaunchKind::OpenCodeWeb,
+            LeafAction::Observatorium => LaunchKind::Observatorium,
+            LeafAction::Maintenance => LaunchKind::Maintenance,
+            LeafAction::Codex => LaunchKind::Codex,
+        }
     }
 }
 
@@ -2528,7 +2561,10 @@ const LOADING_CLOUD_ID: i32 = 0x7FFF_FFFE;
 /// `handle_cloud_overflow_click`); a future GtkWindow picker would replace
 /// that fallback in place. @trace spec:tray-ux
 const CLOUD_OVERFLOW_ID: i32 = 0x7FFF_FFFC;
-const PROJECT_LEAF_COUNT: i32 = 8;
+/// One past the highest leaf offset. The submenu node (offset 8) sits inside
+/// this range since 2454-lhar / 2455-lomp added offsets 9 and 10, so
+/// `project_action_from_id` tests for the submenu id first.
+const PROJECT_LEAF_COUNT: i32 = 11;
 const PROJECT_SUBMENU_OFFSET: i32 = 8;
 
 /// Maximum number of cloud projects rendered as top-level entries inside the
@@ -2609,15 +2645,15 @@ fn project_action_from_id(
 ) -> Option<(String, ProjectScope, Option<LeafAction>)> {
     for project in &state.cloud_projects {
         let base = cloud_project_base(&project.name);
+        if id == base + PROJECT_SUBMENU_OFFSET {
+            return Some((project.name.clone(), ProjectScope::Cloud, None));
+        }
         if id >= base && id < base + PROJECT_LEAF_COUNT {
             return Some((
                 project.name.clone(),
                 ProjectScope::Cloud,
                 LeafAction::from_offset(id - base),
             ));
-        }
-        if id == base + PROJECT_SUBMENU_OFFSET {
-            return Some((project.name.clone(), ProjectScope::Cloud, None));
         }
     }
     None
@@ -3049,6 +3085,8 @@ fn shared_id_to_int(id: &str) -> i32 {
                     "observatorium" => 5,
                     "maintenance" => 6,
                     "copilot" => 7,
+                    "pi" => 9,
+                    "omp" => 10,
                     "" => PROJECT_SUBMENU_OFFSET,
                     _ => return fallback_menu_id(other),
                 };
@@ -3793,16 +3831,7 @@ impl DbusMenuIface {
                     // the existing launch helpers, and cloud-project actions
                     // through an idempotent clone-then-launch path.
                     {
-                        let kind = match action {
-                            LeafAction::Claude => LaunchKind::Claude,
-                            LeafAction::OpenCode => LaunchKind::OpenCode,
-                            LeafAction::Antigravity => LaunchKind::Antigravity,
-                            LeafAction::Copilot => LaunchKind::Copilot,
-                            LeafAction::OpenCodeWeb => LaunchKind::OpenCodeWeb,
-                            LeafAction::Observatorium => LaunchKind::Observatorium,
-                            LeafAction::Maintenance => LaunchKind::Maintenance,
-                            LeafAction::Codex => LaunchKind::Codex,
-                        };
+                        let kind = LaunchKind::from(action);
                         match scope {
                             ProjectScope::Cloud => {
                                 if let Some(cloud_entry) =
@@ -7465,7 +7494,7 @@ mod tests {
             .build();
         let submenu = build_project_submenu(&state, &project, ProjectScope::Cloud);
 
-        assert_eq!(submenu.2.len(), 8);
+        assert_eq!(submenu.2.len(), 10);
         let leaf_labels = labels(&submenu);
         assert_eq!(leaf_labels[0], "alpha");
         assert!(leaf_labels[1].contains("Claude"));
@@ -7473,9 +7502,12 @@ mod tests {
         assert!(leaf_labels[3].contains("OpenCode") && !leaf_labels[3].contains("Web"));
         assert!(leaf_labels[4].contains("Antigravity"));
         assert!(leaf_labels[5].contains("Copilot"));
-        assert!(leaf_labels[6].contains("OpenCode Web"));
-        assert!(leaf_labels[7].contains("Observatorium"));
-        assert!(leaf_labels[8].contains("Maintenance"));
+        // 2454-lhar / 2455-lomp
+        assert!(leaf_labels[6].contains("Pi") && !leaf_labels[6].contains("Oh My"));
+        assert!(leaf_labels[7].contains("Oh My Pi"));
+        assert!(leaf_labels[8].contains("OpenCode Web"));
+        assert!(leaf_labels[9].contains("Observatorium"));
+        assert!(leaf_labels[10].contains("Maintenance"));
     }
 
     #[test]
@@ -7488,11 +7520,39 @@ mod tests {
         );
         let max = LeafAction::ALL.iter().map(|a| a.offset()).max().unwrap();
         assert!(max < PROJECT_LEAF_COUNT);
-        const { assert!(PROJECT_SUBMENU_OFFSET >= PROJECT_LEAF_COUNT && PROJECT_SUBMENU_OFFSET < 16) };
+        const { assert!(PROJECT_SUBMENU_OFFSET < PROJECT_LEAF_COUNT && PROJECT_LEAF_COUNT <= 16) };
+        assert!(
+            LeafAction::ALL
+                .iter()
+                .all(|a| a.offset() != PROJECT_SUBMENU_OFFSET)
+        );
         assert_eq!(
             shared_id_to_int("project.cloud.alpha.copilot"),
             cloud_project_base("alpha") + LeafAction::Copilot.offset()
         );
+    }
+
+    /// @trace order:2454-lhar, order:2455-lomp. Pi and Oh My Pi take offsets
+    /// 9 and 10 (8 stays the submenu node), so every older id is unchanged and
+    /// the new leaves stay inside the project's 16-id stride.
+    #[test]
+    fn pi_and_omp_leaf_ids_round_trip_and_stay_inside_their_project() {
+        for (verb, action, kind) in [
+            ("pi", LeafAction::Pi, LaunchKind::Pi),
+            ("omp", LeafAction::Omp, LaunchKind::Omp),
+        ] {
+            assert_eq!(LeafAction::from_offset(action.offset()), Some(action));
+            assert_ne!(action.offset(), PROJECT_SUBMENU_OFFSET);
+            assert!(action.offset() < 16);
+            assert_eq!(
+                shared_id_to_int(&format!("project.cloud.alpha.{verb}")),
+                cloud_project_base("alpha") + action.offset()
+            );
+            assert_eq!(LaunchKind::from(action), kind);
+        }
+        // Older ids are unchanged.
+        assert_eq!(LeafAction::Copilot.offset(), 7);
+        assert_eq!(LeafAction::Maintenance.offset(), 6);
     }
 
     #[test]

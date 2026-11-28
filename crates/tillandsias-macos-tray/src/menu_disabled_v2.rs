@@ -196,8 +196,8 @@ mod tests {
         // children are the 8 agent rows; each opens the project list.
         assert_eq!(
             projects.children.len(),
-            8,
-            "8 agent rows (claude/codex/opencode/antigravity/copilot/opencode-web/observatorium/maintenance)"
+            10,
+            "10 agent rows (claude/codex/opencode/antigravity/copilot/pi/omp/opencode-web/observatorium/maintenance)"
         );
         for agent in &projects.children {
             assert_eq!(

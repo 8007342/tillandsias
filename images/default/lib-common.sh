@@ -3926,6 +3926,126 @@ require_copilot() {
     return 0
 }
 
+# ── Local-model harnesses: Pi and Oh My Pi (2454-lhar, 2455-lomp) ──
+# Both are pinned by version AND hash, and each is checked twice before it is
+# installed. Only their own lanes call these, in the foreground.
+#
+# Pi: npm @earendil-works/pi-coding-agent. The tarball is fetched with
+# `npm pack`, its sha512 must equal PI_NPM_INTEGRITY (our pin) AND the
+# registry's dist.integrity for that version; only then is the local tarball
+# installed. (Its dependencies come through npm's own lockfile integrity.)
+PI_NPM_PACKAGE="@earendil-works/pi-coding-agent"
+PI_VERSION="1.7.0"
+PI_NPM_INTEGRITY="sha512-opRelA1oqV/o+cByICMYU87oiHuICeCkghHMqsZsDwDz9F6qo8HFhoH4J/wZkr6tBeFor7ryOSwEmpZsusYrbA=="
+# Pi needs Node >= 22.19 (its package.json engines).
+PI_NODE_MIN="22.19.0"
+
+_node_at_least() {
+    # $1 = minimum x.y.z; true when `node --version` is at least that.
+    local have want
+    have="$(node --version 2>/dev/null)" || return 1
+    have="${have#v}"
+    want="$1"
+    [ "$(printf '%s\n%s\n' "$want" "$have" | sort -V | head -n 1)" = "$want" ]
+}
+
+require_pi() {
+    local bin="${NPM_CONFIG_PREFIX:-/usr/local}/bin/pi" have tmp tgz got reg
+    PI_BIN="$bin"
+    if ! _node_at_least "$PI_NODE_MIN"; then
+        trace_lifecycle "harness" "refused:harness:pi:node-too-old:$(node --version 2>/dev/null || echo none) (needs >= $PI_NODE_MIN)"
+        PI_BIN=""
+        return 0
+    fi
+    if [ -x "$bin" ]; then
+        have="$("$bin" --version 2>/dev/null | head -n 1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)"
+        if [ "$have" = "$PI_VERSION" ]; then
+            trace_lifecycle "install" "pi: available ($have, pinned)"
+            return 0
+        fi
+    fi
+    tmp="$(mktemp -d /tmp/pi-pack.XXXXXX 2>/dev/null)" || { PI_BIN=""; return 0; }
+    trace_lifecycle "harness" "pi: installing pinned $PI_NPM_PACKAGE@$PI_VERSION (2454-lhar)"
+    if ! (cd "$tmp" && npm pack --silent "$PI_NPM_PACKAGE@$PI_VERSION" >/dev/null 2>"$tmp/pack.err"); then
+        trace_lifecycle "harness" "pi: npm pack FAILED: $(tail -2 "$tmp/pack.err" 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
+        rm -rf "$tmp"
+        [ -x "$bin" ] || PI_BIN=""
+        return 0
+    fi
+    tgz="$(ls "$tmp"/*.tgz 2>/dev/null | head -n 1)"
+    got="sha512-$(node -e 'const c=require("crypto"),f=require("fs");process.stdout.write(c.createHash("sha512").update(f.readFileSync(process.argv[1])).digest("base64"))' "$tgz" 2>/dev/null)"
+    reg="$(npm view "$PI_NPM_PACKAGE@$PI_VERSION" dist.integrity 2>/dev/null | tr -d '[:space:]')"
+    if [ "$got" != "$PI_NPM_INTEGRITY" ] || [ "$reg" != "$PI_NPM_INTEGRITY" ]; then
+        trace_lifecycle "harness" "refused:harness:pi:integrity-mismatch:pin=$PI_NPM_INTEGRITY:tarball=$got:registry=${reg:-none} (fail closed: nothing installed)"
+        rm -rf "$tmp"
+        [ -x "$bin" ] || PI_BIN=""
+        return 0
+    fi
+    if ! npm install -g --no-audit --no-fund "$tgz" >"$tmp/install.err" 2>&1; then
+        trace_lifecycle "harness" "pi: install FAILED: $(tail -3 "$tmp/install.err" 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
+    fi
+    rm -rf "$tmp"
+    [ -x "$bin" ] || PI_BIN=""
+    return 0
+}
+
+# Oh My Pi: the prebuilt omp binary from github.com/can1357/oh-my-pi releases,
+# pinned by version and sha256. The download must match OMP_LINUX_X64_SHA256
+# (our pin) AND the release's SHA256SUMS.txt line for the asset. The pin was
+# read 2026-11-28 from both the release API digest and SHA256SUMS.txt of
+# v19.2.1, which agreed. An unset or malformed pin refuses before download.
+OMP_REPO="can1357/oh-my-pi"
+OMP_VERSION="19.2.1"
+OMP_LINUX_X64_SHA256="e8b937f9bf023baa147bdd300ad5421af0a6ef8b1f350c47a9a93d5fca94feca"
+
+require_omp() {
+    local root dir path asset tmp got sums url
+    root="${TILLANDSIAS_HARNESS_RELEASE_DIR:-$HOME/.cache/tillandsias-project/harness-release}/omp"
+    dir="$root/$OMP_VERSION"
+    path="$dir/omp"
+    OMP_BIN=""
+    case "$(uname -m)" in
+        x86_64) asset="omp-linux-x64" ;;
+        *)
+            trace_lifecycle "harness" "refused:harness:omp:no-pinned-asset-for-$(uname -m)"
+            return 0
+            ;;
+    esac
+    if ! grep -qE '^[0-9a-f]{64}$' <<<"${OMP_LINUX_X64_SHA256:-}"; then
+        trace_lifecycle "harness" "refused:harness:omp:no-pinned-sha256 (fail closed: nothing downloaded)"
+        return 0
+    fi
+    if [ -x "$path" ] && [ "$(sha256sum "$path" 2>/dev/null | cut -d' ' -f1)" = "$OMP_LINUX_X64_SHA256" ]; then
+        trace_lifecycle "install" "omp: available ($OMP_VERSION, pinned, sha256 verified)"
+        OMP_BIN="$path"
+        export PATH="$dir:$PATH"
+        return 0
+    fi
+    mkdir -p "$dir" 2>/dev/null || return 0
+    tmp="$(mktemp -d "$root/.install.XXXXXX" 2>/dev/null)" || return 0
+    url="https://github.com/$OMP_REPO/releases/download/v$OMP_VERSION"
+    trace_lifecycle "harness" "omp: installing pinned $OMP_VERSION from $OMP_REPO release asset $asset (2455-lomp)"
+    if ! curl -fsSL --max-time 600 --retry 2 --retry-delay 3 "$url/$asset" -o "$tmp/$asset" 2>"$tmp/curl.err" \
+        || ! curl -fsSL --max-time 60 "$url/SHA256SUMS.txt" -o "$tmp/SHA256SUMS.txt" 2>>"$tmp/curl.err"; then
+        trace_lifecycle "harness" "omp download FAILED: $(tail -2 "$tmp/curl.err" 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
+        rm -rf "$tmp"
+        return 0
+    fi
+    got="$(sha256sum "$tmp/$asset" 2>/dev/null | cut -d' ' -f1)"
+    sums="$(awk -v a="$asset" '$2 == a || $2 == "*" a { print $1; exit }' "$tmp/SHA256SUMS.txt" 2>/dev/null)"
+    if [ "$got" != "$OMP_LINUX_X64_SHA256" ] || [ "$sums" != "$OMP_LINUX_X64_SHA256" ]; then
+        trace_lifecycle "harness" "refused:harness:omp:digest-mismatch:pin=$OMP_LINUX_X64_SHA256:got=${got:-none}:sums=${sums:-none} (fail closed: nothing installed)"
+        rm -rf "$tmp"
+        return 0
+    fi
+    chmod 755 "$tmp/$asset" && mv -f "$tmp/$asset" "$path"
+    rm -rf "$tmp"
+    trace_lifecycle "install" "omp: available ($OMP_VERSION, sha256 verified against the pin and SHA256SUMS.txt)"
+    OMP_BIN="$path"
+    export PATH="$dir:$PATH"
+    return 0
+}
+
 require_claude() {
     if curl_install_claude && [ -n "${CC_BIN:-}" ] && [ -x "$CC_BIN" ]; then
         return 0

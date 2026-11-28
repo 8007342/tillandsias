@@ -147,6 +147,8 @@ COPY lib-embed-endpoint.sh /usr/local/lib/tillandsias/lib-embed-endpoint.sh
 COPY lib-experts-probe.sh /usr/local/lib/tillandsias/lib-experts-probe.sh
 COPY lib-ledger-freshness.sh /usr/local/lib/tillandsias/lib-ledger-freshness.sh
 COPY lib-mcp-build-id.sh /usr/local/lib/tillandsias/lib-mcp-build-id.sh
+# 2454-lhar / 2455-lomp: model config for the local-model (Lemonade) lanes.
+COPY lib-local-models.sh /usr/local/lib/tillandsias/lib-local-models.sh
 
 # ── Entrypoints ────────────────────────────────────────────────
 COPY entrypoint.sh /usr/local/bin/tillandsias-entrypoint.sh
@@ -156,6 +158,8 @@ COPY entrypoint-forge-claude.sh /usr/local/bin/entrypoint-forge-claude.sh
 COPY entrypoint-forge-codex.sh /usr/local/bin/entrypoint-forge-codex.sh
 COPY entrypoint-forge-antigravity.sh /usr/local/bin/entrypoint-forge-antigravity.sh
 COPY entrypoint-forge-copilot.sh /usr/local/bin/entrypoint-forge-copilot.sh
+COPY entrypoint-forge-pi.sh /usr/local/bin/entrypoint-forge-pi.sh
+COPY entrypoint-forge-omp.sh /usr/local/bin/entrypoint-forge-omp.sh
 COPY entrypoint-terminal.sh /usr/local/bin/entrypoint-terminal.sh
 COPY sse-keepalive-proxy.js /usr/local/bin/sse-keepalive-proxy.js
 RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
@@ -165,6 +169,8 @@ RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
              /usr/local/bin/entrypoint-forge-codex.sh \
              /usr/local/bin/entrypoint-forge-antigravity.sh \
              /usr/local/bin/entrypoint-forge-copilot.sh \
+             /usr/local/bin/entrypoint-forge-pi.sh \
+             /usr/local/bin/entrypoint-forge-omp.sh \
              /usr/local/bin/entrypoint-terminal.sh \
              /usr/local/bin/tillandsias-brew-shim-exec \
              /usr/local/bin/harness-supervisor \

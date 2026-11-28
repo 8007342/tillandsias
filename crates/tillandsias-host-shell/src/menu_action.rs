@@ -92,6 +92,8 @@ pub fn resolve(id: &str) -> MenuAction {
         ids::AGENT_OPENCODE => MenuAction::SelectAgent(SelectedAgent::OpenCode),
         ids::AGENT_ANTIGRAVITY => MenuAction::SelectAgent(SelectedAgent::Antigravity),
         ids::AGENT_COPILOT => MenuAction::SelectAgent(SelectedAgent::Copilot),
+        ids::AGENT_PI => MenuAction::SelectAgent(SelectedAgent::Pi),
+        ids::AGENT_OMP => MenuAction::SelectAgent(SelectedAgent::Omp),
         ids::CLOUD_PROJECTS_OVERFLOW => MenuAction::CloudOverflow,
         "retry" => MenuAction::Retry,
         "open-log" => MenuAction::OpenLog,
@@ -158,6 +160,19 @@ fn resolve_project(id: &str) -> Option<MenuAction> {
             name: name.to_string(),
             agent: SelectedAgent::Copilot,
         });
+    }
+    // @trace order:2454-lhar, order:2455-lomp
+    for (suffix, agent) in [(".pi", SelectedAgent::Pi), (".omp", SelectedAgent::Omp)] {
+        if let Some(name) = after_scope.strip_suffix(suffix) {
+            if name.is_empty() {
+                return None;
+            }
+            return Some(MenuAction::Attach {
+                scope,
+                name: name.to_string(),
+                agent,
+            });
+        }
     }
     if let Some(name) = after_scope.strip_suffix(".opencode-web") {
         if name.is_empty() {
@@ -251,6 +266,9 @@ mod tests {
             ("antigravity", Antigravity),
             // 2063-nfag
             ("copilot", Copilot),
+            // 2454-lhar, 2455-lomp
+            ("pi", Pi),
+            ("omp", Omp),
         ] {
             assert_eq!(
                 resolve(&format!("project.cloud.myapp.{verb}")),
