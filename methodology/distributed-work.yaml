@@ -1641,6 +1641,7 @@ distributed_work:
     fleet_hosts:
       - calmecacpilli
       - calmecacpilli-silverblue
+      - doris-forge
       - esme
       - esmeraldinha
       - lenovinha
