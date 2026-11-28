@@ -899,6 +899,31 @@ pub async fn run_preview_relay_listener(port: u32, shutdown: Arc<AtomicBool>) ->
     Ok(())
 }
 
+/// ORDER 2456-lrly: the Lemonade relay listener. Same accept loop and same
+/// handshake as the preview relay; the "upstream" is the next forge connection
+/// on a live lane, prefixed with that lane's preamble
+/// (`lemonade_lane::next_forge_connection`). The tray dials in and does all
+/// HTTP parsing and policy on its side.
+///
+/// @trace order:2456-lrly, spec:vsock-transport
+#[cfg(unix)]
+pub async fn run_lemonade_relay_listener(port: u32, shutdown: Arc<AtomicBool>) -> io::Result<()> {
+    let transport = Transport::Vsock {
+        cid: vmaddr_cid_any(),
+        port,
+    };
+    let mut listener = bind(&transport).await?;
+    eprintln!("[tillandsias] lemonade relay bound port={port}");
+    serve_preview_relay(
+        &mut listener,
+        shutdown,
+        secure_control_wire_mode(),
+        crate::lemonade_lane::next_forge_connection,
+    )
+    .await;
+    Ok(())
+}
+
 /// The relay's accept loop. The wire mode and the upstream dialer are
 /// parameters (the mode as in [`handle_connection_with_mode`]), so a test can
 /// serve it on a Unix socket against a local upstream.
@@ -1731,6 +1756,25 @@ async fn serve_ready_stream(
                     break 'connection;
                 }
             }
+            ControlMessage::LemonadeLanesRequest { seq } => {
+                // ORDER 2456-lrly: the live Lemonade lanes and their current
+                // credentials, so the tray can check each relayed preamble.
+                // Only ever answered on this authenticated control wire.
+                let reply = ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: env.seq,
+                    body: ControlMessage::LemonadeLanesReply {
+                        seq,
+                        boot_id: std::fs::read_to_string("/proc/sys/kernel/random/boot_id")
+                            .map(|s| s.trim().to_string())
+                            .unwrap_or_default(),
+                        lanes: crate::lemonade_lane::snapshot(),
+                    },
+                };
+                if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {
+                    break 'connection;
+                }
+            }
             ControlMessage::MetricsSnapshotRequest { seq } => {
                 // Order 333: per-container cgroup counters + per-mount I/O,
                 // sampled in the GUEST and returned over the control wire so
@@ -1890,17 +1934,7 @@ async fn serve_ready_stream(
                     }
                 }
             }
-            ControlMessage::SetVsockForwardTarget { cid, port }
-            | ControlMessage::SetLemonadeForwardTarget { cid, port } => {
-                // 2456-lrly: the Lemonade sibling shares this arm; only the
-                // file it records to and the alias it names differ.
-                let lemonade =
-                    matches!(env.body, ControlMessage::SetLemonadeForwardTarget { .. });
-                let (file_name, lane) = if lemonade {
-                    ("lemonade-forward", "lemonade:13305")
-                } else {
-                    ("vsock-forward", "inference:11434")
-                };
+            ControlMessage::SetVsockForwardTarget { cid, port } => {
                 // ORDER 1309-rb3p, the last half of 830-xsk2. The tray learns
                 // the host endpoint from ITS OWN environment and tells us;
                 // nothing in the guest can know the port the host chose.
@@ -1923,12 +1957,12 @@ async fn serve_ready_stream(
                 let outcome = crate::VsockForwardTarget::new(cid, port)
                     .map_err(|why| std::io::Error::new(std::io::ErrorKind::InvalidInput, why))
                     .and_then(|_| std::fs::create_dir_all(dir))
-                    .and_then(|()| std::fs::write(dir.join(file_name), format!("{cid}:{port}\n")));
+                    .and_then(|()| std::fs::write(dir.join("vsock-forward"), format!("{cid}:{port}\n")));
                 match outcome {
                     Ok(()) => {
                         eprintln!(
-                            "[tillandsias] host-native target set: cid {cid} port {port} \
-                             — the next forwarder start will forward {lane} to the host"
+                            "[tillandsias] host-native inference target set: cid {cid} port {port} \
+                             — the next inference start will forward inference:11434 to the host"
                         );
                         // ORDER 1509-kf4d. ONE FRAME PER REQUEST, as HostClockSync
                         // does. Silent on success, the tray's request() waited
@@ -1959,7 +1993,7 @@ async fn serve_ready_stream(
                             body: ControlMessage::Error {
                                 seq_in_reply_to: Some(env.seq),
                                 code: ErrorCode::Internal,
-                                message: format!("{} failed: {err}", env.body.kind()),
+                                message: format!("SetVsockForwardTarget failed: {err}"),
                             },
                         };
                         if write_envelope_with_shutdown(&mut write_half, &err_env, &mut shutdown)

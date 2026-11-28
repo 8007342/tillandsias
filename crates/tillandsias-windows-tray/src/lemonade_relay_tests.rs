@@ -547,3 +547,193 @@ fn downloaded_models_are_read_from_a_lemonade_listing() {
         vec!["A", "C"]
     );
 }
+
+// ─── Transport flip: the tray dials, the guest pairs (2456-lrly round 2) ─────
+
+type DialFuture = std::pin::Pin<
+    Box<dyn std::future::Future<Output = std::io::Result<tokio::io::DuplexStream>> + Send>,
+>;
+
+/// A fake guest relay listener: every dial hands the TEST the guest end.
+fn fake_guest_dial() -> (
+    impl Fn() -> DialFuture + Clone + Send + Sync + 'static,
+    tokio::sync::mpsc::UnboundedReceiver<tokio::io::DuplexStream>,
+) {
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    let dial = move || {
+        let tx = tx.clone();
+        Box::pin(async move {
+            let (tray_end, guest_end) = tokio::io::duplex(1 << 20);
+            tx.send(guest_end)
+                .map_err(|_| std::io::Error::other("test gone"))?;
+            Ok(tray_end)
+        }) as DialFuture
+    };
+    (dial, rx)
+}
+
+#[tokio::test]
+async fn a_vm_restart_rearms_the_dialer_and_the_old_workers_exit() {
+    let f = fixture().await;
+    let dialer = Dialer::default();
+    let (dial, mut guests) = fake_guest_dial();
+    let old = dialer
+        .arm("boot-a", f.relay.clone(), 2, dial.clone())
+        .expect("first arm starts workers");
+    // Both old workers dial and PARK (the guest ends stay open).
+    let _parked = (guests.recv().await.unwrap(), guests.recv().await.unwrap());
+    assert!(
+        dialer
+            .arm("boot-a", f.relay.clone(), 2, dial.clone())
+            .is_none(),
+        "same boot: no new workers"
+    );
+    let new = dialer
+        .arm("boot-b", f.relay.clone(), 2, dial.clone())
+        .expect("a new boot id re-arms");
+    for h in old {
+        tokio::time::timeout(std::time::Duration::from_secs(2), h)
+            .await
+            .expect("an old-generation worker must exit after the VM restart, even while parked")
+            .unwrap();
+    }
+    // The new pool is alive and dialing.
+    let _new_parked = (guests.recv().await.unwrap(), guests.recv().await.unwrap());
+    assert!(new.iter().all(|h| !h.is_finished()));
+    for h in new {
+        h.abort();
+    }
+}
+
+#[tokio::test]
+async fn a_dialed_connection_parks_past_the_preamble_timeout_then_obeys_every_rule() {
+    let stub = stub_upstream().await;
+    let mut config = RelayConfig::tray_default();
+    config.upstream = stub.addr;
+    config.preamble_timeout = std::time::Duration::from_millis(50);
+    let lanes = Arc::new(LaneRegistry::default());
+    let cred = lanes.mint("tillandsias-p-forge");
+    let relay = Arc::new(Relay::new(
+        config,
+        lanes,
+        Arc::new(StaticCatalog(vec![APPROVED.to_string()])),
+    ));
+    let dialer = Dialer::default();
+    let (dial, mut guests) = fake_guest_dial();
+    let workers = dialer.arm("boot-a", relay, 2, dial).unwrap();
+
+    // A parked connection idles well past the preamble timeout, then the
+    // guest pairs it with a forge request.
+    let mut g = guests.recv().await.unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    let body = format!("{{\"model\":\"{APPROVED}\"}}");
+    g.write_all(&with_preamble(
+        &cred,
+        &post_json("/api/v1/chat/completions", &body, ""),
+    ))
+    .await
+    .unwrap();
+    let mut reply = Vec::new();
+    tokio::time::timeout(std::time::Duration::from_secs(5), g.read_to_end(&mut reply))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(status(&reply), 200, "{}", text(&reply));
+    assert_eq!(stub.accepts.load(Ordering::SeqCst), 1);
+
+    // A refused route over the dialed path: named 403, no upstream connection.
+    let mut g = guests.recv().await.unwrap();
+    g.write_all(&with_preamble(&cred, &post_json("/api/v1/pull", &body, "")))
+        .await
+        .unwrap();
+    let mut reply = Vec::new();
+    g.read_to_end(&mut reply).await.unwrap();
+    assert_eq!(status(&reply), 403, "{}", text(&reply));
+    assert!(text(&reply).contains("refused:lemonade-relay:route-not-allowed:/api/v1/pull"));
+    // A bad credential over the dialed path: silent drop, no upstream.
+    let mut g = guests.recv().await.unwrap();
+    let forged = LaneCredential::for_test("tillandsias-p-forge", &"00".repeat(32));
+    g.write_all(&with_preamble(
+        &forged,
+        &post_json("/api/v1/chat/completions", &body, ""),
+    ))
+    .await
+    .unwrap();
+    let mut reply = Vec::new();
+    g.read_to_end(&mut reply).await.unwrap();
+    assert!(reply.is_empty(), "{}", text(&reply));
+    assert_eq!(stub.accepts.load(Ordering::SeqCst), 1);
+    for w in workers {
+        w.abort();
+    }
+}
+
+struct FakeLanes {
+    lanes: std::sync::Mutex<Vec<(String, [u8; 32])>>,
+    fetches: AtomicUsize,
+}
+
+impl LaneSource for FakeLanes {
+    fn fetch(&self) -> BoxFuture<'_, std::io::Result<LaneSnapshot>> {
+        self.fetches.fetch_add(1, Ordering::SeqCst);
+        let lanes = self.lanes.lock().unwrap().clone();
+        Box::pin(async move {
+            Ok(LaneSnapshot {
+                boot_id: "boot-a".into(),
+                lanes,
+            })
+        })
+    }
+}
+
+#[tokio::test]
+async fn a_lane_learned_from_the_guest_verifies_and_a_rotated_one_does_not() {
+    let stub = stub_upstream().await;
+    let mut config = RelayConfig::tray_default();
+    config.upstream = stub.addr;
+    let source = Arc::new(FakeLanes {
+        lanes: std::sync::Mutex::new(vec![("tillandsias-p-forge".into(), [0x42u8; 32])]),
+        fetches: AtomicUsize::new(0),
+    });
+    // The tray mints nothing: its registry starts EMPTY.
+    let relay = Arc::new(
+        Relay::new(
+            config,
+            Arc::new(LaneRegistry::default()),
+            Arc::new(StaticCatalog(vec![APPROVED.to_string()])),
+        )
+        .with_lane_source(source.clone()),
+    );
+    let cred = LaneCredential::for_test("tillandsias-p-forge", &"42".repeat(32));
+    let body = format!("{{\"model\":\"{APPROVED}\"}}");
+    let reply = exchange(
+        &relay,
+        with_preamble(&cred, &post_json("/api/v1/chat/completions", &body, "")),
+    )
+    .await;
+    assert_eq!(
+        status(&reply),
+        200,
+        "learned from the guest: {}",
+        text(&reply)
+    );
+    assert_eq!(source.fetches.load(Ordering::SeqCst), 1);
+    // The forge relaunched: the guest rotated the credential.
+    *source.lanes.lock().unwrap() = vec![("tillandsias-p-forge".into(), [0x43u8; 32])];
+    tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+    let reply = exchange(
+        &relay,
+        with_preamble(&cred, &post_json("/api/v1/chat/completions", &body, "")),
+    )
+    .await;
+    assert!(
+        reply.is_empty(),
+        "the old credential is dropped: {}",
+        text(&reply)
+    );
+    assert_eq!(
+        stub.accepts.load(Ordering::SeqCst),
+        1,
+        "no upstream connection for the stale credential"
+    );
+}

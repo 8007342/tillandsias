@@ -3055,7 +3055,7 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
         refresh_cloud_projects(hwnd).await;
         // ORDER 2456-lrly: (re)announce the Lemonade relay on every
         // (re)subscribe; the guest's tmpfs target dies with each boot.
-        announce_lemonade_relay(hwnd).await;
+        announce_lemonade_relay().await;
 
         // ORDER 1439-p853: guest progress through the 1420-9vpk renderer. The
         // GUI tray has no console, so its sink is plain lines into tray.log;
@@ -3383,6 +3383,18 @@ fn apply_cloudflare_login(observed: CloudflareLoginState) {
     }
 }
 
+/// ORDER 2456-lrly: (re)arm the Lemonade relay dialer. Fetches the guest's
+/// lanes and boot id over the control wire; a new boot id (VM restart) re-arms
+/// the dialer and retires the old pool. Opt-in (`TILLANDSIAS_LEMONADE_RELAY=1`).
+async fn announce_lemonade_relay() {
+    if !crate::lemonade_relay::relay_opted_in() {
+        return;
+    }
+    if let Err(err) = crate::lemonade_relay::hv::announce().await {
+        tracing::warn!(%err, "lemonade relay: guest lanes unavailable; not dialing");
+    }
+}
+
 /// Order 1719-83po slice 5: ask the in-VM headless whether a Cloudflare login
 /// is stored. The token lives in the guest's Vault, so, like
 /// `refresh_github_login`, this asks over HvSocket. It runs only on events:
@@ -3390,38 +3402,6 @@ fn apply_cloudflare_login(observed: CloudflareLoginState) {
 /// console exits (or a fallback round while pushes are down). An older guest
 /// answers Error, which leaves the state Unknown (the row shown disabled),
 /// never "signed out".
-/// ORDER 2456-lrly: start the hvsocket listener for the Lemonade relay and
-/// tell the guest to forward `lemonade:13305` to it. Opt-in until credential
-/// delivery lands (see `lemonade_relay` module docs). A failed bind is logged
-/// and the guest is NOT told, so no forwarder starts pointing at nothing.
-async fn announce_lemonade_relay(hwnd: HwndHandle) {
-    use tillandsias_control_wire::ControlMessage;
-    use tillandsias_control_wire::transport::LEMONADE_RELAY_VSOCK_PORT;
-
-    if !crate::lemonade_relay::relay_opted_in() {
-        return;
-    }
-    if let Err(err) = crate::lemonade_relay::hv::ensure_listening(LEMONADE_RELAY_VSOCK_PORT) {
-        tracing::warn!(%err, "lemonade relay: listener not started; guest not told");
-        return;
-    }
-    let reply = live_client_request(
-        "lemonade relay announce",
-        |_seq| ControlMessage::SetLemonadeForwardTarget {
-            cid: 2,
-            port: LEMONADE_RELAY_VSOCK_PORT,
-        },
-        hwnd,
-    )
-    .await;
-    match reply.map(|r| r.body) {
-        Some(ControlMessage::IssueAck { .. }) => {
-            tracing::info!("lemonade relay announced to the guest (lemonade:13305)");
-        }
-        other => tracing::warn!(?other, "lemonade relay: guest did not accept the target"),
-    }
-}
-
 async fn refresh_cloudflare_login(hwnd: HwndHandle) {
     use tillandsias_control_wire::ControlMessage;
 

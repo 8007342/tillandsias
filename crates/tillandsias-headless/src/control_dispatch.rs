@@ -158,9 +158,9 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
         // property is worth more than the line it costs.
         (SetVsockForwardTarget { .. }, Vsock) => Handle,
         (SetVsockForwardTarget { .. }, UnixSocket) => Unsupported,
-        // 2456-lrly: the Lemonade sibling, same direction and transport rule.
-        (SetLemonadeForwardTarget { .. }, Vsock) => Handle,
-        (SetLemonadeForwardTarget { .. }, UnixSocket) => Unsupported,
+        // 2456-lrly: the tray asks for the live Lemonade lanes, vsock only.
+        (LemonadeLanesRequest { .. }, Vsock) => Handle,
+        (LemonadeLanesRequest { .. }, UnixSocket) => Unsupported,
 
         // HostClockSync (1503-qrgz) is vsock-only and host->guest: only the
         // host knows its wall clock survived a sleep the VM did not run through.
@@ -217,7 +217,8 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
             | CloudProjectsPush { .. }
             | FlowStatePush { .. }
             | ProgressPush { .. }
-            | MetricsSnapshotReply { .. },
+            | MetricsSnapshotReply { .. }
+            | LemonadeLanesReply { .. },
             _,
         ) => ResponseOnly,
 
@@ -243,20 +244,27 @@ mod tests {
     /// variant answering Unsupported is how two earlier omissions were caught
     /// on their first live run; this asserts the registration exists so that
     /// property is not quietly spent.
-    /// ORDER 2456-lrly: the Lemonade sibling is registered by name, vsock only.
+    /// ORDER 2456-lrly: the lane request is registered by name, vsock only,
+    /// and its reply never opens a connection.
     #[test]
-    fn set_lemonade_forward_target_is_vsock_only() {
-        let msg = ControlMessage::SetLemonadeForwardTarget {
-            cid: 2,
-            port: 42431,
-        };
+    fn lemonade_lanes_request_is_vsock_only() {
+        let req = ControlMessage::LemonadeLanesRequest { seq: 1 };
         assert_eq!(
-            decide_route(&msg, TransportKind::Vsock),
+            decide_route(&req, TransportKind::Vsock),
             DispatchOutcome::Handle
         );
         assert_eq!(
-            decide_route(&msg, TransportKind::UnixSocket),
+            decide_route(&req, TransportKind::UnixSocket),
             DispatchOutcome::Unsupported
+        );
+        let reply = ControlMessage::LemonadeLanesReply {
+            seq: 1,
+            boot_id: String::new(),
+            lanes: vec![],
+        };
+        assert_eq!(
+            decide_route(&reply, TransportKind::Vsock),
+            DispatchOutcome::ResponseOnly
         );
     }
 

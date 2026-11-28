@@ -45,6 +45,10 @@ local PINNED_TESTS = {
     "get_models_is_built_from_the_approved_set_without_upstream",
     "a_lane_at_its_concurrency_cap_is_refused",
     "the_tray_default_upstream_is_fixed_loopback_13305",
+    -- round 2: the tray dials, the guest pairs
+    "a_vm_restart_rearms_the_dialer_and_the_old_workers_exit",
+    "a_dialed_connection_parks_past_the_preamble_timeout_then_obeys_every_rule",
+    "a_lane_learned_from_the_guest_verifies_and_a_rotated_one_does_not",
 }
 
 -- 1. Static allowlist pin.

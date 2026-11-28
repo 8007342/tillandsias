@@ -2505,9 +2505,8 @@ const ENCLAVE_ONLY_NET: &str = "tillandsias-enclave";
 // Order 1986-snpx: `studio` IS listed for the same reason as nix-cache. The
 // project's studio answers as `studio` on its own network (1985-stdu); a
 // forge's curl to it went to squid and came back exit 56 (kumbia forge).
-// Order 2456-lrly: `lemonade` IS listed, like `inference`: it is the enclave
-// alias of the host Lemonade relay (lemonade:13305), plain HTTP to a peer.
-const ENCLAVE_NO_PROXY_BASE: &str = "localhost,127.0.0.1,0.0.0.0,::1,vault,tillandsias-vault,inference,lemonade,proxy,nix-cache,studio";
+const ENCLAVE_NO_PROXY_BASE: &str =
+    "localhost,127.0.0.1,0.0.0.0,::1,vault,tillandsias-vault,inference,proxy,nix-cache,studio";
 /// ORDER 998-qrwu. The path is declared ONCE in images/default/ca-path.txt and
 /// read through tillandsias-core, which both this crate and tillandsias-macos-tray
 /// depend on. It was a literal in 38 places; 975-rsgm has to move it off /tmp,
@@ -8438,9 +8437,6 @@ fn wsl2_dxg_container_args(dxg_present: bool, wsl_tree_present: bool) -> Vec<Str
 /// answers nothing is indistinguishable, from inside the guest, from a service
 /// that is merely quiet — the shape this milestone exists to remove.
 async fn try_start_vsock_forwarder(client: &tillandsias_podman::PodmanClient, debug: bool) -> bool {
-    // 2456-lrly: the Lemonade lane is independent of the inference choice
-    // below; it only shares the kill switch every caller already applied.
-    try_start_lemonade_forwarder(client, debug).await;
     // THE FORWARDER'S IMAGE IS NOT THE INFERENCE IMAGE, and this is measured
     // rather than assumed: `localhost/tillandsias-inference` carries ONLY `sh`
     // — no socat, nc, python3 or perl — while `tillandsias-forge-base` has
@@ -8469,13 +8465,19 @@ async fn try_start_vsock_forwarder(client: &tillandsias_podman::PodmanClient, de
     // The inference container claims the same alias. Stand it down first rather
     // than racing it.
     let _ = client.remove_container("tillandsias-inference").await;
-    match run_vsock_relay_container(
-        client,
-        &ForwarderLane::INFERENCE,
-        &build_vsock_forwarder_run_args(image, &profile, target),
-        debug,
-    )
-    .await
+    match client
+        // Order 1118-zzs4: EXEMPT from the envelope check, reviewed. The relay
+        // carries --cap-drop=ALL and no-new-privileges but a custom seccomp
+        // profile and no --userns=keep-id / label=disable; adding them is
+        // unmeasured on the VM-boundary guests this runs on.
+        .run_container_observed_exempt(
+            "vsock-forwarder",
+            VSOCK_FORWARDER_NAME,
+            &build_vsock_forwarder_run_args(image, &profile, target),
+            debug,
+            "vsock relay: custom seccomp, userns/label unmeasured (1118-zzs4)",
+        )
+        .await
     {
         Ok(_) => {
             eprintln!(
@@ -8506,77 +8508,6 @@ const AF_VSOCK: u64 = 40;
 /// make starting either silently stop the other, hiding a tier decision inside
 /// a container-lifecycle detail.
 const VSOCK_FORWARDER_NAME: &str = "tillandsias-vsock-forwarder";
-
-/// ORDER 2456-lrly: the Lemonade lane's forwarder. Its own container and its own
-/// alias (`lemonade`), so it never displaces `inference`.
-const LEMONADE_FORWARDER_NAME: &str = "tillandsias-lemonade-forwarder";
-
-/// ORDER 2456-lrly: start the `lemonade:13305` forwarder when the tray has
-/// announced a Lemonade relay (`SetLemonadeForwardTarget`). A no-op when no
-/// target was recorded, which is every Linux and macOS host today: only the
-/// Windows tray sends it.
-///
-/// Called from inside [`try_start_vsock_forwarder`], so it sits behind the same
-/// `local_inference_disabled()` switch, and it never touches the `inference`
-/// alias or the inference container. The relay's policy lives on the HOST
-/// (tillandsias-windows-tray `lemonade_relay`); this container only carries
-/// bytes to it.
-///
-/// FOLLOW-UP (2456-lrly, credential delivery): the relay requires a per-lane
-/// preamble on every connection; this plain socat does not attach one yet, so
-/// the relay drops its connections until delivery lands.
-/// The ONE reviewed launch past the envelope check, shared by both forwarder
-/// lanes (order 1118-zzs4; 2456-lrly added the second lane, not a second
-/// exemption). The relay carries --cap-drop=ALL and no-new-privileges but a
-/// custom seccomp profile and no --userns=keep-id / label=disable; adding them
-/// is unmeasured on the VM-boundary guests this runs on. `ForwarderLane` is
-/// the only input type, so nothing but a forwarder lane can reach it.
-async fn run_vsock_relay_container(
-    client: &tillandsias_podman::PodmanClient,
-    lane: &ForwarderLane,
-    args: &[String],
-    debug: bool,
-) -> Result<String, String> {
-    client
-        .run_container_observed_exempt(
-            lane.stage,
-            lane.container,
-            args,
-            debug,
-            "vsock relay: custom seccomp, userns/label unmeasured (1118-zzs4)",
-        )
-        .await
-}
-
-async fn try_start_lemonade_forwarder(client: &tillandsias_podman::PodmanClient, debug: bool) {
-    let Some(target) = lemonade_forward_target() else {
-        return;
-    };
-    if crate::vault_bootstrap::container_running(LEMONADE_FORWARDER_NAME) {
-        return;
-    }
-    let image = versioned_image_tag("forge-base", VERSION.trim());
-    let profile = match ensure_vsock_seccomp_profile() {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!(
-                "[tillandsias] lemonade relay configured but the vsock seccomp profile could \
-                 not be derived: {e}. NOT starting the lemonade forwarder."
-            );
-            return;
-        }
-    };
-    let args = build_forwarder_run_args(&image, &profile, target, &ForwarderLane::LEMONADE);
-    match run_vsock_relay_container(client, &ForwarderLane::LEMONADE, &args, debug).await {
-        Ok(_) => eprintln!(
-            "[tillandsias] lemonade:13305 is forwarded to the host relay over vsock \
-             (cid {}, port {})",
-            target.cid(),
-            target.port()
-        ),
-        Err(e) => eprintln!("[tillandsias] the lemonade forwarder failed to start: {e}"),
-    }
-}
 
 /// Where the tray leaves the forwarder's configuration, and where the derived
 /// seccomp profile is written.
@@ -8629,26 +8560,15 @@ pub(crate) fn vsock_forward_dir() -> PathBuf {
 /// a refused value is logged and treated as no target (the in-guest inference
 /// container runs instead), never relayed.
 fn vsock_forward_target() -> Option<VsockForwardTarget> {
-    forward_target_from("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO", "vsock-forward")
-}
-
-/// ORDER 2456-lrly: the Lemonade sibling of [`vsock_forward_target`], written by
-/// `SetLemonadeForwardTarget`. Same validation, same tmpfs dir, its own file, so
-/// the two lanes are configured independently.
-fn lemonade_forward_target() -> Option<VsockForwardTarget> {
-    forward_target_from("TILLANDSIAS_GUEST_LEMONADE_FORWARD_TO", "lemonade-forward")
-}
-
-fn forward_target_from(env_var: &str, file_name: &str) -> Option<VsockForwardTarget> {
     fn parse(raw: &str) -> Option<(u32, u32)> {
         let (cid, port) = raw.trim().split_once(':')?;
         Some((cid.trim().parse().ok()?, port.trim().parse().ok()?))
     }
-    let (source, raw) = match std::env::var(env_var) {
-        Ok(v) => (env_var.to_string(), v),
+    let (source, raw) = match std::env::var("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO") {
+        Ok(v) => ("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO", v),
         Err(_) => (
-            format!("the {file_name} file"),
-            std::fs::read_to_string(vsock_forward_dir().join(file_name)).ok()?,
+            "the vsock-forward file",
+            std::fs::read_to_string(vsock_forward_dir().join("vsock-forward")).ok()?,
         ),
     };
     let (cid, port) = parse(&raw)?;
@@ -8743,52 +8663,18 @@ fn build_vsock_forwarder_run_args(
     profile: &Path,
     target: VsockForwardTarget,
 ) -> Vec<String> {
-    build_forwarder_run_args(image, profile, target, &ForwarderLane::INFERENCE)
-}
-
-/// ORDER 2456-lrly: which enclave alias a guest->host forwarder answers to.
-/// Two lanes, two containers, two aliases, so `inference:11434` (Ollama) and
-/// `lemonade:13305` (the Windows host relay) coexist.
-pub(crate) struct ForwarderLane {
-    pub(crate) stage: &'static str,
-    pub(crate) container: &'static str,
-    pub(crate) alias: &'static str,
-    pub(crate) listen_port: u16,
-}
-
-impl ForwarderLane {
-    pub(crate) const INFERENCE: Self = Self {
-        stage: "vsock-forwarder",
-        container: VSOCK_FORWARDER_NAME,
-        alias: "inference",
-        listen_port: 11434,
-    };
-    pub(crate) const LEMONADE: Self = Self {
-        stage: "lemonade-forwarder",
-        container: LEMONADE_FORWARDER_NAME,
-        alias: "lemonade",
-        listen_port: 13305,
-    };
-}
-
-fn build_forwarder_run_args(
-    image: &str,
-    profile: &Path,
-    target: VsockForwardTarget,
-    lane: &ForwarderLane,
-) -> Vec<String> {
     let (host_cid, host_port) = (target.cid(), target.port());
     vec![
         "--detach".into(),
         "--replace".into(),
         "--name".into(),
-        lane.container.into(),
+        VSOCK_FORWARDER_NAME.into(),
         "--network".into(),
         ENCLAVE_NET.into(),
         // The whole point: without this the relay is reachable only by IP and
         // every agent addressing the name still lands on nothing.
         "--network-alias".into(),
-        lane.alias.into(),
+        "inference".into(),
         "--cap-drop=ALL".into(),
         "--security-opt=no-new-privileges".into(),
         // NOT seccomp=unconfined, which was the right instrument to ISOLATE the
@@ -8802,7 +8688,7 @@ fn build_forwarder_run_args(
         image.into(),
         // `fork` because each agent request is its own connection; `reuseaddr`
         // so a restart does not wait out TIME_WAIT on a fixed port.
-        format!("TCP-LISTEN:{},fork,reuseaddr", lane.listen_port),
+        "TCP-LISTEN:11434,fork,reuseaddr".into(),
         format!("VSOCK-CONNECT:{host_cid}:{host_port}"),
     ]
 }
@@ -22230,8 +22116,6 @@ async fn ensure_inference_for_launch(
         if debug {
             eprintln!("[tillandsias] inference already running; reusing (order 443)");
         }
-        // 2456-lrly: the Lemonade lane does not depend on the inference choice.
-        try_start_lemonade_forwarder(client, debug).await;
     } else if try_start_vsock_forwarder(client, debug).await {
         // Host-native lane took it. The forwarder claims the `inference`
         // alias, so the container below must NOT also run (830-xsk2).
@@ -23916,6 +23800,9 @@ mod pty_handler;
 pub mod pty_input_probe;
 #[cfg(feature = "listen-vsock")]
 mod vsock_server;
+// ORDER 2456-lrly: guest half of the forge -> host Lemonade relay. The pure
+// lane rules are testable everywhere; the IO half is listen-vsock + unix.
+mod lemonade_lane;
 
 /// Classify `vsock_loopback` availability from the two places the kernel
 /// reports a module (order 620-duta). Pure so the states can be tested
@@ -24399,6 +24286,15 @@ fn maybe_spawn_vsock_listener(
                                 Some(n) => n,
                                 _ => continue,
                             };
+                            // ORDER 2456-lrly: forge start/stop drives its Lemonade lane
+                            // (a no-op until a tray has dialed the relay).
+                            #[cfg(unix)]
+                            {
+                                let (a, n) = (action.to_string(), name.to_string());
+                                tokio::spawn(async move {
+                                    crate::lemonade_lane::on_container_event(&a, &n).await;
+                                });
+                            }
                             let display = match action {
                                 "create" | "start" | "init" => {
                                     if name.contains("forge") {
@@ -24459,6 +24355,21 @@ fn maybe_spawn_vsock_listener(
                 vsock_server::run_preview_relay_listener(relay_port, relay_shutdown).await
             {
                 eprintln!("[tillandsias] preview relay on port {relay_port} failed: {err}");
+            }
+        });
+
+        // ORDER 2456-lrly: the Lemonade relay. The tray dials out to this, as it
+        // does the control channel; each connection parks until a forge lane
+        // has a request for it.
+        #[cfg(unix)]
+        let lemonade_shutdown = shutdown.clone();
+        #[cfg(unix)]
+        let _lemonade_relay = tokio::spawn(async move {
+            let port = tillandsias_control_wire::transport::LEMONADE_RELAY_VSOCK_PORT;
+            if let Err(err) =
+                vsock_server::run_lemonade_relay_listener(port, lemonade_shutdown).await
+            {
+                eprintln!("[tillandsias] lemonade relay on port {port} failed: {err}");
             }
         });
 
@@ -26259,13 +26170,7 @@ mod tests {
         let needle = [".run_container_observed", "_exempt("].concat();
         assert_eq!(source.matches(needle.as_str()).count(), 1);
         let idx = source.find(needle.as_str()).unwrap();
-        // 2456-lrly: the one exempt call is the shared forwarder helper; its
-        // stage comes from a `ForwarderLane`, and only the two lanes exist.
-        assert!(source[idx..idx + 200].contains("lane.stage"));
-        let before = &source[idx.saturating_sub(400)..idx];
-        assert!(before.contains("async fn run_vsock_relay_container("));
-        assert_eq!(ForwarderLane::INFERENCE.stage, "vsock-forwarder");
-        assert_eq!(ForwarderLane::LEMONADE.stage, "lemonade-forwarder");
+        assert!(source[idx..idx + 200].contains("\"vsock-forwarder\""));
     }
 
     #[test]
@@ -27370,64 +27275,6 @@ mod tests {
             assert!(i < at, "{flag} must precede the image");
         }
         assert_ne!(VSOCK_FORWARDER_NAME, "tillandsias-inference");
-    }
-
-    /// ORDER 2456-lrly: the Lemonade lane is its own container on its own
-    /// alias and port, so `inference:11434` and `lemonade:13305` coexist, and
-    /// the inference lane's argv is exactly what it was.
-    #[test]
-    fn lemonade_forwarder_has_its_own_alias_port_and_container() {
-        let target = VsockForwardTarget::new(2, 42431).unwrap();
-        let profile = Path::new("/run/p.json");
-        let lemonade =
-            build_forwarder_run_args("img:v1", profile, target, &ForwarderLane::LEMONADE);
-        let alias = lemonade
-            .iter()
-            .position(|a| a == "--network-alias")
-            .unwrap();
-        assert_eq!(lemonade[alias + 1], "lemonade");
-        let name = lemonade.iter().position(|a| a == "--name").unwrap();
-        assert_eq!(lemonade[name + 1], "tillandsias-lemonade-forwarder");
-        assert!(lemonade.contains(&"TCP-LISTEN:13305,fork,reuseaddr".to_string()));
-        assert!(lemonade.contains(&"VSOCK-CONNECT:2:42431".to_string()));
-        assert_ne!(LEMONADE_FORWARDER_NAME, VSOCK_FORWARDER_NAME);
-
-        let inference = build_vsock_forwarder_run_args("img:v1", profile, target);
-        let alias = inference
-            .iter()
-            .position(|a| a == "--network-alias")
-            .unwrap();
-        assert_eq!(inference[alias + 1], "inference");
-        assert!(inference.contains(&"TCP-LISTEN:11434,fork,reuseaddr".to_string()));
-        assert!(inference.contains(&VSOCK_FORWARDER_NAME.to_string()));
-    }
-
-    /// ORDER 2456-lrly: the two lanes read separate tmpfs files.
-    #[test]
-    fn lemonade_forward_target_reads_its_own_file() {
-        let dir = vsock_forward_dir();
-        std::fs::create_dir_all(&dir).unwrap();
-        let _ = std::fs::remove_file(dir.join("vsock-forward"));
-        std::fs::write(dir.join("lemonade-forward"), "2:42431\n").unwrap();
-        if std::env::var("TILLANDSIAS_GUEST_LEMONADE_FORWARD_TO").is_err() {
-            let t = lemonade_forward_target().expect("lemonade target recorded");
-            assert_eq!((t.cid(), t.port()), (2, 42431));
-        }
-        if std::env::var("TILLANDSIAS_GUEST_VSOCK_FORWARD_TO").is_err() {
-            assert!(
-                vsock_forward_target().is_none(),
-                "the inference lane is untouched"
-            );
-        }
-        let _ = std::fs::remove_file(dir.join("lemonade-forward"));
-        std::fs::write(dir.join("lemonade-forward"), "1:42420\n").unwrap();
-        if std::env::var("TILLANDSIAS_GUEST_LEMONADE_FORWARD_TO").is_err() {
-            assert!(
-                lemonade_forward_target().is_none(),
-                "same validation as inference"
-            );
-        }
-        let _ = std::fs::remove_file(dir.join("lemonade-forward"));
     }
 
     /// ORDER 830-xsk2, MUTUAL EXCLUSION, and a SOURCE-SHAPE test on purpose —

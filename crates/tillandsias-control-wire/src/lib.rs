@@ -841,24 +841,49 @@ pub enum ControlMessage {
     ///
     /// @trace order:1955-cfhf, spec:cloudflare-auth
     CloudflareCallbackForward { seq: u64, line: String },
-    /// Host -> in-VM headless, vsock only (order 2456-lrly): "the host's
-    /// Lemonade relay listens on vsock `port` at `cid`". The sibling of
-    /// [`ControlMessage::SetVsockForwardTarget`] for a SEPARATE enclave alias,
-    /// `lemonade:13305`, so Ollama keeps `inference:11434` and both coexist.
+    /// Host -> in-VM headless, vsock only (order 2456-lrly): "which Lemonade
+    /// lanes are live, and what is each one's current credential?" The guest
+    /// mints one credential per forge launch (rotated on relaunch, held in
+    /// memory only) and attaches it to every relayed connection; the tray asks
+    /// here, over the authenticated control wire, so it can check that
+    /// preamble before any byte reaches Lemonade. Answered with
+    /// [`ControlMessage::LemonadeLanesReply`].
     ///
-    /// The guest records it under /run/tillandsias/lemonade-forward (tmpfs)
-    /// and starts `tillandsias-lemonade-forwarder` from it. The relay at the
-    /// other end, not this message, decides what a forge may reach: nothing
-    /// the guest sends names a host-side host or port.
-    ///
-    /// The guest answers exactly one frame: `IssueAck { seq_acked }` or
-    /// `Error`, like `SetVsockForwardTarget` (1509-kf4d).
-    ///
-    /// New trailing variant (additive, no WIRE_VERSION bump); same
-    /// no-capability-bit argument as `SetVsockForwardTarget`.
+    /// New trailing variant (additive, no WIRE_VERSION bump); the build
+    /// version is bound into the channel key, so only a peer that knows it
+    /// can be sent it (the `SetVsockForwardTarget` argument).
     ///
     /// @trace order:2456-lrly, spec:vsock-transport
-    SetLemonadeForwardTarget { cid: u32, port: u32 },
+    LemonadeLanesRequest { seq: u64 },
+    /// In-VM headless -> host: the reply to `LemonadeLanesRequest`. Response
+    /// only; it never opens a connection.
+    ///
+    /// @trace order:2456-lrly, spec:vsock-transport
+    LemonadeLanesReply {
+        seq: u64,
+        /// The guest kernel's boot id. The tray re-arms its dialer when this
+        /// changes (a VM restart), with no admin-only VM-id lookup.
+        boot_id: String,
+        lanes: Vec<LemonadeLane>,
+    },
+}
+
+/// One live Lemonade lane: a forge container name and its current credential
+/// (64 lowercase hex). Order 2456-lrly.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LemonadeLane {
+    pub lane: String,
+    pub token_hex: String,
+}
+
+/// Never prints the credential.
+impl std::fmt::Debug for LemonadeLane {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LemonadeLane")
+            .field("lane", &self.lane)
+            .field("token_hex", &"<redacted>")
+            .finish()
+    }
 }
 
 /// What the guest established about a PTY session's foreground process.
@@ -1232,7 +1257,8 @@ impl ControlMessage {
             ControlMessage::CloudflareLoginStatusReply { .. } => "CloudflareLoginStatusReply",
             ControlMessage::CloudflareLoginStored { .. } => "CloudflareLoginStored",
             ControlMessage::CloudflareCallbackForward { .. } => "CloudflareCallbackForward",
-            ControlMessage::SetLemonadeForwardTarget { .. } => "SetLemonadeForwardTarget",
+            ControlMessage::LemonadeLanesRequest { .. } => "LemonadeLanesRequest",
+            ControlMessage::LemonadeLanesReply { .. } => "LemonadeLanesReply",
         }
     }
 }
@@ -2987,11 +3013,19 @@ mod tests {
                 "CloudflareCallbackForward",
             ),
             (
-                ControlMessage::SetLemonadeForwardTarget {
-                    cid: 2,
-                    port: 42431,
+                ControlMessage::LemonadeLanesRequest { seq: 1 },
+                "LemonadeLanesRequest",
+            ),
+            (
+                ControlMessage::LemonadeLanesReply {
+                    seq: 1,
+                    boot_id: "b".into(),
+                    lanes: vec![LemonadeLane {
+                        lane: "tillandsias-p-forge".into(),
+                        token_hex: "ab".repeat(32),
+                    }],
                 },
-                "SetLemonadeForwardTarget",
+                "LemonadeLanesReply",
             ),
         ]
     }
@@ -3276,7 +3310,8 @@ mod tests {
             // 1955-cfhf: trailing addition.
             ControlMessage::CloudflareCallbackForward { .. } => 40,
             // 2456-lrly: trailing addition.
-            ControlMessage::SetLemonadeForwardTarget { .. } => 41,
+            ControlMessage::LemonadeLanesRequest { .. } => 41,
+            ControlMessage::LemonadeLanesReply { .. } => 42,
         }
     }
 
@@ -3311,7 +3346,7 @@ mod tests {
         /// The number of `ControlMessage` variants. An independent literal for
         /// the same reason the discriminants are: anything computed from the
         /// enum agrees with the enum by construction.
-        const DECLARED_VARIANTS: usize = 42;
+        const DECLARED_VARIANTS: usize = 43;
 
         let samples = one_sample_per_variant();
         assert_eq!(

@@ -26,10 +26,13 @@
 //! 4. **`GET /api/v1/models`** is BUILT from the approved set; Lemonade's JSON
 //!    is never edited in place, and the request never reaches Lemonade.
 //! 5. **Identity**: every connection starts with a per-lane preamble
-//!    `LRLY1 <lane> <64 hex>\n`. Credentials are minted per forge launch
-//!    ([`LaneRegistry::mint`], which rotates), live in memory only, and are
-//!    compared in constant time BEFORE any upstream byte flows. A mismatch is
-//!    a silent drop: no status, no reason.
+//!    `LRLY1 <lane> <64 hex>\n`. The guest mints one credential per forge
+//!    launch (rotated on relaunch, memory only) and attaches it itself, so
+//!    neither the forge nor its forwarder ever holds it. The tray learns the
+//!    live lanes over the authenticated control wire
+//!    (`LemonadeLanesRequest`, via [`LaneSource`]) into memory only, and
+//!    compares in constant time BEFORE any upstream byte flows. A mismatch
+//!    is a silent drop: no status, no reason.
 //! 6. **Headers** are rebuilt from scratch: `Host: 127.0.0.1:13305`,
 //!    `Content-Type` and `Accept` passed through, `Content-Length` recomputed,
 //!    `Connection: close`. Guest `Authorization`, `Cookie`, `X-Forwarded-*` and
@@ -42,14 +45,22 @@
 //!    requests per lane; image and audio-generation routes are serialised
 //!    globally. Every refusal and cap hit is logged with the lane and route.
 //!
+//! # Transport: the guest listens, the tray dials
+//!
+//! There is NO host listener (no HKLM registration, no admin). The tray dials
+//! out to the guest's vsock `LEMONADE_RELAY_VSOCK_PORT` through the same
+//! privilege-routed, handshake-authenticated path as the control channel
+//! (`open_and_wrap_hvsocket_stream`), so a connection the tray serves is one
+//! whose guest end proved the control wire's key. Each dialed connection
+//! PARKS until the guest pairs it with one forge request; the first bytes the
+//! tray then reads are the lane preamble and the forge's own HTTP request,
+//! which this module parses with httparse and nothing else. A small pool of
+//! parked connections is kept per VM boot by [`Dialer`]; a new guest boot id
+//! re-arms it and the previous pool's workers exit.
+//!
 //! The core is platform-neutral (any `AsyncRead + AsyncWrite` guest stream,
 //! plain TCP upstream) so it is tested on every host. Only [`hv`], the
-//! hvsocket listener, is Windows-only.
-//!
-//! FOLLOW-UP (credential delivery): minting is implemented here, but handing a
-//! lane's credential to the guest forwarder for one forge is not yet wired, so
-//! the tray registers no lanes and the relay drops every connection. That is
-//! the fail-closed default until delivery lands.
+//! hvsocket dial and the control-wire lane fetch, is Windows-only.
 //!
 //! @trace order:2456-lrly
 
@@ -238,9 +249,25 @@ pub struct LaneRegistry {
 }
 
 impl LaneRegistry {
-    /// Mint (or rotate) the credential for `lane`; call on every forge launch.
-    /// The previous token for the lane stops verifying immediately; the
-    /// in-flight gate is kept so a relaunch cannot reset the concurrency cap.
+    /// Replace the lane table with what the guest reported. A lane that
+    /// survives keeps its in-flight gate, so a rotation cannot reset the
+    /// concurrency cap; a lane that vanished stops verifying at once.
+    pub fn replace_all(&self, fresh: Vec<(String, [u8; 32])>) {
+        let mut lanes = self.lanes.lock().unwrap_or_else(|p| p.into_inner());
+        let mut next = HashMap::new();
+        for (lane, token) in fresh {
+            let inflight = lanes
+                .get(&lane)
+                .map(|e| e.inflight.clone())
+                .unwrap_or_else(|| Arc::new(Semaphore::new(PER_LANE_CONCURRENCY as usize)));
+            next.insert(lane, LaneEntry { token, inflight });
+        }
+        *lanes = next;
+    }
+
+    /// Mint (or rotate) a credential locally. Production credentials come
+    /// from the guest ([`LaneRegistry::replace_all`]); tests mint directly.
+    #[cfg(test)]
     pub fn mint(&self, lane: &str) -> LaneCredential {
         let token = random_token();
         let mut lanes = self.lanes.lock().unwrap_or_else(|p| p.into_inner());
@@ -273,6 +300,7 @@ impl LaneRegistry {
     }
 }
 
+#[cfg(test)]
 fn random_token() -> [u8; 32] {
     // Two v4 UUIDs: 244 bits from the OS RNG (getrandom, via uuid).
     let mut out = [0u8; 32];
@@ -664,12 +692,33 @@ struct Checked {
     body: Vec<u8>,
 }
 
+/// The guest's live lanes, as the control wire reports them.
+pub struct LaneSnapshot {
+    pub boot_id: String,
+    pub lanes: Vec<(String, [u8; 32])>,
+}
+
+/// Where the tray learns lane credentials (the guest, over the control wire).
+pub trait LaneSource: Send + Sync {
+    fn fetch(&self) -> BoxFuture<'_, io::Result<LaneSnapshot>>;
+}
+
+/// Parse one `LemonadeLane` token; a malformed one is dropped, never trusted.
+pub fn lane_token(token_hex: &str) -> Option<[u8; 32]> {
+    unhex32(token_hex)
+}
+
+/// How often an unknown preamble may trigger a lane refresh.
+const LANE_REFRESH_MIN_INTERVAL: Duration = Duration::from_millis(500);
+
 pub struct Relay {
     config: RelayConfig,
     lanes: Arc<LaneRegistry>,
     catalog: Arc<dyn ModelCatalog>,
     /// One at a time across all lanes for the serialised routes.
     media_gate: Arc<Semaphore>,
+    lane_source: Option<Arc<dyn LaneSource>>,
+    last_refresh: tokio::sync::Mutex<Option<std::time::Instant>>,
 }
 
 impl Relay {
@@ -683,7 +732,16 @@ impl Relay {
             lanes,
             catalog,
             media_gate: Arc::new(Semaphore::new(1)),
+            lane_source: None,
+            last_refresh: tokio::sync::Mutex::new(None),
         }
+    }
+
+    /// Learn lanes from `source` when a preamble names an unknown or rotated
+    /// credential (a forge launched since the last fetch).
+    pub fn with_lane_source(mut self, source: Arc<dyn LaneSource>) -> Self {
+        self.lane_source = Some(source);
+        self
     }
 
     pub fn lanes(&self) -> &LaneRegistry {
@@ -695,8 +753,31 @@ impl Relay {
     where
         S: AsyncRead + AsyncWrite + Unpin + Send,
     {
+        self.serve_timed(guest, Vec::new()).await;
+    }
+
+    /// Serve one tray-DIALED connection: it parks, with no timer, until the
+    /// guest pairs it with a forge request (or closes it); from the first byte
+    /// on, every rule and cap of [`Relay::serve_connection`] applies.
+    pub async fn serve_parked<S>(&self, mut guest: S)
+    where
+        S: AsyncRead + AsyncWrite + Unpin + Send,
+    {
+        let mut first = vec![0u8; 256];
+        let n = match guest.read(&mut first).await {
+            Ok(0) | Err(_) => return,
+            Ok(n) => n,
+        };
+        first.truncate(n);
+        self.serve_timed(guest, first).await;
+    }
+
+    async fn serve_timed<S>(&self, guest: S, initial: Vec<u8>)
+    where
+        S: AsyncRead + AsyncWrite + Unpin + Send,
+    {
         let total = self.config.total_timeout;
-        if tokio::time::timeout(total, self.serve_inner(guest))
+        if tokio::time::timeout(total, self.serve_inner(guest, initial))
             .await
             .is_err()
         {
@@ -707,12 +788,28 @@ impl Relay {
         }
     }
 
-    async fn serve_inner<S>(&self, mut guest: S)
+    /// Re-read the guest's lanes, at most once per interval.
+    async fn refresh_lanes(&self) {
+        let Some(source) = &self.lane_source else {
+            return;
+        };
+        let mut last = self.last_refresh.lock().await;
+        if last.is_some_and(|t| t.elapsed() < LANE_REFRESH_MIN_INTERVAL) {
+            return;
+        }
+        *last = Some(std::time::Instant::now());
+        match source.fetch().await {
+            Ok(snap) => self.lanes.replace_all(snap.lanes),
+            Err(e) => tracing::warn!(error = %e, "lemonade relay: lane refresh failed"),
+        }
+    }
+
+    async fn serve_inner<S>(&self, mut guest: S, initial: Vec<u8>)
     where
         S: AsyncRead + AsyncWrite + Unpin + Send,
     {
         // 1. Identity, before anything else and before any upstream byte.
-        let (lane, gate, mut buf) = match self.read_preamble(&mut guest).await {
+        let (lane, gate, mut buf) = match self.read_preamble(&mut guest, initial).await {
             Some(v) => v,
             None => {
                 // Silent drop: no status, no reason.
@@ -880,8 +977,8 @@ impl Relay {
     async fn read_preamble<S: AsyncRead + Unpin>(
         &self,
         guest: &mut S,
+        mut buf: Vec<u8>,
     ) -> Option<(String, Arc<Semaphore>, Vec<u8>)> {
-        let mut buf = Vec::new();
         let mut chunk = [0u8; 256];
         let nl = tokio::time::timeout(self.config.preamble_timeout, async {
             loop {
@@ -917,6 +1014,11 @@ impl Relay {
         if !lane_ok {
             return None;
         }
+        // Verify against the guest's CURRENT table: a cache older than the
+        // refresh interval is re-read first, so a relaunch's rotation (and a
+        // stopped forge's revocation) take effect on the next request rather
+        // than lingering in the tray. Rate-limited inside.
+        self.refresh_lanes().await;
         let gate = self.lanes.verify(lane, token)?;
         Some((lane.to_string(), gate, buf[nl + 1..].to_vec()))
     }
@@ -1091,10 +1193,9 @@ impl Relay {
     }
 }
 
-/// Whether the tray announces the relay to the guest. OPT-IN
-/// (`TILLANDSIAS_LEMONADE_RELAY=1`) until credential delivery lands: without
-/// it every connection is dropped, so announcing by default would start a
-/// guest forwarder that can never carry a request.
+/// Whether the tray runs the relay at all. OPT-IN
+/// (`TILLANDSIAS_LEMONADE_RELAY=1`): without it the tray never dials, so the
+/// guest never arms a lane, mints a credential or starts a forwarder.
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub fn relay_opted_in() -> bool {
     std::env::var("TILLANDSIAS_LEMONADE_RELAY")
@@ -1102,39 +1203,172 @@ pub fn relay_opted_in() -> bool {
         .unwrap_or(false)
 }
 
-// ─── hvsocket binding (Windows only) ─────────────────────────────────────────
+// ─── The dialer (platform-neutral) ───────────────────────────────────────────
 
-/// The hvsocket listener: accepts guest connections on
-/// `LEMONADE_RELAY_VSOCK_PORT` from the WSL utility VM and hands each to
-/// [`Relay::serve_connection`].
+/// Parked tray connections kept open per VM boot. Two per lane is the lane
+/// cap; four covers two busy lanes without a dial on the request path.
+pub const PARKED_DIALS: usize = 4;
+/// Pause after a failed dial before the next (the guest may be booting).
+const DIAL_RETRY: Duration = Duration::from_secs(2);
+
+/// Keeps [`PARKED_DIALS`] outbound connections parked on the guest's relay
+/// listener, for ONE guest boot at a time. [`Dialer::arm`] with a new boot id
+/// bumps the generation: every worker of the old generation exits (even one
+/// parked mid-dial or mid-wait), and a fresh pool starts.
+pub struct Dialer {
+    generation: tokio::sync::watch::Sender<u64>,
+    armed_for: Mutex<Option<String>>,
+}
+
+impl Default for Dialer {
+    fn default() -> Self {
+        Self {
+            generation: tokio::sync::watch::channel(0).0,
+            armed_for: Mutex::new(None),
+        }
+    }
+}
+
+impl Dialer {
+    /// Arm for `boot_id`. `None` when already armed for it (no new workers);
+    /// otherwise the new workers' handles.
+    pub fn arm<D, F, S>(
+        &self,
+        boot_id: &str,
+        relay: Arc<Relay>,
+        parked: usize,
+        dial: D,
+    ) -> Option<Vec<tokio::task::JoinHandle<()>>>
+    where
+        D: Fn() -> F + Clone + Send + Sync + 'static,
+        F: Future<Output = io::Result<S>> + Send + 'static,
+        S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
+        {
+            let mut armed = self.armed_for.lock().unwrap_or_else(|p| p.into_inner());
+            if armed.as_deref() == Some(boot_id) {
+                return None;
+            }
+            *armed = Some(boot_id.to_string());
+        }
+        let mine = {
+            let mut next = 0;
+            self.generation.send_modify(|g| {
+                *g += 1;
+                next = *g;
+            });
+            next
+        };
+        tracing::info!(boot_id, generation = mine, "lemonade relay dialer armed");
+        Some(
+            (0..parked)
+                .map(|_| {
+                    let (rx, relay, dial) =
+                        (self.generation.subscribe(), relay.clone(), dial.clone());
+                    tokio::spawn(dial_worker(mine, rx, relay, dial))
+                })
+                .collect(),
+        )
+    }
+}
+
+async fn dial_worker<D, F, S>(
+    mine: u64,
+    mut generation: tokio::sync::watch::Receiver<u64>,
+    relay: Arc<Relay>,
+    dial: D,
+) where
+    D: Fn() -> F + Send + Sync + 'static,
+    F: Future<Output = io::Result<S>> + Send + 'static,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    loop {
+        if *generation.borrow() != mine {
+            return;
+        }
+        let superseded = async {
+            while generation.changed().await.is_ok() {
+                if *generation.borrow() != mine {
+                    return;
+                }
+            }
+        };
+        let work = async {
+            match dial().await {
+                Ok(stream) => relay.serve_parked(stream).await,
+                Err(e) => {
+                    tracing::debug!(error = %e, "lemonade relay: dial failed; retrying");
+                    tokio::time::sleep(DIAL_RETRY).await;
+                }
+            }
+        };
+        tokio::select! {
+            _ = superseded => return,
+            _ = work => {}
+        }
+    }
+}
+
+// ─── hvsocket dial + control-wire lanes (Windows only) ───────────────────────
+
 #[cfg(target_os = "windows")]
 pub mod hv {
     use super::*;
-    use crate::hvsocket::{parse_guid, vsock_service_guid, wsa_startup, wsl_utility_vm_id};
-    use std::os::windows::io::FromRawSocket;
-    use std::sync::OnceLock;
-    use windows::Win32::Networking::WinSock::{
-        SOCK_STREAM, SOCKADDR, accept, bind, closesocket, listen, socket,
+    use tillandsias_control_wire::transport::{
+        CONTROL_WIRE_VSOCK_PORT, LEMONADE_RELAY_VSOCK_PORT, Transport,
     };
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
 
-    const AF_HYPERV: u16 = 34;
-    const HV_PROTOCOL_RAW: i32 = 1;
+    /// The guest's lanes, asked over a fresh authenticated control-wire
+    /// connection (the same open/handshake as every tray request).
+    pub struct ControlWireLanes;
 
-    #[repr(C)]
-    struct SockaddrHv {
-        family: u16,
-        reserved: u16,
-        vm_id: windows::core::GUID,
-        service_id: windows::core::GUID,
+    impl LaneSource for ControlWireLanes {
+        fn fetch(&self) -> BoxFuture<'_, io::Result<LaneSnapshot>> {
+            Box::pin(async {
+                let stream =
+                    crate::hvsocket::open_and_wrap_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT).await?;
+                let mut client = tillandsias_host_shell::vsock_client::Client::from_stream(
+                    stream,
+                    Transport::Vsock {
+                        cid: 0,
+                        port: CONTROL_WIRE_VSOCK_PORT,
+                    },
+                );
+                client
+                    .handshake()
+                    .await
+                    .map_err(|e| io::Error::other(format!("handshake: {e}")))?;
+                let seq = client.allocate_seq();
+                let reply = client
+                    .request(&ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq,
+                        body: ControlMessage::LemonadeLanesRequest { seq },
+                    })
+                    .await
+                    .map_err(|e| io::Error::other(format!("LemonadeLanesRequest: {e}")))?;
+                match reply.body {
+                    ControlMessage::LemonadeLanesReply { boot_id, lanes, .. } => Ok(LaneSnapshot {
+                        boot_id,
+                        lanes: lanes
+                            .into_iter()
+                            .filter_map(|l| lane_token(&l.token_hex).map(|t| (l.lane, t)))
+                            .collect(),
+                    }),
+                    other => Err(io::Error::other(format!(
+                        "expected LemonadeLanesReply, got {}",
+                        other.kind()
+                    ))),
+                }
+            })
+        }
     }
 
-    /// The VM id the running listener is bound to.
-    static BOUND_VM: Mutex<Option<String>> = Mutex::new(None);
-    static RELAY: OnceLock<Arc<Relay>> = OnceLock::new();
+    static RELAY: std::sync::OnceLock<Arc<Relay>> = std::sync::OnceLock::new();
+    static DIALER: std::sync::OnceLock<Dialer> = std::sync::OnceLock::new();
 
-    /// The tray's one relay. Credentials are registered by the (follow-up)
-    /// delivery path through `relay().lanes().mint(..)`.
-    pub fn relay() -> Arc<Relay> {
+    fn relay() -> Arc<Relay> {
         RELAY
             .get_or_init(|| {
                 let config = RelayConfig::tray_default();
@@ -1143,79 +1377,30 @@ pub mod hv {
                     connect_timeout: config.connect_timeout,
                     read_timeout: Duration::from_secs(30),
                 });
-                Arc::new(Relay::new(
-                    config,
-                    Arc::new(LaneRegistry::default()),
-                    catalog,
-                ))
+                Arc::new(
+                    Relay::new(config, Arc::new(LaneRegistry::default()), catalog)
+                        .with_lane_source(Arc::new(ControlWireLanes)),
+                )
             })
             .clone()
     }
 
-    /// Bind (once per WSL VM id) and start accepting. Bound to the WSL utility
-    /// VM's id, not the wildcard, so no other partition can connect.
-    pub fn ensure_listening(port: u32) -> io::Result<()> {
-        let vm = wsl_utility_vm_id()?;
-        {
-            let mut bound = BOUND_VM.lock().unwrap_or_else(|p| p.into_inner());
-            if bound.as_deref() == Some(vm.as_str()) {
-                return Ok(());
-            }
-            *bound = Some(vm.clone());
+    /// Fetch the guest's lanes and boot id, then (re)arm the dialer for that
+    /// boot. Called on every control-subscription (re)establishment, which is
+    /// how a VM restart reaches the tray.
+    pub async fn announce() -> io::Result<()> {
+        let snap = ControlWireLanes.fetch().await?;
+        let relay = relay();
+        relay.lanes().replace_all(snap.lanes);
+        let rearmed =
+            DIALER
+                .get_or_init(Dialer::default)
+                .arm(&snap.boot_id, relay, PARKED_DIALS, || {
+                    crate::hvsocket::open_and_wrap_hvsocket_stream(LEMONADE_RELAY_VSOCK_PORT)
+                });
+        if rearmed.is_some() {
+            tracing::info!(boot_id = %snap.boot_id, "lemonade relay dialing the guest");
         }
-        let vm_guid = parse_guid(&vm).ok_or_else(|| io::Error::other("bad WSL VM GUID"))?;
-        let svc_guid = parse_guid(&vsock_service_guid(port))
-            .ok_or_else(|| io::Error::other("bad service GUID"))?;
-        wsa_startup()?;
-        let listener = unsafe {
-            let sock = socket(AF_HYPERV as i32, SOCK_STREAM, HV_PROTOCOL_RAW)
-                .map_err(|e| io::Error::other(format!("AF_HYPERV socket() failed: {e}")))?;
-            let addr = SockaddrHv {
-                family: AF_HYPERV,
-                reserved: 0,
-                vm_id: vm_guid,
-                service_id: svc_guid,
-            };
-            if bind(
-                sock,
-                &addr as *const SockaddrHv as *const SOCKADDR,
-                std::mem::size_of::<SockaddrHv>() as i32,
-            ) != 0
-                || listen(sock, 16) != 0
-            {
-                let _ = closesocket(sock);
-                *BOUND_VM.lock().unwrap_or_else(|p| p.into_inner()) = None;
-                return Err(io::Error::other(format!(
-                    "AF_HYPERV bind/listen for the lemonade relay (vsock {port}) failed"
-                )));
-            }
-            sock
-        };
-        let handle = tokio::runtime::Handle::current();
-        std::thread::Builder::new()
-            .name("lemonade-relay-accept".into())
-            .spawn(move || {
-                loop {
-                    let accepted = unsafe { accept(listener, None, None) };
-                    let Ok(conn) = accepted else {
-                        tracing::warn!("lemonade relay: accept failed; listener stopped");
-                        *BOUND_VM.lock().unwrap_or_else(|p| p.into_inner()) = None;
-                        return;
-                    };
-                    let std_stream = unsafe { std::net::TcpStream::from_raw_socket(conn.0 as _) };
-                    let relay = relay();
-                    handle.spawn(async move {
-                        if std_stream.set_nonblocking(true).is_err() {
-                            return;
-                        }
-                        let Ok(stream) = tokio::net::TcpStream::from_std(std_stream) else {
-                            return;
-                        };
-                        relay.serve_connection(stream).await;
-                    });
-                }
-            })?;
-        tracing::info!(port, vm = %vm, "lemonade relay listening on hvsocket");
         Ok(())
     }
 }

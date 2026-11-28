@@ -41,10 +41,12 @@ pub const CONTROL_WIRE_VSOCK_PORT: u32 = 42420;
 /// @trace spec:vsock-transport, spec:local-web-preview
 pub const PREVIEW_RELAY_VSOCK_PORT: u32 = 42430;
 
-/// Order 2456-lrly: the vsock port the Windows tray's Lemonade relay listens
-/// on. The guest's `tillandsias-lemonade-forwarder` connects here for every
-/// `lemonade:13305` connection a forge opens; the tray applies the relay policy
-/// and only then talks to Lemonade on the host's 127.0.0.1:13305.
+/// Order 2456-lrly: the GUEST listens here and the Windows tray DIALS OUT, the
+/// control channel's shape (no host listener, no HKLM, no admin). Each tray
+/// connection runs the control wire's handshake, then parks until a forge
+/// opens a connection on its own lane; the guest pairs the two, writes the
+/// lane preamble, and the tray applies the relay policy before it talks to
+/// Lemonade on its own fixed 127.0.0.1:13305.
 ///
 /// @trace order:2456-lrly, spec:vsock-transport
 pub const LEMONADE_RELAY_VSOCK_PORT: u32 = 42431;
