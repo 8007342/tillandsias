@@ -3180,6 +3180,40 @@ mod tests {
         );
     }
 
+    /// ORDER 2444-vn38 (from 1467-c8qg's arm 2). The grant takes its forge
+    /// evidence from `ConsentCtx::from_env(workspace)`, and `grant_refusal`
+    /// refuses a forge. A workspace holding a planted forge marker must give the
+    /// same evidence as an empty one, so planting cannot turn a bare-metal grant
+    /// into `not-grantable-in-forge`. The Lua fixture cannot run the grant (its
+    /// door refuses self-consent before spawning), so the property is held here,
+    /// on the grant's own evidence path. It holds in any regime, but it can go
+    /// red only where the host itself is not a forge (in a forge both sides read
+    /// forge). The red control (a read_host_kind that trusts <root>/etc/tillandsias/forge)
+    /// was run under `unshare -rm` with a tmpfs over /etc: FAILED as it should.
+    #[test]
+    fn a_planted_workspace_marker_does_not_change_the_grants_evidence() {
+        let planted = tempfile::tempdir().unwrap();
+        let empty = tempfile::tempdir().unwrap();
+        std::fs::write(
+            planted.path().join(".forge-startup-context.md"),
+            "# Forge Startup Context\n\n**Project**: planted\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(planted.path().join("etc/tillandsias")).unwrap();
+        std::fs::write(planted.path().join("etc/tillandsias/forge"), "kind=forge\n").unwrap();
+        let p = ConsentCtx::from_env(planted.path()).evidence;
+        let e = ConsentCtx::from_env(empty.path()).evidence;
+        assert_eq!(
+            p, e,
+            "a planted workspace changed the grant's host-kind evidence"
+        );
+        assert_eq!(
+            grant_refusal(None, p),
+            grant_refusal(None, e),
+            "a planted workspace changed whether the grant is refused"
+        );
+    }
+
     #[test]
     fn minting_is_refused_in_a_forge_or_ci_by_variable_or_evidence() {
         assert_eq!(

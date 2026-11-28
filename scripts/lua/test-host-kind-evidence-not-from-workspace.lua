@@ -89,17 +89,25 @@ local FORGE = in_forge()
 if FORGE then
     skip("arms 1, 2: this host is a forge; run on a host that is not")
 else
-    local rc, out = run({ PLAN, "policy", "eval", "--cwd", C, "--", "tillandsias", "--reset-state" })
+    -- --cwd AND --root: the grant takes --root as its workspace (main.rs consent
+    -- grant -> ConsentCtx::from_env(root)), so the planted root is read here too.
+    local rc, out = run({ PLAN, "policy", "eval", "--cwd", C, "--root", C, "--", "tillandsias", "--reset-state" })
     check(rc == 4 and out == BARE_ANS, "arm 1: a planted cwd marker is not forge evidence (" .. out .. ")",
         "arm 1: rc=" .. tostring(rc) .. " out=[" .. out .. "] (the planted marker was read as forge evidence)")
     local rb = run({ PLAN, "policy", "classify-bash", "--command", "tillandsias --reset-state", "--cwd", C })
     -- The grant half cannot be RUN from here, by design: this door refuses a
     -- consent grant before spawning it (floor:no-self-consent, 1443-9f5w), so
     -- no agent script can approve itself. The .sh ran it outside the door.
-    -- What remains checkable is WHICH rule refuses: the self-consent floor,
-    -- never the forge rule (not-grantable-in-forge), so the planted marker
-    -- still did not make this host read as a forge. Measured on msys by
-    -- doris-windows, 2026-11-28: the old arm read rc=nil (policy_denied).
+    -- Measured on msys by doris-windows, 2026-11-28: the old arm read rc=nil
+    -- (policy_denied). The floor refusal does NOT cover the .sh arm's property
+    -- (a planted workspace cannot make the GRANT refuse as a forge), because
+    -- the door refuses before the grant reads any evidence. That property is
+    -- held instead by the Rust test
+    -- a_planted_workspace_marker_does_not_change_the_grants_evidence
+    -- (command_policy.rs), on the grant's own evidence path
+    -- (ConsentCtx::from_env(root) -> grant_refusal), and by arm 1 reading the
+    -- same planted --root through policy eval. What this arm still checks is
+    -- that the door refuses only as self-consent, never as a forge.
     local g = proc.run({ argv = { PLAN, "policy", "consent", "grant", "soft-reset", "--root", C, "--",
         "tillandsias", "--reset-state" }, cwd = C, env = ENV, env_unset = UNSET, timeout_ms = 60000 })
     local gdec = tostring(g.decision)
