@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: test-checkout-writers-trap-removes-the-planted-prefix-runner-on-every-exit-path
+    order: "2452-8qe5"
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [fixtures, gate, checkout-hygiene]
+    estimated_hours: 1
+    owned_paths: [scripts/lua/test-checkout-writers.lua]
+    title: "trap-remove the prefix runner on every exit path: test-checkout-writers arm 10 leaves scripts/.wka4-prefix-runner.<pid>.sh when it is killed"
+    context: |
+      Observed on yolanda (msys): an untracked scripts/.wka4-prefix-runner.25837.sh (a copy of a
+      run-litmus-test-style runner, 180866 bytes) dated 2026-11-27 03:48, inside the window of a
+      ./build.sh --preflight run that ended 03:52 (target/work/pf-9q4c.log). That run deadline-killed
+      both test-checkout-writers.lua and test-litmus-step-pipefail.lua at 6 s. Attribution: the only
+      current code that builds that exact path is test-checkout-writers.lua's arm 10 door.sh, which
+      deliberately runs the PRE-fix pipefail guard so it plants scripts/.wka4-prefix-runner.$pid.sh, and
+      removes it only on door.sh's normal path (rm -f "$pre" as its last line). The current
+      test-litmus-step-pipefail.lua writes its runner under its scratch dir. Inferred, not reproduced:
+      the kill landed between the plant and that rm. A leftover .sh in scripts/ is untracked code to
+      every diff-scoped guard after it.
+    exit_criteria:
+      - "door.sh (or the Lua arm) removes the planted runner on every exit path: a trap on EXIT/TERM/INT plus a Lua-side cleanup after the call, since a KILL skips any trap"
+      - "a planted-kill arm: kill the fixture mid-arm-10 and assert scripts/ holds no .wka4-prefix-runner.* afterwards"
+    unscoreable: "fixture-row: closure is the new planted-kill arm in scripts/lua/test-checkout-writers.lua; no separate litmus."
+    next_action: "reproduce by running test-checkout-writers.lua under a 6 s timeout, confirm the leftover, then add the trap and the planted-kill arm."
+    provenance: filed by yolanda at macuahuitl-fedora's request, after attributing the leftover.
+    related: [1600-nn5b, 2433-4xa2]
+    events:
+      - {type: filed, ts: '2026-11-28T09:30:00Z', host: yolanda, summary: checkout-writers arm 10 leaves its planted prefix runner when killed}
