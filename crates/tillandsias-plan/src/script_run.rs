@@ -299,8 +299,14 @@ pub fn parse_header(src: &str) -> Result<Header, crate::child_env::EnvRefusal> {
 }
 
 /// The name a verdict-less script is refused under: the file stem.
+///
+/// ORDER 2451-7wm7. On Windows a path may separate with `\` (a native temp dir,
+/// `C:\Users\...\helper.lua`), and splitting on `/` alone named the verdict
+/// `refused:no-verdict:C:\Users\...\helper`. A backslash is a separator there
+/// only: on unix it is a legal filename character, so it is kept.
 pub fn script_name(path: &str) -> String {
-    let base = path.rsplit('/').next().unwrap_or(path);
+    let is_sep = |c: char| c == '/' || (cfg!(windows) && c == '\\');
+    let base = path.rsplit(is_sep).next().unwrap_or(path);
     base.strip_suffix(".lua").unwrap_or(base).to_string()
 }
 
@@ -1591,6 +1597,23 @@ pub fn cli_classify(args: &[String]) -> ! {
 
 #[cfg(test)]
 mod tests {
+
+    /// ORDER 2451-7wm7. The verdict name is the file stem on every platform;
+    /// a backslash separates on Windows only.
+    #[test]
+    fn the_script_name_is_the_stem_for_either_separator() {
+        assert_eq!(super::script_name("scripts/lua/test-x.lua"), "test-x");
+        assert_eq!(super::script_name("helper.lua"), "helper");
+        let back = super::script_name(r"C:\Users\u\.tmpA\helper.lua");
+        if cfg!(windows) {
+            assert_eq!(back, "helper");
+        } else {
+            assert_eq!(
+                back, r"C:\Users\u\.tmpA\helper",
+                "a backslash is a filename char on unix"
+            );
+        }
+    }
 
     // ORDER 2417-jzhh: require's two places, and the error when neither has it.
     fn module_tree(with: bool) -> tempfile::TempDir {
