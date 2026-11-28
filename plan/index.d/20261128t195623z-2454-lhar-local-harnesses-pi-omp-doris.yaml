@@ -1,0 +1,138 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by doris-windows for the operator's goal: Pi and Oh My Pi tray menus on host Lemonade, local models only.
+# Design: plan/issues/local-harnesses-pi-omp-lemonade-2026-11-28.md
+packets:
+  - packet_id: pi-harness-lane
+    order: 2454-lhar
+    status: in_progress
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [harness, tray, forge, local-inference]
+    estimated_hours: 6
+    owned_files: []
+    related: [2063-nfag, 2456-lrly]
+    title: |
+      A "Pi" tray menu launches the pi coding agent in a forge on local models only
+    context: |
+      Operator goal (2026-11-28). It follows the Copilot lane (2063-nfag) as the template: host-shell SelectedAgent
+      and menu rows, headless ForgeAgentMode::Pi (--pi, ProviderId None), an entrypoint, a pinned, twice-verified
+      install of @earendil-works/pi-coding-agent, and a models.json generated from GET /api/v1/models on the
+      enclave lemonade endpoint (pi does not autodiscover). PI_OFFLINE=1, no cloud keys.
+    verifiable_closure: |
+      A litmus for the pi lane: from a stub /models answer the entrypoint writes a models.json listing only the
+      lemonade provider, and --pi resolves to the pi entrypoint with no Vault provider.
+    unscoreable: "unpinnable-until-the-guard-exists: the lane ships its own litmus and lua fixture"
+    next_action: Implement on doris; Linux and macOS menus follow by parity rows.
+  - packet_id: omp-harness-lane
+    order: 2455-lomp
+    status: in_progress
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [harness, tray, forge, local-inference]
+    estimated_hours: 4
+    owned_files: []
+    related: [2454-lhar, 2456-lrly]
+    title: |
+      An "Oh My Pi" tray menu launches omp in a forge on local models only
+    context: |
+      Same shape as 2454-lhar. omp is a prebuilt, SHA-256-pinned binary. models.yml declares the lemonade provider with
+      discovery openai-models-list and auth none; disabledProviders lists every cloud provider; OTEL_SDK_DISABLED=true.
+      Update checks and crash reports are stopped by the proxy (no allowlist row).
+    verifiable_closure: |
+      A litmus for the omp lane: the generated config enables only lemonade and disables every cloud provider, and
+      --omp resolves to the omp entrypoint with no Vault provider.
+    unscoreable: "unpinnable-until-the-guard-exists: the lane ships its own litmus and lua fixture"
+    next_action: Implement after or alongside 2454-lhar.
+  - packet_id: windows-host-lemonade-relay
+    order: 2456-lrly
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows-tray, hvsocket, security, local-inference]
+    estimated_hours: 8
+    owned_files: []
+    related: [2454-lhar, 2455-lomp]
+    title: |
+      The Windows tray relays an allowlisted subset of host Lemonade to forges over hvsocket
+    context: |
+      Measured in a doris forge (2026-11-28): no default route, host.containers.internal:13305 refused (rc=56), only
+      inference:11434 (enclave Ollama) and the lane MCP socket reach out. Reuse ControlMessage::SetVsockForwardTarget
+      and the guest vsock forwarder (macos-host-native-inference) under a separate enclave alias "lemonade", so Ollama
+      keeps inference:11434 and lemonade is added to NO_PROXY. Allowlist: chat and completions, embeddings, audio,
+      images, and GET models; approved models only; no pull, delete or load. Per-VM credential and caps. Needs the
+      coordinator's security review before build.
+    verifiable_closure: |
+      A fixture where the relay forwards an allowlisted request to a stub upstream and refuses /api/v1/pull and an
+      unapproved model by name.
+    unscoreable: "unpinnable-until-the-guard-exists: the relay ships its own fixture"
+    next_action: Coordinator reviews the allowlist, then build.
+  - packet_id: lemonade-model-catalog-first-use-pull
+    order: 2457-lcat
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [tray, models, consent, local-inference]
+    estimated_hours: 6
+    owned_files: []
+    related: [2456-lrly, 2458-whel, 968-mp4e, 802-2536]
+    title: |
+      A tracked model catalog per role, with a tray-side first-use pull behind consent
+    context: |
+      Each role maps to a Lemonade id and a device (GPU > NPU > CPU), sized to the DXGI VRAM budget (968-mp4e). A missing
+      model is pulled by the tray (POST /api/v1/pull, progress from /api/v1/downloads) behind the imagegen_consent
+      first-use pattern. Gated licences go through the approval broker with an OS check (2458-whel). The lineup is in
+      the design doc.
+    verifiable_closure: |
+      A fixture where a missing model asks once and pulls once, and a second use does not ask; a gated licence without
+      approval is refused by name.
+    unscoreable: "unpinnable-until-the-guard-exists: the catalog ships its own fixture"
+    next_action: After 2456-lrly.
+  - packet_id: windows-hello-approval-signer
+    order: 2458-whel
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows-tray, approval, security]
+    estimated_hours: 8
+    owned_files: []
+    related: [2457-lcat]
+    title: |
+      The Windows approval broker's check uses Windows Hello, matching Touch ID on macOS
+    context: |
+      approval.rs has FIDO2 and polkit checks and macOS has a Touch ID signer; Windows has none. Gated model licences
+      must be accepted by the operator's OS-verified gesture, never by an agent.
+    verifiable_closure: |
+      A Windows test where an approval without a Hello verification is refused and a signed record verifies in the
+      guest.
+    unscoreable: "unpinnable-until-the-guard-exists: the signer ships its own test"
+    next_action: Design against openspec/changes/os-verified-approval-gates.
+  - packet_id: local-asset-pipeline-smoke
+    order: 2459-lpip
+    status: ready
+    kind: test
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [local-inference, pipelines]
+    estimated_hours: 3
+    owned_files: []
+    related: [2456-lrly]
+    title: |
+      A demon_attack-style local pipeline smoke: image, TTS, music, SFX and 3D through the relay, one job at a time
+    context: |
+      Lemonade on doris covers text, music, SFX, TTS, STT, images and 3D (design doc). VACE video and ControlNet edit
+      still need ComfyUI. Heavy jobs are serialised, since demon_attack crashed on shared VRAM.
+    verifiable_closure: |
+      From a forge, one request per modality returns a valid artifact through the relay, run on doris.
+    unscoreable: "unpinnable-until-the-guard-exists: the smoke ships its own fixture"
+    next_action: After 2456-lrly.
