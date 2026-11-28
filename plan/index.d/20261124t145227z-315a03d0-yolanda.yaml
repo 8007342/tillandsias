@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: port-terminology-memo-diagnose-surface-vault-classifier-fixtures-to-lua
+    field: status
+    value: completed
+    ts: "2026-11-24T14:52:27Z"
+    host: yolanda
+
+events:
+  - packet_id: port-terminology-memo-diagnose-surface-vault-classifier-fixtures-to-lua
+    event:
+      type: completed
+      ts: "2026-11-24T14:52:27Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: 2bd439d3431af98a4b9a407d6991c8fcbd8da74e
+  - packet_id: port-terminology-memo-diagnose-surface-vault-classifier-fixtures-to-lua
+    event:
+      type: note
+      ts: "2026-11-24T14:52:27Z"
+      host: yolanda
+      summary: |-
+        #1489 landed; the three Lua fixtures are on origin/linux-next and the shell files are gone

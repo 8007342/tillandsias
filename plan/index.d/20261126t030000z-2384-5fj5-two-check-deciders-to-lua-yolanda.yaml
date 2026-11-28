@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: two-check-deciders-to-lua
+    order: "2384-5fj5"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, gate]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/check-tracked-files-unwritten.lua
+      - scripts/lua/test-tracked-files-unwritten-guard.lua
+      - scripts/lua/test-tracked-files-unwritten-affordances.lua
+      - scripts/lua/check-long-running-view.lua
+      - scripts/lua/test-long-running-view.lua
+    title: "check-tracked-files-unwritten and check-long-running-view ported to Lua, with their tests and mutants"
+    context: |
+      check-* batch 1. check-salvage-refs-ledger and check-skills-single-source were candidates and are left:
+      open drafts #1196 (test-salvage-net.sh) and #1192 touch their callers.
+    exit_criteria:
+      - "Each decider gives the .sh's verdict on one tree, its main assertions are mutated, callers run the .lua, and the .sh files are deleted."
+    unscoreable: "fixture-scored: the deciders and their fixtures are the deliverable, run by build.sh, two gate steps and two litmus tests"
+    provenance: "coordinator 2026-11-26 (check-* range, batch 1, 3-4 per PR), yolanda"
+    related: [1063-363b, 2188-qaaj, 251, 943-26rx, 964-tzmp, 1247-amcu]
+    events:
+      - {type: claimed, ts: "2026-11-26T01:04:02Z", host: yolanda, summary: "claimed; work ref work/2384-5fj5"}

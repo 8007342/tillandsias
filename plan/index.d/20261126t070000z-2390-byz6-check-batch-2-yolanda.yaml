@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: check-batch-2-base-ledger-and-must-ship-to-lua
+    order: "2390-byz6"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, gate]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/check-base-ledger-status-loss.lua
+      - scripts/lua/check-must-ship-rows.lua
+    title: "check-* batch 2: check-base-ledger-status-loss and check-must-ship-rows ported to Lua"
+    context: |
+      Untouched by open PRs. Left out of this batch, with reasons: check-gate-memory-floor, check-yaml-reader-availability
+      and check-issue-citation-convention are bootstrap shell by design (bootstrap-shell-allowlist.txt);
+      check-litmus-pin-claims is a push-blocking relay-preflight decider invoked by .sh path from relay-preflight.sh;
+      check-build-cache-sweep's litmus writes a marker under the home cache dir, outside the Lua fs door.
+    exit_criteria:
+      - "Each decider gives the .sh's verdict on one tree, its main assertions are mutated, callers run the .lua, and the .sh files are deleted."
+    unscoreable: "fixture-scored: test-base-ledger-status-loss, test-must-ship-rows, build.sh, release-preflight and step 951"
+    provenance: "coordinator 2026-11-26 (check-* batch 2), yolanda"
+    related: [751-i9mb, 1218-25z3, 2384-5fj5]
+    events:
+      - {type: claimed, ts: "2026-11-26T05:01:34Z", host: yolanda, summary: "claimed; work ref work/2390-byz6"}

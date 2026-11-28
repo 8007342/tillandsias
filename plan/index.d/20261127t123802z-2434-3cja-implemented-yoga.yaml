@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: local-ci-landed-guards-drops-its-dead-bash-runtime-arm
+    field: status
+    value: implemented
+    ts: "2026-11-27T12:38:02Z"
+    host: yoga
+events:
+  - packet_id: local-ci-landed-guards-drops-its-dead-bash-runtime-arm
+    event: {type: implemented, ts: "2026-11-27T12:38:02Z", host: yoga, summary: "On work/2434-3cja: the landed-guards loop's bash arm is removed; a roster row whose runtime is not lua is a tracked failure naming the row (runtime-not-lua), never run. The roster fixture's shape arm accepts lua only, and a new arm plants runtime=bash on litmus-dead-inputs: on trunk the loop ran it with bash (red), with the fix it is refused by name. 6 arms."}

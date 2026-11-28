@@ -71,7 +71,7 @@
 # enforces it on this host. It does not prove the forge launches with it.
 name: litmus:podman-idiomatic-security-flags
 spec: podman-idiomatic-patterns
-phase: integration
+phase: runtime
 description: >
   Verify the product's DECLARED hardening envelope (policy.rs
   MANDATORY_HARDENING_FLAGS) is complete and that podman actually enforces it:

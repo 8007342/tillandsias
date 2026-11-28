@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# inputs: build.sh Cargo.toml scripts/build-macos-tray.sh scripts/check-no-competing-gate.sh scripts/check-test-baseline.sh scripts/gate-changed.sh scripts/gate-stamp.sh scripts/lib-dispatch-reap.sh scripts/lib-env-forward.sh scripts/local-ci.sh scripts/lua/check-cross-target-build.lua scripts/lua/check-portability-idioms.lua scripts/lua/nextest-to-libtest.lua scripts/lua/replay-intake-on-evictions.lua scripts/lua/test-archiver-ruby-could-not-run.lua scripts/lua/test-gate-changed-parallel-fixtures.lua scripts/lua/test-toolbox-refusal-wsl-exception.lua scripts/plan-binary-probe.sh scripts/podman-neutralize-proxy.sh scripts/timing-log.sh scripts/with-tillandsias-builder.sh scripts/with-wsl2-builder.sh VERSION lib/lua/common/ crates/tillandsias-plan/
 # @trace order:1141-vf9w, spec:ci-release
 #
 # Fixture for check-no-competing-gate.sh (1141-vf9w).

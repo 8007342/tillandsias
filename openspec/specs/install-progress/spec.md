@@ -64,6 +64,6 @@ checksum file SHOULD warn and continue only after the binary download succeeds.
 
 Smallest actionable boundary:
 - `grep -F 'tillandsias-linux-x86_64' scripts/install.sh`
-- `bash scripts/test-install-path.sh`
+- `tillandsias-plan script run scripts/lua/test-install-path.lua`
 - `! grep -F 'install_chromium' scripts/install.sh`
 - `! grep -F 'sudo rpm-ostree install podman' scripts/install.sh >/dev/null || grep -F 'say "sudo rpm-ostree install podman"' scripts/install.sh`

@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: metrics-default-log-refusal-exits-only-the-command-substitution-so-the-reporter-runs-on
+    order: 2387-9kta
+    status: implemented
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [metrics, shell, refusal]
+    estimated_hours: 1
+    owned_files:
+      - scripts/cycle-metrics.sh
+    title: |
+      cycle-metrics.sh's unresolvable-rule refusal (1096-p3tn) calls exit 2 inside a command substitution, so it ends only the subshell and the reporter carries on with an empty log path
+    context: |
+      Found by doris-windows 2026-11-26 porting the agreement fixture. With no
+      metrics-log-path.sh beside it, the copy printed refused:metrics:unresolvable-log-path
+      and then ran the whole report (over 120 s on doris, killed by timeout).
+      Every default was taken as VAR="${ENV:-$(_metrics_default_log name)}".
+    verifiable_closure: |
+      tillandsias-plan script run scripts/lua/test-metrics-log-path-agreement.lua
+      arm 8 passes (refusal, nonzero exit) and arm 8b passes (the mutation still
+      accepts). Measured on doris: a no-rule copy exits rc=2 in ~5 s. PRE-FIX
+      RESULT: the copy ran past the refusal until a 120 s timeout.
+    unscoreable: "the closure is the fixture scripts/lua/test-metrics-log-path-agreement.lua, run by gate step 279-1455-d7hc; no separate litmus pin"
+    next_action: >
+      Implemented on work/2387-rca8: each default resolves at top level through
+      _default_log_into, which exits 2 when the resolver fails.
+status:
+  - packet_id: metrics-default-log-refusal-exits-only-the-command-substitution-so-the-reporter-runs-on
+    field: status
+    value: implemented
+    ts: "2026-11-26T03:12:35Z"
+    host: doris

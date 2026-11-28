@@ -1,7 +1,7 @@
--- @trace order:2244-ge9s
+-- @trace order:2244-ge9s, order:2365-mskt
 --
 -- test-metrics-isolation-keeps-off-the-shared-log.lua — gate step 380
--- (scripts/test-gate-step-metrics-isolation.sh) runs in the litmus lane BESIDE
+-- (scripts/lua/test-gate-step-metrics-isolation.lua) runs in the litmus lane BESIDE
 -- the checkout lane (2156-glan). Its negative control provokes a split on
 -- purpose, and it used to provoke it into the host's shared
 -- /tmp/tillandsias-timing.jsonl while carrying the gate's inherited run id, so
@@ -17,6 +17,10 @@
 --
 -- Measured before the fix on lenovinha (2026-11-23): the shared path gained
 -- records carrying the probe's run id during arm 3.
+--
+-- Then the leak itself (2365-mskt): in a scratch copy of the tree whose
+-- metrics-log-path.sh ignores TILLANDSIAS_METRICS_FALLBACK_DIR, the fixture must red AND
+-- write nothing to the absolute fallback, here a scratch stand-in for /tmp.
 --
 -- Verdict: ok:metrics-isolation-off-shared-log:<n> | violation:metrics-isolation-off-shared-log:<failed>/<n>
 
@@ -36,7 +40,7 @@ set -u
 fb="$(mktemp -d "${TMPDIR:-/tmp}/probe2244-gatefb.XXXXXX")" || exit 3
 trap 'rm -rf "$fb"' EXIT
 TILLANDSIAS_TIMING_RUN_ID="$RUN" TILLANDSIAS_METRICS_FALLBACK_DIR="$fb" \
-    bash scripts/test-gate-step-metrics-isolation.sh >"$fb.out" 2>&1 &
+    "$TILLANDSIAS_PLAN_BIN" script run scripts/lua/test-gate-step-metrics-isolation.lua >"$fb.out" 2>&1 &
 pid=$!
 hs=0; hp=0
 probe() {
@@ -66,6 +70,21 @@ check("no record carrying the gate's run id reached the shared " .. SHARED,
     hs == "0", "a concurrent step in another lane is charged with ours=1 for it")
 check("no record carrying the gate's run id reached the gate's private fallback",
     hp == "0", "the gate's private-fallback check would charge it to the watched step")
+
+local T = fixture.new("metrics-isolation-leak")
+local c = T:git_repo("copy")
+fs.mkdir(c.rel .. "/shared"); fs.mkdir(c.rel .. "/target")
+for _, d in ipairs{ "scripts", "lib", "openspec", "build.sh" } do T:must{ "cp", "-R", root .. "/" .. d, c.abs .. "/" .. d } end
+local lib, n = fs.read("scripts/metrics-log-path.sh"):gsub('_mdl_fb="%${TILLANDSIAS_METRICS_FALLBACK_DIR:%-[^}]*}"',
+    '_mdl_fb="${TILLANDSIAS_NO_SUCH_KNOB:-' .. c.abs .. '/shared}"')
+fs.write(c.rel .. "/scripts/metrics-log-path.sh", lib)
+local m = T:run{ PB, "script", "run", "scripts/lua/test-gate-step-metrics-isolation.lua", cwd = c.abs, timeout_ms = 600000,
+    env = { TILLANDSIAS_PLAN_BIN = PB, TILLANDSIAS_SCRIPT_RUNNER_BIN = PB }, env_unset = { "TILLANDSIAS_*", "CARGO_TARGET_DIR", "GIT_*" } }
+local said = ((m.stdout or "") .. (m.stderr or "")):gsub("\n", " | ")
+check("the fixture reds at arm 3 when the fallback-dir knob is broken", n == 1 and m.code == 1 and said:find("FAIL: 3 ", 1, true) ~= nil,
+    "mutated " .. n .. " rc=" .. tostring(m.code) .. " " .. said)
+check("and it writes nothing to the absolute fallback", #fs.list(c.rel .. "/shared") == 0, "leaked " .. #fs.list(c.rel .. "/shared") .. " file(s)")
+T:cleanup()
 
 local total = pass + failn
 if failn == 0 then verdict.ok("metrics-isolation-off-shared-log:" .. total) end

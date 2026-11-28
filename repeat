@@ -295,15 +295,15 @@ run_agent() {
   case "$selected" in
     codex)
       bin="$(resolve_bin CODEX_BIN codex)" || return $?
-      run_with_timeout "$bin" exec --color never --dangerously-bypass-approvals-and-sandbox -p tillandsias -C "$REPO_ROOT" "${MODEL_FLAG[@]}" "$PROMPT"
+      run_with_timeout "$bin" exec --color never --dangerously-bypass-approvals-and-sandbox -p tillandsias -C "$REPO_ROOT" ${MODEL_FLAG[@]+"${MODEL_FLAG[@]}"} "$PROMPT"
       ;;
     claude)
       bin="$(resolve_bin CLAUDE_BIN claude)" || return $?
-      run_in_pty "$bin" --print --output-format text --dangerously-skip-permissions "${CLAUDE_MODEL_FLAG[@]}" "${CLAUDE_EFFORT_FLAG[@]}" "$PROMPT" --add-dir "$REPO_ROOT"
+      run_in_pty "$bin" --print --output-format text --dangerously-skip-permissions ${CLAUDE_MODEL_FLAG[@]+"${CLAUDE_MODEL_FLAG[@]}"} ${CLAUDE_EFFORT_FLAG[@]+"${CLAUDE_EFFORT_FLAG[@]}"} "$PROMPT" --add-dir "$REPO_ROOT"
       ;;
     opencode)
       bin="$(resolve_bin OPENCODE_BIN opencode)" || return $?
-      (cd "$REPO_ROOT" && run_with_timeout "$bin" run --auto "${MODEL_FLAG[@]}" "$PROMPT")
+      (cd "$REPO_ROOT" && run_with_timeout "$bin" run --auto ${MODEL_FLAG[@]+"${MODEL_FLAG[@]}"} "$PROMPT")
       ;;
     gemini)
       bin="$(resolve_bin GEMINI_BIN gemini)" || return $?

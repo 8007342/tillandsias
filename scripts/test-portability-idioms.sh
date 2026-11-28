@@ -114,7 +114,6 @@ _pre_fix_has 737bd10c5 scripts/test-plan-binary-freshness.sh \
 
 # ── HALF 2: it does not flag those same files now ──────────────────────────
 for f in audit-guard-activation.sh check-cheatsheet-refs.sh \
-         test-gate-stamp-does-not-memoize-guard-owned-paths.sh \
          test-plan-binary-freshness.sh; do
     if grep -q <<<"$OUT" "$f"; then
         bad "HALF 2: $f still flagged after its fix"
@@ -180,8 +179,7 @@ _D=d   # split literal; see the note at the grep below
 # date -d class minus one deliberate test subject. AN INCOMPLETE COUNTERPART
 # LIST DOES NOT UNDER-REPORT, IT ACCUSES WORKING CODE, which is the failure
 # this fixture exists to catch.
-for _cf in manage-cache.sh test-forge-liveness-probe.sh \
-           pre-commit-openspec.sh; do
+for _cf in manage-cache.sh pre-commit-openspec.sh; do
     # The literal is SPLIT so this fixture does not itself read as a
     # GNU-date-ism to check-bash-dialect (761-g36m). It flagged line 131 of an
     # earlier cut for carrying the idiom in an ok() MESSAGE — a test about
@@ -193,10 +191,12 @@ for _cf in manage-cache.sh test-forge-liveness-probe.sh \
         || ok "COUNTERPART: ${_cf}'s GNU-first date chain is not flagged"
 done
 
-# AND THE CONTROL: a `date -d` with NO counterpart must still be named.
-# test-check-bash-dialect.sh:77 writes one into a fixture as its SUBJECT — the
-# same self-flagging shape as this file's own HALF-1 lines, and correct.
-grep -qE <<<"$OUT" 'test-check-bash-dialect\.sh:[0-9]+' \
+# AND THE CONTROL: a bare GNU date with NO counterpart must still be named. Planted in a scratch
+# tree: the witness was a live test script until 2377-znx4 ported it to Lua.
+_cw="$_W/counterpart-control"; mkdir -p "$_cw/scripts"
+printf '#!/usr/bin/env bash\nwhen="$(date -%s yesterday +%%Y)"\necho "$when"\n' "$_D" > "$_cw/scripts/planted-bare-date.sh"
+_co="$(TILLANDSIAS_PORTABILITY_ROOT="${_cw#"$ROOT"/}" run_guard 2>&1)"
+grep -qE <<<"$_co" 'planted-bare-date\.sh:[0-9]+' \
     && ok "COUNTERPART control: a bare GNU date idiom IS still flagged" \
     || bad "COUNTERPART control: the date fallback rule is swallowing bare idioms"
 
@@ -217,9 +217,30 @@ grep -qE <<<"$OUT" 'plan-binary-probe\.sh:[0-9]+' \
     && ok "REMOTE CONTEXT control: a bare idiom outside a dispatch IS still flagged" \
     || bad "REMOTE CONTEXT control: the remote-context rule is swallowing host code"
 
-grep -q <<<"$OUT" 'check-plan-ledger-readers.sh' \
-    && bad "NEGATIVE CONTROL: flagged grep -r over the CANONICAL skills/ tree" \
-    || ok "NEGATIVE CONTROL: the canonical tree is not a symlink farm"
+# NEGATIVE CONTROL, CONSTRUCTED (2118-9awa). Its live subject was
+# check-plan-ledger-readers.sh (`grep -rl ... skills/`), deleted when it was
+# ported to lua, which left this arm vacuously green. Both directions are built
+# here, as the DIALECT BRANCH control above is: a grep -r over the canonical
+# skills/ must not be flagged, and the same grep over .claude/skills/ (the
+# runtime symlink farm) must be. That way the arm cannot pass on an empty corpus.
+_sw="$(mktemp -d "$ROOT/target/plan-scratch/portability-skills.XXXXXX" 2>/dev/null || mktemp -d "${TMPDIR:-/tmp}/portability-skills.XXXXXX")"
+mkdir -p "$_sw/real/scripts" "$_sw/real/skills/a" "$_sw/farm/scripts" "$_sw/farm/.claude/skills/a"
+printf '#!/usr/bin/env bash\ngrep -rl "token" scripts/ skills/\n' > "$_sw/real/scripts/scan-skills.sh"
+# The rule is textual: a grep -r that names a DOTTED runtime dir (a symlink
+# farm by construction) is flagged, and plain skills/ is the canonical tree.
+# Assembled at runtime so this file does not carry its own subject (as _D).
+_farm_dir=".cla""ude/skills/"
+printf '#!/usr/bin/env bash\ngrep -rl "token" scripts/ %s\n' "$_farm_dir" > "$_sw/farm/scripts/scan-skills.sh"
+_s_real="$(TILLANDSIAS_PORTABILITY_ROOT="$_sw/real" run_guard 2>&1)"
+_s_farm="$(TILLANDSIAS_PORTABILITY_ROOT="$_sw/farm" run_guard 2>&1)"
+rm -rf "$_sw"
+if grep -q 'scan-skills\.sh' <<<"$_s_real"; then
+    bad "NEGATIVE CONTROL: flagged grep -r over a canonical (real) skills/ tree (constructed)"
+elif ! grep -q 'scan-skills\.sh' <<<"$_s_farm"; then
+    bad "NEGATIVE CONTROL premise: grep -r over a skills/ symlink farm is NOT flagged either, so the real-tree pass proves nothing (constructed)"
+else
+    ok "NEGATIVE CONTROL: grep -r over a real skills/ tree is not flagged, over a symlink farm it is (constructed)"
+fi
 
 # ── cost ───────────────────────────────────────────────────────────────────
 # The first cut took 102s by forking grep for every line of every script. A

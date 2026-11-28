@@ -29,12 +29,18 @@ if not entries then
     verdict.emit("could-not-run:smoke-agent-prompt:no-skills-dir", 3)
 end
 
-local skills, refused = 0, 0
+local smoke = {}
 for _, path in ipairs(entries) do
     local name = path:match("([^/]+)/SKILL%.md$")
-    if name and name:find("smoke", 1, true) then
-        local ok_read, body = pcall(fs.read, path)
-        if ok_read and body then
+    if name and name:find("smoke", 1, true) then smoke[#smoke + 1] = path end
+end
+local SRC = require("common.listed_read").read_all("smoke-agent-prompt", smoke)
+local skills, refused = 0, 0
+for _, path in ipairs(smoke) do
+    local name = path:match("([^/]+)/SKILL%.md$")
+    do
+        local body = SRC[path]
+        if body then
             skills = skills + 1
             local n = 0
             for line in (body .. "\n"):gmatch("(.-)\n") do

@@ -40,7 +40,6 @@ if not fs.exists(SCAN_DIR) then
     verdict.emit("ok:jq-multiline-capture-strips-cr:0 multi-line site(s), all stripped", 0)
 end
 
-local SELF = { ["check-jq-multiline-capture-strips-cr.sh"] = true, ["test-jq-multiline-capture.sh"] = true }
 local REDUCERS = { "| max", "| join(", "| add", "| length", "| first", "| any", "| all",
     "| head ", "| head -", "| tail ", "| tail -" }
 
@@ -48,9 +47,8 @@ local files = fs.walk(SCAN_DIR, { suffix = ".sh" })
 table.sort(files)
 local violations, multiline = {}, 0
 for _, file in ipairs(files) do
-    local base = file:match("[^/]+$")
     local ok, body = pcall(fs.read, file)
-    if ok and body and not SELF[base] then
+    if ok and body then
         local n = 0
         for line in (body .. "\n"):gmatch("(.-)\n") do
             n = n + 1

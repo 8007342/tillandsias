@@ -5,17 +5,18 @@
 # Measured green and cheap on b026372ff (Spec-index tier demotion), so the honest verdict is to run
 # it where every host lands rather than once a day on the release gate.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf): a binding assembled
+# STEP_LUA is a LITERAL path on purpose (1063-nraf): a binding assembled
 # from a variable is invisible to every name-based scan.
 STEP_DESC="Checking spec-index durable-tier demotion"
-STEP_SCRIPT="scripts/test-spec-index-durable-tier-demotion.sh"
+STEP_LUA="scripts/lua/test-spec-index-durable-tier-demotion.lua"
 STEP_ERROR="an unreadable volume is reported as absent, not demoted (1087-h2z9)"
 STEP_OK="Spec-index tier demotion passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:test-spec-index-durable-tier-demotion:7-passed"
+STEP_SECOND_REGIME="yolanda 2026-11-25 msys ok:test-spec-index-durable-tier-demotion:5-passed:2-skipped"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="drives podman"
 STEP_LANES="podman"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="plan/index.yaml scripts/spec-index-ensure.sh scripts/test-spec-index-durable-tier-demotion.sh"
+STEP_READS="plan/index.yaml scripts/spec-index-ensure.sh scripts/lua/test-spec-index-durable-tier-demotion.lua"

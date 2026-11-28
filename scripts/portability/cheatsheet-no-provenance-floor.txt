@@ -1,0 +1,31 @@
+# 2080-kkki: staged cheatsheets (relative to images/default/cheatsheets) with no ## Provenance section,
+# tolerated as of 2026-11-27 (28 of 254). This list ONLY SHRINKS: add a Provenance section to a sheet
+# and delete its line; scripts/lua/check-cheatsheet-provenance.lua refuses a line whose sheet has one.
+architecture/cpu-only-model-tier-ladder.md
+architecture/diagnostic-attribution.md
+architecture/expert-inference-endpoint-contract.md
+architecture/host-tool-dispatch-sweeps.md
+build/build-strategy.md
+build/container-image-building.md
+build/windows-wsl-hop.md
+concurrent-git/git-mirror-architecture-audit.md
+concurrent-git/git-mirror-enterprise-practices.md
+runtime/codex-agent-entrypoints.md
+runtime/everything-in-forge.md
+runtime/forge-loss-on-shutdown-window.md
+runtime/forge-memory-tmpfs-swap.md
+runtime/forge-standalone.md
+runtime/forge-standalone-runner.md
+runtime/forge-transparency.md
+runtime/low-end-cpu-inference-floor.md
+runtime/macos-guest-host-vsock-measurement.md
+runtime/macos-vz-guest-boot-baseline.md
+runtime/opencode-web-launch.md
+runtime/podman-control-plane.md
+runtime/silverblue-updates.md
+runtime/user-runtime-install.md
+runtime/windows-tray-dev.md
+test/litmus-fixture-writing.md
+tooling/a-write-cannot-ask-a-question.md
+tooling/exit-status-is-not-an-answer.md
+ux/ux-message-budget.md

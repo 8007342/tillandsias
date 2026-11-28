@@ -34,7 +34,7 @@
 --
 -- WHAT THIS GATE CANNOT SEE, stated here so no reader has to find the .sh:
 --   * plan/index.d ONLY. A closure already compacted into plan/index.yaml is
---     outside it; scripts/check-base-ledger-status-loss.sh is the (advisory)
+--     outside it; scripts/lua/check-base-ledger-status-loss.lua is the (advisory)
 --     reader of the base ledger.
 --   * an UNKNOWN packet_id under `packets:` — that entry CREATES the packet,
 --     so there is nothing to compare; unknown ids are caught only on the
@@ -91,10 +91,11 @@ local declared, declared_lww = {}, {}       -- list of {pid, want}, first-seen o
 local rows_read = {}                        -- "<file>\t<pid>\t<status>", for --dump-declared
 local seen_decl, seen_lww = {}, {}
 local function str(v) if type(v) == "string" and v ~= "" then return v end end
+local FRAG_SRC = require("common.listed_read").read_all("fragment-status-loss", frags)
 for _, f in ipairs(frags) do
-    local ok_r, content = pcall(fs.read, f)
+    local content = FRAG_SRC[f]
     local ok_p, doc = false, nil
-    if ok_r then ok_p, doc = pcall(yaml.parse, content) end
+    if content then ok_p, doc = pcall(yaml.parse, content) end
     if ok_p and type(doc) == "table" then
         if type(doc.packets) == "table" then
             for _, row in ipairs(doc.packets) do

@@ -185,7 +185,7 @@ GitHub App user-to-server access tokens expire after 8 hours. The system MUST pe
 - **THEN** that process MUST run the due-check at its start and periodically for its lifetime, so a host with a tray, a host with only CLI lanes, and a guest regime are each covered without the others
 - **AND** a token that expired while NO such process ran MUST be rotated by the next one to start (the "or has expired" branch above), not left expired
 - **AND** a forge MUST NOT rotate (it cannot reach the refresh token and must not try)
-- **AND** removing any one of these entry points MUST fail `scripts/test-github-token-rotation-entry-points.sh`
+- **AND** removing any one of these entry points MUST fail `scripts/lua/test-github-token-rotation-entry-points.lua`
 
 #### Scenario: Explicit refresh is an operator action
 - **WHEN** `tillandsias --refresh-github-token` runs without a desktop session

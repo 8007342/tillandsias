@@ -81,7 +81,7 @@ base_ref="${TILLANDSIAS_SIGPIPE_BASE:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux
 # change could hand it: tracked or untracked *.sh (and build.sh) that set
 # pipefail, the same filter as the loop below. That population, and how much
 # of it is on the bootstrap-shell allowlist (design §6.5), goes to STDERR; the
-# stdout verdict is an interface. scripts/check-decider-retirement.sh reads it.
+# stdout verdict is an interface. scripts/lua/check-decider-retirement.lua reads it.
 # Printed BEFORE the base-ref check so an unavailable base still reports it.
 _sp_allowlist="${TILLANDSIAS_BOOTSTRAP_ALLOWLIST:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/portability/bootstrap-shell-allowlist.txt}"
 [ -f "$_sp_allowlist" ] || _sp_allowlist=/dev/null
@@ -167,7 +167,7 @@ UNBOUNDED_PRODUCER_RE='(^|[;&|(]|[[:space:]])(/[^[:space:]|;&()]*/)?(cat|find|jo
 #
 # THE DISPROOF IS 1306-ifhv, measured on yoga 2026-09-20. The flaking line was
 # `printf '%s' "$out" | grep -qi 'ANCESTRY IS NOT USED' && ok … || bad …` in
-# scripts/test-salvage-audit.sh. `$out` was a captured audit transcript of
+# scripts/test-salvage-audit.sh (now scripts/lua/test-salvage-audit.lua). `$out` was a captured audit transcript of
 # 15,569 BYTES. Under a default 64 KB pipe it fits one write and never flakes,
 # which is why forty replays were clean; under the 8,192-byte pipes a loaded
 # host hands out once its open pipes pass /proc/sys/fs/pipe-user-pages-soft it

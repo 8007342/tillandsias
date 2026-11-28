@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: timing-root-own-log-and-toolbox-fallback-arms
+    order: 2373-rrim
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-timing-record-carries-root.lua
+      - scripts/lua/test-tool-dispatch-rejects-unusable-host-tool.lua
+    title: "Two ported fixtures stay green with the property removed: a checkout's own log, and the toolbox fallback"
+    context: |
+      On trunk 37e440921 metrics_root_fields can stop writing root for a .cache/metrics log, and resolve_tool can lose its
+      toolbox fallback, and both fixtures pass. One arm each.
+    exit_criteria:
+      - "each mutant is red on the new arm 6 and green on trunk's fixture"
+    unscoreable: "pinned-elsewhere: gate steps 220 and 418"
+    provenance: "coordinator macuahuitl-fedora 2026-11-25"
+    related: [1299-s2sv, 1138-bb5r, 2367-d5gx, 2361-y7pf]
+    events:
+      - {type: claimed, ts: '2026-11-25T19:02:14Z', host: calmecacpilli, summary: two arms}

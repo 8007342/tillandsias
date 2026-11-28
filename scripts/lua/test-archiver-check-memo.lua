@@ -71,6 +71,7 @@ T:must{ "git", "init", "-q", "-b", "main", W.abs }
 T:must{ "git", "-C", W.abs, "config", "user.email", "fixture@example.invalid" }
 T:must{ "git", "-C", W.abs, "config", "user.name", "fixture" }
 T:must{ "git", "-C", W.abs, "config", "commit.gpgsign", "false" }
+T:must{ "git", "-C", W.abs, "config", "core.autocrlf", "false" }  -- a Windows autocrlf checkout rewrites the scaffold's bytes
 T:must{ "git", "-C", W.abs, "add", "-A" }
 T:must{ "git", "-C", W.abs, "commit", "-q", "-m", "scaffold" }
 local WT = W.abs .. "/wt2"
@@ -99,6 +100,27 @@ T:arm("the first worktree still hits: the set keeps every verified digest",
 fs.write(W.rel .. "/bin/plan", "fake plan binary v2\n")
 out = shared(W.abs, "check")
 T:arm("a rebuilt plan binary at the same path misses (content, not path)",
+    out == "miss:ledger-or-instrument-changed", out)
+-- 2429-amem: a REAL tillandsias-plan embeds the checkout it was built from (surface_root's
+-- env!("CARGO_MANIFEST_DIR")), so two gate worktrees' builds of identical sources differ in bytes
+-- and a byte-keyed memo missed on every fresh worktree. The identity is the binary's build-id
+-- (a content hash of the sources it compiled), when it can answer one.
+fs.write(W.rel .. "/plan/index.d/20260102t000000z-other.yaml", "events: []\n")  -- same ledger both sides
+local function stub(path, id, built_at)
+    fs.write(path, "#!/bin/sh\n# built from " .. built_at .. "\n"
+        .. "[ \"$1\" = build-id ] && { echo 0.1.0+" .. id .. "; exit 0; }\nexit 2\n")
+    T:must{ "chmod", "+x", path }
+end
+stub(W.abs .. "/bin/plan", "aaaa", W.abs)
+stub(WT .. "/bin/plan", "aaaa", WT)
+out = shared(W.abs, "record")
+T:arm("record with a build-id-answering binary", text.starts_with(out, "ok:archiver-check-memo-recorded:"), out)
+out = shared(WT, "check", wt_bin)
+T:arm("2429 a build of the same sources in another worktree (different bytes, same build-id) hits",
+    text.starts_with(out, "ok:archiver-check-memoized:"), out)
+stub(WT .. "/bin/plan", "bbbb", WT)
+out = shared(WT, "check", wt_bin)
+T:arm("2429 CONTROL a binary built from different sources (other build-id) misses",
     out == "miss:ledger-or-instrument-changed", out)
 T:must{ "git", "-C", W.abs, "worktree", "remove", "--force", WT }
 

@@ -29,11 +29,16 @@ local OWNER = "crates/tillandsias-control-wire/src/secure_wire_mode.rs"
 
 local PATTERN = [[env::var\("]] .. text.escape(ENV_NAME) .. [["\)|env::var\(]] .. text.escape(ENV_NAME) .. [[\)]]
 
-local readers = {}
+local listed = {}
 for _, f in ipairs(fs.walk("crates", { suffix = ".rs" })) do
-    if f ~= OWNER then
-        local ok, content = pcall(fs.read, f)
-        if ok and text.is_match(content, PATTERN) then
+    if f ~= OWNER then listed[#listed + 1] = f end
+end
+local SRC = require("common.listed_read").read_all("secure-wire-single-reader", listed)
+local readers = {}
+for _, f in ipairs(listed) do
+    do
+        local content = SRC[f]
+        if content and text.is_match(content, PATTERN) then
             readers[#readers + 1] = f
         end
     end

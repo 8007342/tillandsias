@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: land-queue-shadow-intake
+    order: "2285-haa6"
+    status: implemented
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [land-queue, observability, build-speed]
+    estimated_hours: 4
+    owned_files:
+      - scripts/land-queue.sh
+      - scripts/lua/shadow-intake.lua
+      - scripts/test-land-queue.sh
+    title: "The land queue can record intake's verdict beside the gate's, detached, changing nothing about what lands"
+    context: |
+      Bundle landing phase 2 needs intake's recall and p. With TILLANDSIAS_LAND_QUEUE_SHADOW_INTAKE set, each gated
+      candidate is remembered and scripts/lua/shadow-intake.lua measures it after the run ends: its own lock and session,
+      nice 10, bounded per PR and per run, one persistent tree outside the checkout. A land run that starts meanwhile
+      stops it, a build in flight included, container side too. What it did not measure is named unmeasured:shadow.
+      Measured on yoga while building it: a fresh tree per PR compiled cold and timed out at 481 s, and a tree without the
+      router sidecar read intake=red on a head the gate passed; both are fixed here.
+    exit_criteria:
+      - "scripts/test-land-queue.sh ARM 60 green: ok, red, heavy, timeout, train, off, bound, stop, stop mid-build with no process left (and none in the builder toolbox), isolation, low priority."
+    unscoreable: "fixture-scored: scripts/test-land-queue.sh ARM 60 is the pin; no litmus covers the land queue"
+    provenance: "coordinator macuahuitl-fedora queue 2026-11-23, bundle-landing design phase 0"
+    related: [2248-zcqh, 2276-fnhy]
+    events:
+      - {type: implemented, ts: "2026-11-24T04:38:00Z", host: yoga, summary: "implemented on work/2285-haa6; test-land-queue 80/80, mutants red"}

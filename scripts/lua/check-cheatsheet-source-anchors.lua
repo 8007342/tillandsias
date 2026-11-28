@@ -82,9 +82,11 @@ local violations = {}
 
 local ok_sheets, sheets = pcall(fs.walk, "cheatsheets", { suffix = ".md" })
 if ok_sheets then
+    -- 2417-jzhh: every sheet is read, or the check blocks naming it
+    local SRC = require("common.listed_read").read_all("cheatsheet-source-anchors", sheets)
     for _, sheet in ipairs(sheets) do
-        local ok_read, content = pcall(fs.read, sheet)
-        if ok_read then
+        local content = SRC[sheet]
+        if content then
             for _, entry in ipairs(source_entries(content)) do
                 local file, ord = split_entry(entry)
                 checked = checked + 1

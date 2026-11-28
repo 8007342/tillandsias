@@ -7,9 +7,9 @@
 # binding between scripts/land-on-platform-branch.sh and
 # scripts/allocate-gate-step-prefix.sh is proved by what ran.
 #
-# STEP_SCRIPT is a LITERAL path (1063-nraf).
+# STEP_LUA is a LITERAL path (1063-nraf).
 STEP_DESC="Checking a gate-step prefix taken by the integrate is reallocated at land time, before the gate (1162-qbrx)"
-STEP_SCRIPT="scripts/test-gate-step-prefix-allocation.sh"
+STEP_LUA="scripts/lua/test-gate-step-prefix-allocation.lua"
 STEP_ERROR="land-time gate-step prefix allocation regressed — two lands choosing one prefix would collide in the gate again (1162-qbrx)"
 STEP_OK="gate-step prefix allocation holds"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   ARM 9 (executed): a refusing allocator stops the land with refused:land:gate-step-prefix and exit 8 befo"
@@ -19,4 +19,4 @@ STEP_LANES="checkout"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/allocate-gate-step-prefix.sh scripts/gate-steps.d/** scripts/land-on-platform-branch.sh scripts/test-gate-step-prefix-allocation.sh"
+STEP_READS="scripts/allocate-gate-step-prefix.sh scripts/gate-steps.d/** scripts/land-on-platform-branch.sh scripts/lua/test-gate-step-prefix-allocation.lua"

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: opencode-web-session-loses-its-lane-mcp-socket-when-the-launching-process-exits
+    field: status
+    value: completed
+    ts: "2026-11-27T10:49:46Z"
+    host: yolanda
+
+events:
+  - packet_id: opencode-web-session-loses-its-lane-mcp-socket-when-the-launching-process-exits
+    event:
+      type: completed
+      ts: "2026-11-27T10:49:46Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: 02ad54309 land(659) work/1899-p8yj; litmus:lane-socket-survives-launcher-exit on trunk per lenovinha triage 2026-10-27
+  - packet_id: opencode-web-session-loses-its-lane-mcp-socket-when-the-launching-process-exits
+    event:
+      type: note
+      ts: "2026-11-27T10:49:46Z"
+      host: yolanda
+      summary: |-
+        Fix landed via 1899-p8yj (PR 659, land 02ad54309). Closed at coordinator direction 2026-11-27; work/1863-eckw holds only a field-report doc, coordinator deletes the ref. Litmus not re-run by yolanda; relies on lenovinha triage 2026-10-27.

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: two-release-litmus-reds-cloudflare-login-backoff-and-git-image-ca-control
+    order: 2319-fmgy
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [release-gate]
+    estimated_hours: 1
+    title: |
+      Two long pre-build litmus are red on every Linux host with today's tree and crun: cloudflare-login (its watchdog is shorter than the image-build retry backoff) and git-image-ca-bind-styles (crun 1.31 makes its control pass).
+    context: |
+      Coordinator triage on trunk b32a23986, reproduced on lenovinha (podman 6.2.0, crun 1.31).
+      cloudflare-login NOVAULT and DEVICE bin arms end rc=143: the fake podman fails the Vault image build, 1776-brk3 retries it after 30 s and 120 s, and the arm's own watchdog TERMs at 60 s. The product path is as designed; the fixture sets TILLANDSIAS_IMAGE_RETRY_BASE_MS.
+      git-image-ca-bind-styles CONTROL: crun 1.31 creates a bind's missing symlink target, so the pre-fix image reads the CA. Arm 4 checks the image's own mount point with nothing bound, which no runtime changes.
+      release-gates-run-locally step 20 (gate-stamp memoization) is 15/15 here three times; its step now prints the failing arm instead of only the last line.
+    exit_criteria:
+      - "litmus:cloudflare-login and litmus:git-image-ca-bind-styles pass on lenovinha"
+      - "git-image-ca-bind-styles refuses SHAPE on the pre-fix image and CONTROL-SHAPE when the control carries the fix"
+      - "a red gate-stamp memoization step names its failing arm in the litmus output"
+    verifiable_closure: "litmus:cloudflare-login, litmus:git-image-ca-bind-styles"
+    next_action: "Land work/2319-fmgy."
+    provenance: coordinator triage 2026-11-24; filed by lenovinha.
+    related: [1776-brk3, 2018-cabd, 1505-kc5f]
+    events:
+      - {type: filed, ts: '2026-11-24T20:06:38Z', host: lenovinha, summary: release litmus reds reproduced and filed}

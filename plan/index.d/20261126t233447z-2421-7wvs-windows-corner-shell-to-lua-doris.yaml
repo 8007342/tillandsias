@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by doris-windows 2026-11-26 at macuahuitl's request: the Windows-corner shell-to-Lua batch.
+packets:
+  - packet_id: windows-corner-shell-to-lua-batch-host-side-scripts
+    order: 2421-7wvs
+    status: in_progress
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, shell-to-lua, wsl2]
+    estimated_hours: 6
+    owned_files:
+      - scripts/windows-host-capability-probe.sh
+      - scripts/lua/windows-host-capability-probe.lua
+      - scripts/windows-host-capability-query.ps1
+      - scripts/lua/test-windows-host-capability-probe.lua
+      - scripts/wsl-plan-expert-ensure.sh
+      - scripts/test-wsl-builder-kill-reaches-guest.sh
+    related: [2420-rd7x]
+    title: |
+      Port the host-side Windows-corner shell scripts to Lua: windows-host-capability-probe, wsl-plan-expert-ensure (outer lane), test-wsl-builder-kill-reaches-guest
+    context: |
+      Filtered on doris against every origin/work/* ref: no open ref touches any of the ten wsl*, windows*,
+      with-wsl2-* and lib-wsl-* scripts, and none has a .lua twin. Of the ten, three are sourced shell
+      libraries (with-wsl2-builder, lib-wsl-exec, lib-wsl-capture), which stay shell until build.sh moves.
+      Four run inside the WSL guest (wsl-guest-session, wsl2-src-mirror, wsl2-build-memory-cap,
+      wsl2-build-target-prune), which needs 2420-rd7x first. That leaves the three host-side scripts here.
+      Slice 1 is done: windows-host-capability-probe. It is ported as a --helper (stdout is the document
+      alone), its PowerShell query moved to a checked-in .ps1 run with -File (the command policy refuses
+      a -Command string), and the .sh is deleted. Live on doris the Lua document equals the .sh's
+      (jq -S, the real NPU and GPU). The fixture's parity arm runs the pinned .sh blob against a
+      powershell stub.
+    verifiable_closure: |
+      Each port's fixture is green, with its parity arm against the pinned .sh. Slice 1:
+      test-windows-host-capability-probe.lua (step 971) gives ok, 4 arms, and 3-failed with the port moved aside.
+    unscoreable: "pinned by each port's own parity fixture; no litmus"
+    next_action: >
+      Slice 2, wsl-plan-expert-ensure's outer lane (the inner lane runs in the guest and waits on 2420-rd7x).
+      Slice 3, test-wsl-builder-kill-reaches-guest.
+status:
+  - packet_id: windows-corner-shell-to-lua-batch-host-side-scripts
+    field: status
+    value: in_progress
+    ts: "2026-11-26T23:34:47Z"
+    host: doris

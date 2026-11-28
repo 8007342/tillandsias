@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: gate-changed-dynamic-scripts-path-narrows-to-literals
+    order: "2423-86ca"
+    status: ready
+    kind: improvement
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [gate, build-velocity]
+    estimated_hours: 4
+    owned_paths: [scripts/gate-changed.sh]
+    title: "gate-changed: a dynamic scripts/ path narrows to the fixture's literal names unless the fixture globs or censuses scripts/"
+    context: |
+      Measured on lenovinha 2026-11-27 (2422-gg77): of the 125 fixtures a change to scripts/merge-floor-driver.sh
+      selects, 116 match only through a derived "scripts/" prefix, because a dynamic path such as
+      "$ROOT/scripts/${name}.sh" stops at the $ and maps the whole directory. Declarations remove about one per change
+      each. Rule (macuahuitl): a dynamic scripts/ path narrows to the fixture's literal names only when the fixture
+      names at least one literal under scripts/ AND has no glob, ls or find over that directory; a census keeps the
+      whole-directory selection. Stacks on yoga's 2422-4yak (resolve() in the same function); never a parallel edit.
+    exit_criteria:
+      - "a fixture red first, then green, with three arms: narrowed (literal names only), kept (a census loop keeps scripts/), and a mutant (a narrowed fixture's subject changed outside its literals is caught by --check-declared or a gate arm)"
+      - "selected counts before and after are reported for merge-floor-driver.sh, check-issue-citation-convention.sh and portability/checkout-writers.txt"
+    unscoreable: "measurement-row: closure is the new fixture plus the before/after selection counts."
+    next_action: "agree with yoga on stacking over 2422-4yak, then write the red fixture."
+    provenance: filed by lenovinha at macuahuitl's request, from the 2422-gg77 ranking.
+    related: [2422-gg77, 2422-4yak, 2261-8gx5]
+    events:
+      - {type: filed, ts: '2026-11-27T02:31:10Z', host: lenovinha, summary: dynamic scripts path narrows to literal names}

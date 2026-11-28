@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: windows-tray-diagnose-check-runs-its-tests-instead-of-always-skipping
+    order: "2306-3hr6"
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, litmus, vacuous-check, shell-to-lua]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-windows-tray-diagnose-surface.sh
+      - scripts/lua/check-windows-tray-diagnose-surface.lua
+      - scripts/lua/test-windows-tray-diagnose-surface.lua
+      - scripts/lua/test-windows-host-lane-refusal.lua
+      - scripts/lua/test-windows-host-lane-refusal-controls.lua
+    title: "The windows-tray diagnose check runs cargo test on targets the crate has, and the host-lane-refusal fixtures run from scripts/lua"
+    context: |
+      ports: check-windows-tray-diagnose-surface test-windows-host-lane-refusal test-windows-host-lane-refusal-controls
+      scripts/check-windows-tray-diagnose-surface.sh runs cargo test -p tillandsias-windows-tray --lib, but the crate has no lib
+      target, so per #1189 it always skips as no-test-run and the litmus accepts the skip. #1189 (draft, 2026-11-20, order
+      2080-8i25) has a fix to --bins, reported ok:diagnose-surface-verified:17, and the host-lane-refusal Lua pair; neither
+      landed. #1489 landed the diagnose fixture on its own. Carry the rest here, then close #1189.
+    exit_criteria:
+      - "On a Windows host the check runs the tests and prints ok:diagnose-surface-verified:17. Pre-fix result: FAILS, skip no-test-run."
+      - "NEGATIVE CONTROL: one pinned test made to fail in the crate is reported as tests-failed by name."
+      - "A cargo error that stops the runner is not read as an ordinary skip on a host that has the toolchain, or the row says why it stays one."
+      - "The host-lane-refusal pair gives the same verdict and red arms as the .sh under mutants; the .sh files and floor lines are gone; #1189 is closed."
+    unscoreable: "unpinnable-until-the-guard-exists: the check is the deliverable"
+    next_action: "Measure the pre-fix skip on trunk, then carry #1189's check and host-lane-refusal ports onto current trunk."
+    provenance: "yolanda's #1189 reviewed against #1489; coordinator macuahuitl-fedora 2026-11-24 gave it priority"
+    related: [624-cf9f, 2080-8i25, 2301-eny9, 1321-2ixp]
+    events:
+      - {type: filed, ts: '2026-11-24T15:01:55Z', host: yolanda, summary: filed with agreement of the coordinator}

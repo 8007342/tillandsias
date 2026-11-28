@@ -1,6 +1,6 @@
 ---
 name: join-the-fleet
-description: Idempotent onboarding for a worker agent, on bare metal or inside a forge — the requirements to join the Tillandsias fleet, the scheduled work, the work-ref and landing flow, the attestation rules, and how to join the work session. Verified by scripts/check-fleet-membership.sh, which reports what is left and never installs.
+description: Idempotent onboarding for a worker agent, on bare metal or inside a forge — the requirements to join the Tillandsias fleet, the scheduled work, the work-ref and landing flow, the attestation rules, and how to join the work session. Verified by scripts/lua/check-fleet-membership.lua, which reports what is left and never installs.
 license: MIT
 metadata:
   author: tillandsias
@@ -23,7 +23,7 @@ is ensure-shaped: a second run changes nothing and reports the same verdict.
 The skill DOES; the checker only SAYS WHAT IS LEFT:
 
 ```bash
-scripts/check-fleet-membership.sh     # ok:join-the-fleet:<host>:<regime>:ran=<n> skipped=<m>  → you are in
+tillandsias-plan script run scripts/lua/check-fleet-membership.lua   # ok:join-the-fleet:<host>:<regime>:ran=<n> skipped=<m>  → you are in
                                       # todo:join-the-fleet:<host>:<regime>:todos=<k> …        → do the todo: lines, re-run
 ```
 
@@ -36,6 +36,10 @@ not run is not a green; the verdict carries the counts for that reason.
 `agent_identity_contract`) and in the skills it names. When a rule changes,
 change methodology first and this page second; never the other way round
 (CLAUDE.md, Authority).
+
+**Vocabulary.** `methodology/glossary.yaml` is binding (1908-9q4c): packets,
+messages and methodology use its terms. Ask `methodology_ask "what does <term>
+mean"` for a word you are unsure of.
 
 ## Remote unreachable: STOP — check FIRST, and on the first GitHub failure (order 2239-rmun)
 
@@ -177,7 +181,7 @@ there.
   limited to one full cycle per 4 hours per host
   (`scripts/forge-e2e-rate-limit.sh`).
 - **A worker's slot** is two commands, in this order:
-  `scripts/check-fleet-membership.sh` (the daily-maintenance and credential
+  `scripts/lua/check-fleet-membership.lua` (the daily-maintenance and credential
   checks come out as `todo:` lines; on `due:*` run the Start Of Day gate in
   skills/meta-orchestration once), then `/advance-work-from-plan`, which
   claims, works, lands and hands off. `/meta-orchestration` in full mode is
@@ -488,7 +492,7 @@ there.
    ```text
    worker host (every host except the coordinator):
      cron "<slot-minute> <slot-hours> * * *"
-     prompt: Run scripts/check-fleet-membership.sh and resolve every todo:
+     prompt: Run tillandsias-plan script run scripts/lua/check-fleet-membership.lua and resolve every todo:
              line (on due:* run the Start Of Day gate in
              skills/meta-orchestration once), then use the
              /advance-work-from-plan skill.
@@ -515,8 +519,8 @@ there.
 ## 6 — Verify
 
 ```bash
-scripts/check-fleet-membership.sh            # the verdict, with counts
-scripts/test-join-the-fleet-idempotent.sh    # ok:join-the-fleet-idempotent:6/6
+tillandsias-plan script run scripts/lua/check-fleet-membership.lua   # the verdict, with counts
+tillandsias-plan script run scripts/lua/test-join-the-fleet-idempotent.lua   # ok:join-the-fleet-idempotent:<n> arms
 ./build.sh --floor                           # REQUIRED before a work/* push (2130-fl0r, operator 2026-11-20): fmt, Lua parse, packet litmus, <120 s
 ./build.sh --preflight                       # optional where memory allows (1305-udgs): every guard roster, ≤150 s
 ```

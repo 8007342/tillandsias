@@ -119,7 +119,7 @@ pub const WINDOWS_EXTERNAL_KILL_LIMIT: &str = "limit:windows-external-kill-reads
 /// `env_inherited` (declared and present on the caller) and `env_absent`
 /// (declared and unset) — names only, never a value. A call that declared
 /// nothing keeps the eleven keys above (all three arrays would be empty by
-/// construction, and scripts/test-run-verb-agent-door.sh pins the eleven). A
+/// construction, and scripts/lua/test-run-verb-agent-door.lua pins the eleven). A
 /// class-A name declared or set per call is status `env_refused`, exit 1, with
 /// the refusal token in `stderr`.
 pub fn outcome_json(spec: &RunSpec, outcome: &RunOutcome) -> (serde_json::Value, i32) {

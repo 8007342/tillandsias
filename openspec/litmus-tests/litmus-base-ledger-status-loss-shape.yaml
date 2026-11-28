@@ -34,8 +34,8 @@ description: >
   get the whole gate switched off.
 
 preconditions:
-  - workspace contains scripts/check-base-ledger-status-loss.sh
-  - workspace contains scripts/test-base-ledger-status-loss.sh
+  - workspace contains scripts/lua/check-base-ledger-status-loss.lua
+  - workspace contains scripts/lua/test-base-ledger-status-loss.lua
   - workspace contains scripts/lua/check-fragment-status-loss.lua
   - tillandsias-plan is built (the fixture SKIPs loudly otherwise)
 
@@ -45,12 +45,12 @@ critical_path:
     # are its named negative controls (progress/claim is not a closure; a
     # FALSIFIED closure does not report forever); 5 pins advisory-not-gate; 6
     # pins that an unparseable base is never reported as ok.
-    command: "bash scripts/test-base-ledger-status-loss.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-base-ledger-status-loss.lua 2>&1 | tail -1"
     timeout_ms: 120000
-    expected_behavior: "ok:base-status-loss-fixture:7"
+    expected_behavior: "ok:base-ledger-status-loss:12 arms"
 
   - step: "the advisory emits its pinned grammar on the live tree"
-    command: "out=$(scripts/check-base-ledger-status-loss.sh 2>/dev/null); case \"$out\" in ok:no-base-status-loss:*\\ checked|advisory:base-status-loss:*|skip:*) echo 'ok: grammar held';; *) echo \"FAIL: off-grammar verdict: $out\"; exit 1;; esac"
+    command: "out=$(\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-base-ledger-status-loss.lua 2>/dev/null); case \"$out\" in ok:no-base-status-loss:*\\ checked|advisory:base-status-loss:*|skip:*) echo 'ok: grammar held';; *) echo \"FAIL: off-grammar verdict: $out\"; exit 1;; esac"
     timeout_ms: 60000
     expected_behavior: "ok: grammar held"
 
@@ -58,7 +58,7 @@ critical_path:
     # The property that keeps it alive. An advisory that can red a build is a
     # gate wearing an advisory's name, and it gets switched off the first time
     # it is wrong about a historical row.
-    command: "scripts/check-base-ledger-status-loss.sh >/dev/null 2>&1; rc=$?; [ \"$rc\" -eq 0 ] && echo 'ok: exits zero'"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-base-ledger-status-loss.lua >/dev/null 2>&1; rc=$?; [ \"$rc\" -eq 0 ] && echo 'ok: exits zero'"
     timeout_ms: 60000
     expected_behavior: "ok: exits zero"
 
@@ -75,7 +75,7 @@ critical_path:
     expected_behavior: "ok: base ledger is readable"
 
   - step: "build.sh consults the advisory (wiring is real, not prose)"
-    command: "grep -q 'check-base-ledger-status-loss.sh' build.sh && echo 'ok: wired'"
+    command: "grep -q 'check-base-ledger-status-loss.lua' build.sh && echo 'ok: wired'"
     timeout_ms: 3000
     expected_behavior: "ok: wired"
 
@@ -95,14 +95,14 @@ observability:
   log_fields:
     spec: "methodology-accountability"
     test: "base-ledger-status-loss-shape"
-    artifact: "scripts/check-base-ledger-status-loss.sh + scripts/test-base-ledger-status-loss.sh + crates/tillandsias-plan/src/main.rs (fragment-terminal-events --live)"
+    artifact: "scripts/lua/check-base-ledger-status-loss.lua + scripts/lua/test-base-ledger-status-loss.lua + crates/tillandsias-plan/src/main.rs (fragment-terminal-events --live)"
 
 rollback:
   on_failure: >
     The base-ledger closure pass drifted. Restore
-    scripts/check-base-ledger-status-loss.sh (verdicts
+    scripts/lua/check-base-ledger-status-loss.lua (verdicts
     ok:no-base-status-loss:<n> checked / advisory:base-status-loss:<n> /
-    skip:*, ALWAYS exit 0), its seven-scenario fixture, the recursive
+    skip:*, ALWAYS exit 0), its fixture, the recursive
     packet walk in fragment-terminal-events (it must find packets at
     plan_index.steps[], not only doc["packets"]), the --live withdrawal
     rule, and the advisory invocation in build.sh. Order 751-i9mb; the

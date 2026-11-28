@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: smoke-agent-token-must-stand-on-its-own-line
+    order: 2333-kaf2
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 1
+    title: |
+      The smoke's agent-turn check matched SMOKE-AGENT-OK inside a sentence that refused to print it.
+    context: |
+      Measured in the v56.11.24.1 smoke on lenovinha (plan/issues/smoke-e2e-findings-v56.11.24.1-2026-11-25-linux-immutable-lenovinha.md): the credential check answered blocked, the agent wrote that it could not append the token because the string attests success, and grep -q SMOKE-AGENT-OK passed on that sentence (agent_turn=answered).
+      Three places carry the grep: run_smoke.sh and both smoke skills. The prompt also invited the refusal: it never says that the token reports the turn and not the check, so a strict check alone would turn every credential-blocked smoke red.
+    exit_criteria:
+      - "the three checks accept the token only as a whole line; the recorded refusal sentence, a token in backticks inside a sentence and a missing token are each refused by the same expression read out of the live files"
+      - "the prompt says the token reports the turn, whatever the check answered"
+    verifiable_closure: "litmus:smoke-agent-prompt-is-minimal"
+    next_action: "Anchor the grep in the three files, extend the prompt check and its fixture, run the covering litmus."
+    provenance: coordinator queue 2026-11-25; filed by lenovinha.
+    related: [1941-smkp]
+    events:
+      - {type: filed, ts: '2026-11-25T07:53:00Z', host: lenovinha, summary: filed from the v56.11.24.1 smoke finding}
+  - packet_id: port-stamp-digest-openspec-init-hardware-fingerprint-step-prefix-fixtures-to-lua
+    order: 2333-rqjn
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      Four whole-file shell-to-Lua ports: test-gate-stamp-portable-digest.sh, test-forge-launch-openspec-init-clean.sh, test-hardware-fingerprint.sh and test-gate-step-prefix-across-refs.sh become scripts/lua/*.lua.
+    context: |
+      Coordinator queue 2026-11-25: lenovinha has scripts/test-[d-h]*.sh, 3 to 4 per PR. Fifth batch, after 2312-d2gf.
+      ports: scripts/test-gate-stamp-portable-digest.sh scripts/test-forge-launch-openspec-init-clean.sh scripts/test-hardware-fingerprint.sh scripts/test-gate-step-prefix-across-refs.sh
+      No origin/work/* ref modifies or deletes any of the four (checked against every ref, 2026-11-25).
+    exit_criteria:
+      - "each .lua gives the same verdict as its .sh on the trunk tree, and the same red arm as the .sh under a mutant"
+      - "every caller runs the .lua; the four .sh files are deleted"
+    unscoreable: "unpinnable-until-the-guard-exists: the mutant parity is the deliverable."
+    next_action: "Port, mutant-parity each, rewire build.sh, step 740 and two litmus files, delete the .sh."
+    provenance: coordinator queue; filed by lenovinha.
+    related: [2312-d2gf]
+    events:
+      - {type: filed, ts: '2026-11-25T07:53:00Z', host: lenovinha, summary: fifth d-h batch filed}

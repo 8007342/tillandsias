@@ -1,454 +1,437 @@
-#!/usr/bin/env bash
-# tellme — search and lookup cheatsheets and dependency references in the forge.
-#
-# Usage: tellme about <topic> [--full]
-#        tellme about "<free-form question>"
-#        tellme about --list
-#        tellme howto "<query>"
-#        tellme --help
-#
-# @trace spec:forge-environment-discoverability, spec:expert-serve-grounded-pipeline
-# @trace order:1814-x78v
-# @cheatsheet runtime/cheatsheet-architecture-v2.md, runtime/cheatsheet-frontmatter-spec.md
+#!/usr/bin/env lua
+-- tellme — search and lookup cheatsheets and dependency references in the forge.
+--
+-- Usage: tellme about <topic> [--full]
+--        tellme about "<free-form question>"
+--        tellme about --list
+--        tellme howto "<query>"
+--        tellme --help
+--
+-- Stock Lua 5.4 (order 2392-kww7). The text processing still runs as the
+-- same grep/awk/sed/jq/curl commands the shell version ran; every value that
+-- reaches one is single-quoted by q(), never spliced.
+--
+-- @trace spec:forge-environment-discoverability, spec:expert-serve-grounded-pipeline
+-- @trace order:1814-x78v, order:2392-kww7
+-- @cheatsheet runtime/cheatsheet-architecture-v2.md, runtime/cheatsheet-frontmatter-spec.md
 
-set -euo pipefail
+local function q(s) return "'" .. tostring(s):gsub("'", "'\\''") .. "'" end
+-- sh(script) -> stdout, exit code. Each script runs under bash with pipefail,
+-- as the shell version did under `set -euo pipefail`.
+local function sh(script)
+    local h = io.popen("bash -c " .. q("set -o pipefail; " .. script))
+    local o = h:read("a") or ""
+    local _, _, code = h:close()
+    return o, code or 0
+end
+local function out(s) io.stdout:write(s) end
+local function err(...) io.stderr:write(...) end
+local function env(n) local v = os.getenv(n); if v == "" then return nil end return v end
+local function isdir(p) local _, c = sh("[ -d " .. q(p) .. " ]"); return c == 0 end
+local function isfile(p) local _, c = sh("[ -f " .. q(p) .. " ]"); return c == 0 end
 
-# Find cheatsheets directory
-cheatsheets_dir="${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets}"
-serving_note=""
-if [ ! -d "$cheatsheets_dir" ] || [ ! -f "$cheatsheets_dir/INDEX.md" ]; then
-    # 920-tqhs: the resolved dir is missing or hollow (an empty hot mount broke
-    # tellme in-lane on 2026-08-28 while the lifecycle trace claimed the copy
-    # succeeded). Fall back to the repo / image bundle and say which copy is
-    # serving, so a degraded lane is diagnosable instead of a silent CLI break.
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-    if [ -n "${BASH_SOURCE[0]:-}" ] && [ -d "$SCRIPT_DIR/../cheatsheets" ] && [ -f "$SCRIPT_DIR/../cheatsheets/INDEX.md" ]; then
-        cheatsheets_dir="$SCRIPT_DIR/../cheatsheets"
-        serving_note="serving repo-local cheatsheets ($SCRIPT_DIR/../cheatsheets): requested dir ${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets} lacks INDEX.md"
-    elif [ -d "$SCRIPT_DIR/../../cheatsheets" ] && [ -f "$SCRIPT_DIR/../../cheatsheets/INDEX.md" ]; then
-        cheatsheets_dir="$SCRIPT_DIR/../../cheatsheets"
-        serving_note="serving repo-local cheatsheets ($SCRIPT_DIR/../../cheatsheets): requested dir ${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets} lacks INDEX.md"
-    elif [ -d /opt/cheatsheets-image ] && [ -f /opt/cheatsheets-image/INDEX.md ]; then
-        cheatsheets_dir="/opt/cheatsheets-image"
-        serving_note="serving the shipped image bundle (/opt/cheatsheets-image): requested dir ${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets} lacks INDEX.md"
-    fi
-fi
-[ -n "$serving_note" ] && printf 'tellme: %s\n' "$serving_note" >&2
+-- Find cheatsheets directory
+local requested = env("TILLANDSIAS_CHEATSHEETS") or "/opt/cheatsheets"
+local cheatsheets_dir = requested
+local serving_note = ""
+if not isdir(cheatsheets_dir) or not isfile(cheatsheets_dir .. "/INDEX.md") then
+    -- 920-tqhs: the resolved dir is missing or hollow (an empty hot mount broke
+    -- tellme in-lane on 2026-08-28 while the lifecycle trace claimed the copy
+    -- succeeded). Fall back to the repo / image bundle and say which copy is
+    -- serving, so a degraded lane is diagnosable instead of a silent CLI break.
+    local script_dir = (sh("cd \"$(dirname " .. q(arg[0] or ".") .. ")\" && pwd")):gsub("\n+$", "")
+    local lacks = ": requested dir " .. requested .. " lacks INDEX.md"
+    if isdir(script_dir .. "/../cheatsheets") and isfile(script_dir .. "/../cheatsheets/INDEX.md") then
+        cheatsheets_dir = script_dir .. "/../cheatsheets"
+        serving_note = "serving repo-local cheatsheets (" .. cheatsheets_dir .. ")" .. lacks
+    elseif isdir(script_dir .. "/../../cheatsheets") and isfile(script_dir .. "/../../cheatsheets/INDEX.md") then
+        cheatsheets_dir = script_dir .. "/../../cheatsheets"
+        serving_note = "serving repo-local cheatsheets (" .. cheatsheets_dir .. ")" .. lacks
+    elseif isdir("/opt/cheatsheets-image") and isfile("/opt/cheatsheets-image/INDEX.md") then
+        cheatsheets_dir = "/opt/cheatsheets-image"
+        serving_note = "serving the shipped image bundle (/opt/cheatsheets-image)" .. lacks
+    end
+end
+if serving_note ~= "" then err("tellme: " .. serving_note .. "\n") end
 
-INDEX_PATH="$cheatsheets_dir/INDEX.md"
+local INDEX_PATH = cheatsheets_dir .. "/INDEX.md"
 
-# ── grounded answers through expert-serve (order 1814-x78v) ────────────────
-# `howto` and free-form `about` ask expert-serve first: the OpenAI-shaped
-# loopback front-end over the grounded pipeline (expert_serve.rs `route`,
-# pipeline.rs `run_grounded`), started at forge launch by lib-common.sh
-# `start_expert_serve_fail_soft`. It cites the chunks it retrieved and refuses
-# typed below its threshold. The model id IS the retrieval domain:
-# `cheatsheet` for howto, `all` for free-form about. Only when the port does
-# not answer does tellme drop to the keyword-grep fallback, and it labels that
-# answer UNGROUNDED.
-EXPERT_URL="${TELLME_EXPERT_URL:-http://127.0.0.1:${TILLANDSIAS_EXPERT_SERVE_PORT:-11436}}"
-EXPERT_URL="${EXPERT_URL%/}"
+-- ── a stale cheatsheet says so (order 2080-kkki) ────────────────────────────
+-- The age past which a sheet's `last_verified` reads stale is the OPERATOR's ruling, not yet
+-- made: nil means no stale marking. The ruling is this one line (or the variable, per forge).
+local CHEATSHEET_STALE_DAYS = nil
+local function stale_note(path)
+    local days = tonumber(env("TILLANDSIAS_CHEATSHEET_STALE_DAYS") or "") or CHEATSHEET_STALE_DAYS
+    if not days then return "" end
+    local lv = (sh("awk 'NR == 1 && /^---$/ { fm = 1; next } fm && /^---$/ { exit } "
+        .. "fm && /^last_verified:/ { sub(/^last_verified:[ \"]*/, \"\"); sub(/[\" ].*$/, \"\"); print; exit }' " .. q(path)))
+        :gsub("%s+$", "")
+    if lv == "" then return "[STALE: this cheatsheet records no last_verified date; verify it before relying on it]\n" end
+    -- an unparseable date reads as age-unknown, which is stale: never as fresh
+    local age = tonumber(((sh("t=$(date -u -d " .. q(lv) .. " +%s 2>/dev/null) || t=0; echo $(( ( $(date -u +%s) - t ) / 86400 ))")):gsub("%s+$", "")))
+    if age and age <= days then return "" end
+    return "[STALE: last verified " .. lv .. ", " .. tostring(age or "?") .. " days ago (limit " .. days .. "); verify it before relying on it]\n"
+end
 
-# The plan binary reads the reply (`json get`, a jq subset — no new jq call
-# site, 1375-tsfu). It is the binary that serves expert-serve, so a forge with
-# the port up has it; without it the grounded path reports itself unavailable.
-tellme_plan_bin() {
-    local c
-    for c in "${TELLME_PLAN_BIN:-}" "$(command -v tillandsias-plan 2>/dev/null || true)" \
-             "${FORGE_EXPERTS_BIN_DIR:-$HOME/.local/bin}/tillandsias-plan"; do
-        if [ -n "$c" ] && [ -x "$c" ]; then
-            printf '%s\n' "$c"
-            return 0
-        fi
-    done
-    return 1
-}
+-- ── grounded answers through expert-serve (order 1814-x78v) ────────────────
+-- `howto` and free-form `about` ask expert-serve first: the OpenAI-shaped
+-- loopback front-end over the grounded pipeline (expert_serve.rs `route`,
+-- pipeline.rs `run_grounded`), started at forge launch by lib-common.sh
+-- `start_expert_serve_fail_soft`. It cites the chunks it retrieved and refuses
+-- typed below its threshold. The model id IS the retrieval domain:
+-- `cheatsheet` for howto, `all` for free-form about. Only when the port does
+-- not answer does tellme drop to the keyword-grep fallback, and it labels that
+-- answer UNGROUNDED.
+local EXPERT_URL = (env("TELLME_EXPERT_URL") or ("http://127.0.0.1:" .. (env("TILLANDSIAS_EXPERT_SERVE_PORT") or "11436")))
+    :gsub("/$", "")
 
-# Order 1815-tei4: the project-derived context pack (.forge-expert-context.md,
-# written at forge launch by lib-common.sh write_expert_context_pack) goes
-# FIRST, byte-identical, in every synthesis prompt tellme builds: the pack's
-# bytes, then the separator pipeline.rs uses (context_pack::PACK_SEPARATOR,
-# pinned by the cargo test tellme_prints_the_same_pack_separator). Path:
-# $TILLANDSIAS_EXPERT_CONTEXT_PACK, else beside the startup context, else in
-# $PROJECT_DIR. FAIL-SOFT: absent, not a regular file, empty or oversized
-# prints nothing and the prompt is unchanged. Callers capture it with a
-# trailing sentinel so command substitution keeps its trailing newlines.
-tellme_context_pack() {
-    local pack="${TILLANDSIAS_EXPERT_CONTEXT_PACK:-}" size
-    if [ -z "$pack" ]; then
-        if [ -n "${FORGE_STARTUP_CONTEXT_FILE:-}" ]; then
-            pack="$(dirname "$FORGE_STARTUP_CONTEXT_FILE")/.forge-expert-context.md"
-        elif [ -n "${PROJECT_DIR:-}" ]; then
-            pack="$PROJECT_DIR/.forge-expert-context.md"
+-- The plan binary reads the reply (`json get`, a jq subset — no new jq call
+-- site, 1375-tsfu). It is the binary that serves expert-serve, so a forge with
+-- the port up has it; without it the grounded path reports itself unavailable.
+local function tellme_plan_bin()
+    local onpath = (sh("command -v tillandsias-plan 2>/dev/null || true")):gsub("\n+$", "")
+    for _, c in ipairs({ env("TELLME_PLAN_BIN") or "", onpath,
+        (env("FORGE_EXPERTS_BIN_DIR") or ((os.getenv("HOME") or "") .. "/.local/bin")) .. "/tillandsias-plan" }) do
+        if c ~= "" then
+            local _, x = sh("[ -x " .. q(c) .. " ]")
+            if x == 0 then return c end
+        end
+    end
+    return nil
+end
+
+-- Order 1815-tei4: the project-derived context pack (.forge-expert-context.md,
+-- written at forge launch by lib-common.sh write_expert_context_pack) goes
+-- FIRST, byte-identical, in every synthesis prompt tellme builds: the pack's
+-- bytes, then the separator pipeline.rs uses (context_pack::PACK_SEPARATOR,
+-- pinned by the cargo test tellme_prints_the_same_pack_separator). Path:
+-- $TILLANDSIAS_EXPERT_CONTEXT_PACK, else beside the startup context, else in
+-- $PROJECT_DIR. FAIL-SOFT: absent, not a regular file, empty or oversized
+-- returns "" and the prompt is unchanged.
+local PACK_SEPARATOR = "\n---\n\n"
+local function tellme_context_pack()
+    local pack = env("TILLANDSIAS_EXPERT_CONTEXT_PACK")
+    if not pack then
+        if env("FORGE_STARTUP_CONTEXT_FILE") then
+            pack = (env("FORGE_STARTUP_CONTEXT_FILE"):match("^(.*)/[^/]*$") or ".") .. "/.forge-expert-context.md"
+        elseif env("PROJECT_DIR") then
+            pack = env("PROJECT_DIR") .. "/.forge-expert-context.md"
         else
-            return 0
-        fi
-    fi
-    [ -f "$pack" ] && [ -r "$pack" ] || return 0
-    size="$(wc -c < "$pack" 2>/dev/null | tr -d ' ')" || return 0
-    # Same bounds as context_pack::load_pack_from: non-empty, <= 2 x 4800 bytes.
-    [ -n "$size" ] && [ "$size" -gt 0 ] && [ "$size" -le 9600 ] || return 0
-    head -c 9600 "$pack" || return 0
-    printf '\n---\n\n'
-}
+            return ""
+        end
+    end
+    -- Same bounds as context_pack::load_pack_from: non-empty, <= 2 x 4800 bytes.
+    -- The trailing `.` keeps the pack's own trailing newlines.
+    local o, c = sh("p=" .. q(pack) .. "; [ -f \"$p\" ] && [ -r \"$p\" ] || exit 1; s=$(wc -c < \"$p\" | tr -d ' ') || exit 1; "
+        .. "[ -n \"$s\" ] && [ \"$s\" -gt 0 ] && [ \"$s\" -le 9600 ] || exit 1; head -c 9600 \"$p\" && printf .")
+    if c ~= 0 then return "" end
+    return o:sub(1, -2) .. PACK_SEPARATOR
+end
 
-# expert_serve_ask <model> <question> — 0 when expert-serve answered (answer
-# and citations printed on stdout), 1 when the port did not answer or the
-# reply was unusable (nothing on stdout; the caller falls back).
-expert_serve_ask() {
-    local model="$1" question="$2" plan q_json payload reply answer cites c_path c_start c_end
-    curl -fsS --max-time "${TELLME_EXPERT_PROBE_TIMEOUT:-1}" "$EXPERT_URL/v1/models" >/dev/null 2>&1 || return 1
-    if ! plan="$(tellme_plan_bin)"; then
-        echo "tellme: expert-serve answers at $EXPERT_URL but no tillandsias-plan binary is installed to read its reply" >&2
-        return 1
-    fi
-    # The question is JSON-escaped by the plan binary; the object around it is
-    # assembled in shell (`json get` constructs no objects).
-    q_json="$("$plan" json get -n -c --arg q "$question" '$q')" || return 1
-    payload='{"model":"'"$model"'","stream":false,"messages":[{"role":"user","content":'"$q_json"'}]}'
-    if ! reply="$(curl -fsS --max-time "${TELLME_EXPERT_TIMEOUT:-120}" -X POST "$EXPERT_URL/v1/chat/completions" \
-        -H "Content-Type: application/json" -d "$payload" 2>/dev/null)"; then
-        echo "tellme: expert-serve at $EXPERT_URL did not complete the request" >&2
-        return 1
-    fi
-    answer="$(printf '%s' "$reply" | "$plan" json get -r '.choices[0].message.content // empty' 2>/dev/null)" || answer=""
-    if [ -z "$answer" ]; then
-        echo "tellme: expert-serve at $EXPERT_URL returned no answer content" >&2
-        return 1
-    fi
-    cites="$(printf '%s' "$reply" | "$plan" json get -r '.tillandsias_envelope.citations[]? | .path, .line_start, .line_end' 2>/dev/null | paste - - -)" || cites=""
-    printf '\033[1;30m[expert-serve: grounded answer, model %s, %s]\033[0m\n\n' "$model" "$EXPERT_URL"
-    printf '%s\n\n' "$answer"
-    if [ -n "$cites" ]; then
-        echo "Sources:"
-        while IFS=$'\t' read -r c_path c_start c_end; do
-            [ -n "$c_path" ] || continue
-            printf '  - %s:%s-%s\n' "$c_path" "$c_start" "$c_end"
-        done <<< "$cites"
+-- expert_serve_ask(model, question) — true when expert-serve answered (answer
+-- and citations printed on stdout), false when the port did not answer or the
+-- reply was unusable (nothing on stdout; the caller falls back).
+local function expert_serve_ask(model, question)
+    local _, up = sh("curl -fsS --max-time " .. q(env("TELLME_EXPERT_PROBE_TIMEOUT") or "1") .. " " .. q(EXPERT_URL .. "/v1/models") .. " >/dev/null 2>&1")
+    if up ~= 0 then return false end
+    local plan = tellme_plan_bin()
+    if not plan then
+        err("tellme: expert-serve answers at " .. EXPERT_URL .. " but no tillandsias-plan binary is installed to read its reply\n")
+        return false
+    end
+    -- The question is JSON-escaped by the plan binary; the object around it is
+    -- assembled here (`json get` constructs no objects).
+    local q_json, c = sh(q(plan) .. " json get -n -c --arg q " .. q(question) .. " '$q'")
+    if c ~= 0 then return false end
+    q_json = q_json:gsub("\n+$", "")
+    local payload = '{"model":"' .. model .. '","stream":false,"messages":[{"role":"user","content":' .. q_json .. '}]}'
+    local reply
+    reply, c = sh("curl -fsS --max-time " .. q(env("TELLME_EXPERT_TIMEOUT") or "120") .. " -X POST " .. q(EXPERT_URL .. "/v1/chat/completions")
+        .. " -H 'Content-Type: application/json' -d " .. q(payload) .. " 2>/dev/null")
+    if c ~= 0 then
+        err("tellme: expert-serve at " .. EXPERT_URL .. " did not complete the request\n")
+        return false
+    end
+    reply = reply:gsub("\n+$", "")
+    local answer = (sh("printf '%s' " .. q(reply) .. " | " .. q(plan) .. " json get -r '.choices[0].message.content // empty' 2>/dev/null")):gsub("\n+$", "")
+    if answer == "" then
+        err("tellme: expert-serve at " .. EXPERT_URL .. " returned no answer content\n")
+        return false
+    end
+    local cites = (sh("printf '%s' " .. q(reply) .. " | " .. q(plan)
+        .. " json get -r '.tillandsias_envelope.citations[]? | .path, .line_start, .line_end' 2>/dev/null | paste - - -")):gsub("\n+$", "")
+    out(string.format("\27[1;30m[expert-serve: grounded answer, model %s, %s]\27[0m\n\n", model, EXPERT_URL))
+    out(answer .. "\n\n")
+    if cites ~= "" then
+        out("Sources:\n")
+        for line in (cites .. "\n"):gmatch("([^\n]*)\n") do
+            local p, s, e = line:match("^([^\t]*)\t?([^\t]*)\t?(.*)$")
+            if p and p ~= "" then out(string.format("  - %s:%s-%s\n", p, s, e)) end
+        end
     else
-        echo "Sources: none cited (a typed refusal cites nothing)"
-    fi
-    return 0
-}
+        out("Sources: none cited (a typed refusal cites nothing)\n")
+    end
+    return true
+end
 
-show_help() {
-    echo "Usage: tellme about <topic> [--full]"
-    echo "       tellme about \"<free-form question>\""
-    echo "       tellme about --list"
-    echo "       tellme howto \"<query>\""
-    echo "       tellme --help"
-    echo ""
-    echo "Options:"
-    echo "  --list    Show all categories of cheatsheets"
-    echo "  --full    Show full content of the matching cheatsheet"
-    echo "  -h|--help Show this help message"
-    echo ""
-    echo "Examples:"
-    echo "  tellme about languages"
-    echo "  tellme about python"
-    echo "  tellme about git-workflows --full"
-    echo "  tellme howto \"how do I run python unit tests\""
-    echo "  tellme about \"how do I push from the forge\""
-    echo ""
-    echo "howto and free-form about answer through expert-serve ($EXPERT_URL), with"
-    echo "citations. When it does not answer, howto falls back to a keyword search of"
-    echo "the cheatsheet index and labels that answer UNGROUNDED."
-}
+local function show_help()
+    out([[Usage: tellme about <topic> [--full]
+       tellme about "<free-form question>"
+       tellme about --list
+       tellme howto "<query>"
+       tellme --help
 
-if [ $# -eq 0 ]; then
-    show_help
-    exit 0
-fi
+Options:
+  --list    Show all categories of cheatsheets
+  --full    Show full content of the matching cheatsheet
+  -h|--help Show this help message
 
-case "${1:-}" in
-    -h|--help)
-        show_help
-        exit 0
-        ;;
-    howto)
-        if [ -z "${2:-}" ]; then
-            echo "tellme howto: query missing" >&2
-            echo "usage: tellme howto \"<query>\"" >&2
-            exit 2
-        fi
-        query="$2"
+Examples:
+  tellme about languages
+  tellme about python
+  tellme about git-workflows --full
+  tellme howto "how do I run python unit tests"
+  tellme about "how do I push from the forge"
 
-        # Grounded first (1814-x78v): expert-serve's cheatsheet domain.
-        if expert_serve_ask cheatsheet "$query"; then
-            exit 0
-        fi
+]])
+    out("howto and free-form about answer through expert-serve (" .. EXPERT_URL .. "), with\n")
+    out("citations. When it does not answer, howto falls back to a keyword search of\n")
+    out("the cheatsheet index and labels that answer UNGROUNDED.\n")
+end
 
-        # FALLBACK — expert-serve did not answer. The keyword-grep context
-        # below is not retrieval with a refusal threshold, so the answer is
-        # labelled UNGROUNDED and the prompt forbids guessing past the context.
-        INFERENCE_URL="${TILLANDSIAS_INFERENCE_URL:-http://inference:11434}"
-        
-        # Verify inference service is reachable and get models
-        raw_models="$(curl -fsS --max-time 3 "${INFERENCE_URL%/}/api/tags" 2>/dev/null || true)"
-        if [ -z "$raw_models" ]; then
-            echo "Error: inference container not running (${INFERENCE_URL%/}/api/tags unreachable)" >&2
-            exit 1
-        fi
-        
-        models_list=$(echo "$raw_models" | jq -r '.models[].name' 2>/dev/null || true)
-        if [ -z "$models_list" ]; then
-            echo "Error: no models loaded at $INFERENCE_URL" >&2
-            exit 1
-        fi
-        
-        # Select model: TILLANDSIAS_INFERENCE_MODEL when set (the variable
-        # pipeline.rs and lib-common.sh already honour), else qwen2.5:0.5b,
-        # then llama3.2:3b, then the first loaded model.
-        chosen_model="${TILLANDSIAS_INFERENCE_MODEL:-}"
-        for m in qwen2.5:0.5b llama3.2:3b; do
-            [ -z "$chosen_model" ] || break
-            if echo "$models_list" | grep -q "^$m$"; then
-                chosen_model="$m"
-                break
-            fi
-        done
-        if [ -z "$chosen_model" ]; then
-            chosen_model=$(echo "$models_list" | head -n 1)
-        fi
-        
-        # 1. RAG Context Building
-        # Extract alphanumeric keywords from query, lowercase them, ignore small words/stop words
-        keywords=$(echo "$query" | tr -cs 'a-zA-Z0-9' ' ' | tr 'A-Z' 'a-z' | xargs -n1 | awk 'length($0) > 2' | sed -E 's/(ing|ed|s|es)$//' | sort -u)
-        
-        matching_files=()
-        if [ -n "$keywords" ] && [ -f "$INDEX_PATH" ]; then
-            # Find matching cheatsheets, boosting filename matches
-            matching_lines=$(echo "$keywords" | while read -r kw; do
-                [ -n "$kw" ] || continue
-                grep -i -- "- .*$kw" "$INDEX_PATH" || true
-                grep -i -- "- *$kw.*\.md" "$INDEX_PATH" || true
-                grep -i -- "- *$kw.*\.md" "$INDEX_PATH" || true
-            done | sort | uniq -c | sort -nr)
-            
-            if [ -n "$matching_lines" ]; then
-                while IFS= read -r line; do
-                    f=$(echo "$line" | sed -E 's/^[[:space:]]*[0-9]+[[:space:]]+-[[:space:]]+([^[:space:]]+).*/\1/')
-                    if [ -n "$f" ]; then
-                        matching_files+=("$f")
-                    fi
-                done <<< "$matching_lines"
-            fi
-        fi
-        
-        # Build context from top 3 cheatsheets (first 100 lines after frontmatter)
-        context=""
-        count=0
-        for f in "${matching_files[@]}"; do
-            [ $count -ge 3 ] && break
-            if [ -f "$cheatsheets_dir/$f" ]; then
-                file_content=$(head -n 120 "$cheatsheets_dir/$f" | awk 'NR==1 && /^---$/ { fm=1; next } fm && /^---$/ { fm=0; next } fm { next } { print }' | head -n 100)
-                if [ -n "$file_content" ]; then
-                    context+=$'\n'
-                    context+="=== Cheatsheet: $f ==="$'\n'
-                    context+="$file_content"$'\n'
-                    count=$((count+1))
-                fi
-            fi
-        done
-        
-        # Print info about model and cheatsheets used
-        echo -e "\033[1;30m[UNGROUNDED: expert-serve not answering at $EXPERT_URL; keyword-search fallback, no citations]\033[0m"
-        echo -e "\033[1;30m[Using model: $chosen_model]\033[0m"
-        if [ $count -gt 0 ]; then
-            echo -e "\033[1;30m[Context: top $count keyword-matched cheatsheet(s)]\033[0m"
-        else
-            echo -e "\033[1;30m[Context: no matching cheatsheets]\033[0m"
-        fi
-        echo ""
+local function howto(query)
+    -- Grounded first (1814-x78v): expert-serve's cheatsheet domain.
+    if expert_serve_ask("cheatsheet", query) then os.exit(0) end
 
-        # Format the system prompt and context. The context pack (1815-tei4)
-        # leads it byte-identically; the `.` sentinel keeps the separator's
-        # trailing newlines through the command substitution.
-        pack_prefix="$(tellme_context_pack; printf .)"
-        pack_prefix="${pack_prefix%.}"
-        prompt="${pack_prefix}System: You are an expert developer assistant for the Tillandsias Forge.
+    -- FALLBACK — expert-serve did not answer. The keyword-grep context
+    -- below is not retrieval with a refusal threshold, so the answer is
+    -- labelled UNGROUNDED and the prompt forbids guessing past the context.
+    local inference = (env("TILLANDSIAS_INFERENCE_URL") or "http://inference:11434"):gsub("/$", "")
+
+    -- Verify inference service is reachable and get models
+    local raw_models = (sh("curl -fsS --max-time 3 " .. q(inference .. "/api/tags") .. " 2>/dev/null || true")):gsub("\n+$", "")
+    if raw_models == "" then
+        err("Error: inference container not running (" .. inference .. "/api/tags unreachable)\n")
+        os.exit(1)
+    end
+    local models_list = (sh("echo " .. q(raw_models) .. " | jq -r '.models[].name' 2>/dev/null || true")):gsub("\n+$", "")
+    if models_list == "" then
+        err("Error: no models loaded at " .. (env("TILLANDSIAS_INFERENCE_URL") or "http://inference:11434") .. "\n")
+        os.exit(1)
+    end
+
+    -- Select model: TILLANDSIAS_INFERENCE_MODEL when set (the variable
+    -- pipeline.rs and lib-common.sh already honour), else qwen2.5:0.5b,
+    -- then llama3.2:3b, then the first loaded model.
+    local names = {}
+    for n in (models_list .. "\n"):gmatch("([^\n]*)\n") do names[#names + 1] = n end
+    local chosen_model = env("TILLANDSIAS_INFERENCE_MODEL")
+    for _, m in ipairs({ "qwen2.5:0.5b", "llama3.2:3b" }) do
+        if chosen_model then break end
+        for _, n in ipairs(names) do if n == m then chosen_model = m; break end end
+    end
+    chosen_model = chosen_model or names[1]
+
+    -- 1. RAG Context Building: alphanumeric keywords from the query, lowercased,
+    -- small words dropped; matching index lines ranked, filename matches boosted.
+    local matching_files = {}
+    if isfile(INDEX_PATH) then
+        local lines = sh("idx=" .. q(INDEX_PATH) .. "; keywords=$(echo " .. q(query)
+            .. " | tr -cs 'a-zA-Z0-9' ' ' | tr 'A-Z' 'a-z' | xargs -n1 | awk 'length($0) > 2' | sed -E 's/(ing|ed|s|es)$//' | sort -u)\n"
+            .. "[ -n \"$keywords\" ] || exit 0\n"
+            .. "echo \"$keywords\" | while read -r kw; do [ -n \"$kw\" ] || continue\n"
+            .. "  grep -i -- \"- .*$kw\" \"$idx\" || true\n"
+            .. "  grep -i -- \"- *$kw.*\\.md\" \"$idx\" || true\n"
+            .. "  grep -i -- \"- *$kw.*\\.md\" \"$idx\" || true\n"
+            .. "done | sort | uniq -c | sort -nr | sed -E 's/^[[:space:]]*[0-9]+[[:space:]]+-[[:space:]]+([^[:space:]]+).*/\\1/'")
+        for f in lines:gmatch("([^\n]*)\n") do
+            if f ~= "" then matching_files[#matching_files + 1] = f end
+        end
+    end
+
+    -- Build context from top 3 cheatsheets (first 100 lines after frontmatter)
+    local context, count = "", 0
+    for _, f in ipairs(matching_files) do
+        if count >= 3 then break end
+        local path = cheatsheets_dir .. "/" .. f
+        if isfile(path) then
+            local file_content = (sh("head -n 120 " .. q(path)
+                .. " | awk 'NR==1 && /^---$/ { fm=1; next } fm && /^---$/ { fm=0; next } fm { next } { print }' | head -n 100")):gsub("\n+$", "")
+            if file_content ~= "" then
+                context = context .. "\n=== Cheatsheet: " .. f .. " ===\n" .. stale_note(path) .. file_content .. "\n"
+                count = count + 1
+            end
+        end
+    end
+
+    -- Print info about model and cheatsheets used
+    out("\27[1;30m[UNGROUNDED: expert-serve not answering at " .. EXPERT_URL .. "; keyword-search fallback, no citations]\27[0m\n")
+    out("\27[1;30m[Using model: " .. chosen_model .. "]\27[0m\n")
+    if count > 0 then
+        out("\27[1;30m[Context: top " .. count .. " keyword-matched cheatsheet(s)]\27[0m\n")
+    else
+        out("\27[1;30m[Context: no matching cheatsheets]\27[0m\n")
+    end
+    out("\n")
+
+    -- The context pack (1815-tei4) leads the prompt byte-identically.
+    local prompt = tellme_context_pack() .. [[System: You are an expert developer assistant for the Tillandsias Forge.
 Using only the following cheatsheet context, answer the user's question concisely. If the context does not contain the answer, say that the cheatsheets do not cover it and suggest 'tellme about --list'; do not guess. Keep your response brief, action-oriented, and focused on command/code snippets.
 
 Context:
-$context
+]] .. context .. "\n\nUser: " .. query .. "\nAssistant:"
 
-User: $query
-Assistant:"
-        
-        # Safe JSON generation using jq
-        payload=$(jq -n \
-          --arg model "$chosen_model" \
-          --arg prompt "$prompt" \
-          '{model: $model, prompt: $prompt, stream: true}')
-        
-        # Call curl and stream response to stdout
-        curl -s -N -X POST "${INFERENCE_URL%/}/api/generate" \
-          -H "Content-Type: application/json" \
-          -d "$payload" | \
-          jq -j --unbuffered '.response' | tr -d '\r'
-        
-        echo ""
-        ;;
-    about)
-        if [ -z "${2:-}" ]; then
-            echo "tellme about: topic or flag missing" >&2
-            echo "usage: tellme about <topic> [--full] or tellme about --list" >&2
-            exit 2
-        fi
-        
-        if [ "$2" = "--list" ]; then
-            if [ ! -f "$INDEX_PATH" ]; then
-                echo "Error: Cheatsheet index not found at $INDEX_PATH" >&2
-                exit 1
-            fi
-            grep '^## ' "$INDEX_PATH" | sed 's/^## //'
-            exit 0
-        fi
-        
-        topic="$2"
-        full=0
-        if [ "${3:-}" = "--full" ] || [ "${3:-}" = "-f" ]; then
-            full=1
-        fi
+    -- JSON by jq; the reply streams to stdout chunk by chunk.
+    io.stdout:flush()
+    local h = io.popen("bash -c " .. q("payload=$(jq -n --arg model " .. q(chosen_model) .. " --arg prompt " .. q(prompt)
+        .. " '{model: $model, prompt: $prompt, stream: true}')\n"
+        .. "curl -s -N -X POST " .. q(inference .. "/api/generate") .. " -H 'Content-Type: application/json' -d \"$payload\""
+        .. " | jq -j --unbuffered '.response' | tr -d '\\r'"))
+    while true do
+        local chunk = h:read(256)
+        if not chunk or chunk == "" then break end
+        out(chunk); io.stdout:flush()
+    end
+    h:close()
+    out("\n")
+    os.exit(0)
+end
 
-        # Free-form about (1814-x78v): a question rather than a topic slug —
-        # whitespace in the topic, or several words — goes to expert-serve's
-        # `all` domain. A slug keeps the index lookup below.
-        if [ $full -eq 0 ]; then
-            question="$topic"
-            [ $# -le 2 ] || question="${*:2}"
-            case "$question" in
-                *[[:space:]]*)
-                    if expert_serve_ask all "$question"; then
-                        exit 0
-                    fi
-                    # Port closed: the howto fallback, which labels itself
-                    # UNGROUNDED. An index slug search cannot answer a sentence.
-                    exec bash "${BASH_SOURCE[0]:-$0}" howto "$question"
-                    ;;
-            esac
-        fi
+local argv = arg
+if #argv == 0 then show_help(); os.exit(0) end
 
-        # 1. Handle dependencies special topic
-        is_dep_query=0
-        if [[ "$topic" =~ ^(dependency|dependencies|package|packages)$ ]]; then
-            is_dep_query=1
-            echo "Tillandsias Forge Dependency Reference:"
-            echo "The forge image builds on Fedora minimal. Main system dependencies:"
-            echo "  - Languages: Java 25, Python 3.13, Node 22, Go, Rust (cargo), Dart (flutter)"
-            echo "  - Build tools: Maven, Gradle, npm, yarn, pnpm, pipx, uv, poetry, make, cmake, ninja, nix"
-            echo "  - Test frameworks: pytest, junit, cargo-test, chromium-headless, firefox"
-            echo "  - Utils: jq, yq, protoc, grpcurl, shellcheck, shfmt, rg, fd, fzf, curl, wget, git, gh, xmlstarlet"
-            echo "  - Agent tools: claude-code, opencode, openspec, codex"
-            echo ""
-            echo "For the exact version and binary paths of these dependencies, run:"
-            echo "  tillandsias-inventory"
-            echo ""
-            echo "For enclave services:"
-            echo "  tillandsias-services"
-            echo "--------------------------------------------------------"
-        fi
-        
-        if [ ! -f "$INDEX_PATH" ]; then
-            echo "Error: Cheatsheet index not found at $INDEX_PATH" >&2
-            exit 1
-        fi
-        
-        if [ $full -eq 1 ]; then
-            # Find matching cheatsheet files
-            # Check exact file matches first
-            matches=()
-            if [ -f "$cheatsheets_dir/$topic" ]; then
-                matches+=("$cheatsheets_dir/$topic")
-            elif [ -f "$cheatsheets_dir/$topic.md" ]; then
-                matches+=("$cheatsheets_dir/$topic.md")
-            else
-                # Search recursively for matching filename
-                while IFS= read -r -d '' file; do
-                    matches+=("$file")
-                done < <(find "$cheatsheets_dir" -type f -iname "*${topic}*.md" -print0 2>/dev/null)
-            fi
-            
-            # De-duplicate matches
-            unique_matches=()
-            for m in "${matches[@]}"; do
-                found_match=0
-                for um in "${unique_matches[@]}"; do
-                    if [ "$um" = "$m" ]; then
-                        found_match=1
-                        break
-                    fi
-                done
-                if [ $found_match -eq 0 ]; then
-                    unique_matches+=("$m")
-                fi
-            done
-            
-            if [ ${#unique_matches[@]} -eq 0 ]; then
-                echo "No cheatsheet found matching '$topic'." >&2
-                exit 1
-            elif [ ${#unique_matches[@]} -eq 1 ]; then
-                if command -v bat >/dev/null 2>&1; then
-                    bat --style=plain "${unique_matches[0]}"
-                else
-                    cat "${unique_matches[0]}"
-                fi
-                exit 0
-            else
-                echo "Multiple matching cheatsheets found for '$topic':"
-                for m in "${unique_matches[@]}"; do
-                    rel="${m#$cheatsheets_dir/}"
-                    echo "  - $rel"
-                done
-                echo "Please specify a more specific name, e.g.:"
-                rel_example="${unique_matches[0]#$cheatsheets_dir/}"
-                base_example="$(basename "$rel_example" .md)"
-                echo "  tellme about $base_example --full"
-                exit 1
-            fi
+local cmd = argv[1] or ""
+if cmd == "-h" or cmd == "--help" then
+    show_help(); os.exit(0)
+elseif cmd == "howto" then
+    if (argv[2] or "") == "" then
+        err("tellme howto: query missing\n", "usage: tellme howto \"<query>\"\n")
+        os.exit(2)
+    end
+    howto(argv[2])
+elseif cmd == "about" then
+    if (argv[2] or "") == "" then
+        err("tellme about: topic or flag missing\n", "usage: tellme about <topic> [--full] or tellme about --list\n")
+        os.exit(2)
+    end
+    if argv[2] == "--list" then
+        if not isfile(INDEX_PATH) then
+            err("Error: Cheatsheet index not found at " .. INDEX_PATH .. "\n"); os.exit(1)
+        end
+        out((sh("grep '^## ' " .. q(INDEX_PATH) .. " | sed 's/^## //'")))
+        os.exit(0)
+    end
+
+    local topic = argv[2]
+    local full = argv[3] == "--full" or argv[3] == "-f"
+
+    -- Free-form about (1814-x78v): a question rather than a topic slug —
+    -- whitespace in the topic, or several words — goes to expert-serve's
+    -- `all` domain. A slug keeps the index lookup below.
+    if not full then
+        local question = topic
+        if #argv > 2 then question = table.concat(argv, " ", 2) end
+        if question:find("%s") then
+            if expert_serve_ask("all", question) then os.exit(0) end
+            -- Port closed: the howto fallback, which labels itself
+            -- UNGROUNDED. An index slug search cannot answer a sentence.
+            -- (The shell version re-exec'd itself, which reprinted the note.)
+            if serving_note ~= "" then err("tellme: " .. serving_note .. "\n") end
+            howto(question)
+        end
+    end
+
+    -- 1. Handle dependencies special topic
+    local is_dep_query = topic == "dependency" or topic == "dependencies" or topic == "package" or topic == "packages"
+    if is_dep_query then
+        out([[Tillandsias Forge Dependency Reference:
+The forge image builds on Fedora minimal. Main system dependencies:
+  - Languages: Java 25, Python 3.13, Node 22, Go, Rust (cargo), Dart (flutter)
+  - Build tools: Maven, Gradle, npm, yarn, pnpm, pipx, uv, poetry, make, cmake, ninja, nix
+  - Test frameworks: pytest, junit, cargo-test, chromium-headless, firefox
+  - Utils: jq, yq, protoc, grpcurl, shellcheck, shfmt, rg, fd, fzf, curl, wget, git, gh, xmlstarlet
+  - Agent tools: claude-code, opencode, openspec, codex
+
+For the exact version and binary paths of these dependencies, run:
+  tillandsias-inventory
+
+For enclave services:
+  tillandsias-services
+--------------------------------------------------------
+]])
+    end
+
+    if not isfile(INDEX_PATH) then
+        err("Error: Cheatsheet index not found at " .. INDEX_PATH .. "\n"); os.exit(1)
+    end
+
+    if full then
+        -- Exact file matches first, then a recursive filename search.
+        local found = sh("d=" .. q(cheatsheets_dir) .. "; t=" .. q(topic) .. "\n"
+            .. "if [ -f \"$d/$t\" ]; then printf '%s\\n' \"$d/$t\"\n"
+            .. "elif [ -f \"$d/$t.md\" ]; then printf '%s\\n' \"$d/$t.md\"\n"
+            .. "else find \"$d\" -type f -iname \"*${t}*.md\" 2>/dev/null || true; fi")
+        local unique, seen = {}, {}
+        for m in found:gmatch("([^\n]*)\n") do
+            if m ~= "" and not seen[m] then seen[m] = true; unique[#unique + 1] = m end
+        end
+        if #unique == 0 then
+            err("No cheatsheet found matching '" .. topic .. "'.\n"); os.exit(1)
+        elseif #unique == 1 then
+            out(stale_note(unique[1]))
+            out((sh("if command -v bat >/dev/null 2>&1; then bat --style=plain " .. q(unique[1]) .. "; else cat " .. q(unique[1]) .. "; fi")))
+            os.exit(0)
         else
-            # Print category section if topic matches a category name exactly
-            category_match=$(grep -Ei "^## $topic$" "$INDEX_PATH" || true)
-            if [ -n "$category_match" ]; then
-                awk -v category="$topic" '
-                  BEGIN { IGNORECASE = 1; found = 0 }
-                  $0 ~ "^## " category "$" { found = 1; print; next }
-                  found && /^## / { found = 0 }
-                  found { print }
-                ' "$INDEX_PATH"
-                exit 0
-            fi
-            
-            # Substring match categories or cheatsheet lines
-            search_results=$(awk -v topic="$topic" '
-              BEGIN { IGNORECASE = 1; current_cat = ""; cat_printed = 0 }
-              /^## / { current_cat = substr($0, 4); cat_printed = 0; next }
-              /^- / {
-                if ($0 ~ topic) {
-                  if (!cat_printed && current_cat != "") {
-                    print "\n## " current_cat
-                    cat_printed = 1
-                  }
-                  print $0
-                }
+            local function rel(m)
+                local p = cheatsheets_dir .. "/"
+                if m:sub(1, #p) == p then return m:sub(#p + 1) end
+                return m
+            end
+            out("Multiple matching cheatsheets found for '" .. topic .. "':\n")
+            for _, m in ipairs(unique) do out("  - " .. rel(m) .. "\n") end
+            out("Please specify a more specific name, e.g.:\n")
+            local base = rel(unique[1]):match("([^/]*)$"):gsub("%.md$", "")
+            out("  tellme about " .. base .. " --full\n")
+            os.exit(1)
+        end
+    else
+        -- Print category section if topic matches a category name exactly
+        local category_match = sh("grep -Ei " .. q("^## " .. topic .. "$") .. " " .. q(INDEX_PATH) .. " || true")
+        if category_match ~= "" then
+            out((sh("awk -v category=" .. q(topic) .. [[ '
+              BEGIN { IGNORECASE = 1; found = 0 }
+              $0 ~ "^## " category "$" { found = 1; print; next }
+              found && /^## / { found = 0 }
+              found { print }
+            ' ]] .. q(INDEX_PATH))))
+            os.exit(0)
+        end
+
+        -- Substring match categories or cheatsheet lines
+        local search_results = (sh("awk -v topic=" .. q(topic) .. [[ '
+          BEGIN { IGNORECASE = 1; current_cat = ""; cat_printed = 0 }
+          /^## / { current_cat = substr($0, 4); cat_printed = 0; next }
+          /^- / {
+            if ($0 ~ topic) {
+              if (!cat_printed && current_cat != "") {
+                print "\n## " current_cat
+                cat_printed = 1
               }
-            ' "$INDEX_PATH")
-            
-            if [ -n "$search_results" ]; then
-                printf '%s\n' "$search_results"
-            else
-                if [ $is_dep_query -eq 1 ]; then
-                    exit 0
-                fi
-                echo "No matching cheatsheets or categories found for '$topic'." >&2
-                echo "Run 'tellme about --list' to see all categories." >&2
-                exit 1
-            fi
-        fi
-        ;;
-    *)
-        echo "tellme: unknown command/option '${1:-}'" >&2
-        echo "usage: tellme about <topic> [--full] or tellme about --list" >&2
-        exit 2
-        ;;
-esac
+              print $0
+            }
+          }
+        ' ]] .. q(INDEX_PATH))):gsub("\n+$", "")
+
+        if search_results ~= "" then
+            out(search_results .. "\n")
+        else
+            if is_dep_query then os.exit(0) end
+            err("No matching cheatsheets or categories found for '" .. topic .. "'.\n",
+                "Run 'tellme about --list' to see all categories.\n")
+            os.exit(1)
+        end
+    end
+else
+    err("tellme: unknown command/option '" .. cmd .. "'\n", "usage: tellme about <topic> [--full] or tellme about --list\n")
+    os.exit(2)
+end

@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: a-cheatsheet-staged-into-the-forge-without-provenance-or-past-its-age-is-an-error-or-labelled-stale
+    field: status
+    value: implemented
+    ts: "2026-11-27T14:42:20Z"
+    host: yoga
+events:
+  - packet_id: a-cheatsheet-staged-into-the-forge-without-provenance-or-past-its-age-is-an-error-or-labelled-stale
+    event:
+      type: implemented
+      ts: "2026-11-27T14:42:20Z"
+      host: yoga
+      summary: |
+        On work/2080-kkki. (1) scripts/lua/check-cheatsheet-provenance.lua, wired into ./build.sh --check: a staged sheet
+        (images/default/cheatsheets) with no ## Provenance section is refused unless
+        scripts/portability/cheatsheet-no-provenance-floor.txt lists it; a floor line whose sheet now has one, or
+        that names no sheet, is refused, so the floor only shrinks. Counted population 2026-11-27: 254 staged sheets,
+        28 without provenance (the row said 29; one gained it). test-cheatsheet-provenance.lua 7 arms; a mutant
+        dropping the stale-floor rule fails arm 4. (2) images/default/cli/tellme: stale_note() prints a STALE banner
+        on `tellme about <sheet> --full` and in howto's context when last_verified is older than
+        CHEATSHEET_STALE_DAYS (or TILLANDSIAS_CHEATSHEET_STALE_DAYS); the shipped value is nil, no stale marking,
+        until the OPERATOR rules the age (a one-line change). test-tellme-stale-cheatsheet.lua 5 arms, 3 red on trunk.

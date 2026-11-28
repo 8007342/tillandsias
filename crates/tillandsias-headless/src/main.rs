@@ -69,14 +69,14 @@ use tracing::{debug, error, info, warn};
 
 use serde::{Deserialize, Serialize};
 
+mod bringup_progress;
 /// ORDER 626-w3fn (b). User-facing bring-up progress, on the DEFAULT path.
 /// UNCONDITIONAL: the packet's whole point is that this reaches users without
 /// --debug and on every platform, so it must not sit behind a feature gate.
-mod bringup_progress;
-mod egress;
-mod fs_stall;
 // 1991-dovl: dev-build overlay over the compiled-in studio tables.
 mod dev_overlay;
+mod egress;
+mod fs_stall;
 // 1984-pexe: this binary's path, robust to an upgrade replacing it on disk.
 mod bringup_timer;
 mod device_poll_view;
@@ -86,6 +86,7 @@ mod image_build_scope;
 mod memory_protection;
 mod self_exe;
 // @trace order:1874-b9tg: where an sd.cpp run placed the model.
+mod gpu_fallback;
 #[cfg(feature = "host-services")]
 mod imagegen_consent;
 mod imagegen_models;
@@ -3287,6 +3288,86 @@ fn emit_image_build_event(event: &ImageBuildEvent, debug: bool) {
 
 fn forge_image_tag(version: &str) -> String {
     versioned_image_tag("forge", version)
+}
+
+/// Where the launch record appears inside a forge (order 2354-5biy slice A,
+/// operator ruling 2026-11-27: "A carries the details"). The command policy
+/// reads it as `command_policy::FORGE_RECORD_PATH`; it never makes a forge on
+/// its own (the image's root-owned /etc/tillandsias/forge marker does).
+const FORGE_LAUNCH_RECORD_DST: &str = "/run/tillandsias/forge-launch";
+
+/// The record's text: `key=value` lines the policy compares with the marker
+/// and with `/run/.containerenv`.
+fn forge_launch_record_body(image: &str, version: &str, project: &str, launch_id: &str) -> String {
+    format!(
+        "kind=forge\nimage={image}\nversion={version}\nproject={project}\nlaunch_id={launch_id}\n"
+    )
+}
+
+/// Host-side source of one container's record, on the session tmpfs.
+fn forge_launch_record_source(container: &str) -> PathBuf {
+    vault_bootstrap::runtime_dir_tillandsias()
+        .join("forge-launch")
+        .join(format!("{container}.record"))
+}
+
+/// Write the record for `container` and return its host path, to be bind
+/// mounted read-only at [`FORGE_LAUNCH_RECORD_DST`]. `None` when it could not
+/// be written: the forge still is one (the marker decides), it just carries
+/// no details, and the launcher says so.
+fn write_forge_launch_record(container: &str, project: &str, version: &str) -> Option<PathBuf> {
+    let path = forge_launch_record_source(container);
+    let launch_id = format!(
+        "{container}-{}-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0),
+        std::process::id()
+    );
+    let body = forge_launch_record_body(&forge_image_tag(version), version, project, &launch_id);
+    if cfg!(test) {
+        // Tests build argv; they never launch, and must not write the
+        // operator's runtime dir.
+        return Some(path);
+    }
+    let write = || -> std::io::Result<()> {
+        let dir = path.parent().expect("the record has a parent dir");
+        fs::create_dir_all(dir)?;
+        let tmp = dir.join(format!(".{container}.record.{}", std::process::id()));
+        fs::write(&tmp, body.as_bytes())?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&tmp, fs::Permissions::from_mode(0o444))?;
+        }
+        fs::rename(&tmp, &path)
+    };
+    match write() {
+        Ok(()) => Some(path),
+        Err(e) => {
+            eprintln!(
+                "[tillandsias] forge launch record not written ({}): {e}; the forge marker still \
+                 decides host_kind",
+                path.display()
+            );
+            None
+        }
+    }
+}
+
+/// `--mount` argv for the record, empty when it could not be written.
+fn forge_launch_record_args(container: &str, project: &str, version: &str) -> Vec<String> {
+    match write_forge_launch_record(container, project, version) {
+        Some(src) => vec![
+            "--mount".into(),
+            format!(
+                "type=bind,source={},target={FORGE_LAUNCH_RECORD_DST},relabel=shared,readonly=true",
+                src.display()
+            ),
+        ],
+        None => Vec::new(),
+    }
 }
 
 /// Check if Containerfile has been modified since last successful build.
@@ -8452,7 +8533,7 @@ pub(crate) fn vsock_forward_dir() -> PathBuf {
             .chars()
             .filter(char::is_ascii_alphanumeric)
             .collect::<String>();
-        std::env::temp_dir().join(format!(
+        tillandsias_core::test_scratch::path(format!(
             "tillandsias-vsock-forward-test-{}-{thread}",
             std::process::id()
         ))
@@ -11275,6 +11356,12 @@ fn build_status_check_forge_args(
     version: &str,
 ) -> Vec<String> {
     let mut args = build_forge_common_args(project_path, project_name, certs_dir);
+    // 2354-5biy slice A: every forge launch carries its record.
+    args.extend(forge_launch_record_args(
+        &forge_container_name(project_name),
+        project_name,
+        version,
+    ));
 
     args.extend([
         "--rm".into(),
@@ -12055,6 +12142,16 @@ fn build_opencode_forge_args(
         // images/default/entrypoint-forge-opencode-web.sh.
         ForgeMode::Web => ("/usr/local/bin/entrypoint-forge-opencode-web.sh", ""),
     };
+    // 2354-5biy slice A: every forge launch carries its record, named for the
+    // container this argv starts.
+    if let Some(name) = args
+        .iter()
+        .position(|a| a == "--name")
+        .and_then(|i| args.get(i + 1))
+        .cloned()
+    {
+        args.extend(forge_launch_record_args(&name, project_name, version));
+    }
     args.push("--entrypoint".into());
     args.push(entrypoint.into());
     args.push(forge_image_tag(version));
@@ -22775,8 +22872,9 @@ fn build_forge_agent_run_args_with_vault(
     // A prompt-driven CLAUDE run is the opposite: the prompt is the initial
     // message of an INTERACTIVE session, so it keeps its TTY.
     let non_interactive_prompt = prompt.is_some() && matches!(mode, ForgeAgentMode::Codex);
+    let agent_container = forge_container_name_for_mode(project_name, mode);
     let mut spec = ContainerSpec::new(image)
-        .name(forge_container_name_for_mode(project_name, mode))
+        .name(agent_container.clone())
         .hostname(forge_hostname(project_name))
         .network(ENCLAVE_NET)
         // 4096, not 512 (667-se87 / 959-fpc5): 512 was reachable in NORMAL
@@ -22791,6 +22889,10 @@ fn build_forge_agent_run_args_with_vault(
         .memory_budget(tillandsias_core::forge_budget::ForgeBudget::for_this_host())
         // 1913-ebv8: in tillandsias.slice, where oomd ranks this forge last.
         .cgroup_parent(oom_slice());
+    // 2354-5biy slice A: every forge launch carries its record.
+    if let Some(src) = write_forge_launch_record(&agent_container, project_name, version) {
+        spec = spec.bind_mount(src.display().to_string(), FORGE_LAUNCH_RECORD_DST, true);
+    }
     if !non_interactive_prompt {
         spec = spec.interactive().tty();
         // D3 of order 702-6jza. With --tty, podman injects its DEFAULT
@@ -24429,9 +24531,7 @@ async fn run_headless_async(
     tokio::task::spawn_blocking(run_disk_usage_check);
 
     // Wave 21a Gap ON-009: Check and refresh GitHub token if expired
-    // Wave 21b Gap ON-010: Check for missing project dependencies before forge launch
-    // @trace gap:ON-010, spec:forge-environment-discoverability
-    // run_dependency_check();
+    // Wave 21b Gap ON-010 retired (2399-vzkf): run_dependency_check, #[allow(dead_code)] and never called, ran /opt/cheatsheets/dependency-resolver.sh, a path the image never wrote; both are gone.
 
     let metrics_handle = spawn_metrics_sampler();
 
@@ -24919,88 +25019,6 @@ fn run_disk_usage_check() {
                 gap = "TR-006",
                 error = %e,
                 "failed to invoke disk usage check (non-blocking)"
-            );
-        }
-    }
-}
-
-/// Check for missing project dependencies before forge launch.
-///
-/// This implements gap:ON-010. Scans the current project for dependency files
-/// (Cargo.toml, package.json, requirements.txt, etc.) and checks if required
-/// tools (rustc, cargo, node, npm, python3, etc.) are available in PATH.
-///
-/// Output: Displays missing dependencies as a formatted list to stderr.
-/// Non-blocking: If dependency check fails, startup continues.
-///
-/// @trace gap:ON-010, spec:forge-environment-discoverability
-#[allow(dead_code)]
-fn run_dependency_check() {
-    use std::process::Command;
-
-    let project_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-
-    // Call the dependency-resolver.sh script to scan for missing dependencies
-    let resolver_script = "/opt/cheatsheets/dependency-resolver.sh";
-
-    // Check if the script exists; if not, skip silently (may be running in environment without it)
-    if !Path::new(resolver_script).exists() {
-        debug!(
-            gap = "ON-010",
-            "dependency-resolver.sh not found; skipping dependency check"
-        );
-        return;
-    }
-
-    match Command::new("bash")
-        .arg(resolver_script)
-        .arg(&project_dir)
-        .output()
-    {
-        Ok(output) => {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-
-            // Parse JSON output
-            if let Ok(missing_deps) = serde_json::from_str::<Vec<serde_json::Value>>(&stdout) {
-                if !missing_deps.is_empty() {
-                    // Display missing dependencies to user
-                    eprintln!("\n[dependency resolver] Missing project dependencies:");
-                    for dep in &missing_deps {
-                        if let (Some(tool), Some(install_hint)) =
-                            (dep.get("tool"), dep.get("install"))
-                        {
-                            eprintln!(
-                                "  - {} (install: {})",
-                                tool.as_str().unwrap_or("unknown"),
-                                install_hint.as_str().unwrap_or("see docs")
-                            );
-                        }
-                    }
-                    eprintln!("  → You can continue, but some tools may not work as expected.\n");
-
-                    // Log structured event for observability
-                    tracing::info!(
-                        gap = "ON-010",
-                        spec = "forge-environment-discoverability",
-                        missing_count = missing_deps.len(),
-                        "project dependencies check completed"
-                    );
-                } else {
-                    debug!(gap = "ON-010", "all project dependencies available");
-                }
-            } else {
-                debug!(
-                    gap = "ON-010",
-                    "failed to parse dependency resolver output; skipping"
-                );
-            }
-        }
-        Err(e) => {
-            // Non-critical error; don't fail startup
-            tracing::warn!(
-                gap = "ON-010",
-                error = %e,
-                "dependency check failed (non-blocking)"
             );
         }
     }
@@ -25542,7 +25560,7 @@ pub(crate) async fn service_stop(
 fn test_cache_root() -> std::path::PathBuf {
     use std::sync::atomic::{AtomicU64, Ordering};
     static SEQ: AtomicU64 = AtomicU64::new(0);
-    let dir = std::env::temp_dir().join(format!(
+    let dir = tillandsias_core::test_scratch::path(format!(
         "tillandsias-test-cache-{}-{}",
         std::process::id(),
         SEQ.fetch_add(1, Ordering::Relaxed)
@@ -25705,7 +25723,8 @@ mod tests {
         }
         use std::process::Command;
 
-        let root = std::env::temp_dir().join(format!("tz-checkout-{}", std::process::id()));
+        let root =
+            tillandsias_core::test_scratch::path(format!("tz-checkout-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("temp root");
 
@@ -41500,6 +41519,13 @@ mod forge_budget_argv_tests {
     /// the budget itself, so a tier change cannot desynchronise the test; the
     /// named-flag checks keep the list from being vacuously empty.
     fn assert_budget(what: &str, args: &[String]) {
+        // 2354-5biy slice A: the same builders mount the launch record.
+        assert!(
+            args.iter().any(|a| a.starts_with("type=bind,")
+                && a.contains(&format!("target={FORGE_LAUNCH_RECORD_DST},"))
+                && a.ends_with(",readonly=true")),
+            "{what}: no read-only launch record mount at {FORGE_LAUNCH_RECORD_DST}: {args:?}"
+        );
         let budget = ForgeBudget::for_this_host().podman_args();
         assert!(
             budget.iter().any(|a| a == "--cgroup-conf=memory.high=max")
@@ -41615,6 +41641,7 @@ mod forge_budget_argv_tests {
             .collect();
         let mut launchers = Vec::new();
         let mut missing = Vec::new();
+        let mut missing_record = Vec::new();
         for (k, &s) in starts.iter().enumerate() {
             let e = starts.get(k + 1).copied().unwrap_or(lines.len());
             let body = lines[s..e].join("\n");
@@ -41626,8 +41653,11 @@ mod forge_budget_argv_tests {
                 .to_string();
             // apply_web_lane (1860-auhm) builds nothing: it rewrites the argv
             // build_opencode_forge_args already budgeted, finding the tag by name.
+            // write_forge_launch_record (2354-5biy) names the tag inside the
+            // record it writes; it launches nothing.
             if name == "forge_image_tag"
                 || name == "apply_web_lane"
+                || name == "write_forge_launch_record"
                 || !body.contains("forge_image_tag(")
             {
                 continue;
@@ -41637,7 +41667,11 @@ mod forge_budget_argv_tests {
                 || body.contains("build_forge_common_args(")
                 || body.contains("build_stack_common_args(");
             if !budgeted {
-                missing.push(name);
+                missing.push(name.clone());
+            }
+            // 2354-5biy slice A: and every one mounts the launch record.
+            if !body.contains("forge_launch_record") {
+                missing_record.push(name);
             }
         }
         // Vacuity floor: the builders this order was filed about must be found.
@@ -41654,6 +41688,44 @@ mod forge_budget_argv_tests {
         assert!(
             missing.is_empty(),
             "forge launch builder(s) naming the forge image without the ForgeBudget flags: {missing:?}"
+        );
+        assert!(
+            missing_record.is_empty(),
+            "forge launch builder(s) without the 2354-5biy launch record mount: {missing_record:?}"
+        );
+    }
+
+    #[test]
+    fn the_launch_record_says_forge_and_names_its_launch() {
+        let body = forge_launch_record_body(
+            "localhost/tillandsias-forge:v1.2.3",
+            "1.2.3",
+            "proj",
+            "forge-proj-1",
+        );
+        for want in [
+            "kind=forge\n",
+            "image=localhost/tillandsias-forge:v1.2.3\n",
+            "version=1.2.3\n",
+            "project=proj\n",
+            "launch_id=forge-proj-1\n",
+        ] {
+            assert!(body.contains(want), "{want:?} missing from {body:?}");
+        }
+        let args = forge_launch_record_args("tillandsias-x-forge", "x", "1.2.3");
+        assert_eq!(args.len(), 2, "{args:?}");
+        assert_eq!(args[0], "--mount");
+        assert!(
+            args[1].ends_with(&format!(
+                "target={FORGE_LAUNCH_RECORD_DST},relabel=shared,readonly=true"
+            )),
+            "{}",
+            args[1]
+        );
+        assert!(
+            args[1].contains("forge-launch/tillandsias-x-forge.record"),
+            "{}",
+            args[1]
         );
     }
 }

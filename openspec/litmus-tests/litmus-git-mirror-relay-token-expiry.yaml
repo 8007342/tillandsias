@@ -13,14 +13,14 @@ size: instant
 
 preconditions:
   - workspace contains images/git/relay-refs.sh, images/git/vault-cli.sh, images/git/entrypoint.sh
-  - workspace contains scripts/test-git-mirror-relay-token-expiry.sh
+  - workspace contains scripts/lua/test-git-mirror-relay-token-expiry.lua
 
 critical_path:
   - step: "expired mirror token yields honest re-mint diagnosis, not a false GitHub Login; a valid mirror token with an absent GitHub token still says GitHub Login"
-    command: "scripts/test-git-mirror-relay-token-expiry.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-git-mirror-relay-token-expiry.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "PASS: git-mirror relay distinguishes expired mirror token from absent GitHub token (order 414)"
-    assert_output_contains: "PASS: git-mirror relay distinguishes expired mirror token from absent GitHub token (order 414)"
+    expected_behavior: "ok:git-mirror-relay-token-expiry:4 arms"
+    assert_output_contains: "ok:git-mirror-relay-token-expiry:4 arms"
 
   - step: "vault-cli exposes lookup and graceful current-token revocation"
     command: "grep -Fq 'lookup-self)' images/git/vault-cli.sh && grep -Fq 'revoke-self)' images/git/vault-cli.sh && grep -Fq 'auth/token/lookup-self' images/git/vault-cli.sh && grep -Fq 'auth/token/revoke-self' images/git/vault-cli.sh && echo 'ok: vault-cli token verbs'"
@@ -51,4 +51,4 @@ rollback:
     Do not restore the swallowed `2>/dev/null || true` vault read that conflates
     an unavailable Agent sink with an absent GitHub token. Inspect the
     lookup-self discriminator and Vault Agent bootstrap.
-  command: "scripts/test-git-mirror-relay-token-expiry.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-git-mirror-relay-token-expiry.lua 2>&1"

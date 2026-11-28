@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: relay-preflight-lua-fixtures-get-the-plan-binary
+    field: status
+    value: implemented
+    ts: "2026-11-26T23:13:02Z"
+    host: yoga
+events:
+  - packet_id: relay-preflight-lua-fixtures-get-the-plan-binary
+    event: {type: implemented, ts: "2026-11-26T23:13:02Z", host: yoga, summary: "On work/2419-8him: phase 5 runs a .lua fixture as env TILLANDSIAS_PLAN_BIN=<runner> TILLANDSIAS_SCRIPT_RUNNER_BIN=<runner> <runner> script run <f>. Red first: arm 7 of test-relay-preflight-selects-lua-fixtures.lua cuts the loop's command construction and runs it against a stub runner that prints both; trunk gave PLAN= RUNNER=, the fix names the runner (9 arms)."}

@@ -1,4 +1,5 @@
 -- @trace order:1056-5344, order:1060-7mmm, order:2209-jw2t
+-- inputs: scripts/hooks/pre-push-local-gate.sh scripts/plan-binary-probe.sh scripts/gate-stamp.sh scripts/common.sh scripts/check-issue-citation-convention.sh lib/lua/common/ crates/tillandsias-plan/ README.md plan/index.yaml
 --
 -- test-pre-push-plan-lane-after-merge.lua — PORTED from
 -- test-pre-push-plan-lane-after-merge.sh (2209-jw2t), same arms, same lines.

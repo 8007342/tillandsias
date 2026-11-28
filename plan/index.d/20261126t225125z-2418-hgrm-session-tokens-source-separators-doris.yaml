@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed and fixed by doris-windows 2026-11-26, msys queue item session-tokens arm 3.
+packets:
+  - packet_id: session-tokens-source-keeps-windows-backslashes-and-cycle-metrics-mangles-them-to-underscores
+    order: 2418-hgrm
+    status: implemented
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, metrics, tokens, paths]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-plan/src/session_tokens.rs
+    related: [1437-3pj7]
+    title: |
+      On Windows a discovered transcript's source is joined with backslashes, and cycle-metrics.sh strips them to _, so the token record names no file
+    context: |
+      Measured on doris: test-session-tokens arm 3 expected source=<cfg>/projects/-scratch-slug/sess1.jsonl and
+      got <cfg>_projects_-scratch-slug_sess1.jsonl. session_tokens.rs builds the path with PathBuf::join
+      (backslashes on Windows), and cycle-metrics.sh --emit-tokens strips backslashes and quotes from source
+      before writing JSON. So on Windows every --from-transcript record named a path that does not exist.
+      The source is now spelled with / on Windows (cfg!(windows)); Unix is byte-identical.
+    verifiable_closure: |
+      On doris: before, violation:session-tokens:1-failed (arm 3); after, ok:session-tokens:5 arms; unit test
+      source_spelling_tests (the Windows arm on Windows, the unchanged arm on Unix).
+    unscoreable: "pinned by the existing session-tokens fixture and the unit test; no litmus"
+    next_action: >
+      Implemented.
+status:
+  - packet_id: session-tokens-source-keeps-windows-backslashes-and-cycle-metrics-mangles-them-to-underscores
+    field: status
+    value: implemented
+    ts: "2026-11-26T22:51:25Z"
+    host: doris

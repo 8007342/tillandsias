@@ -35,7 +35,7 @@ size: instant
 
 preconditions:
   - workspace contains scripts/build-sidecar.sh
-  - workspace contains scripts/test-sidecar-staleness-stamp.sh
+  - workspace contains scripts/lua/test-sidecar-staleness-stamp.lua
   - shell utilities (bash, find, sort, sha256sum or shasum) are available in PATH
 
 critical_path:
@@ -45,22 +45,22 @@ critical_path:
     # six negatives (real source change, VERSION bump, added input file,
     # tampered artifact, missing stamp, unreadable stamp) plus the force
     # override and the skip that follows it.
-    command: "bash scripts/test-sidecar-staleness-stamp.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-sidecar-staleness-stamp.lua"
     timeout_ms: 60000
-    expected_behavior: "ok:sidecar-staleness-stamp-fixture:11"
+    expected_behavior: "ok:sidecar-staleness-stamp:15 arms"
 
   - step: "mtime churn on byte-identical inputs does not cost a build"
     # The velocity property in isolation — this is the one that regresses if
     # anyone reverts the digest to a timestamp comparison.
-    command: "bash scripts/test-sidecar-staleness-stamp.sh 2>&1 | grep -c '^ok: mtime churn on identical content skips the build$'"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-sidecar-staleness-stamp.lua"
     timeout_ms: 60000
-    expected_behavior: "1"
+    expected_behavior: "ok:   3 mtime churn on identical content skips the build"
 
   - step: "a tampered staged artifact is rebuilt rather than trusted"
     # The correctness property in isolation (723-b9cn's named hazard).
-    command: "bash scripts/test-sidecar-staleness-stamp.sh 2>&1 | grep -c '^ok: a tampered staged artifact is rebuilt, not trusted$'"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-sidecar-staleness-stamp.lua"
     timeout_ms: 60000
-    expected_behavior: "1"
+    expected_behavior: "ok:   7 a tampered staged artifact is rebuilt, not trusted"
 
   - step: "the evaluation stamp is a gitignored build artifact, never tracked"
     # Same discipline as the staged binary itself (710-w9kc): a stamp that

@@ -18,6 +18,8 @@
 --               -> violation naming it
 --   3 READ GAP  drop scripts/test-support/podman-mock.sh (an include path)
 --               -> violation naming it
+--   5 CLIPPY    the real _CARGO_CLIPPY_INPUTS covers the --compile-only scan (2440-8893)
+--   6 INCLUDE   drop an include*! target from it -> violation naming it (the coordinator's mutant)
 --   4 MUTANT    a scanner with the exec net removed passes arm 2's gap: arm 2
 --               has teeth
 --
@@ -38,14 +40,16 @@ local function bad(m) out.line("FAIL: " .. m); fail = fail + 1 end
 
 local REL = "target/plan-scratch/scan-roots-" .. tostring(time.now_ms())
 fs.mkdir(REL)
-local function run(scanner, buildsh)
+local function run(scanner, buildsh, extra)
     local argv = { PLAN, "script", "run", scanner, "--", "--check" }
     if buildsh then argv[#argv + 1] = "--build-sh"; argv[#argv + 1] = buildsh end
+    for _, x in ipairs(extra or {}) do argv[#argv + 1] = x end
     local r = proc.run({ argv = argv, env = { PATH = env.get("PATH"), HOME = env.get("HOME") }, timeout_ms = 300000 })
     return r.code, (r.stdout or "") .. (r.stderr or "")
 end
 -- a copy of build.sh whose declaration lacks <entry>; asserts the entry was there
-local function without(entry, name)
+local function without(entry, name, var)
+    local VAR = var or VAR
     local src = fs.read("build.sh") or ""
     local decl = src:match("\n" .. VAR .. '="([^"]*)"') or ""
     local kept, hit = {}, 0
@@ -96,6 +100,22 @@ else
     rc, o = run(mut, p2)
     if rc == 0 then ok("4 MUTANT without the exec net the exec gap passes — arm 2 has teeth")
     else bad("4 MUTANT the net-less scanner still refused (rc=" .. rc .. "): arm 2 proves nothing") end
+end
+
+-- 5-6 (2440-8893): the two clippy passes skip against _CARGO_CLIPPY_INPUTS, what COMPILES IN.
+local CVAR, COMPILE = "_CARGO_CLIPPY_INPUTS", { "--workspace", "--compile-only", "--var", "_CARGO_CLIPPY_INPUTS" }
+rc, o = run(SCAN, nil, COMPILE)
+if rc == 0 and o:find("ok:cargo-test-inputs:", 1, true) then ok("5 REAL the clippy declaration covers every compile-time input")
+else bad("5 REAL rc=" .. rc .. ": " .. o) end
+-- the coordinator's mutant: an include_str! target the list leaves out must be refused
+local INC = "path:scripts/build-image.sh"
+local p6, h6 = without(INC, "build-include-gap.sh", CVAR)
+if h6 ~= 1 then bad("6 INCLUDE GAP premise: " .. INC .. " declared " .. h6 .. " times in " .. CVAR .. ", want 1")
+else
+    rc, o = run(SCAN, p6, COMPILE)
+    if rc == 1 and o:find("missing from " .. CVAR .. ": " .. INC, 1, true) then
+        ok("6 INCLUDE GAP a compiled-in scripts/ file left out of the clippy list is refused")
+    else bad("6 INCLUDE GAP rc=" .. rc .. ": " .. o) end
 end
 
 proc.run({ argv = { "rm", "-rf", REL }, timeout_ms = 60000 })

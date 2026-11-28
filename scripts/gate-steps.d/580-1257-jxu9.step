@@ -8,7 +8,7 @@
 #
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking the expert-accuracy record keeps its provenance (1257-jxu9)"
-STEP_SCRIPT="scripts/test-expert-accuracy-provenance.sh"
+STEP_LUA="scripts/lua/test-expert-accuracy-provenance.lua"
 STEP_ERROR="the expert-accuracy record loses provenance: a /v1 base asks /v1/api/show, or the series is not a tracked per-host file (1257-jxu9)"
 STEP_OK="expert-accuracy provenance: native /api/show, no guessing, tracked per-host series"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin PASS: expert-accuracy-provenance (1257-jxu9)"
@@ -18,4 +18,4 @@ STEP_LANES="port"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/derive-host-identity.sh scripts/record-expert-accuracy.sh scripts/test-expert-accuracy-provenance.sh"
+STEP_READS="scripts/derive-host-identity.sh scripts/record-expert-accuracy.sh scripts/lua/test-expert-accuracy-provenance.lua"

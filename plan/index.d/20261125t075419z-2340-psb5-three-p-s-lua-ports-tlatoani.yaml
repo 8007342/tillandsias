@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-25. p-s port range, batch 4 (macuahuitl: batch 4 then 5).
+packets:
+- packet_id: port-p-s-fixtures-batch-4
+  order: 2340-psb5
+  status: implemented
+  kind: chore
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [shell-to-lua, macos, fixtures, portability]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 2
+  title: 'Three whole-file shell-to-Lua ports from the p-s range: test-sidecar-arch-derivation, test-pre-push-main-branch-affordance, test-sync-image-cheatsheets-for-commit'
+  ports: [scripts/test-sidecar-arch-derivation.sh, scripts/test-pre-push-main-branch-affordance.sh, scripts/test-sync-image-cheatsheets-for-commit.sh]
+  context: >-
+    Each port keeps its arms and moves to the common.fixture grammar. Picked from the p-s range files no open PR touches
+    (the parked #1149-#1238 family holds many of the others). Passed over: test-studio-puck and test-studio-decap, which build
+    podman images on the local forge image and cannot be checked on darwin; test-precommit-zero-trace-scan-scope, which
+    test-gate-thresholds-are-chosen.lua names as its CONTROL; test-plan-field-get, lenovinha's 2292-62a5. Callers: the
+    sidecar-arch-derivation litmus (now without its `| tail -1`), gate step 274 (STEP_LUA, a fresh darwin second-regime line),
+    and build.sh's ci-full cheatsheet-sync block (_run_lua_decider).
+  exit_criteria:
+  - 'Each .lua gives the same verdict as its .sh on the trunk tree, and the same red arms under a mutant.'
+  - 'Every caller runs the .lua; the three .sh files and their floor lines are gone.'
+  verifiable_closure: 'Mutant parity in the PR; litmus sidecar-arch-derivation and gate step 274 green on darwin.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the mutant parity is the deliverable.'
+  next_action: >-
+    Implemented. Darwin (bash 3.2.57): ok:sidecar-arch-derivation:17 arms, ok:main-branch-affordance:5 arms,
+    ok:cheatsheet-commit-sync:7 arms. Eleven mutants, each red on the same arm in .sh and .lua. One difference: with the
+    missing-stager path made to block, the .sh died silently under set -e while the .lua names arm 6.
+  provenance: 'tlatoanis-macbook-air 2026-11-25, on macuahuitl-fedora''s direction.'
+  related: [2302-pspt, 2303-rttr, 2312-psb3, 2318-psb4]
+  events:
+  - {type: filed, ts: '2026-11-25T07:54:19Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}

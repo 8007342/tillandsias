@@ -470,6 +470,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-as-only-runtime
+  - litmus:forge-no-raw-podman
   - litmus:container-start-health
   - litmus:launch-artifacts-untracked
   - litmus:forge-agent-result-format
@@ -818,6 +819,7 @@ specs:
   - litmus:pre-push-deletion-only
   - litmus:expire-claims-reads-the-status-write
   - litmus:a-claim-names-a-workstation
+  - litmus:gate-changed-dynamic-path-narrows
   - litmus:claim-wip-limit-shape
   - litmus:fragment-keys-are-read
   - litmus:gate-step-prefix-allocation
@@ -1001,8 +1003,6 @@ specs:
   - litmus:podman-idiomatic-storage-isolation
   - litmus:podman-idiomatic-events-no-polling
   - litmus:no-polling-noops
-  - litmus:podman-idiomatic-event-driven
-  - litmus:podman-idiomatic-storage-isolation-runtime
   - litmus:podman-idiomatic-error-discrimination
   - litmus:podman-idiomatic-launch-routing
   - litmus:headless-init-status-check-source-built
@@ -1375,7 +1375,6 @@ specs:
   - litmus:no-credentials-at-rest
   - litmus:antigravity-lane-tty-takes-keystrokes
   - litmus:vault-audit-persistence-shape
-  - litmus:vault-auto-unseal-no-prompt
   - litmus:codex-api-key-env-var
   - litmus:vault-cli-verifies-tls
   - litmus:default-vault-cli-security

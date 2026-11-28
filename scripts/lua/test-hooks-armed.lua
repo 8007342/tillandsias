@@ -1,4 +1,5 @@
 -- @trace order:1255-s4im
+-- inputs: scripts/lua/check-hooks-armed.lua lib/lua/common/ crates/tillandsias-plan/ scripts/ensure-hooks.sh scripts/install-hooks.sh scripts/merge-floor-driver.sh
 -- @env TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
 --
 -- test-hooks-armed.lua — scripts/lua/check-hooks-armed.lua on scratch repos:
@@ -8,7 +9,7 @@
 --   4 FOREIGN  a hook with no marker: refused:hooks:foreign-pre-push, exit 3
 --   (no GLOBAL arm: the runner scrubs a child's environment, so a fixture
 --   cannot point the checker's own git at a scratch global config. That
---   branch copies ensure-hooks.sh's, which test-ensure-hooks.sh covers, 1442-wyf9.)
+--   branch copies ensure-hooks.sh's, which test-ensure-hooks.lua covers, 1442-wyf9.)
 --   6 NOREPO   not a checkout: blocked, exit 2
 --   7 READONLY the ABSENT run installed nothing: still no pre-push after it
 --   9/10 DRIVER the floor merge driver shipped but unconfigured is due; configured ok

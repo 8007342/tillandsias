@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: classify-dpkg-unknown-package-licences
+    order: "2424-49ac"
+    status: ready
+    kind: improvement
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [credits, images]
+    estimated_hours: 3
+    owned_paths: [scripts/lua/build-package-licence-register.lua, docs/credits/package-licences.tsv]
+    title: "classify the licences of Debian/Ubuntu image packages, which the register records as unknown"
+    context: |
+      dpkg declares no licence field, so build-package-licence-register.lua (1958-yfib) records every Debian/Ubuntu
+      package as unknown. As of 2026-11-27 that is 498 webkit rows (#1688, 2413-fbzp) and 206 flutter rows. The
+      licence is in each package's /usr/share/doc/<pkg>/copyright (DEP-5 machine-readable for most), which the
+      register could read inside the image instead of guessing. Not blocking (macuahuitl, 2026-11-27).
+    exit_criteria:
+      - "the register reads each dpkg package's copyright file inside the image and records its declared licence(s); a package without a machine-readable file stays unknown, by name"
+    unscoreable: "no-litmus-yet: closure is the regenerated TSV with the unknown count before and after."
+    next_action: "read DEP-5 copyright files inside the webkit and flutter images from the register; measure how many stay unknown."
+    provenance: filed by lenovinha at macuahuitl's request after 2413-fbzp.
+    related: [1958-yfib, 2413-fbzp]
+    events:
+      - {type: filed, ts: '2026-11-27T04:47:17Z', host: lenovinha, summary: classify dpkg unknown licences}

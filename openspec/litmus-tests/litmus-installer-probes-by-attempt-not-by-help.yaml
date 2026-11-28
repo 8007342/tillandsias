@@ -49,7 +49,7 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-installer-probes-by-attempt-not-by-help.sh
+  - workspace contains scripts/lua/test-installer-probes-by-attempt-not-by-help.lua
   - workspace contains scripts/install-windows.ps1
   - the behavioural arms need cmd.exe, so they SKIP BY NAME off msys; a green
     run on Linux exercises the four source arms only and must not be read as
@@ -57,14 +57,14 @@ preconditions:
 
 critical_path:
   - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-installer-probes-by-attempt-not-by-help.sh && test -x scripts/test-installer-probes-by-attempt-not-by-help.sh && echo 'ok: installer-probe-fixture-parses'"
+    command: "test -f scripts/lua/test-installer-probes-by-attempt-not-by-help.lua && ! test -e scripts/test-installer-probes-by-attempt-not-by-help.sh && echo 'ok: installer-probe-fixture-parses'"
     timeout_ms: 10000
     expected_behavior: "ok: installer-probe-fixture-parses"
 
   - step: "every arm passes against the real installer: no --help decision, exactly one attempt and no guarded second one, the decision taken from its exit code, and the liar stub rejected while the old --help rule accepts it"
-    command: "bash scripts/test-installer-probes-by-attempt-not-by-help.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-installer-probes-by-attempt-not-by-help.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "ok:installer-probes-by-attempt-not-by-help:all"
+    expected_behavior: "ok:installer-probes-by-attempt-not-by-help:7 arms"
 
   - step: "SOURCE PIN: the installer carries no --help-derived capability decision, exactly one attempt, and no guarded probe -- asserted on the file directly so a fixture that stopped looking cannot hide it"
     # `|| true` ON EVERY COUNT IS LOAD-BEARING, and its absence fails the

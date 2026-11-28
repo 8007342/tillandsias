@@ -1,5 +1,5 @@
--- @trace order:2150-3j97, spec:spec-traceability
--- @env PATH HOME TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
+-- @trace order:2150-3j97, order:2332-5r8v, spec:spec-traceability
+-- @env PATH HOME
 --
 -- test-litmus-timeout-retry.lua — priority:build-speed. A litmus step killed by
 -- its OWN timeout with no output is re-run once and announced as
@@ -27,6 +27,10 @@ local ROOT = text.trim(run({ "git", "rev-parse", "--show-toplevel" }).stdout or 
 if ROOT == "" then
     verdict.could_not_run("litmus-timeout-retry", "not inside a git checkout")
 end
+-- 2332-5r8v: the plan binary as an absolute path. The variable handed on raw, when unset or
+-- relative, resolved to nothing in the scratch project and every arm read as its own red.
+local PLAN = require("common.fixture").plan_binary()
+if PLAN == "" then verdict.could_not_run("litmus-timeout-retry", "no-plan-binary") end
 local REL = "target/plan-scratch/tr3j97-" .. tostring(math.random(100000, 999999)) .. tostring(math.random(100000, 999999))
 local W = ROOT .. "/" .. REL
 fs.mkdir(REL .. "/lt")
@@ -49,13 +53,7 @@ fs.write(REL .. "/bindings.yaml", "version: '1.0'\ndescription: throwaway bindin
     .. "\n  coverage_ratio: 100\n")
 
 -- The runner reads YAML through the plan binary; the scratch project has none,
--- so name the one running this script (else it falls to a slower tier).
-local PLAN = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN") or env.get("TILLANDSIAS_PLAN_BIN")
-if not PLAN or PLAN == "" then
-    local probe = run({ "bash", "-c", ". scripts/plan-binary-probe.sh && resolve_plan_binary" }, { cwd = ROOT })
-    PLAN = text.trim(probe.stdout or "")
-    if PLAN ~= "" and PLAN:sub(1, 1) ~= "/" then PLAN = ROOT .. "/" .. PLAN:gsub("^%./", "") end
-end
+-- so name one it can run from there, resolved before the scratch exists (2332-5r8v).
 local SEAMS = {
     PATH = env.get("PATH"), HOME = env.get("HOME"),
     TILLANDSIAS_PLAN_BIN = PLAN,

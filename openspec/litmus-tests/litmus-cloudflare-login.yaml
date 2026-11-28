@@ -28,28 +28,23 @@ size: long
 # (TILLANDSIAS_CLOUDFLARE_LOGIN_BIN) fails every BIN arm.
 
 preconditions:
-  - workspace contains scripts/test-cloudflare-login.sh
+  - workspace contains scripts/lua/test-cloudflare-login.lua
   - workspace contains crates/tillandsias-headless/src/cloudflare_login.rs
   - workspace contains crates/tillandsias-headless/src/bin/tillandsias-fake-cloudflare.rs
   - workspace contains assets/cloudflare-relay/index.html
   - cargo and curl are available in PATH
 
 critical_path:
-  - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-cloudflare-login.sh && test -x scripts/test-cloudflare-login.sh && echo 'ok: cloudflare-login-fixture-parses'"
-    timeout_ms: 3000
-    expected_behavior: "ok: cloudflare-login-fixture-parses"
-
   - step: "every BIN and CARGO arm and every control passes by name"
-    command: "out=$(bash scripts/test-cloudflare-login.sh 2>&1); rc=$?; case \"$out\" in (*'ok:cloudflare-login:all-arms+controls'*) [ \"$rc\" = 0 ] && echo 'ok: cloudflare login all arms+controls' ;; (*) printf '%s\\n' \"$out\" | grep -E '^FAIL' | head -12; exit 1 ;; esac"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-cloudflare-login.lua 2>&1"
     timeout_ms: 900000
-    expected_behavior: "ok: cloudflare login all arms+controls"
+    expected_behavior: "ok:cloudflare-login:"
 
 observability:
   traces:
     - "@trace order:1505-kc5f"
     - "@trace openspec/changes/cloudflare-login-and-fleet-vpn/design.md#decision-1"
-  expected_log: "ok:cloudflare-login:all-arms+controls"
+  expected_log: "ok:cloudflare-login:"
   log_fields:
     spec: "ci-release"
     test: "cloudflare-login"
@@ -57,9 +52,9 @@ observability:
 
 rollback:
   on_failure: >
-    A named arm or control failed. Re-run `bash scripts/test-cloudflare-login.sh`
+    A named arm or control failed. Re-run `tillandsias-plan script run scripts/lua/test-cloudflare-login.lua`
     and read its FAIL lines. Do not move the state check after the code or
     error read, bind anything but 127.0.0.1, accept more than one callback,
     add an environment switch that selects a non-Vault store, or print a
     token, verifier or code to make it pass.
-  command: "bash scripts/test-cloudflare-login.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-cloudflare-login.lua 2>&1"

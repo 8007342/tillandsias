@@ -1,0 +1,13 @@
+# Gate step 2417-jzhh batch 1 — data, not code.
+#
+# Eight checkers that read a listing must block (exit 2, naming the file) when
+# a listed file cannot be read, never count it clean. Each arm plants a chmod
+# 000 file in a scratch tree; its control makes it readable again.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking eight listing checkers block on an unreadable listed file (2417-jzhh batch 1)"
+STEP_LUA="scripts/lua/test-listed-read-blocks-batch1.lua"
+STEP_ERROR="a listing checker read ok over a file it could not read (2417-jzhh) — see the FAIL lines above"
+STEP_OK="batch-1 listing checkers block on unreadable files"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-26 darwin ok:listed-read-blocks-batch1:16 arms at 3f3a123af (red 8/8 on the trunk checkers first)"
+STEP_READS="scripts/lua/test-listed-read-blocks-batch1.lua lib/lua/common/listed_read.lua scripts/lua/census-litmus-pipes.lua scripts/lua/check-all-fragments-intact.lua scripts/lua/check-backgrounded-jobs-redirect-stderr.lua scripts/lua/check-ca-path-literals.lua scripts/lua/check-cheatsheet-frontmatter.lua scripts/lua/check-cheatsheet-refs.lua scripts/lua/check-cheatsheet-source-anchors.lua scripts/lua/check-enclave-ca-not-host-trusted.lua"

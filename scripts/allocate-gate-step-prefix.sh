@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # allocate-gate-step-prefix.sh — move a NEW gate step whose numeric prefix is
 # already taken to a free slot, AFTER the integrate and BEFORE the gate
-# (order 1162-qbrx). Called by scripts/land-on-platform-branch.sh in the only
+# (order 1162-qbrx). Called by scripts/land-on-platform-branch.sh and, per
+# merged candidate and train member, by scripts/land-queue.sh (2416-57a6), in the only
 # window that cannot race; runnable by hand for a hand-rolled push.
 #
 # WHY. scripts/gate-steps.d/NNN-<order>.step files are ordered by a scarce
 # integer prefix chosen at authoring time, and the gate's own fixture
-# (test-gate-step-append-no-conflict.sh, arm 7) refuses a tree where two
+# (test-gate-step-append-no-conflict.lua, arm 7) refuses a tree where two
 # files share one — the spacing exists so a later step can land between
 # two without renaming either, and a doubly-occupied slot loses that gap.
 # The skill's advice was "pick the prefix after the integrate"; MEASURED

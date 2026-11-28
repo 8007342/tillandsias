@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: medium-github-and-each-model-provider-can-be-signed-out-from-the-tray
+    field: next_action
+    value: D5 is answered. Left to do, everything. Follow the shape of the Cloudflare logout and its tests. For GitHub, delete the token and refresh records and tell the person to finish on the GitHub settings page; a test asserts that sentence is shown and that no revocation request is made.
+    ts: "2026-11-11T19:15:00Z"
+    host: macuahuitl
+    replaces_sha256: "d1e5db7deb56ecfaf4f281035c02acf1186a89c2d184ea826c6991f1e67f1952"
+
+events:
+  - packet_id: medium-github-and-each-model-provider-can-be-signed-out-from-the-tray
+    event:
+      type: note
+      ts: "2026-11-11T19:15:00Z"
+      host: macuahuitl
+      summary: |-
+        the WAIT on D5 is discharged by the operator answer

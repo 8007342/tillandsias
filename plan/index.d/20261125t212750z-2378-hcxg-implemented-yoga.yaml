@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: step-350s-private-bus-harness-and-six-credential-fixtures-ported-to-lua
+    field: status
+    value: implemented
+    ts: "2026-11-25T21:27:50Z"
+    host: yoga
+events:
+  - packet_id: step-350s-private-bus-harness-and-six-credential-fixtures-ported-to-lua
+    event: {type: implemented, ts: "2026-11-25T21:27:50Z", host: yoga, summary: "implemented on work/2378-hcxg"}

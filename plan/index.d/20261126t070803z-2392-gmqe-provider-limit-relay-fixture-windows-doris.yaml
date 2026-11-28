@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: test-provider-limit-relay-is-a-script-error-on-native-windows
+    order: 2392-gmqe
+    status: implemented
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [lua-fixture, windows, msys, provider-limit]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/test-provider-limit-relay.lua
+    title: |
+      test-provider-limit-relay.lua is a script error on native Windows: fs.write into a plan/ dir it never made, because its relay ran under a bare "bash" (WSL's)
+    context: |
+      Measured on doris (native Windows) 2026-11-26, on origin/linux-next:
+        refused:script-error:test-provider-limit-relay
+        runtime error: fs.write: the directory for 'target/plan-scratch/provider-limit-relay-<ms>/plan/...' does not exist
+      (line ~144). The missing dir was a symptom: the relay and the forge check ran as argv "bash", which on native
+      Windows is WSL's bash.exe (another filesystem), so the relay never created plan/ and every arm
+      before it saw nothing. Fixed on work/2392-gmqe: both spawns use common.fixture's posix_shell()
+      (the 2246-fkea rule), plus an fs.mkdir of plan/ before the write so the arm never depends on
+      an earlier one having run (as macuahuitl asked).
+    verifiable_closure: |
+      tillandsias-plan script run scripts/lua/test-provider-limit-relay.lua prints
+      ok:provider-limit-relay:18 arms on msys. Measured on doris: 18 arms. PRE-FIX: refused:script-error;
+      with the mkdir alone, 14 of 18 arms red.
+    unscoreable: "the closure is the existing fixture, run by gate step 918-1957-msjs; no separate litmus pin"
+status:
+  - packet_id: test-provider-limit-relay-is-a-script-error-on-native-windows
+    field: status
+    value: implemented
+    ts: "2026-11-26T07:08:03Z"
+    host: doris

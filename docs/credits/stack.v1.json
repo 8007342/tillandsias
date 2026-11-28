@@ -9528,6 +9528,24 @@
       "from": "image:audio-studio",
       "kind": "package",
       "optional": false,
+      "to": "pkg:debian:lua-filesystem"
+    },
+    {
+      "from": "image:audio-studio",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-lpeg"
+    },
+    {
+      "from": "image:audio-studio",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua5.4"
+    },
+    {
+      "from": "image:audio-studio",
+      "kind": "package",
+      "optional": false,
       "to": "pkg:debian:rubberband-cli"
     },
     {
@@ -9583,6 +9601,24 @@
       "kind": "package",
       "optional": false,
       "to": "pkg:fedora:libglvnd"
+    },
+    {
+      "from": "image:chromium-core",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:fedora:lua"
+    },
+    {
+      "from": "image:chromium-core",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:fedora:lua-filesystem"
+    },
+    {
+      "from": "image:chromium-core",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:fedora:lua-lpeg"
     },
     {
       "from": "image:chromium-core",
@@ -10257,6 +10293,24 @@
       "to": "oci:docker.io/library/alpine:3.22"
     },
     {
+      "from": "image:enclave-fetch",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4"
+    },
+    {
+      "from": "image:enclave-fetch",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-filesystem"
+    },
+    {
+      "from": "image:enclave-fetch",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-lpeg"
+    },
+    {
       "from": "image:flutter",
       "kind": "base-image",
       "optional": false,
@@ -10279,6 +10333,24 @@
       "kind": "package",
       "optional": false,
       "to": "pkg:debian:git"
+    },
+    {
+      "from": "image:flutter",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-filesystem"
+    },
+    {
+      "from": "image:flutter",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-lpeg"
+    },
+    {
+      "from": "image:flutter",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua5.4"
     },
     {
       "from": "image:flutter",
@@ -10339,6 +10411,24 @@
       "kind": "package",
       "optional": false,
       "to": "pkg:alpine:jq"
+    },
+    {
+      "from": "image:git",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4"
+    },
+    {
+      "from": "image:git",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-filesystem"
+    },
+    {
+      "from": "image:git",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-lpeg"
     },
     {
       "from": "image:git",
@@ -10441,6 +10531,24 @@
       "kind": "package",
       "optional": false,
       "to": "pkg:fedora:libgomp"
+    },
+    {
+      "from": "image:imagegen",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:fedora:lua"
+    },
+    {
+      "from": "image:imagegen",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:fedora:lua-filesystem"
+    },
+    {
+      "from": "image:imagegen",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:fedora:lua-lpeg"
     },
     {
       "from": "image:imagegen",
@@ -10584,6 +10692,24 @@
       "from": "image:imagegen-cuda",
       "kind": "package",
       "optional": false,
+      "to": "pkg:debian:lua-filesystem"
+    },
+    {
+      "from": "image:imagegen-cuda",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-lpeg"
+    },
+    {
+      "from": "image:imagegen-cuda",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua5.4"
+    },
+    {
+      "from": "image:imagegen-cuda",
+      "kind": "package",
+      "optional": false,
       "to": "pkg:debian:ninja-build"
     },
     {
@@ -10621,6 +10747,24 @@
       "kind": "package",
       "optional": false,
       "to": "pkg:debian:libglib2.0-0"
+    },
+    {
+      "from": "image:imagegen-studio",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-filesystem"
+    },
+    {
+      "from": "image:imagegen-studio",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-lpeg"
+    },
+    {
+      "from": "image:imagegen-studio",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua5.4"
     },
     {
       "from": "image:imagegen-studio",
@@ -10716,6 +10860,24 @@
       "from": "image:inference",
       "kind": "package",
       "optional": false,
+      "to": "pkg:fedora:lua"
+    },
+    {
+      "from": "image:inference",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:fedora:lua-filesystem"
+    },
+    {
+      "from": "image:inference",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:fedora:lua-lpeg"
+    },
+    {
+      "from": "image:inference",
+      "kind": "package",
+      "optional": false,
       "to": "pkg:fedora:mesa-vulkan-drivers"
     },
     {
@@ -10770,6 +10932,24 @@
       "from": "image:proxy",
       "kind": "package",
       "optional": false,
+      "to": "pkg:alpine:lua5.4"
+    },
+    {
+      "from": "image:proxy",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-filesystem"
+    },
+    {
+      "from": "image:proxy",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-lpeg"
+    },
+    {
+      "from": "image:proxy",
+      "kind": "package",
+      "optional": false,
       "to": "pkg:alpine:openssl"
     },
     {
@@ -10801,6 +10981,24 @@
       "kind": "package",
       "optional": false,
       "to": "pkg:alpine:libcap"
+    },
+    {
+      "from": "image:router",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4"
+    },
+    {
+      "from": "image:router",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-filesystem"
+    },
+    {
+      "from": "image:router",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-lpeg"
     },
     {
       "from": "image:router",
@@ -18090,6 +18288,24 @@
       "from": "image:vault",
       "kind": "package",
       "optional": false,
+      "to": "pkg:alpine:lua5.4"
+    },
+    {
+      "from": "image:vault",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-filesystem"
+    },
+    {
+      "from": "image:vault",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-lpeg"
+    },
+    {
+      "from": "image:vault",
+      "kind": "package",
+      "optional": false,
       "to": "pkg:alpine:socat"
     },
     {
@@ -18109,6 +18325,24 @@
       "kind": "package",
       "optional": false,
       "to": "pkg:alpine:busybox-extras"
+    },
+    {
+      "from": "image:web",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4"
+    },
+    {
+      "from": "image:web",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-filesystem"
+    },
+    {
+      "from": "image:web",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:alpine:lua5.4-lpeg"
     },
     {
       "from": "image:web-wrangler",
@@ -18711,6 +18945,24 @@
       "to": "oci:docker.io/library/node:22.19.0-bookworm-slim"
     },
     {
+      "from": "image:web-wrangler",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-filesystem"
+    },
+    {
+      "from": "image:web-wrangler",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-lpeg"
+    },
+    {
+      "from": "image:web-wrangler",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua5.4"
+    },
+    {
       "from": "image:webkit",
       "kind": "download",
       "optional": false,
@@ -18763,6 +19015,24 @@
       "kind": "package",
       "optional": false,
       "to": "pkg:debian:fonts-noto-core"
+    },
+    {
+      "from": "image:webkit",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-filesystem"
+    },
+    {
+      "from": "image:webkit",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-lpeg"
+    },
+    {
+      "from": "image:webkit",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua5.4"
     },
     {
       "from": "image:webkit",
@@ -57637,18 +57907,18 @@
       "homepage": "https://pkgs.alpinelinux.org/packages?name=busybox-extras",
       "homepage_kind": "package-index",
       "id": "pkg:alpine:busybox-extras",
-      "license": "unknown",
-      "license_family": "unknown",
-      "license_source": "none",
+      "license": "GPL-2.0-only",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apk; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "busybox-extras",
       "optional": false,
       "pulled_by": [
         "image:web"
       ],
       "source": "images/web/Containerfile",
-      "version": "unknown"
+      "version": "1.36.1-r31"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=ca-certificates",
@@ -57788,6 +58058,72 @@
       ],
       "source": "images/router/Containerfile",
       "version": "2.78-r0"
+    },
+    {
+      "homepage": "https://pkgs.alpinelinux.org/packages?name=lua5.4",
+      "homepage_kind": "package-index",
+      "id": "pkg:alpine:lua5.4",
+      "license": "MIT",
+      "license_family": "permissive",
+      "license_source": "package-manager",
+      "link": "container-image",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
+      "name": "lua5.4",
+      "optional": false,
+      "pulled_by": [
+        "image:enclave-fetch",
+        "image:git",
+        "image:proxy",
+        "image:router",
+        "image:vault",
+        "image:web"
+      ],
+      "source": "images/enclave-fetch/Containerfile",
+      "version": "5.4.7-r0"
+    },
+    {
+      "homepage": "https://pkgs.alpinelinux.org/packages?name=lua5.4-filesystem",
+      "homepage_kind": "package-index",
+      "id": "pkg:alpine:lua5.4-filesystem",
+      "license": "MIT",
+      "license_family": "permissive",
+      "license_source": "package-manager",
+      "link": "container-image",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
+      "name": "lua5.4-filesystem",
+      "optional": false,
+      "pulled_by": [
+        "image:enclave-fetch",
+        "image:git",
+        "image:proxy",
+        "image:router",
+        "image:vault",
+        "image:web"
+      ],
+      "source": "images/enclave-fetch/Containerfile",
+      "version": "1.8.0-r4"
+    },
+    {
+      "homepage": "https://pkgs.alpinelinux.org/packages?name=lua5.4-lpeg",
+      "homepage_kind": "package-index",
+      "id": "pkg:alpine:lua5.4-lpeg",
+      "license": "MIT",
+      "license_family": "permissive",
+      "license_source": "package-manager",
+      "link": "container-image",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
+      "name": "lua5.4-lpeg",
+      "optional": false,
+      "pulled_by": [
+        "image:enclave-fetch",
+        "image:git",
+        "image:proxy",
+        "image:router",
+        "image:vault",
+        "image:web"
+      ],
+      "source": "images/enclave-fetch/Containerfile",
+      "version": "1.1.0-r0"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=nss-tools",
@@ -57976,7 +58312,7 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "ffmpeg",
       "optional": true,
       "pulled_by": [
@@ -57984,7 +58320,7 @@
         "image:imagegen-corridorkey"
       ],
       "source": "images/audio-studio/Containerfile",
-      "version": "unknown"
+      "version": "7:5.1.9-0+deb12u1"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=fonts-liberation",
@@ -57994,14 +58330,14 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "fonts-liberation",
       "optional": true,
       "pulled_by": [
         "image:webkit"
       ],
       "source": "images/webkit/Containerfile",
-      "version": "unknown"
+      "version": "1:2.1.5-3"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=fonts-noto-cjk",
@@ -58011,14 +58347,14 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "fonts-noto-cjk",
       "optional": true,
       "pulled_by": [
         "image:webkit"
       ],
       "source": "images/webkit/Containerfile",
-      "version": "unknown"
+      "version": "1:20230817+repack1-3"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=fonts-noto-color-emoji",
@@ -58028,14 +58364,14 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "fonts-noto-color-emoji",
       "optional": true,
       "pulled_by": [
         "image:webkit"
       ],
       "source": "images/webkit/Containerfile",
-      "version": "unknown"
+      "version": "2.047-0ubuntu0.24.04.1"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=fonts-noto-core",
@@ -58045,14 +58381,14 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "fonts-noto-core",
       "optional": true,
       "pulled_by": [
         "image:webkit"
       ],
       "source": "images/webkit/Containerfile",
-      "version": "unknown"
+      "version": "20201225-2"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=git",
@@ -58082,7 +58418,7 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "libgl1",
       "optional": true,
       "pulled_by": [
@@ -58090,7 +58426,7 @@
         "image:imagegen-studio"
       ],
       "source": "images/imagegen-corridorkey/Containerfile",
-      "version": "unknown"
+      "version": "1.6.0-1"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=libglib2.0-0",
@@ -58100,7 +58436,7 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "libglib2.0-0",
       "optional": true,
       "pulled_by": [
@@ -58108,7 +58444,7 @@
         "image:imagegen-studio"
       ],
       "source": "images/imagegen-corridorkey/Containerfile",
-      "version": "unknown"
+      "version": "2.74.6-2+deb12u9"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=libgomp1",
@@ -58118,14 +58454,14 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "libgomp1",
       "optional": true,
       "pulled_by": [
         "image:imagegen-cuda"
       ],
       "source": "images/imagegen/Containerfile.cuda",
-      "version": "unknown"
+      "version": "12.2.0-14+deb12u1"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=libsndfile1",
@@ -58135,14 +58471,80 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "libsndfile1",
       "optional": true,
       "pulled_by": [
         "image:audio-studio"
       ],
       "source": "images/audio-studio/Containerfile",
-      "version": "unknown"
+      "version": "1.2.0-1+deb12u1"
+    },
+    {
+      "homepage": "https://packages.debian.org/search?keywords=lua-filesystem",
+      "homepage_kind": "package-index",
+      "id": "pkg:debian:lua-filesystem",
+      "license": "unknown",
+      "license_family": "unknown",
+      "license_source": "none",
+      "link": "container-image",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
+      "name": "lua-filesystem",
+      "optional": true,
+      "pulled_by": [
+        "image:audio-studio",
+        "image:flutter",
+        "image:imagegen-cuda",
+        "image:imagegen-studio",
+        "image:web-wrangler",
+        "image:webkit"
+      ],
+      "source": "images/audio-studio/Containerfile",
+      "version": "1.8.0-3"
+    },
+    {
+      "homepage": "https://packages.debian.org/search?keywords=lua-lpeg",
+      "homepage_kind": "package-index",
+      "id": "pkg:debian:lua-lpeg",
+      "license": "unknown",
+      "license_family": "unknown",
+      "license_source": "none",
+      "link": "container-image",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
+      "name": "lua-lpeg",
+      "optional": true,
+      "pulled_by": [
+        "image:audio-studio",
+        "image:flutter",
+        "image:imagegen-cuda",
+        "image:imagegen-studio",
+        "image:web-wrangler",
+        "image:webkit"
+      ],
+      "source": "images/audio-studio/Containerfile",
+      "version": "1.0.2-2"
+    },
+    {
+      "homepage": "https://packages.debian.org/search?keywords=lua5.4",
+      "homepage_kind": "package-index",
+      "id": "pkg:debian:lua5.4",
+      "license": "unknown",
+      "license_family": "unknown",
+      "license_source": "none",
+      "link": "container-image",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
+      "name": "lua5.4",
+      "optional": true,
+      "pulled_by": [
+        "image:audio-studio",
+        "image:flutter",
+        "image:imagegen-cuda",
+        "image:imagegen-studio",
+        "image:web-wrangler",
+        "image:webkit"
+      ],
+      "source": "images/audio-studio/Containerfile",
+      "version": "5.4.4-3+deb12u1"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=ninja-build",
@@ -58169,14 +58571,14 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "pulseaudio",
       "optional": true,
       "pulled_by": [
         "image:webkit"
       ],
       "source": "images/webkit/Containerfile",
-      "version": "unknown"
+      "version": "1:16.1+dfsg1-2ubuntu10.1"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=pulseaudio-utils",
@@ -58186,14 +58588,14 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "pulseaudio-utils",
       "optional": true,
       "pulled_by": [
         "image:webkit"
       ],
       "source": "images/webkit/Containerfile",
-      "version": "unknown"
+      "version": "1:16.1+dfsg1-2ubuntu10.1"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=rubberband-cli",
@@ -58203,14 +58605,14 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "rubberband-cli",
       "optional": true,
       "pulled_by": [
         "image:audio-studio"
       ],
       "source": "images/audio-studio/Containerfile",
-      "version": "unknown"
+      "version": "3.1.2+dfsg0-1"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=sox",
@@ -58220,14 +58622,14 @@
       "license_family": "unknown",
       "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "sox",
       "optional": true,
       "pulled_by": [
         "image:audio-studio"
       ],
       "source": "images/audio-studio/Containerfile",
-      "version": "unknown"
+      "version": "14.4.2+git20190427-3.5"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=unzip",
@@ -58287,18 +58689,18 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/bat/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:bat",
-      "license": "unknown",
-      "license_family": "unknown",
-      "license_source": "none",
+      "license": "Apache-2.0 AND BSD-2-Clause AND BSD-2-Clause-Views AND BSD-3-Clause AND CC-BY-SA-3.0 AND LGPL-3.0-or-later AND GPL-2.0-only WITH GCC-exception-2.0 AND MIT AND Unicode-3.0 AND Unicode-DFS-2016 AND Unlicense AND WTFPL AND (0BSD OR MIT OR Apache-2.0) AND (Apache-2.0 OR BSL-1.0) AND (Apache-2.0 OR MIT) AND (Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT) AND (MIT OR Apache-2.0 OR Zlib) AND (Unlicense OR MIT)",
+      "license_family": "permissive",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "bat",
       "optional": false,
       "pulled_by": [
         "image:default-base"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "0.26.1-4.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/black/",
@@ -58750,11 +59152,11 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/git/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:git",
-      "license": "unknown",
-      "license_family": "unknown",
-      "license_source": "none",
+      "license": "BSD-3-Clause AND GPL-2.0-only AND GPL-2.0-or-later AND LGPL-2.1-or-later AND MIT",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "git",
       "optional": false,
       "pulled_by": [
@@ -58762,7 +59164,7 @@
         "image:imagegen"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "2.56.1-1.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/git-delta/",
@@ -59093,18 +59495,18 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/jq/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:jq",
-      "license": "unknown",
+      "license": "MIT AND ICU AND CC-BY-3.0",
       "license_family": "unknown",
-      "license_source": "none",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "jq",
       "optional": false,
       "pulled_by": [
         "image:default-base"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "1.8.1-3.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/just/",
@@ -59315,52 +59717,61 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/lua/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:lua",
-      "license": "unknown",
-      "license_family": "unknown",
-      "license_source": "none",
+      "license": "MIT",
+      "license_family": "permissive",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "lua",
       "optional": false,
       "pulled_by": [
-        "image:default-base"
+        "image:chromium-core",
+        "image:default-base",
+        "image:imagegen",
+        "image:inference"
       ],
-      "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "source": "images/chromium/Containerfile.core",
+      "version": "5.4.8-5.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/lua-filesystem/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:lua-filesystem",
-      "license": "unknown",
-      "license_family": "unknown",
-      "license_source": "none",
+      "license": "MIT",
+      "license_family": "permissive",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "lua-filesystem",
       "optional": false,
       "pulled_by": [
-        "image:default-base"
+        "image:chromium-core",
+        "image:default-base",
+        "image:imagegen",
+        "image:inference"
       ],
-      "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "source": "images/chromium/Containerfile.core",
+      "version": "1.8.0-16.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/lua-lpeg/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:lua-lpeg",
-      "license": "unknown",
-      "license_family": "unknown",
-      "license_source": "none",
+      "license": "MIT",
+      "license_family": "permissive",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "lua-lpeg",
       "optional": false,
       "pulled_by": [
-        "image:default-base"
+        "image:chromium-core",
+        "image:default-base",
+        "image:imagegen",
+        "image:inference"
       ],
-      "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "source": "images/chromium/Containerfile.core",
+      "version": "1.1.0-7.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/make/",
@@ -59470,18 +59881,18 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/ncurses/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:ncurses",
-      "license": "unknown",
-      "license_family": "unknown",
-      "license_source": "none",
+      "license": "MIT-open-group",
+      "license_family": "permissive",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "ncurses",
       "optional": false,
       "pulled_by": [
         "image:default-base"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "6.6-1.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/ncurses-term/",
@@ -60102,18 +60513,18 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/unzip/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:unzip",
-      "license": "unknown",
+      "license": "Info-ZIP",
       "license_family": "unknown",
-      "license_source": "none",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "unzip",
       "optional": false,
       "pulled_by": [
         "image:default-base"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "6.0-69.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/uv/",
@@ -60991,15 +61402,15 @@
   "schema": "tillandsias-stack/v1",
   "summary": {
     "components": 57,
-    "edges": 3113,
+    "edges": 3155,
     "license_families": {
       "model": 7,
-      "permissive": 1712,
+      "permissive": 1720,
       "service": 15,
-      "strong-copyleft": 25,
-      "unknown": 162,
+      "strong-copyleft": 27,
+      "unknown": 158,
       "weak-copyleft": 20
     },
-    "nodes": 1941
+    "nodes": 1947
   }
 }

@@ -3,7 +3,7 @@
 #
 # host-capability-probe.sh — emit this host's capability row (Linux/macOS
 # bare-metal and forge loci), the sibling of
-# scripts/windows-host-capability-probe.sh, which remains the generator for
+# scripts/lua/windows-host-capability-probe.lua, which remains the generator for
 # the windows-host locus.
 #
 # WHY (order 850-bif2). The capability matrix was silent for 5 of 7 hosts —

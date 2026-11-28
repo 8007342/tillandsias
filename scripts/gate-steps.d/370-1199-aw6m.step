@@ -17,15 +17,15 @@
 #
 # STEP_SCRIPT is a LITERAL path (1063-nraf).
 STEP_DESC="Checking an offer carries the host constraint its row already states (1199-aw6m)"
-STEP_SCRIPT="scripts/test-selector-flags-host-scoped-criteria.sh"
+STEP_LUA="scripts/lua/test-selector-flags-host-scoped-criteria.lua"
 STEP_ERROR="the selector's host-scoped annotation regressed (1199-aw6m) — either a row whose exit criteria name other hosts is being offered unmarked (so hosts keep claiming and releasing work they cannot close, as lenovinha did with 1132-r4mt), or the mark has widened into a blanket annotation, or worse it has begun WITHHOLDING rows; see the failing arm above"
 STEP_OK="selector host-scoped criteria annotation check passed"
 # Exit 3 now means only that no runnable plan binary resolved (or mktemp failed):
 # the ledger is the fixture's own, so a batch with no host-scoped row cannot occur.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="no runnable tillandsias-plan resolved, so the selector could not be driven"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:host-scoped-criteria:6"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:selector-flags-host-scoped-criteria:6 arms (work/2380-psba @ 9943432f7)"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="plan/index.d/** plan/index.yaml scripts/plan-binary-probe.sh scripts/select-work-batch.sh scripts/test-selector-flags-host-scoped-criteria.sh"
+STEP_READS="plan/index.d/** plan/index.yaml scripts/plan-binary-probe.sh scripts/select-work-batch.sh scripts/lua/test-selector-flags-host-scoped-criteria.lua"

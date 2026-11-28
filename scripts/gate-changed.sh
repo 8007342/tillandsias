@@ -53,6 +53,13 @@
 #   * a change that cannot be scoped (exit 10 below) prints `heavy:<reason>`
 #     and runs nothing: the lander marks the member HEAVY rather than
 #     running everything at intake.
+#
+# CHECKS (2282-asxn, relay-preflight). `--checks` keeps only the selected
+# scripts/**/check-* deciders (no test-* fixture, no crate), whole-tree readers
+# included: they are the tree-only answers the queue evicts on. A change that
+# cannot be scoped selects EVERY check-* decider, never none. A header declaring
+# `preflight: gate-only — <reason>` is left out and named on a deferred: line.
+#
 # Without --intake every line and exit code is exactly today's.
 #
 # Usage:
@@ -60,6 +67,10 @@
 #   gate-changed.sh --run  [base]   run the selection (build.sh --changed)
 #   gate-changed.sh --map           print the derived input map
 #   --intake                        the bundle intake gate (see INTAKE above)
+#   --check-declared                the decider for declared inputs (2261-8gx5):
+#                                   every literal repo file a declaring fixture
+#                                   names must be covered by its declaration
+#   --checks                        only the check-* deciders (see CHECKS above)
 #   --crate-graph                   print the derived path-dependency edges
 #                                   (<crate dir> TAB <dep dir>) and exit; the
 #                                   metadata lint compares them to cargo's
@@ -75,17 +86,19 @@ set -uo pipefail
 ROOT="${TILLANDSIAS_GATE_CHANGED_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 MODE="--list"
 INTAKE=0
+CHECKS=0
 BASE=""
 FILES_FROM=""
 while [ $# -gt 0 ]; do
     case "$1" in
-        --list|--run|--map|--crate-graph) MODE="$1" ;;
+        --list|--run|--map|--crate-graph|--check-declared) MODE="$1" ;;
         --intake) INTAKE=1 ;;
+        --checks) CHECKS=1 ;;
         --files) FILES_FROM="${2:-}"; shift ;;
         -h|--help) sed -n '2,75p' "${BASH_SOURCE[0]}"; exit 0 ;;
         -*) echo "refused:gate-changed:unknown-flag:$1" >&2
             echo "  why: an unknown flag would be read as the base ref and diff against nothing meaningful" >&2
-            echo "  remedy: use --list, --run, --map, --crate-graph, --intake or --files <file>, then an optional base ref (see --help)" >&2
+            echo "  remedy: use --list, --run, --map, --crate-graph, --check-declared, --intake, --checks or --files <file>, then an optional base ref (see --help)" >&2
             exit 2 ;;
         *) BASE="$1" ;;
     esac
@@ -181,7 +194,15 @@ xargs grep -HnE '/|\.(sh|lua|awk|py|yaml|toml|json|txt|tsv|md)' < "$WORK/srcs" 2
 awk -F'\t' -v W="$WORK" '
 function add(f, r, t,   k) { k = f SUBSEP r; if (!(k in E) || (E[k] == "r" && t == "x")) E[k] = t }
 function dirof(p,   q) { q = p; if (q !~ /\//) return ""; sub(/\/[^\/]*$/, "", q); return q }
-function resolve(tok, from,   t, g, i) {
+# 2422-4yak: stripping leading components until a path exists is how "$ROOT/scripts"
+# resolves, but it also turned every UNRESOLVED token ending in a top-level name
+# into that whole directory: Cloudflare API URLs (".../workers/scripts") made
+# tillandsias-headless read all of scripts/, and scratch trees ("$d/scripts",
+# "$WORK/crates") did the same. A strip that lands on a bare top-level directory
+# counts only when the component it dropped last is a repo-root name; anything
+# else resolves to nothing (an unresolved token, never a guess at an input).
+function trusted_root(c) { return c ~ /^(ROOT|REPO_ROOT|REPO|TOP|SCRIPT_DIR|repo|root|\.\.)$/ }
+function resolve(tok, from, ctx,   t, g, i, last) {
     t = tok
     gsub(/[{}]/, "", t)
     if (t ~ /\*/) {                     # glob -> its static prefix directory
@@ -189,10 +210,18 @@ function resolve(tok, from,   t, g, i) {
         if (t == "") return ""
     }
     sub(/\/+$/, "", t)
+    # A token that STARTS with / was cut after its root: ROOT .. "/x" and "$ROOT"/x
+    # tokenise as "/x". ctx is the identifier just before it, so the root is judged too.
+    last = ""
+    if (t ~ /^\//) last = ctx
     for (i = 0; i < 8 && t != ""; i++) {
         if (t in F) return t
-        if (t in D) return t "/"
+        if (t in D) {
+            if (i > 0 && t !~ /\// && !trusted_root(last)) return ""
+            return t "/"
+        }
         if (t !~ /\//) break
+        if (t !~ /^\//) { last = t; sub(/\/.*/, "", last) }
         sub(/^[^\/]*\//, "", t)
     }
     # a bare basename resolves against the referring file directory
@@ -202,6 +231,12 @@ function resolve(tok, from,   t, g, i) {
 FILENAME == W "/files" { F[$0] = 1; n = split($0, c, "/"); p = ""; for (i = 1; i < n; i++) { p = (p == "" ? c[i] : p "/" c[i]); D[p] = 1 } next }
 FILENAME == W "/tokens" {
     line = $0; f = line; sub(/:.*/, "", f); text = line; sub(/^[^:]*:[0-9]+:/, "", text)
+    # 2261-8gx5 (1): a shell `case` ARM is a pattern, not a read. Its text up to
+    # the arm-closing `)` — `scripts/*|build.sh|flake.nix)` — names paths only to
+    # classify one; gate-stamp.sh:174 made all 13 of its executors read the whole
+    # scripts/ directory. A function definition `name()` and a subshell `( … )`
+    # do not match: the arm text may not contain `(`.
+    if (text ~ /^[[:space:]]*[^[:space:];()#]+(\|[^[:space:];()]+)*\)/) sub(/^[[:space:]]*[^[:space:];()#]+(\|[^[:space:];()]+)*\)/, "", text)
     # An EXECUTED or SOURCED script is followed (its inputs become ours); any
     # other named path is a leaf the source reads. Following mere mentions
     # made every fixture reach build.sh and so every script (measured: 347 of
@@ -215,12 +250,35 @@ FILENAME == W "/tokens" {
         for (i = 1; i <= m; i++) if (w[i] in D) { add(f, w[i] "/", "r"); nres++ }
     }
     while (match(text, /[A-Za-z0-9_.@*{}-]*\/[A-Za-z0-9_.\/*@-]+|[A-Za-z0-9_.-]+\.(sh|lua|awk|py|yaml|toml|json|txt|tsv|md)/)) {
+        pre = (RSTART > 1) ? substr(text, RSTART - 1, 1) : ""
+        before = substr(text, 1, RSTART - 1)
         tok = substr(text, RSTART, RLENGTH); text = substr(text, RSTART + RLENGTH)
-        r = resolve(tok, f)
+        # 2422-4yak: the path part of a URL ("https://host/...") is not a repo path.
+        if (pre == ":" || tok ~ /^\/\//) continue
+        # ctx: the identifier just before the token across quotes, $, braces, spaces
+        # and the Lua .. operator (ROOT .. "/x" -> ROOT; d.abs .. "/x" -> abs).
+        ctx = substr(before, 1); sub(/[ "$(){}.]*$/, "", ctx)
+        if (match(ctx, /[A-Za-z_][A-Za-z0-9_]*$/)) ctx = substr(ctx, RSTART); else ctx = ""
+        r = resolve(tok, f, ctx)
         if (r == "" || r == f || r == "/") continue
         nres++
+        # 2423-86ca: a token that stops at a $ ("$ROOT/scripts/${name}.sh") names a
+        # directory only because the name is dynamic, as does a Lua concatenation
+        # (ROOT .. "/scripts/" .. name). Record it apart from a WHOLE
+        # read (a glob, a find or ls, a plain mention), and from a LITERAL file
+        # under the directory; END narrows the dynamic edge when the file has both
+        # a literal and no whole read of that directory.
+        if (r ~ /^scripts\/(.*\/)?$/) {
+            if ((substr(text, 1, 1) == "$" || text ~ /^["\047][[:space:]]*\.\./) && tok !~ /\*/) { DYN[f, r] = 1; continue }
+            WHOLE[f, r] = 1
+        } else if (r ~ /^scripts\// && r !~ /\/$/) LIT[f, r] = 1
         add(f, r, (ex == "x" && r ~ /\.(sh|lua)$/) ? "x" : "r")
     }
+    # 2423-86ca: a census that names the directory without a slash
+    # (fs.walk("scripts"), find scripts, git ls-files scripts) reads it whole; the
+    # token loop above never sees a bare word, so record it here. Without this a
+    # narrowed file that walks scripts/ would select on no script change.
+    if (full ~ /(fs\.(walk|list|glob|dir)|(^|[^A-Za-z_])(ls|find)[[:space:]]|ls-files)/ && full ~ /(["\047 (]|^)scripts\/?(["\047 ),]|$)/) { WHOLE[f, "scripts/"] = 1; add(f, "scripts/", "r") }
     # TREE SCANS read "*": a repo-wide git listing with no pathspec (not one
     # run inside a scratch repo via -C "$tmp"), a recursive grep/find/rg aimed
     # at the repo root, or a glob over every root entry.
@@ -231,12 +289,67 @@ FILENAME == W "/tokens" {
 }
 FILENAME == W "/scanlines" { f = $0; sub(/:.*/, "", f); ALL[f] = 1; next }
 END {
+    # 2423-86ca: a dynamic directory edge stays unless the same file names a
+    # literal file under that directory and reads none of it whole (a census).
+    # It also stays when one of those literals ITSELF reads the directory
+    # dynamically or whole: the names may be DATA that literal holds
+    # (test-host-tools.sh runs the provers check-host-tools.sh lists).
+    for (k in DYN)   { split(k, kk, SUBSEP); RD[kk[1], kk[2]] = 1 }
+    for (k in WHOLE) { split(k, kk, SUBSEP); RD[kk[1], kk[2]] = 1 }
+    for (k in DYN) {
+        split(k, kk, SUBSEP); keep = 1
+        if (!((kk[1], kk[2]) in WHOLE)) for (j in LIT) { split(j, jj, SUBSEP); if (jj[1] == kk[1] && index(jj[2], kk[2]) == 1) { if ((jj[2], kk[2]) in RD) { keep = 1; break } keep = 0 } }
+        if (keep) add(kk[1], kk[2], "r")
+    }
     for (k in E) { split(k, kk, SUBSEP); print kk[1] "\t" kk[2] "\t" E[k] > (W "/edges") }
     ALL["build.sh"] = 1   # a fixture that RUNS build.sh depends on all of it
     for (f in ALL) print f > (W "/allsrc")
 }
 ' "$WORK/files" "$WORK/tokens"
 touch "$WORK/edges" "$WORK/allsrc"
+
+# ── 4b. Declared inputs (2261-8gx5 (4)) ─────────────────────────────────────
+# A fixture may DECLARE what it reads, in its first 40 lines:
+#     # inputs: scripts/foo.sh scripts/lua/bar.lua openspec/litmus-tests/
+#     -- inputs: …                         (a Lua fixture)
+# The selector then trusts the declaration over the derived closure. The
+# derived one is conservative on purpose: a dynamic path such as
+# "$ROOT/scripts/${name}.sh" stops at the `$` and reads the WHOLE scripts/
+# directory, which is why ~87 fixtures selected on any script change (measured
+# 2026-11-23). --check-declared holds a declaration honest: every literal repo
+# file the fixture names itself must be covered (exactly, or by a declared
+# directory prefix ending in /).
+: > "$WORK/decl"
+while IFS=$'\t' read -r _did _drun _dpath _drest; do
+    [ -f "$_dpath" ] || continue
+    _dl="$(awk 'NR > 40 { exit } /^(#|--) inputs:/ { sub(/^(#|--) inputs:[[:space:]]*/, ""); print; exit }' "$_dpath" 2>/dev/null)"
+    [ -n "$_dl" ] || continue
+    for _di in $_dl; do printf '%s\t%s\n' "$_dpath" "$_di"; done
+done < "$WORK/pop" >> "$WORK/decl"
+sort -u -o "$WORK/decl" "$WORK/decl"
+if [ "$MODE" = "--check-declared" ]; then
+    awk -F'\t' -v W="$WORK" '
+        FILENAME == W "/decl"  { D[$1] = D[$1] " " $2; next }
+        FILENAME == W "/edges" {
+            if (!($1 in D) || $2 ~ /\/$/ || $2 == "*" || $2 == $1) next
+            n = split(D[$1], d, " "); ok = 0
+            for (i = 1; i <= n; i++) if (d[i] != "" && ($2 == d[i] || (d[i] ~ /\/$/ && index($2, d[i]) == 1))) { ok = 1; break }
+            if (!ok) { print "undeclared:" $1 ":" $2; bad++ }
+            next
+        }
+        END { exit bad > 0 }' "$WORK/decl" "$WORK/edges" > "$WORK/undeclared"
+    _ud=$?
+    _nd="$(cut -f1 "$WORK/decl" | sort -u | grep -c .)"
+    if [ "$_ud" -ne 0 ]; then
+        cat "$WORK/undeclared"
+        echo "violation:gate-changed-declared-inputs:$(wc -l < "$WORK/undeclared" | tr -d ' ') declaring=$_nd"
+        echo "  why: a declared fixture is selected ONLY by its declaration, so a file it reads but does not declare would never select it" >&2
+        echo "  remedy: add each undeclared path (or a directory prefix ending in /) to the fixture's inputs: line" >&2
+        exit 1
+    fi
+    # 2263-6xsp: no exit yet — the on-touch hint below needs the map.
+    _CD_OK="ok:gate-changed-declared-inputs:$_nd declaring"
+fi
 
 # ── 5. Close each fixture and each crate over its inputs ────────────────────
 # Output map lines: <unit> <TAB> <input>  where unit is fx:<path>[ args] or
@@ -261,7 +374,18 @@ function close_over(start, unit,   q, h, t, cur, n, parts, i, x) {
 }
 FILENAME == W "/edges"   { ADJ[$1] = ADJ[$1] "\t" $2; TY[$1 SUBSEP $2] = $3; next }
 FILENAME == W "/allsrc"  { ALLSRC[$1] = 1; next }
-FILENAME == W "/pop"     { u = "fx:" $3 ($4 == "" ? "" : " " $4); close_over($3, u); if ($7 != "") print u "\t" $7; next }
+FILENAME == W "/decl"    { DECL[$1] = DECL[$1] "\t" $2; next }
+FILENAME == W "/pop"     {
+    u = "fx:" $3 ($4 == "" ? "" : " " $4)
+    if ($3 in DECL) {
+        # 2261-8gx5: a declaring fixture reads itself, its declaration and its .step
+        print u "\t" $3
+        n = split(DECL[$3], parts, "\t")
+        for (i = 1; i <= n; i++) if (parts[i] != "") print u "\t" parts[i]
+    } else close_over($3, u)
+    if ($7 != "") print u "\t" $7
+    next
+}
 FILENAME == W "/crates"  {
     unit = "crate:" $1
     print unit "\t" $1 "/"
@@ -273,7 +397,32 @@ FILENAME == W "/crates"  {
     }
     next
 }
-' "$WORK/edges" "$WORK/allsrc" "$WORK/pop" "$WORK/crates" | sort -u > "$WORK/map"
+' "$WORK/edges" "$WORK/allsrc" "$WORK/decl" "$WORK/pop" "$WORK/crates" | sort -u > "$WORK/map"
+
+# ORDER 2263-6xsp — DECLARE ON TOUCH. An ADVISORY, never a refusal: a change
+# that edits a scripts/test-* fixture which reads the WHOLE scripts/ directory
+# and declares nothing gets one hint naming `# inputs:`, so each fixture's
+# owner narrows it when they are already there (2261-8gx5 measured ~5 fixtures,
+# ~13 s of intake on a scripts change, per hand-verified batch). The exit code
+# stays the decider's.
+if [ "$MODE" = "--check-declared" ]; then
+    _hb="${BASE:-${TILLANDSIAS_GATE_DIFF_BASE:-}}"
+    [ -n "$_hb" ] || _hb="$(git merge-base HEAD origin/linux-next 2>/dev/null)" || _hb=""
+    if [ -n "$_hb" ] && git rev-parse --verify -q "$_hb^{commit}" >/dev/null; then
+        { git diff --name-only "$_hb" --; git ls-files --others --exclude-standard; } 2>/dev/null | sort -u |
+            grep -E '^scripts/(lua/)?test-[^/]+\.(sh|lua)$' > "$WORK/hint-changed" || true
+        while IFS= read -r _hf; do
+            [ -f "$_hf" ] || continue
+            grep -q "^$_hf	" "$WORK/decl" && continue
+            if awk -F'\t' -v u="fx:$_hf" '($1 == u || index($1, u " ") == 1) && $2 == "scripts/" { f = 1 } END { exit !f }' "$WORK/map"; then
+                _hs='#'; case "$_hf" in *.lua) _hs='--' ;; esac
+                echo "note:gate-changed-declared-inputs:hint:$_hf reads the whole scripts/ directory and declares nothing — this change touches it, so add \`$_hs inputs: <paths>\` to its header (the decider holds it honest), unless it genuinely scans the live tree (2263-6xsp)"
+            fi
+        done < "$WORK/hint-changed"
+    fi
+    echo "$_CD_OK"
+    exit 0
+fi
 
 if [ "$MODE" = "--map" ]; then
     cat "$WORK/map"
@@ -398,6 +547,25 @@ END { h = 1; while (h <= t) { c = q[h++]; print c; n = split(R[c], p, " ")
 awk -F'\t' 'NR == FNR { N[$1] = $2; next } ($0 in N) { print N[$0] }' "$WORK/crates" "$WORK/crate-sel" > "$WORK/pkg-sel"
 
 awk -F'\t' '$1 == "sel" && $2 ~ /^fx:/ { sub(/^fx:/, "", $2); print $2 "\t" $3 }' "$WORK/sel" | sort > "$WORK/fx-sel"
+if [ "$CHECKS" = 1 ]; then
+    if [ -n "$_why_all" ]; then
+        echo "select:checks-all reason=$_why_all"
+        awk -F'\t' '{ print $1 ($4 == "" ? "" : " " $4) "\tall" }' "$WORK/pop" > "$WORK/fx-sel"
+        _why_all=""
+    fi
+    : > "$WORK/fx-chk"; : > "$WORK/fx-chk-def"
+    while IFS=$'\t' read -r _u _why; do
+        _fp="${_u%% *}"
+        case "${_fp##*/}" in check-*) ;; *) continue ;; esac
+        if [ -n "$(awk 'NR > 40 { exit } /preflight: gate-only-decider/ { next } /^(#|--) preflight: gate-only/ { print; exit }' "$_fp" 2>/dev/null)" ]; then
+            printf '%s\n' "$_u" >> "$WORK/fx-chk-def"
+        else
+            printf '%s\t%s\n' "$_u" "$_why" >> "$WORK/fx-chk"
+        fi
+    done < "$WORK/fx-sel"
+    sort -u "$WORK/fx-chk" > "$WORK/fx-sel"; : > "$WORK/pkg-sel"; : > "$WORK/crate-hit"
+    [ ! -s "$WORK/fx-chk-def" ] || echo "deferred:checks $(tr '\n' ' ' < "$WORK/fx-chk-def")"
+fi
 FX_N="$(wc -l < "$WORK/fx-sel" | tr -d ' ')"
 PKG_N="$(wc -l < "$WORK/pkg-sel" | tr -d ' ')"
 CRATE_TOTAL="$(wc -l < "$WORK/crates" | tr -d ' ')"
@@ -494,6 +662,44 @@ case "$_plan" in ./*) _plan="$ROOT/${_plan#./}" ;; esac
 . "$ROOT/scripts/timing-log.sh" 2>/dev/null || true
 _now() { if command -v timing_now_ms >/dev/null 2>&1; then timing_now_ms; else echo $(( $(date +%s) * 1000 )); fi; }
 _t0="$(_now)"; _fail=0; _ran=0
+
+# ORDER 2256-mvmy — A PLAN-ONLY DIFF GOES TO THE PLAN LANE. Operator-approved
+# 2026-11-20: plan changes get the plan-lane checks, never a build-check; at
+# intake a plan-only follow-up took 247 s and 91 fixtures (2249-tif9 sample).
+# The lane's own validators, each over this diff: `check --strict-fragments`
+# and the fragment deciders the pre-push plan-only lane runs (its Lua port
+# where one exists). One route:plan-lane line, then their verdicts.
+if [ "$INTAKE" = 1 ] && ! grep -qvE '^plan/' "$WORK/changed"; then
+    echo "route:plan-lane changed=$CHANGED_N (every path under plan/)"
+    _ps="$(_now)"
+    if [ -z "$_plan" ]; then
+        echo "fail:gate-changed:plan-lane:no-plan-binary"; exit 1
+    fi
+    if ! _o="$("$_plan" check --strict-fragments 2>&1)"; then
+        printf '%s\n' "$_o" | tail -n 20; echo "fail:gate-changed:plan-lane:check-strict-fragments"; _fail=$((_fail + 1))
+    else
+        echo "ok:gate-changed:plan-lane:check-strict-fragments"
+    fi
+    for _pd in check-added-fragments-parse check-scorable-obligation-added check-fragment-status-loss \
+               check-fragment-ts-skew check-issue-citation-convention check-mo-full-attestations; do
+        if [ -f "$ROOT/scripts/lua/$_pd.lua" ]; then
+            _o="$(TILLANDSIAS_GATE_DIFF_BASE="$BASE" TILLANDSIAS_SCRIPT_RUNNER_BIN="$_plan" "$_plan" script run "$ROOT/scripts/lua/$_pd.lua" 2>&1)"; _rc=$?
+        elif [ -f "$ROOT/scripts/$_pd.sh" ]; then
+            _o="$(TILLANDSIAS_GATE_DIFF_BASE="$BASE" bash "$ROOT/scripts/$_pd.sh" 2>&1)"; _rc=$?
+        else
+            echo "skip:gate-changed:plan-lane:$_pd:absent"; continue
+        fi
+        if [ "$_rc" -ne 0 ]; then
+            printf '%s\n' "$_o" | tail -n 20; echo "fail:gate-changed:plan-lane:$_pd rc=$_rc"; _fail=$((_fail + 1))
+        else
+            echo "ok:gate-changed:plan-lane:$_pd"
+        fi
+    done
+    echo "phase:plan-lane ms=$(( $(_now) - _ps ))"
+    if [ "$_fail" -gt 0 ]; then echo "fail:gate-changed:intake:plan-lane $_fail-failed ms=$(( $(_now) - _t0 ))"; exit 1; fi
+    echo "ok:gate-changed:intake:plan-lane ms=$(( $(_now) - _t0 ))"
+    exit 0
+fi
 if [ "$PKG_N" -gt 0 ]; then
     _pk=(); while IFS= read -r _p; do _pk+=(-p "$_p"); done < "$WORK/pkg-sel"
     _tr="$ROOT/target/test-transcript-changed.log"; mkdir -p "$ROOT/target"
@@ -502,6 +708,14 @@ if [ "$PKG_N" -gt 0 ]; then
     if [ "$INTAKE" = 1 ] && [ "${TILLANDSIAS_GATE_NEXTEST:-auto}" != 0 ]; then
         _nx="$(cargo nextest --version 2>/dev/null)" || _nx=""
         _nx="${_nx%%$'\n'*}"
+    fi
+    # 2256-mvmy: the build is its own phase, so the breakdown can say which
+    # part of intake to cut (the test runs below then start from warm binaries).
+    if [ "$INTAKE" = 1 ]; then
+        _bs="$(_now)"
+        cargo test --no-run "${_pk[@]}" --manifest-path "$ROOT/Cargo.toml" > "$WORK/build.log" 2>&1 || true
+        echo "phase:cargo-build ms=$(( $(_now) - _bs ))"
+        _s="$(_now)"
     fi
     if [ -n "$_nx" ]; then
         # The crates that CHANGED, each with its reverse-dep closure, as one
@@ -512,15 +726,34 @@ if [ "$PKG_N" -gt 0 ]; then
             [ -n "$_n" ] && _fs="${_fs:+$_fs | }rdeps($_n)"
         done < "$WORK/crate-hit"
         echo "runner:nextest:${_nx#cargo-nextest } filter=$_fs"
-        cargo nextest run --workspace --no-fail-fast -E "$_fs" --manifest-path "$ROOT/Cargo.toml" > "$WORK/nextest.log" 2>&1
+        # Under target/, never $WORK in /tmp: the converter reads only inside the
+        # repository, and a refused read made every green run here read red (2285-jvg6).
+        _nx_log="$ROOT/target/nextest-changed.log"
+        cargo nextest run --workspace --no-fail-fast -E "$_fs" --manifest-path "$ROOT/Cargo.toml" > "$_nx_log" 2>&1
         _crc=$?
         # The baseline check reads cargo test's transcript shape.
-        if [ -n "$_plan" ]; then
-            ( cd "$ROOT" && "$_plan" script run --helper scripts/lua/nextest-to-libtest.lua -- "$WORK/nextest.log" ) > "$_tr" 2>/dev/null \
-                || cp "$WORK/nextest.log" "$_tr"
-        else
-            cp "$WORK/nextest.log" "$_tr"
+        _conv_bad=1
+        _conv="no plan binary with \`script run\` resolves"
+        if [ -n "$_plan" ] && ( cd "$ROOT" && "$_plan" script run --helper scripts/lua/nextest-to-libtest.lua -- "$_nx_log" ) > "$_tr" 2> "$WORK/conv.err"; then
+            _conv_bad=0
+        elif [ -n "$_plan" ]; then
+            _conv="$(cat "$WORK/conv.err" "$_tr")"; _conv="${_conv:-the converter failed and printed nothing}"
         fi
+        echo "phase:nextest ms=$(( $(_now) - _s ))"
+        # 2256-mvmy: nextest runs no doctests, and the gate adds them after the
+        # converted log (build.sh, 2243-urcy); those `test result:` lines are
+        # what check-test-baseline counts. Without them a green nextest run
+        # read as no-test-results. Only crates with a lib target have any.
+        _ds="$(_now)"; _dk=()
+        while IFS= read -r _d; do
+            [ -f "$ROOT/$_d/src/lib.rs" ] || continue
+            _n="$(awk -F'\t' -v d="$_d" '$1 == d { print $2 }' "$WORK/crates")"
+            [ -n "$_n" ] && _dk+=(-p "$_n")
+        done < "$WORK/crate-sel"
+        if [ "${#_dk[@]}" -gt 0 ]; then
+            cargo test --doc --no-fail-fast "${_dk[@]}" --manifest-path "$ROOT/Cargo.toml" >> "$_tr" 2>&1 || _crc=$?
+        fi
+        echo "phase:doctests ms=$(( $(_now) - _ds )) crates=$(( ${#_dk[@]} / 2 ))"
     else
         if [ "$INTAKE" = 1 ]; then
             if [ "${TILLANDSIAS_GATE_NEXTEST:-auto}" = 0 ]; then echo "runner:cargo-test:forced-by-TILLANDSIAS_GATE_NEXTEST=0"
@@ -528,8 +761,13 @@ if [ "$PKG_N" -gt 0 ]; then
         fi
         cargo test --no-fail-fast "${_pk[@]}" --manifest-path "$ROOT/Cargo.toml" > "$_tr" 2>&1
         _crc=$?
+        [ "$INTAKE" = 1 ] && echo "phase:cargo-test ms=$(( $(_now) - _s ))"
     fi
-    if ! _v="$(bash scripts/check-test-baseline.sh --from "$_tr")"; then
+    if [ "${_conv_bad:-0}" = 1 ]; then
+        echo "fail:gate-changed:nextest-transcript log=$_nx_log rc=$_crc — the result log could not be converted, so the tests were not judged"
+        printf '%s\n' "$_conv" | sed 's/^/  /'
+        _fail=$((_fail + 1))
+    elif ! _v="$(bash scripts/check-test-baseline.sh --from "$_tr")"; then
         tail -n 40 "$_tr"; echo "$_v"; echo "fail:gate-changed:cargo-test rc=$_crc transcript=$_tr"; _fail=$((_fail + 1))
     else
         echo "ok:gate-changed:cargo-test packages=$PKG_N ms=$(( $(_now) - _s ))"
@@ -585,7 +823,14 @@ _fx_one() { # _fx_one <n> <runner> <path> <args> <adv>
     case "$5" in skip=*) [ "$_rc" = "${5#skip=}" ] && _rc=0 ;; 1) _rc=0 ;; esac
     echo "$(( $(_now) - _s ))" > "$_o.ms"; echo "$_rc" > "$_o.rc"
 }
-: > "$WORK/fx.order"
+: > "$WORK/fx.order"; : > "$WORK/fx.serial"
+# 2256-mvmy: the loop reads a FILE, never a process substitution. A serial
+# row calls `wait`, and on the real tree (population > the 64 KB pipe buffer)
+# that wait sat on the `tr` feeding the loop while `tr` blocked writing to the
+# pipe only the waiting loop drains: measured on lenovinha, the intake run in
+# do_wait for 46 min with tr in anon_pipe_write and no fixture started.
+tr '\t' '\037' < "$WORK/pop" > "$WORK/pop.us"
+_fxs="$(_now)"
 while IFS=$'\037' read -r _id _runner _path _args _adv _desc _rest; do
     grep -qxF -- "$_id${_args:+ $_args}" "$WORK/fx-sel.ids" || continue
     _ran=$((_ran + 1))
@@ -594,14 +839,37 @@ while IFS=$'\037' read -r _id _runner _path _args _adv _desc _rest; do
         echo "could-not-run:gate-changed:no-plan-binary:$_path" > "$WORK/fx.$_ran.out"
         echo 127 > "$WORK/fx.$_ran.rc"; echo 0 > "$WORK/fx.$_ran.ms"; continue
     fi
-    if [ -n "$(sed -n '1,40{/^# preflight: serial/p;/^-- preflight: serial/p;}' "$ROOT/$_path" 2>/dev/null | head -n 1)" ]; then
+    # 2256-mvmy: at intake, run serially everything --check never runs beside
+    # another fixture: an inline build.sh block (serial by construction; such a
+    # row names no .step file) and a .step declaring STEP_SERIAL. Only an
+    # undeclared .step is known pool-safe — it is what the gate-steps pool
+    # already runs concurrently. Measured on 10 landed-green merges: the pool
+    # ran these side by side and every scoped run reported 7-13 false reds.
+    # (Without --intake the loop keeps its header-only rule; legacy --changed
+    # has the same defect and is a developer loop, so it is left as it was.)
+    _ser=0
+    [ -n "$(awk 'NR > 40 { exit } /^(#|--) preflight: serial/ { print; exit }' "$ROOT/$_path" 2>/dev/null)" ] && _ser=1
+    if [ "$INTAKE" = 1 ]; then
+        _sf="${_rest%%$'\037'*}"
+        if [ -z "$_sf" ]; then _ser=1
+        elif grep -q '^STEP_SERIAL=' "$ROOT/$_sf" 2>/dev/null; then _ser=1; fi
+    fi
+    if [ "$_ser" = 1 ]; then
+        printf '%s\n' "$_ran" >> "$WORK/fx.serial"
         wait; _fx_one "$_ran" "$_runner" "$_path" "$_args" "$_adv"
     else
         _fx_wait_below "$_jobs"
         _fx_one "$_ran" "$_runner" "$_path" "$_args" "$_adv" &
     fi
-done < <(tr '\t' '\037' < "$WORK/pop")
+done < "$WORK/pop.us"
 wait
+if [ "$INTAKE" = 1 ]; then
+    _sms=0; _sn=0
+    while IFS= read -r _n; do _sms=$(( _sms + $(cat "$WORK/fx.$_n.ms" 2>/dev/null || echo 0) )); _sn=$((_sn + 1)); done < "$WORK/fx.serial"
+    _fxw=$(( $(_now) - _fxs ))
+    echo "phase:serial-fixtures ms=$_sms n=$_sn"
+    echo "phase:pool ms=$(( _fxw > _sms ? _fxw - _sms : 0 )) n=$(( _ran - _sn ))"
+fi
 while IFS=$'\t' read -r _n _path; do
     _rc="$(cat "$WORK/fx.$_n.rc" 2>/dev/null || echo 125)"; _ms="$(cat "$WORK/fx.$_n.ms" 2>/dev/null || echo 0)"
     if [ "$_rc" -ne 0 ]; then

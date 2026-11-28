@@ -1,0 +1,30 @@
+# @trace spec:methodology-accountability
+# @trace order:2423-86ca
+#
+# Order 2423-86ca: gate-changed.sh cut a dynamic path ("$ROOT/scripts/${name}.sh",
+# ROOT .. "/scripts/" .. name) at the $ and mapped its file to the whole scripts/
+# directory. It now narrows to the file's literal names under scripts/, only when
+# the file names one, reads none of the directory whole (glob, find, ls, fs.walk),
+# and none of those literals itself reads the directory (the names may be data it
+# holds: test-host-tools.sh runs the provers check-host-tools.sh lists).
+name: litmus:gate-changed-dynamic-path-narrows
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Pin 2423-86ca on a stub tree: a dynamic path plus a literal subject narrows (shell
+  and Lua), and every way the narrowing could drop a real read keeps the whole
+  scripts/ directory: a glob census, a find, an fs.walk, a dynamic path with no
+  literal, a subject that reads scripts/ dynamically (closure), and names taken
+  as data from a literal script that reads scripts/ whole.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/lua/test-gate-changed-dynamic-path-narrows.lua
+  - a runnable tillandsias-plan is resolvable
+
+critical_path:
+  - step: "a dynamic scripts/ path narrows to literal names, and every census or data-driven read keeps the whole directory"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-gate-changed-dynamic-path-narrows.lua 2>&1"
+    timeout_ms: 300000
+    expected_behavior: "ok:gate-changed-dynamic-path-narrows:8 arms"

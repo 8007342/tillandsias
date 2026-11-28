@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# doris-windows 2026-11-26: 2416-pscn implemented; the wider pcall(fs.read) sweep filed as 2417-jzhh.
+packets:
+  - packet_id: lua-checkers-that-pcall-fs-read-inside-a-listing-loop-count-an-unreadable-file-as-clean
+    order: 2417-jzhh
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [deciders, fail-closed, lua, sweep]
+    estimated_hours: 4
+    owned_files:
+      - scripts/lua
+    related: [2416-pscn]
+    title: |
+      Lua checkers that wrap fs.read in pcall inside a loop over a file listing drop an unreadable file silently, so they can report ok over files they never read
+    context: |
+      2416-pscn found check-podman-sync-budgets doing this (red: a real violation read ok:0). lines_matching
+      was local to that checker, not shared, so the hazard is the pattern: git grep finds 180 pcall(fs.read)
+      sites in 143 files, and about 27 scripts/lua/check-* files have one within three lines of a
+      for-ipairs loop over files, list, paths, fs.walk or fs.list (a heuristic count). Many pcall reads are
+      legitimate: optional files whose absence is a real state. The sweep must tell those from listing loops.
+    exit_criteria:
+      - Each check-* listing-loop site either blocks or refuses on an unreadable listed file (counted, named), or carries a one-line comment saying why skipping is correct.
+      - A guard refuses a new pcall(fs.read) inside a listing loop without that comment.
+      - Red first per converted site, where a fixture can make one file unreadable.
+    verifiable_closure: |
+      The guard reports 0 uncommented listing-loop sites, and each converted checker's fixture shows an unreadable listed file refused.
+    unscoreable: "no litmus or fixture scores the sweep yet; the guard in exit_criteria becomes the pin"
+    next_action: >
+      Triage the ~27 check-* sites (listing loop vs optional file) before converting any.
+status:
+  - packet_id: podman-sync-budgets-find-branch-reads-nothing-on-windows-and-reports-ok
+    field: status
+    value: implemented
+    ts: "2026-11-26T21:19:57Z"
+    host: doris
+  - packet_id: podman-sync-budgets-find-branch-reads-nothing-on-windows-and-reports-ok
+    field: next_action
+    value: "Implemented (doris). Every listed file is read once up front; one that cannot be read blocks (exit 2, blocked:podman-sync-bounded:unreadable:<n>, each named), never zero matches. On Windows the find listing is mapped through one cygpath -m call. fs.read still confines an external root to its @read-env spelling, so a /-spelled root now BLOCKS by name instead of reading ok:0 (fail-closed; making it readable is not attempted). Red first: test-podman-sync-unreadable-blocks.lua arm 1 read rc=0 ok:podman-sync-bounded:0 before, blocked after; control arm 2 is violation:direct-command:1 both ways (step 961). Unix uses chmod 000. Default run unchanged: ok:podman-sync-bounded:6. scripts/test-podman-sync-budgets.sh case 9 (CRLF) fails on msys before and after, so it is pre-existing. Wider pattern: 2417-jzhh."
+    ts: "2026-11-26T21:19:57Z"
+    host: doris
+  - packet_id: lua-checkers-that-pcall-fs-read-inside-a-listing-loop-count-an-unreadable-file-as-clean
+    field: status
+    value: ready
+    ts: "2026-11-26T21:19:57Z"
+    host: doris

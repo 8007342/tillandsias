@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: images-inference-nine-scripts-stay-shell-until-the-runtime-ruling
+    order: "2374-wy4f"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [inference]
+    estimated_hours: 1
+    title: "images/inference: nine scripts stay shell until the operator rules on shipping tillandsias-plan in a non-forge image"
+    context: |
+      The inference image (fedora-minimal) has no Lua and no plan binary. macuahuitl ruled C on 2026-11-25: leave all nine and ask the
+      operator one question for images/git and images/inference together.
+      owner scripts (ruling unaffected): entrypoint.sh (PID 1, on the bootstrap allowlist); supervise.sh (PID 1 traps, waits on the shell's own jobs);
+      gpu-stall-watchdog.sh (a backgrounded loop that calls decode-floor-pin's _tdf_pin; the tick itself is pure enough to split);
+      llama-server-lane.sh's serve function (two children, trap, wait -n).
+      portable if the answer is yes: tiers/tiers.sh, preload-policy.sh, engine-tuning.sh, engine-integrity.sh, decode-floor-pin.sh, and
+      llama-server-lane.sh's select, verdict, pin and check verbs. preload-policy and engine-tuning export variables into the entrypoint,
+      which would read a printed KEY=value block. build-forge-plan-bin.sh, crates/tillandsias-embed/build.rs, flake.nix and release.yml
+      name images/default/policy-bin and would each need a second destination. The binary is 10.9 MB (musl).
+    exit_criteria:
+      - "the operator's answer is recorded here; on yes, the portable list becomes a scoped row"
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is a ruling."
+    next_action: "operator ruling, asked by macuahuitl together with images/git."
+    provenance: filed by lenovinha; all nine scripts read except entrypoint.sh.
+    events:
+      - {type: filed, ts: '2026-11-25T20:16:02Z', host: lenovinha, summary: inference scripts stay shell pending the ruling}

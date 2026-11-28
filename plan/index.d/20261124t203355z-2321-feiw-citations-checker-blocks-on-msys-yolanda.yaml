@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: order-citations-checker-cannot-judge-on-native-windows
+    order: "2321-feiw"
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [windows, portability]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/check-order-citations-resolve.lua
+    title: "check-order-citations-resolve spawns /usr/bin/grep and find, which a native Windows runner cannot resolve, so it blocks on every Windows host"
+    context: |
+      Measured on yolanda 2026-11-24: blocked:order-citations-resolve:no-ledger-orders-found on a healthy ledger. The
+      script spawns "/usr/bin/grep" by absolute path, an MSYS mount the native runner has no meaning for, and a bare
+      "find", which on Windows can resolve to System32 find.exe. #1510 was handed off with a citation no packet carries
+      because the check could not run here.
+    exit_criteria:
+      - "On native Windows the check gives the same verdict as on Linux for the same tree; pre-fix result: blocked."
+      - "NEGATIVE CONTROL: a planted unresolvable citation is named on Windows."
+    unscoreable: "unpinnable-until-the-guard-exists: the Windows arm is the deliverable"
+    next_action: "Resolve grep and find with common.fixture.which, or read with fs/text instead of spawning."
+    provenance: "coordinator macuahuitl-fedora 2026-11-24, asked for the row after #1510's eviction"
+    related: [1234-zade, 2315-yjjc]
+    events:
+      - {type: filed, ts: '2026-11-24T20:33:55Z', host: yolanda, summary: filed on the request of the coordinator}

@@ -99,6 +99,9 @@ end
 -- Leading whitespace allowed is the whole point: a marker indented inside a
 -- `summary: |` block scalar parses as valid YAML and is invisible to a
 -- column-0 grep.
+-- 2417-jzhh: a fragment that cannot be read is not intact; block naming it
+local SRC = require("common.listed_read").read_all("all-fragments-intact", files, function(d) return read_path[d] end)
+
 local MARKER = [=[^[[:space:]]*(<{7}|={7}|>{7})( |$)]=]
 
 local checked = 0
@@ -107,9 +110,9 @@ local yaml_candidates = {}
 
 for _, disp in ipairs(files) do
     checked = checked + 1
-    local ok_r, content = pcall(fs.read, read_path[disp])
+    local content = SRC[read_path[disp]]
     local has_marker = false
-    if ok_r then
+    if content then
         for _, line in ipairs(text.lines(content)) do
             if text.is_match(line, MARKER) then
                 has_marker = true
@@ -125,9 +128,13 @@ for _, disp in ipairs(files) do
 end
 
 if #yaml_candidates > 0 then
-    local argv = { POLICY, "validate-yaml" }
-    for _, disp in ipairs(yaml_candidates) do argv[#argv + 1] = disp end
-    local res = proc.run({ argv = argv, cwd = SCAN_ROOT })
+    -- 2418-ct85: in argv batches. One argv naming every fragment (7 820 of them) passed Windows'
+    -- 32 767-character command line, the spawn failed, and every fragment read "damaged".
+    -- On Windows scripts/tillandsias-policy is a shell script, which a native spawn cannot run
+    -- (os error 193), so it goes through Git's bash there; Unix keeps the direct exec.
+    local SH = require("common.fixture").posix_shell()
+    local base = SH ~= "bash" and { SH, POLICY, "validate-yaml" } or { POLICY, "validate-yaml" }
+    local res = require("common.argv_batch").run(base, yaml_candidates, { cwd = SCAN_ROOT })
     local parsed = {}
     if res.status == "exited" then
         for _, l in ipairs(text.lines(res.stdout)) do

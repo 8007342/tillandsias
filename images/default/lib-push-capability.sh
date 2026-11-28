@@ -35,24 +35,47 @@
 # TILLANDSIAS_PUSH_LOUD=1 for the states a user must be told about at launch
 # (read-only, revoked, sso-required, no-credential).
 
+# _tillandsias_push_helper <mode> <args...> — run lua/push-capability.lua (beside
+# this file in a checkout, /usr/local/lib/tillandsias/lua/ in the image) on the
+# plan binary's helper runner. Non-zero when there is no runner or no module.
+_tillandsias_push_helper() {
+    _ph_run="${TILLANDSIAS_PLAN_BIN:-tillandsias-plan}"
+    command -v "$_ph_run" >/dev/null 2>&1 || return 1
+    _ph_lua=""
+    for _ph_c in "${BASH_SOURCE:+${BASH_SOURCE%/*}/lua/push-capability.lua}" /usr/local/lib/tillandsias/lua/push-capability.lua; do
+        if [ -n "$_ph_c" ] && [ -r "$_ph_c" ]; then _ph_lua="$_ph_c"; break; fi
+    done
+    [ -n "$_ph_lua" ] || return 1
+    "$_ph_run" script run --helper "$_ph_lua" -- "$@" 2>/dev/null
+}
+
 tillandsias_push_capability() {
     _pc_dir="${1:-.}"
     _pc_repo="${2:-this repository}"
     TILLANDSIAS_PUSH_STATE="unknown"
     TILLANDSIAS_PUSH_REASON="probe-pending"
     TILLANDSIAS_PUSH_LOUD=0
-    _pc_out="$(git -C "$_pc_dir" ls-remote origin 'refs/tillandsias/upstream-auth/*' 2>/dev/null)"
-    _pc_rc=$?
-    if [ "$_pc_rc" -ne 0 ]; then
+    # ORDER 2393-j27x (openspec forge-lua-helpers D3.6): the ls-remote and the
+    # newest-verdict parse are lua/push-capability.lua on the helper runner, one
+    # runner + one git where the pipeline was nine processes (measured in the
+    # forge image). Without the runner or the module the state is UNKNOWN with
+    # reason no-plan-binary: never a guess, and no second implementation.
+    _pc_state=""; _pc_sub=""
+    if ! _pc_vals="$(_tillandsias_push_helper repo "$_pc_dir")"; then
+        TILLANDSIAS_PUSH_REASON="no-plan-binary"
+        _pc_state="no-plan-binary"
+    else
+        { IFS= read -r _pc_state; IFS= read -r _pc_sub; } <<_PC_EOF
+$_pc_vals
+_PC_EOF
+    fi
+    if [ "$_pc_state" = no-plan-binary ]; then
+        :
+    elif [ "$_pc_state" = unreachable ]; then
         TILLANDSIAS_PUSH_REASON="mirror-unreachable"
     else
         # The newest verdict: the largest trailing epoch. The mirror keeps one
-        # ref, but never assume it.
-        _pc_ref="$(printf '%s\n' "$_pc_out" \
-            | sed -n 's#^[0-9a-f]*[[:space:]]*refs/tillandsias/upstream-auth/##p' \
-            | awk -F/ 'NF >= 2 { print $NF "\t" $0 }' | sort -n | tail -n 1 | cut -f2)"
-        _pc_state="${_pc_ref%%/*}"
-        _pc_sub="$(printf '%s' "$_pc_ref" | cut -d/ -f2)"
+        # ref, but never assume it (the helper picks it).
         case "$_pc_state" in
             authorized) TILLANDSIAS_PUSH_STATE="can-push"; TILLANDSIAS_PUSH_REASON="-" ;;
             denied)
@@ -127,13 +150,19 @@ tillandsias_push_branch() {
         if [ -z "$_pb_plan" ] || [ ! -x "$_pb_plan" ]; then
             TILLANDSIAS_PUSH_BRANCH_REASON="no-plan-binary"
         else
-            _pb_out="$("$_pb_plan" discipline check-ref "refs/heads/$_pb_branch" --root "$_pb_dir" 2>&1)"
-            _pb_verdict="$(printf '%s\n' "$_pb_out" | head -n 1)"
+            # 2393-j27x: the check and its parse are the helper's (one runner +
+            # one check, where head | cut | sed | head was five processes).
+            _pb_verdict=""; _pb_field3="-"; _pb_remedy="-"
+            if _pb_vals="$(TILLANDSIAS_PLAN_BIN="$_pb_plan" _tillandsias_push_helper branch "$_pb_dir" "$_pb_branch" "$_pb_plan")"; then
+                { IFS= read -r _pb_verdict; IFS= read -r _pb_field3; IFS= read -r _pb_remedy; } <<_PB_EOF
+$_pb_vals
+_PB_EOF
+            fi
+            [ "$_pb_remedy" = "-" ] && _pb_remedy=""
             case "$_pb_verdict" in
                 refused:discipline:*)
                     TILLANDSIAS_PUSH_BRANCH="refused"
-                    TILLANDSIAS_PUSH_BRANCH_REASON="$(printf '%s' "$_pb_verdict" | cut -d: -f3)"
-                    _pb_remedy="$(printf '%s\n' "$_pb_out" | sed -n 's/^remedy: //p' | head -n 1)"
+                    TILLANDSIAS_PUSH_BRANCH_REASON="$_pb_field3"
                     TILLANDSIAS_PUSH_BRANCH_LINE="push: move away from ${_pb_branch} — this project's push discipline refuses it (${TILLANDSIAS_PUSH_BRANCH_REASON}). ${_pb_remedy}" ;;
                 refused:discipline-seed:*)
                     TILLANDSIAS_PUSH_BRANCH_REASON="seed-invalid" ;;

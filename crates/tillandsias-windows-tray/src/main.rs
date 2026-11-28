@@ -732,7 +732,7 @@ fn ",
     /// empty window to inspect.
     ///
     /// The independent checks that do NOT come from this file:
-    /// `scripts/check-purge-clears-vault-credentials.sh` refuses a purge path
+    /// `scripts/lua/check-purge-clears-vault-credentials.lua` refuses a purge path
     /// that unregisters the distro without calling the helper (a second reader,
     /// not this one), and the behaviour itself is only observable on a real
     /// Windows host with a real `cmdkey`. Neither is a substitute for the

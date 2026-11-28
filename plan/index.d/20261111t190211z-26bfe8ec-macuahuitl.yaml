@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: medium-the-developer-build-proxy-ca-key-is-not-a-ten-year-plaintext-file-in-the-cache
+    field: context
+    value: |-
+      Audit finding M2b. The file the black-box audit took for the enclave root CA key is written by build.sh ensure_dev_cache with -nodes and 3650 days. It is the dev caching proxy CA, not part of the enclave chain. This also names the writer the macOS storage finding could not. A per-session key on the runtime tmpfs with a short life meets the ruling; an existing file is deleted, not migrated.
+
+
+      [2026-11-11T19:02:11Z macuahuitl] Coordinator note 2026-11-11 on D4. The operator re-minted the intermediate CA, wiped the vault with a guest reset, and deleted the ca-key.pem file from the cache directory on macuahuitl. The row stands unchanged, because ensure_dev_cache writes the file again on the next build that uses the dev proxy; the pre-fix arm must run ensure_dev_cache in a scratch home, not look for a leftover file.
+    ts: "2026-11-11T19:02:11Z"
+    host: macuahuitl
+
+events:
+  - packet_id: medium-the-developer-build-proxy-ca-key-is-not-a-ten-year-plaintext-file-in-the-cache
+    event:
+      type: note
+      ts: "2026-11-11T19:02:11Z"
+      host: macuahuitl
+      summary: |-
+        D4 done by the operator; the writer is unchanged

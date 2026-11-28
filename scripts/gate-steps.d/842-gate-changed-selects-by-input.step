@@ -8,8 +8,8 @@
 # fixture and not an unrelated one, a crate selects its reverse
 # dependents, and a guard or an unmapped path selects everything.
 STEP_DESC="Checking --changed selects checks by their inputs (1916-tsel)"
-STEP_SCRIPT="scripts/test-gate-changed-selects-by-input.sh"
+STEP_LUA="scripts/lua/test-gate-changed-selects-by-input.lua"
 STEP_ERROR="./build.sh --changed no longer scopes by input, or no longer fails safe to the full gate (1916-tsel)"
 STEP_OK="--changed selects checks by their inputs passed"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin ok:gate-changed-selects-by-input:11 at 35680bdf4 (run directly, idle host)"
-STEP_READS="scripts/test-gate-changed-selects-by-input.sh"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:gate-changed-selects-by-input:11 at b022b6b85 (the Lua fixture, 2344-zk8r; bash 3.2, relayed by macuahuitl)"
+STEP_READS="scripts/lua/test-gate-changed-selects-by-input.lua"

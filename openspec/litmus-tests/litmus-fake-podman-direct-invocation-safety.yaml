@@ -25,7 +25,7 @@ size: quick
 
 preconditions:
   - workspace contains scripts/test-support/litmus-fake-podman-guard.sh
-  - workspace contains scripts/test-litmus-fake-podman-hermetic.sh
+  - workspace contains scripts/lua/test-litmus-fake-podman-hermetic.lua
   - workspace contains scripts/test-image-build-convergence.sh
   - shell utilities (bash, grep, find) are available in PATH
 
@@ -41,6 +41,6 @@ critical_path:
     expected_behavior: "ok: fixture-sources-guard"
 
   - step: "hermetic suite: spy-zero, injected-failure residue-freedom, verdict parity"
-    command: "bash scripts/test-litmus-fake-podman-hermetic.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-fake-podman-hermetic.lua"
     timeout_ms: 120000
-    expected_behavior: "ok: all fake-podman-hermetic scenarios passed"
+    expected_behavior: "ok:litmus-fake-podman-hermetic:7 arms"

@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: land-queue-cuts-a-stale-daily-proof-when-idle
+    order: "2432-ik2d"
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [land-queue, gate, velocity]
+    estimated_hours: 3
+    owned_files: [scripts/land-queue.sh]
+    title: "the land queue cuts the daily full proof itself when it is stale, the queue is idle and trunk is green, and says so loudly"
+    context: |
+      A proof older than DAILY_MAX_AGE_S (24 h) turns every land gate FULL (daily_proof). Only a manual
+      scripts/land-queue.sh --daily-full cuts one (macuahuitl, 11:51Z/13:32Z/10:48Z on 11-24..26); nothing in skills,
+      methodology or a schedule names it, so a day without one silently freezes every scoped land, which is the lever
+      2429-u3rp unlocks. Coordinator 2026-11-27: no new cron (crons are operator-only); the queue cuts it.
+    exit_criteria:
+      - "When a run finds no candidate, the newest proof is stale or absent, no daily-red is newer, and trunk's last land was green, the queue runs --daily-full on trunk and prints one loud line naming the new proof (or why it did not cut one)."
+      - "It never cuts a proof while a candidate is waiting, nor on main/release trunks; a fixture covers stale+idle (cuts), stale+busy (does not), fresh (does not)."
+    unscoreable: "fixture-scored: a land-queue fixture"
+    provenance: "coordinator 2026-11-27; yoga"
+    related: [2174-dail, 2429-u3rp]

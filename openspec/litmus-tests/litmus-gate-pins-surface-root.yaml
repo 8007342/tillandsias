@@ -14,11 +14,11 @@ description: >
 severity: high
 size: quick
 preconditions:
-  - workspace contains scripts/test-gate-pins-surface-root.sh
+  - workspace contains scripts/lua/test-gate-pins-surface-root.lua
   - workspace contains scripts/test-claims-fleet-visible.sh
 
 critical_path:
   - step: "a shared target inside an older checkout refuses unpinned, and the gate's pin makes claims-fleet-visible pass"
-    command: "bash scripts/test-gate-pins-surface-root.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-gate-pins-surface-root.lua 2>&1"
     timeout_ms: 600000
-    expected_behavior: "PASS: gate-pins-surface-root"
+    expected_behavior: "ok:gate-pins-surface-root:4 arms"

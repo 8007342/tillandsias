@@ -102,12 +102,15 @@ differently-aged shares (yoga, created 2026-06-15; lenovinha, created
 dirty state — and it means every Linux "clean room" pass since at least 2026-06
 silently carried this gap.
 
-Run `scripts/probe-credential-cold-state.sh --format=md` and paste its block
-into the findings file, the way the Windows leg records its hashes. It reports
-`credential-cold` or `credential-warm` from **metadata only** — never
-`secret-tool search --all`, which prints the secret inline and put live tokens
-into two transcripts on 2026-08-25 — and reports `could-not-run` when the
-question cannot be asked, which must never be read as cold.
+Run `tillandsias-plan script run scripts/lua/probe-credential-cold-state.lua -- --format=md`
+and paste its block into the findings file, the way the Windows leg records its
+hashes. It reports `credential-cold` or `credential-warm` from **metadata only** —
+never `secret-tool search --all`, which prints the secret inline and put live
+tokens into two transcripts on 2026-08-25 — and reports `could-not-run` when the
+question cannot be asked, which must never be read as cold. On macOS it reads the
+login Keychain with `security find-generic-password` WITHOUT `-g`/`-w`, which
+prints the item's attributes and never the password (2353-ccsd; before it, every
+Mac answered `could-not-run:no-busctl`).
 
 **Since 1149-vgn2 it checks the host keychain AND
 `~/.cache/tillandsias/fallback_*`, and a cold verdict names everything it
@@ -1231,14 +1234,16 @@ _WATCH_PID=$!
 # 100+ requests per smoke, and on 2026-11-01 that ended in a 429 with
 # Retry-After 78443. The prompt spells the token out so the prompt text itself
 # can never satisfy the grep below.
-SMOKE_PROMPT='Smoke check, one turn only. Run `bash scripts/check-credential-channel.sh` in the checkout and show its last line. Then reply with the word SMOKE-AGENT, a hyphen, and the word OK, all on one line with no spaces. Load no skill and do nothing else.'
+SMOKE_PROMPT='Smoke check, one turn only. Run `bash scripts/check-credential-channel.sh` in the checkout and show its last line. Then reply with the word SMOKE-AGENT, a hyphen, and the word OK, as plain text with no spaces, alone on its own line. That word only reports that you answered: print it whatever the check said. Load no skill and do nothing else.'
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
   env TILLANDSIAS_NO_TRAY=1 tillandsias --cloud 8007342/tillandsias --opencode --prompt "$SMOKE_PROMPT" 2>&1 \
   | tee target/smoke-e2e/04-opencode.log
 LANE_RC=${PIPESTATUS[0]}; printf 'opencode_exit=%s\n' "$LANE_RC" | tee target/smoke-e2e/04-opencode-exit.txt
-# The agent answered and called a tool: the token, not the exit code.
-grep -q 'SMOKE-AGENT-OK' target/smoke-e2e/04-opencode.log \
+# The agent answered: the token ALONE ON A LINE, not the exit code. A sentence that
+# declines to print it names it too, and a bare grep took that for an answer
+# (2333-kaf2, lenovinha v56.11.24.1).
+grep -Eq '^[[:space:]]*SMOKE-AGENT-OK[[:space:]]*$' target/smoke-e2e/04-opencode.log \
   && echo 'agent_turn=answered' || echo 'agent_turn=NO-TOKEN (finding)'
 kill "$_WATCH_PID" 2>/dev/null; wait "$_WATCH_PID" 2>/dev/null
 # The watch's verdict, when it issued one, IS the §4 verdict: the agent died and
@@ -1348,7 +1353,7 @@ stops the forge container so the lane returns in minutes instead of never.
 **Do not replace this with a timeout.** A budget tuned to the ~70-minute
 working figure kills long healthy lanes and still waits 70 minutes to notice a
 death at minute 2; any agent activity after an error resets the watch, which
-is the negative control (`scripts/test-smoke-agent-watch.sh` arm 4).
+is the negative control (`scripts/lua/test-smoke-agent-watch.lua` arm 4).
 To classify a lane by hand: `scripts/smoke-agent-watch.sh classify
 target/smoke-e2e/04-opencode-agent.log`.
 LIMIT, by name: the watch finds the forge by `podman ps` on THIS host, so on
@@ -1624,6 +1629,124 @@ completed cycle** (order 1190-swen), which of these happened:
 
 **Never report the forge lane from `opencode_exit` alone.** Exit 0 and a
 guard-stop are the same number.
+
+### 5a — Attest the run as a ref (order 2252-ck7h)
+
+The daily release candidate moves to `main` only with a **PASS per platform**,
+read from `refs/attest/smoke/<platform>/<rc-commit-sha>` by
+`scripts/lua/check-smoke-attested.lua`. Every run is attested, red or green.
+Write the attestation AFTER the report lines above, from the same evidence
+directory, in this order:
+
+**1. Record the credential step, as observed.** A reset wipes the Vault, and
+only the operator can sign in again (see *Credentials* above). Write
+`target/smoke-e2e/credential-step.txt`, whose first line is one of:
+
+- `measured: <what you observed>`. Use this only when this round saw the operator's
+  sign-in take effect, for example the forge lane getting past the Credential
+  Channel Guard, or a tray `--diagnose --json` naming the GitHub credential as
+  present after they signed in from the tray.
+- `unmeasured: <why>`. Use this when the operator has not signed in yet, which is
+  the normal state right after §2.
+
+**Never write `measured` for a step you did not see.** `attest-smoke.lua` refuses `pass`
+without it. An unmeasured run attests as `partial:credential-unmeasured`, and
+**a partial blocks promotion.** When the operator has signed in, re-run the
+credential check, rewrite the file as `measured: …`, and attest again on the same sha.
+The new commit sits on top of the partial one, so the history stays.
+
+**2. Pick the verdict.** `pass` means every step was green and the
+credential step was measured. `partial:credential-unmeasured` means every
+other step was green. `fail:<slug>` means anything red, where `<slug>` is the
+§5 finding's short slug, e.g. `fail:init-vault-brick`. A `cosign:could-not-run` round is
+not an unqualified PASS (above), so it attests as `fail:signatures-unverified`.
+
+**3. Write and push the ref.** The RC is the tag's commit. The asset sha256 is the
+`SHA256SUMS` line for the asset that §1 installed. Set `SMOKE_ASSET` to its
+name as listed in `SHA256SUMS`. Set `SMOKE_REGIME` to this host's regime slug
+(`[A-Za-z0-9._-]+`, e.g. `darwin-arm64`, `linux-x86_64`, `msys-x64`). The
+promote gate's smoke record reads it back from the ref's `regime.txt`
+(2300-j4cv), so it is never retyped.
+
+**The ref carries DIGESTS ONLY, never the evidence (2299-atdg).** Its tree is
+exactly three files: `SHA256SUMS` (a sha256 per evidence file), `regime.txt` and
+`verdict.txt`. The logs stay on this host, provable by their digests. Lane and
+init logs can carry a sign-in URL or a token, and a pushed secret is not undone
+by deleting the ref. The script refuses three cases:
+- `raw-tree-in-history:<commit>`: an older attest on the same ref has any other
+  tree shape, from before 2299-atdg. Delete that LOCAL ref as the refusal says;
+  never push it.
+- `unsafe-evidence-name`: a file name outside `[A-Za-z0-9._/-]`, since a name can
+  leak too. Rename the file; the refusal never echoes the name.
+- `stale-evidence`: a file older than `00-run-start.txt`. Previous rounds archived
+  inside the directory (`_archived-<ts>/`, step 4) are skipped, and are neither
+  judged stale nor digested.
+
+```bash
+[ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
+git fetch -q origin "refs/tags/${SMOKE_TAG}:refs/tags/${SMOKE_TAG}"
+SMOKE_RC_SHA="$(git rev-parse "${SMOKE_TAG}^{commit}")"
+SMOKE_ASSET_SHA256="$(gh release download "$SMOKE_TAG" -p SHA256SUMS -O - | awk -v a="$SMOKE_ASSET" '$2 == a || $2 == "*" a { print $1 }')"
+test -n "$SMOKE_RC_SHA" && test -n "$SMOKE_ASSET_SHA256" || { echo 'FAIL: no RC sha or asset sha256 — do not attest'; exit 2; }
+test -n "${SMOKE_REGIME:-}" || { echo 'FAIL: set SMOKE_REGIME (e.g. darwin-arm64) — do not attest'; exit 2; }
+./target/release/tillandsias-plan script run scripts/lua/attest-smoke.lua -- \
+    --sha "$SMOKE_RC_SHA" --tag "$SMOKE_TAG" --asset-sha256 "$SMOKE_ASSET_SHA256" \
+    --verdict "$SMOKE_VERDICT" --regime "$SMOKE_REGIME" --dir target/smoke-e2e --push \
+  | tee target/smoke-e2e/05-attest.txt
+ATTEST_RC=${PIPESTATUS[0]}; test -n "$ATTEST_RC" && test "$ATTEST_RC" -eq 0
+```
+
+```powershell
+git fetch -q origin "refs/tags/${SmokeTag}:refs/tags/${SmokeTag}"
+$SmokeRcSha = (git rev-parse "${SmokeTag}^{commit}").Trim()
+$sums = gh release download $SmokeTag -p SHA256SUMS -O -
+$SmokeAssetSha256 = ($sums | Where-Object { ($_ -split '\s+')[1] -in @($SmokeAsset, "*$SmokeAsset") } | ForEach-Object { ($_ -split '\s+')[0] })
+if (-not $SmokeRcSha -or -not $SmokeAssetSha256) { throw 'no RC sha or asset sha256 — do not attest' }
+if (-not $SmokeRegime) { throw 'set $SmokeRegime (e.g. msys-x64) — do not attest' }
+.\target\release\tillandsias-plan.exe script run scripts/lua/attest-smoke.lua -- `
+    --sha $SmokeRcSha --tag $SmokeTag --asset-sha256 $SmokeAssetSha256 `
+    --verdict $SmokeVerdict --regime $SmokeRegime --dir target/smoke-e2e --push | Tee-Object target\smoke-e2e\05-attest.txt
+if ($LASTEXITCODE -ne 0) { throw "attest-smoke refused (rc=$LASTEXITCODE) — read 05-attest.txt" }
+```
+
+The platform is read from the host (`darwin`, `msys`, `linux`). Cite the
+`ok:attest-smoke:<platform>:<sha>:<verdict>` line in the report. A
+`refused:attest-smoke:<why>` line is a finding about this run: stale evidence,
+or a `pass` without a measured credential step. Never answer it by editing the
+evidence.
+
+### 5b — Record the run for the promote gate (order 2300-j4cv)
+
+`scripts/promote-stable.sh` refuses a tag without a smoke record per platform
+(`scripts/lua/check-promote-gate.lua`). The record is DERIVED from the ref §5a
+pushed, red or green, so **never type a record line**. After §5a's
+`ok:attest-smoke:` line:
+
+```bash
+[ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
+./target/release/tillandsias-plan script run scripts/lua/smoke-record.lua -- \
+    --tag "$SMOKE_TAG" | tee target/smoke-e2e/05-record.txt
+RECORD_RC=${PIPESTATUS[0]}; test -n "$RECORD_RC" && test "$RECORD_RC" -eq 0
+SMOKE_FRAGMENT="$(sed -n 's/^ok:smoke-record://p' target/smoke-e2e/05-record.txt)"
+test -n "$SMOKE_FRAGMENT" && scripts/push-plan-fragments-to-trunk.sh "$SMOKE_FRAGMENT"
+```
+
+```powershell
+.\target\release\tillandsias-plan.exe script run scripts/lua/smoke-record.lua -- `
+    --tag $SmokeTag | Tee-Object target\smoke-e2e\05-record.txt
+if ($LASTEXITCODE -ne 0) { throw "smoke-record refused (rc=$LASTEXITCODE) — read 05-record.txt" }
+$SmokeFragment = (Select-String -Path target\smoke-e2e\05-record.txt -Pattern '^ok:smoke-record:(.+)$').Matches[0].Groups[1].Value
+bash scripts/push-plan-fragments-to-trunk.sh $SmokeFragment
+```
+
+The regime is the one §5a attested. The first host to record a tag also declares
+its `smoke-<tag>` row; two hosts doing so at once write the same one.
+An attestation that says `partial:credential-unmeasured` is recorded as that and
+**blocks**. When the operator has signed in, attest again (§5a) and record again:
+the later record decides. A `refused:smoke-record:<why>` line is a finding about
+this run; never answer it by writing the event by hand.
+
+**Only this skill records.** A local-build smoke installed nothing a tag names.
 
 Each finding becomes a `### Work Packet:` entry so `/advance-work-from-plan` can
 claim and fix it. Append packets to a dated, **host-qualified** smoke report:

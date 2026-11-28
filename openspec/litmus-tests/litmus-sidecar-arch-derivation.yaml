@@ -24,19 +24,19 @@ size: instant
 
 preconditions:
   - workspace contains scripts/build-sidecar.sh and images/router/entrypoint.sh
-  - workspace contains scripts/test-sidecar-arch-derivation.sh
+  - workspace contains scripts/lua/test-sidecar-arch-derivation.lua
   - shell utilities (bash, awk, sed, od, dd) are available in PATH
 
 critical_path:
   - step: "scripts parse and the fixture is executable"
-    command: "bash -n scripts/build-sidecar.sh && bash -n images/router/entrypoint.sh && test -x scripts/test-sidecar-arch-derivation.sh && echo 'ok: parses'"
+    command: "bash -n scripts/build-sidecar.sh && bash -n images/router/entrypoint.sh && test -f scripts/lua/test-sidecar-arch-derivation.lua && echo 'ok: parses'"
     timeout_ms: 5000
     expected_behavior: "ok: parses"
 
   - step: "all fixture scenarios pass (derivation, override, loud unknown, guard both directions, mutant arms)"
-    command: "bash scripts/test-sidecar-arch-derivation.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-sidecar-arch-derivation.lua"
     timeout_ms: 60000
-    expected_behavior: "ok:sidecar-arch-derivation-fixture:17"
+    expected_behavior: "ok:sidecar-arch-derivation:17 arms"
 
   - step: "LIVE: any staged sidecar on this host matches this host's machine (a wrong-arch artifact is exactly the shipped defect)"
     command: "b=images/router/tillandsias-router-sidecar; if [ ! -f \"$b\" ]; then echo 'ok: not-staged-here'; else m=$(uname -m); case \"$m\" in x86_64|amd64) pat='x86-64';; arm64|aarch64) pat='aarch64';; *) pat='';; esac; if [ -z \"$pat\" ]; then echo 'ok: unjudged-machine'; elif file \"$b\" | grep -Eqi \"$pat\"; then echo 'ok: staged-arch-matches'; else echo \"FAIL: staged sidecar is $(file -b \"$b\") on a $m host\"; fi; fi"
@@ -56,5 +56,5 @@ critical_path:
     expected_behavior: "ok:"
 
 evidence:
-  artifact: "scripts/build-sidecar.sh + images/router/entrypoint.sh + scripts/test-sidecar-arch-derivation.sh"
+  artifact: "scripts/build-sidecar.sh + images/router/entrypoint.sh + scripts/lua/test-sidecar-arch-derivation.lua (port of the .sh, 2340-psb5)"
   measured_on: "macOS Darwin 25.6.0 (Apple Silicon) 2026-08-23 — staged artifact was x86-64 before the fix, ARM aarch64 after a 12.1s rust-lld cross-build; fixture 17/17"

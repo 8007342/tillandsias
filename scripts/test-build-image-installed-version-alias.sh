@@ -42,6 +42,12 @@ PLAN_BIN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary)
 case "$PLAN_BIN" in ./*) PLAN_BIN="$ROOT/${PLAN_BIN#./}" ;; esac
 [[ -n "$PLAN_BIN" ]] || fail "no runnable tillandsias-plan for the Lua path (build it: cargo build --release -p tillandsias-plan)"
 
+# 2268-kvxh: hash-image-sources.sh hashes through git when there is one. On MSYS
+# git is in /ucrt64/bin, so the arms' PATH lost it, the two sides hashed
+# differently, and the seeded tag never matched. Add git's directory there only.
+GIT_DIR_PATH=""
+PATH=/usr/bin:/bin command -v git >/dev/null 2>&1 || GIT_DIR_PATH=":$(dirname "$(command -v git)")"
+
 # --- fake podman: an image store that is a file of tag lines ----------------
 mkdir -p "$WORK/bin"
 cat > "$WORK/bin/podman" <<'FAKE'
@@ -82,6 +88,13 @@ exit 0
 FAKE
 chmod +x "$WORK/bin/podman"
 
+# A native Windows door cannot spawn the fake (an extensionless bash script), and
+# would answer skip:no-podman. Hand it the fake through this bash (2268-kvxh).
+DOOR_PODMAN=()
+if command -v cygpath >/dev/null 2>&1; then
+    DOOR_PODMAN=(TILLANDSIAS_PODMAN="$(cygpath -m "$BASH")" TILLANDSIAS_PODMAN_ARGS="$(cygpath -m "$WORK/bin/podman")")
+fi
+
 # Run one arm. $1 = arm name, $2 = version the fake installed binary reports,
 # $3.. = tags pre-seeded into the store. Prints the resulting store to stdout
 # via $ARM_STORE, the build output to $ARM_OUT.
@@ -109,9 +122,10 @@ EOF
 
     env -i \
         HOME="$home" \
-        PATH="$WORK/bin:/usr/bin:/bin" \
+        PATH="$WORK/bin:/usr/bin:/bin$GIT_DIR_PATH" \
         TILLANDSIAS_FIXTURE_PODMAN_STORE="$ARM_STORE" \
         FAKE_PODMAN_STORE="$ARM_STORE" \
+        ${DOOR_PODMAN[@]+"${DOOR_PODMAN[@]}"} \
         TILLANDSIAS_PLAN_BIN="$PLAN_BIN" \
         TERM=dumb \
         bash "$SCRIPT_DIR/build-image.sh" "$IMG" > "$ARM_OUT" 2>&1 \

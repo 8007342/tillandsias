@@ -13,6 +13,11 @@
 --   4 LS-HANG     git ls-remote hangs -> blocked:remote-unreachable:ls-remote-timeout
 --                 inside the bounded timeout (no retry: one ls-remote call)
 --   5 LS-AUTH     git ls-remote refused credentials -> ...:ls-remote-auth
+--  14 FRENCH    under LANG=fr_FR.UTF-8, a git that speaks French unless told
+--                 LANGUAGE=en still reads as ls-remote-auth (2281-amjg)
+--  15-19 NETWORK a cut network is blocked:remote-unreachable:network, never a
+--                 login: gh's timeout, gh calling a good token invalid, gh
+--                 hanging, git alone; a real refusal stays gh-auth
 --   6 GH-HANG     gh hangs (a locked keyring) -> ...:gh-timeout, bounded, remedy names the keyring
 --   7 LOCAL       a non-GitHub origin (a fixture's local remote) never asks gh
 --   8 NO-GH       gh absent (the builder toolbox) is NOT unreachable: a named
@@ -45,6 +50,9 @@ case "$(cat "$d/gh.mode")" in
   ok)   echo "github.com"; echo "  ✓ Logged in to github.com account stub (keyring)"; exit 0 ;;
   none) echo "You are not logged into any GitHub hosts. To log in, run: gh auth login" >&2; exit 1 ;;
   hang) sleep 30; exit 0 ;;
+  slow) echo "  X Timeout trying to log in to github.com account stub (keyring)" >&2; exit 1 ;;
+  invalid) echo "  X Failed to log in to github.com account stub (keyring)" >&2
+        echo "  - The token in keyring is invalid." >&2; exit 1 ;;
 esac
 ]==]):gsub("@REL@", function() return rel end))
 fs.write(rel .. "/git.sh", ([==[
@@ -53,6 +61,9 @@ d="@REL@"; echo "git $*" >> "$d/calls"
 case "$(cat "$d/git.mode")" in
   ok)   printf 'f79786f6084a62e797dc3b47ca14e03094f8304b\tHEAD\n'; exit 0 ;;
   hang) sleep 30; exit 0 ;;
+  net)  echo "fatal: unable to access 'https://github.com/x/y.git/': Failed to connect to github.com:443 after 135141 ms: Could not connect to server" >&2; exit 128 ;;
+  fr)   if [ "${LANGUAGE:-}" = en ]; then echo "fatal: Authentication failed for 'https://github.com/x/y.git/'" >&2
+        else echo "fatal : Échec d'authentification pour 'https://github.com/x/y.git/'" >&2; fi; exit 128 ;;
   auth) echo "remote: Invalid username or token. Password authentication is not supported for Git operations." >&2
         echo "fatal: Authentication failed for 'https://github.com/x/y.git/'" >&2; exit 128 ;;
 esac
@@ -65,7 +76,8 @@ local function probe(gh_mode, git_mode, url, gh_bin)
     local t0 = time.now_ms()
     local p = proc.run{ argv = { RUNNER, "script", "run", "scripts/lua/probe-remote-reachable.lua" },
         env = { TILLANDSIAS_PROBE_GH = gh_bin or (rel .. "/gh.sh"), TILLANDSIAS_PROBE_GIT = rel .. "/git.sh",
-                TILLANDSIAS_PROBE_TIMEOUT_MS = "2000" }, timeout_ms = 60000 }
+                TILLANDSIAS_PROBE_TIMEOUT_MS = "2000", LANG = git_mode == "fr" and "fr_FR.UTF-8" or nil,
+                LANGUAGE = git_mode == "fr" and "fr" or nil }, timeout_ms = 60000 }
     return text.trim(p.stdout or ""), p.stderr or "", p.code, time.now_ms() - t0, fs.read(rel .. "/calls") or ""
 end
 
@@ -91,6 +103,26 @@ else bad("4: hung ls-remote answered [" .. o .. "] rc=" .. tostring(rc) .. " in 
 o, e, rc, ms, calls = probe("ok", "auth"); all_calls = all_calls .. calls
 if o == "blocked:remote-unreachable:ls-remote-auth" and rc == 1 then ok("5: refused git credentials -> ls-remote-auth")
 else bad("5: refused credentials answered [" .. o .. "] rc=" .. tostring(rc) .. " err=[" .. e .. "]") end
+
+o, e, rc, ms, calls = probe("ok", "fr"); all_calls = all_calls .. calls
+if o == "blocked:remote-unreachable:ls-remote-auth" and rc == 1 then ok("14: a French git's refused credentials -> ls-remote-auth")
+else bad("14: French git answered [" .. o .. "] rc=" .. tostring(rc) .. " err=[" .. e .. "]") end
+
+-- 15-19: the network. Arms 15 and 16 are what the 2026-11-23 stall looked like.
+for _, a in ipairs({
+    { 15, "slow", "net", "network", "gh timed out and git cannot connect" },
+    { 16, "invalid", "net", "network", "gh calls the token invalid but git cannot connect" },
+    { 17, "hang", "net", "network", "gh hangs and git cannot connect" },
+    { 18, "ok", "net", "network", "gh answers but git cannot connect" },
+    { 19, "invalid", "auth", "gh-auth", "a token both gh and git find refused" },
+}) do
+    o, e, rc, ms, calls = probe(a[2], a[3]); all_calls = all_calls .. calls
+    local n_git = select(2, calls:gsub("git ls%-remote", ""))
+    local login = e:find("gh auth login", 1, true) ~= nil
+    if o == "blocked:remote-unreachable:" .. a[4] and rc == 1 and n_git <= 1 and login == (a[4] == "gh-auth") then
+        ok(a[1] .. ": " .. a[5] .. " -> " .. a[4])
+    else bad(a[1] .. ": " .. a[5] .. " answered [" .. o .. "] rc=" .. tostring(rc) .. " ls-remote=" .. n_git .. " err=[" .. e .. "]") end
+end
 
 o, e, rc, ms, calls = probe("hang", "ok"); all_calls = all_calls .. calls
 if o == "blocked:remote-unreachable:gh-timeout" and rc == 1 and ms < 15000 and e:find("keyring", 1, true) then

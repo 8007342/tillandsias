@@ -7,7 +7,7 @@ severity: high
 size: instant
 inputs:
   - images/default/lib-common.sh
-  - scripts/test-forge-seeds-from-salvage-ref.sh
+  - scripts/lua/test-forge-seeds-from-salvage-ref.lua
 
 # Order 1350-8hmy. The salvage lane rescues work off a wedged checkout onto a
 # `salvage/<order>` ref, and a forge is then seeded from that ref so the rescued
@@ -41,7 +41,7 @@ critical_path:
     # WITHOUT the sentinel. Without that arm the content check would be green
     # by construction however badly the seed behaved, because it would be
     # reading the fixture's own scaffolding back to itself.
-    command: "bash scripts/test-forge-seeds-from-salvage-ref.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-seeds-from-salvage-ref.lua"
     timeout_ms: 120000
     expected_behavior: "ok:forge-seeds-from-salvage-ref:5/5"
 

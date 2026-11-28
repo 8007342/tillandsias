@@ -1,0 +1,10 @@
+# Gate step 2421-7wvs — data, not code (order 1072-b7eq).
+#
+# The Lua port of windows-host-capability-probe answers what the .sh answered,
+# on the same PowerShell JSON (parity against the pinned .sh blob).
+STEP_DESC="Checking windows-host-capability-probe.lua matches its .sh (2421-7wvs)"
+STEP_LUA="scripts/lua/test-windows-host-capability-probe.lua"
+STEP_ERROR="windows-host-capability-probe.lua diverged from the .sh it replaced (2421-7wvs) — see the FAIL lines above"
+STEP_OK="windows-host capability probe parity passed"
+STEP_SECOND_REGIME="doris 2026-11-26 msys ok:windows-host-capability-probe-fixture:4 arms"
+STEP_READS="scripts/lua/windows-host-capability-probe.lua scripts/windows-host-capability-query.ps1 scripts/lua/test-windows-host-capability-probe.lua"

@@ -34,7 +34,7 @@
 -- passes exactly as a correct one does. (Restored from the deleted
 -- check-requirement-ids.sh header, a9a61de58^, at the coordinator's request.)
 --
--- TILLANDSIAS_SPEC_ROOT is a TEST SEAM (scripts/test-requirement-ids.sh points
+-- TILLANDSIAS_SPEC_ROOT is a TEST SEAM (scripts/lua/test-requirement-ids.lua points
 -- it at a fake openspec tree, outside the repo, exactly like
 -- scripts/lua/check-spec-registry-status.lua's TILLANDSIAS_SPEC_ROOT); -- @read-env
 -- widens fs.read/fs.walk under it. Production never sets it.
@@ -87,9 +87,10 @@ local total = 0
 local missing_lines = {}
 local contents = {}
 
+local SRC = require("common.listed_read").read_all("requirement-ids", specs)
 for _, f in ipairs(specs) do
-    local ok_r, content = pcall(fs.read, f)
-    if ok_r then
+    local content = SRC[f]
+    if content then
         contents[f] = content
         local lines = text.lines(content)
         local n = #lines

@@ -55,6 +55,8 @@
 #      carried-obligation backlog that neither pays nor waives), plus
 #      `tillandsias-plan check --strict-fragments` and `tillandsias-policy
 #      plan-orders` when the diff adds plan/index.d fragments.
+#   3b. every scripts/**/check-* decider gate-changed.sh --checks selects for
+#      the diff (2282-asxn), derived from build.sh and gate-steps.d.
 #   4. `cargo fmt --check` when the diff touches *.rs.
 #   5. Touched fixtures: every scripts/test-*.sh in the diff, plus every
 #      scripts/test-*.sh (excluding scripts/test-support/*) whose bytes name
@@ -314,6 +316,9 @@ MERGED_SHA="$(git rev-parse --short HEAD)"
 # ── shared diff surfaces, computed ONCE ─────────────────────────────────────
 DIFF_ALL="$(git diff --name-only "$BASE"...HEAD 2>/dev/null | LC_ALL=C sort -u)"
 DIFF_SCRIPTS="$(printf '%s\n' "$DIFF_ALL" | grep -E '^scripts/.*\.sh$' || true)"
+# ORDER 2415-ea3h: the fixture phase's subjects are the shell AND Lua scripts the
+# diff touched. DIFF_SCRIPTS stays *.sh for the deciders that read it.
+DIFF_SUBJECTS="$(printf '%s\n' "$DIFF_ALL" | grep -E '^scripts/.*\.(sh|lua)$' || true)"
 FRAGMENTS_ADDED=0
 if grep -q '^plan/index\.d/' <<<"$DIFF_ALL"; then FRAGMENTS_ADDED=1; fi
 
@@ -342,7 +347,7 @@ if grep -q '^crates/tillandsias-plan/' <<<"$DIFF_ALL"; then
             printf '%s\n' "$_CAP_OUT" | sed 's/^/  /' >&2
             echo "refused:relay-preflight:check-plan-binary-current"
             _afford "the rebuilt plan binary does not carry the semantics check-plan-binary-current.sh expects" \
-                "read scripts/test-expire-claims-write-is-opt-in.sh's output above, fix it, then re-run"
+                "read scripts/lua/test-expire-claims-write-is-opt-in.lua's output above, fix it, then re-run"
             _restore_clean
             timing_emit relay-preflight relay "$T0" 1
             exit 1
@@ -402,7 +407,9 @@ _run_decider() { # name -> sets DEC_OUT, returns rc
             _lua_runner "$name" || return 3
             _cap env TILLANDSIAS_REPO_ROOT="$ROOT" TILLANDSIAS_FRAGMENT_PARSE_BASE="$BASE" TILLANDSIAS_SCRIPT_RUNNER_BIN="$_lb" "$_lb" script run "$SELF_DIR/lua/check-added-fragments-parse.lua" ;;
         check-scorable-obligation-added) _cap bash "$SELF_DIR/check-scorable-obligation-added.sh" "$BASE" ;;
-        check-gate-step-regimes) _cap bash "$SELF_DIR/check-gate-step-regimes.sh" ;;
+        check-gate-step-regimes)
+            _lua_runner "$name" || return 3
+            _cap env TILLANDSIAS_REPO_ROOT="$ROOT" "$_lb" script run "$SELF_DIR/lua/check-gate-step-regimes.lua" ;;
         check-added-test-is-referenced) DEC_OUT="$(TILLANDSIAS_ADDED_TEST_BASE="$BASE" bash "$SELF_DIR/check-added-test-is-referenced.sh" 2>&1)"; return $? ;;
         check-refusal-affordance-added) DEC_OUT="$(TILLANDSIAS_AFFORDANCE_BASE="$BASE" bash "$SELF_DIR/check-refusal-affordance-added.sh" 2>&1)"; return $? ;;
         check-rust-source-pin-added)
@@ -463,6 +470,50 @@ for name in $DECIDER_NAMES; do
     fi
 done
 
+# BEGIN-DERIVED-CHECKS
+# ORDER 2282-asxn — EVERY check-* DECIDER THE DIFF TOUCHES, DERIVED. The list
+# above is hand-kept, and what it left out was learned from evictions, a full
+# gate each (2026-11-24: check-gate-step-inputs #1109, native-argv-added #1135,
+# check-shell-ratchet #1190). gate-changed derives the population from build.sh
+# and gate-steps.d and the selection from the diff, so a decider wired tomorrow
+# is run with no edit here. A change it cannot scope runs every check-*.
+derived_state="skip"
+if [ "$PLAN_MODE" = 1 ]; then
+    derived_state="plan"
+    TILLANDSIAS_GATE_DIFF_BASE="$BASE" bash "$SELF_DIR/gate-changed.sh" --list --checks "$BASE" 2>/dev/null \
+        | sed -n 's/^select:fixture:\([^ ]*\).*/plan:derived-check:\1/p'
+elif [ "$STUB" = 1 ]; then
+    derived_state="stub"
+    _item derived-checks skip:stub 0
+else
+    _t="$(timing_now_ms)"
+    # Roots by cwd, never by an exported root: check-archive-answerability tests a
+    # COPY of the tree, and an inherited root sent its reads back to this one.
+    _cap env -u TILLANDSIAS_REPO_ROOT -u PROJECT_ROOT TILLANDSIAS_GATE_DIFF_BASE="$BASE" bash "$SELF_DIR/gate-changed.sh" --run --checks "$BASE"
+    _dc_rc=$?
+    _dc_bad="$(sed -n 's/^fail:gate-changed:fixture:\([^ ]*\).*/\1/p' <<<"$_CAP_OUT")"
+    _dc_bad="${_dc_bad%%$'\n'*}"
+    if [ "$_dc_rc" -eq 0 ]; then
+        derived_state="ok"
+        _item derived-checks ok "$_t"
+    else
+        _dc_name="${_dc_bad##*/}"; _dc_name="${_dc_name%.*}"
+        [ -n "$_dc_name" ] || _dc_name="could-not-run:rc=$_dc_rc"
+        _item "derived-checks:$_dc_name" red "$_t"
+        grep -v '^ok:gate-changed:fixture:\|^select:' <<<"$_CAP_OUT" | sed 's/^/  /' >&2
+        if [ "$KEEP_GOING" != 1 ]; then
+            echo "refused:relay-preflight:derived-checks:$_dc_name"
+            _afford "a decider the gate runs on this diff refused on the merged tree (its own output is above)" \
+                "fix what $_dc_name named, commit onto the ref that carries it, and re-run relay-preflight"
+            _restore_clean
+            timing_emit relay-preflight relay "$T0" 1
+            exit 1
+        fi
+        [ -n "$FIRST_FAIL_TOKEN" ] || { FIRST_FAIL_TOKEN="derived-checks:$_dc_name"; FIRST_FAIL_RC=1; }
+    fi
+fi
+# END-DERIVED-CHECKS
+
 # ── phase 4: cargo fmt --check, when *.rs moved ─────────────────────────────
 fmt_state="skip"
 if grep -qE '\.rs$' <<<"$DIFF_ALL"; then
@@ -497,8 +548,14 @@ if [ "$PLAN_MODE" = 1 ]; then
 fi
 
 # ── phase 5: touched fixtures, LISTED before any of them run ────────────────
-_all_fixtures="$(git ls-files 'scripts/test-*.sh' 2>/dev/null | grep -v '^scripts/test-support/' | LC_ALL=C sort -u)"
-_set_a="$(printf '%s\n' "$DIFF_SCRIPTS" | grep -E '^scripts/test-[^/]+\.sh$' | grep -v '^scripts/test-support/' || true)"
+# ORDER 2415-ea3h (doris, relayed as 2413-3dap): the population and the subjects
+# were *.sh only, so a Lua-only diff selected ZERO fixtures on every host and the
+# line still read ok (fixtures=0 on every relay of 2026-11-26). Lua fixtures are
+# scripts/lua/test-*.lua; a caller that sets only DIFF_SCRIPTS (a fixture cutting
+# this block) still selects as before.
+_all_fixtures="$(git ls-files 'scripts/test-*.sh' 'scripts/lua/test-*.lua' 2>/dev/null | grep -v '^scripts/test-support/' | LC_ALL=C sort -u)"
+_fx_subjects="${DIFF_SUBJECTS-$DIFF_SCRIPTS}"
+_set_a="$(printf '%s\n' "$_fx_subjects" | grep -E '^scripts/(test-[^/]+\.sh|lua/test-[^/]+\.lua)$' | grep -v '^scripts/test-support/' || true)"
 # ORDER 1594-mtc3: DIFF_SCRIPTS includes the paths the diff DELETES, and every
 # shell->lua port deletes a test-*.sh, so _set_a selected a fixture that no
 # longer exists and reported it red ("No such file"; #314 on 2026-10-11).
@@ -514,7 +571,7 @@ SETAEOF
 _set_a="$_set_a_present"
 # END-SET-A-EXISTS
 _set_b=""
-if [ -n "$DIFF_SCRIPTS" ]; then
+if [ -n "$_fx_subjects" ]; then
     while IFS= read -r _fx; do
         [ -n "$_fx" ] || continue
         [ -f "$_fx" ] || continue
@@ -523,7 +580,7 @@ if [ -n "$DIFF_SCRIPTS" ]; then
             [ -n "$_sp" ] || continue
             grep -qF -- "$_sp" "$_fx" 2>/dev/null && { _hit=1; break; }
         done <<DIFFEOF
-$DIFF_SCRIPTS
+$_fx_subjects
 DIFFEOF
         [ "$_hit" = 1 ] && _set_b="${_set_b}${_fx}
 "
@@ -547,6 +604,18 @@ done <<FXEOF
 $fixtures
 FXEOF
 
+# ORDER 2399-vsok: a fixture that drives the macOS VM (boots the guest through
+# the installed tray, execs in it) declares `# drives-vm: <why>` in its header,
+# and the preflight names it skipped unless this run opts in. It was selected
+# on 2026-11-26 because it names a path the diff touched, and it drove the
+# operator's VM through a stale dev tray for ~300 s. A bare `# drives-vm:` with
+# no reason is not a declaration.
+# BEGIN-DRIVES-VM
+_drives_vm() { # fixture path: 0 when it declares drives-vm and the run did not opt in
+    [ "${TILLANDSIAS_RELAY_DRIVE_VM:-0}" = 1 ] && return 1
+    grep -qE '^# drives-vm: [^ ]' "$1" 2>/dev/null
+}
+# END-DRIVES-VM
 if [ "$PLAN_MODE" != 1 ]; then
     _fx_ran=0
     while IFS= read -r _fx; do
@@ -554,7 +623,20 @@ if [ "$PLAN_MODE" != 1 ]; then
         _name="fixture:$(basename "$_fx" .sh)"
         _t="$(timing_now_ms)"
         _fx_ran=$((_fx_ran + 1))
-        if _cap bash "$_fx"; then
+        if _drives_vm "$_fx"; then
+            _item "$_name" skip-drives-vm 0
+            echo "skip:relay-preflight:$_name:drives-the-macos-vm — set TILLANDSIAS_RELAY_DRIVE_VM=1 to run it (2399-vsok)" >&2
+            continue
+        fi
+        # 2415-ea3h: a .lua fixture runs through the one runner; no runner is red
+        # (DEC_OUT says why), never a skip.
+        _fx_cmd=(bash "$_fx")
+        if [ "${_fx%.lua}" != "$_fx" ]; then
+            # 2419-8him: 175 Lua fixtures read TILLANDSIAS_PLAN_BIN or ..._SCRIPT_RUNNER_BIN and
+            # refuse without it, so the runner is named to the fixture as well as running it.
+            if _lua_runner "$_name"; then _fx_cmd=(env TILLANDSIAS_PLAN_BIN="$_lb" TILLANDSIAS_SCRIPT_RUNNER_BIN="$_lb" "$_lb" script run "$_fx"); else _fx_cmd=(sh -c 'printf "%s\n" "$1"; exit 3' _ "$DEC_OUT"); fi
+        fi
+        if _cap "${_fx_cmd[@]}"; then
             _item "$_name" ok "$_t"
         else
             _item "$_name" red "$_t"
@@ -729,12 +811,17 @@ if [ -n "$FIRST_FAIL_TOKEN" ]; then
     exit "$FIRST_FAIL_RC"
 fi
 
+# ORDER 2415-ea3h: zero selected is legitimate (a plan-only diff) but is not a
+# passing fixture run, so the count says not-run rather than 0. The ok: prefix
+# is an interface (land queue, pushgreen) and stays.
+_fx_field="$fixture_n"; [ "$fixture_n" = 0 ] && _fx_field=not-run
+
 if [ "$PLAN_MODE" = 1 ]; then
-    echo "ok:relay-preflight:plan:refs=${#refs[@]} deciders=$decider_n fixtures=$fixture_n crates=$crate_n litmus=${litmus_run}/${litmus_deferred}"
+    echo "ok:relay-preflight:plan:refs=${#refs[@]} deciders=$decider_n fixtures=$_fx_field crates=$crate_n litmus=${litmus_run}/${litmus_deferred}"
     timing_emit relay-preflight relay "$T0" 0
     exit 0
 fi
 
-echo "ok:relay-preflight:${MERGED_SHA}:refs=${#refs[@]} deciders=$decider_n fmt=${fmt_state} fixtures=$fixture_n crates=$crate_n litmus=${litmus_run}/${litmus_deferred}"
+echo "ok:relay-preflight:${MERGED_SHA}:refs=${#refs[@]} deciders=$decider_n fmt=${fmt_state} fixtures=$_fx_field crates=$crate_n litmus=${litmus_run}/${litmus_deferred}"
 timing_emit relay-preflight relay "$T0" 0
 exit 0

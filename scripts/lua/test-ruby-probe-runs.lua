@@ -18,7 +18,7 @@
 --              reports no reason (the "()" of the measured warning)
 --   2 FIXED    the parser as it stands reports reason=no-ruby
 --   3 NO INSTALL  the fixed probe never lets the shim attempt an install
---   4 GUARD    test-mirror-discipline.sh's skip guard runs ruby, with
+--   4 GUARD    test-mirror-discipline.lua's skip guard runs ruby, with
 --              AUTOINSTALL=0, rather than `command -v ruby`
 --
 -- Terminal line: ok:ruby-probe-runs-fixture:<n> or
@@ -82,11 +82,10 @@ if added == 0 and after_pre >= 1 then
     ok("the fixed probe let the shim attempt no install (pre-fix: " .. after_pre .. ", fixed: 0)")
 else bad("install attempts — pre-fix: " .. after_pre .. ", added by the fixed parse: " .. added) end
 
-local fx = fs.read("scripts/test-mirror-discipline.sh") or ""
-if has(fx, "TILLANDSIAS_BREW_AUTOINSTALL=0 ruby -e 'exit 0' >/dev/null 2>&1 || { echo \"skip:mirror-discipline:no-ruby")
-    and not fx:find("\ncommand %-v ruby >/dev/null 2>&1 || { echo \"skip:mirror%-discipline") then
-    ok("test-mirror-discipline.sh's skip guard runs ruby rather than `command -v ruby`")
-else bad("test-mirror-discipline.sh's skip guard still stats ruby") end
+local fx = fs.read("scripts/lua/test-mirror-discipline.lua") or ""
+if has(fx, "TILLANDSIAS_BREW_AUTOINSTALL=0 ruby -e 'exit 0' >/dev/null 2>&1") and has(fx, "T:skip(\"no-ruby\")") and not has(fx, "which(\"ruby\")") then
+    ok("test-mirror-discipline.lua's skip guard runs ruby rather than `command -v ruby`")
+else bad("test-mirror-discipline.lua's skip guard still stats ruby") end
 
 proc.run({ argv = { "rm", "-rf", S } })
 if failed == 0 then verdict.emit("ok:ruby-probe-runs-fixture:" .. passed, 0) end

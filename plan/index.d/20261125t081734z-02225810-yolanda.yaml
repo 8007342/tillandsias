@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: litmus-expected-behavior-requires-exit-0-unless-the-step-declares-its-exit
+    field: status
+    value: completed
+    ts: "2026-11-25T08:17:34Z"
+    host: yolanda
+
+events:
+  - packet_id: litmus-expected-behavior-requires-exit-0-unless-the-step-declares-its-exit
+    event:
+      type: completed
+      ts: "2026-11-25T08:17:34Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: land(1523) 94cd5ec4f: ok:litmus-verdict-stdout-fixture:16 arms on msys and darwin; step 412 10/10
+  - packet_id: litmus-expected-behavior-requires-exit-0-unless-the-step-declares-its-exit
+    event:
+      type: note
+      ts: "2026-11-25T08:17:34Z"
+      host: yolanda
+      summary: |-
+        census, exit-0 flip, controls, bare-number and zero-test parts all landed (#1514, #1523)

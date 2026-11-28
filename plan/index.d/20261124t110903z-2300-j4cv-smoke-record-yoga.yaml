@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: published-smoke-writes-its-smoke-record-from-its-attestation
+    order: "2300-j4cv"
+    status: implemented
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [release, smoke, promotion]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/smoke-record.lua
+      - scripts/lua/test-smoke-record.lua
+      - skills/smoke-curl-install-and-test-e2e/SKILL.md
+    title: "the published-release smoke writes its smoke-record event from its pushed attestation, and declares the smoke-<tag> row"
+    context: |
+      The promote gate (2296-pn45) reads smoke-record events and nothing wrote them. smoke-record.lua derives the line
+      from refs/attest/smoke/<platform>/<tag commit> (2252-ck7h, skill step 5a of 2253-69c5), which origin must hold;
+      the verdict is never typed. The row declaration is identical on every host. Local-build smokes record nothing
+      (coordinator 2026-11-24).
+    exit_criteria:
+      - "scripts/lua/test-smoke-record.lua green (11 arms: real attest, real record, real gate), run by litmus:promote-stable-refusals-carry-affordance."
+      - "One real RC has a smoke-record per platform written by step 5b, and promote-stable.sh --dry-run reads them."
+    unscoreable: "fixture-scored: test-smoke-record.lua is the pin, bound to litmus:promote-stable-refusals-carry-affordance"
+    provenance: "coordinator macuahuitl-fedora 2026-11-24"
+    related: [2296-pn45, 2252-ck7h, 2253-69c5]
+    events:
+      - {type: implemented, ts: "2026-11-24T11:09:03Z", host: yoga, summary: "implemented on work/2300-j4cv"}

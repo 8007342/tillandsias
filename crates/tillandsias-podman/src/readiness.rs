@@ -607,7 +607,8 @@ mod tests {
 
     #[cfg(unix)]
     fn scratch(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("tl-rann-{}-{name}", std::process::id()));
+        let d =
+            tillandsias_core::test_scratch::path(format!("tl-rann-{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         d.join("s.sock")
     }

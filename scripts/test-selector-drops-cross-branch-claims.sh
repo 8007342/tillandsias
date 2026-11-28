@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# inputs: images/default/lib-common.sh methodology/convergence.yaml methodology/distributed-work.yaml plan/index.yaml scripts/agent-identity.sh scripts/build-image.sh scripts/check-plan-binary-current.sh scripts/check-resumable-claim-dirt.sh scripts/check-stranded-in-progress.sh scripts/cycle-preflight.sh scripts/derive-host-identity.sh scripts/lib/tool-dispatch.sh scripts/lua/check-claims-across-branches.lua scripts/lua/test-capability-routing.lua scripts/lua/test-claims-across-branches.lua scripts/lua/test-plan-binary-probe-release-over-debug.lua scripts/nix-toolbox.sh scripts/plan-binary-probe.sh scripts/regenerate-cheatsheet-index.sh scripts/select-work-batch.sh scripts/with-wsl2-builder.sh scripts/wsl-plan-expert-ensure.sh VERSION lib/lua/common/ crates/tillandsias-plan/
 # @trace order:1034-whsp
 #
 # Pin: the selector must not OFFER a packet a sibling branch already holds, and

@@ -1,0 +1,36 @@
+# @trace spec:forge-as-only-runtime
+#
+# The source half of the forge-as-only-runtime litmus, in its own file because a phase is read
+# from the top level only: as a step of a file with no top-level phase it ran in no pre-build
+# run (2327-ahqf).
+name: litmus:forge-no-raw-podman
+spec: forge-as-only-runtime
+phase: pre-build
+description: >
+  Verify that the headless crate constructs no raw podman command: every launch goes through
+  the idiomatic layer, or the line is marked allowed-bootstrap.
+severity: critical
+size: instant
+
+preconditions:
+  - workspace contains scripts/lua/test-forge-no-raw-podman.lua
+  - a tillandsias-plan resolves (scripts/plan-binary-probe.sh)
+
+critical_path:
+  - step: "no raw podman command in the headless sources; a planted one is red, allowed-bootstrap is not"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-no-raw-podman.lua 2>&1"
+    timeout_ms: 30000
+    expected_behavior: "ok:forge-no-raw-podman:6 arms"
+    assert_exit: 0
+    assert_output_contains: "ok:forge-no-raw-podman:6 arms"
+
+observability:
+  traces:
+    - "@trace spec:forge-as-only-runtime"
+  expected_log: "no raw podman command slips past the idiomatic layer"
+  log_fields:
+    spec: "forge-as-only-runtime"
+    test: "forge-no-raw-podman"
+
+rollback:
+  on_failure: "route the flagged command through tillandsias_podman::PodmanClient, or mark the line allowed-bootstrap if it is a documented bootstrap exception"

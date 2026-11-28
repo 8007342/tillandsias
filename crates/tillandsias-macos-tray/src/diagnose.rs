@@ -416,8 +416,44 @@ pub(crate) fn headless_service_line(
     }
 }
 
+/// The guest kernel as provisioning left it (order 2352-pvcm).
+///
+/// PENDING IS EXPECTED, AND SAID. Provisioning upgrades the guest OS (1925-gupg),
+/// which installs a newer kernel-core, but the guest keeps the kernel it booted
+/// until its next COLD boot; provisioning runs once, on the first. The VM boots
+/// through EFI and GRUB picks the newest entry, and the tray's quit is a cold
+/// stop, so the next launch runs the new kernel. Before this line the mismatch was
+/// visible only to someone who asked the guest for both versions (v56.11.24.1
+/// macOS smoke, finding 3). A guest provisioned before the record existed says
+/// nothing: absent, never read as "no reboot pending".
+pub(crate) fn kernel_reboot_line(text: &str) -> Option<String> {
+    let field = |k: &str| {
+        text.lines()
+            .find_map(|l| l.strip_prefix(k).and_then(|v| v.strip_prefix(' ')))
+            .map(|v| v.trim().to_string())
+    };
+    let running = field("kernel_running").unwrap_or_else(|| "unknown".into());
+    let installed = field("kernel_installed").unwrap_or_else(|| "unknown".into());
+    match field("kernel_reboot_pending")?.as_str() {
+        "yes" => Some(format!(
+            "Guest kernel: {installed} installed, {running} running. EXPECTED after a first \
+             provision: the OS upgrade takes effect at the VM's next cold boot. Quit the tray \
+             and launch it again to boot the new kernel."
+        )),
+        "no" => Some(format!(
+            "Guest kernel: {running}, the newest installed; no reboot pending."
+        )),
+        _ => Some(format!(
+            "Guest kernel: could not compare installed ({installed}) with running ({running})."
+        )),
+    }
+}
+
 pub(crate) fn provision_report_line() -> String {
     let text = std::fs::read_to_string(provision_state_path()).unwrap_or_default();
+    let kernel = kernel_reboot_line(&text)
+        .map(|l| format!("\n{l}"))
+        .unwrap_or_default();
     match provision_record_from(&text) {
         ProvisionRecord::Complete {
             written_at,
@@ -425,18 +461,20 @@ pub(crate) fn provision_report_line() -> String {
             headless_service_state,
             headless_start_timestamp,
             headless_result,
-        } => format!(
-            "Provisioning: COMPLETE — the guest script recorded its own completion{}\n{}\n{}",
-            written_at
-                .map(|t| format!(" at {}", format_utc(t)))
-                .unwrap_or_default(),
-            guest_binary_skew_line(guest_binary_sha256.as_deref()),
-            headless_service_line(
-                headless_service_state.as_deref(),
-                headless_start_timestamp.as_deref(),
-                headless_result.as_deref(),
-            )
-        ),
+        } => {
+            format!(
+                "Provisioning: COMPLETE — the guest script recorded its own completion{}\n{}\n{}",
+                written_at
+                    .map(|t| format!(" at {}", format_utc(t)))
+                    .unwrap_or_default(),
+                guest_binary_skew_line(guest_binary_sha256.as_deref()),
+                headless_service_line(
+                    headless_service_state.as_deref(),
+                    headless_start_timestamp.as_deref(),
+                    headless_result.as_deref(),
+                )
+            ) + &kernel
+        }
         ProvisionRecord::Failed {
             written_at,
             line,
@@ -4374,6 +4412,29 @@ mod tests {
     /// line and nothing else. A fixture that only proved failure-is-detected
     /// would pass on that broken marker, because the broken marker detects
     /// failure too. What it could not do is tell success from silence.
+    /// 2352-pvcm: the pending kernel reboot is SAID, as expected, with both
+    /// versions; a matching kernel says none is pending; an old record says nothing.
+    #[test]
+    fn a_pending_guest_kernel_reboot_is_reported_as_expected() {
+        let pending = "phase complete\nkernel_running 6.19.10-300.fc44.aarch64\n\
+                       kernel_installed 7.3.4-200.fc44.aarch64\nkernel_reboot_pending yes\n";
+        let l = super::kernel_reboot_line(pending).expect("a line");
+        assert!(
+            l.contains("7.3.4-200.fc44.aarch64 installed")
+                && l.contains("6.19.10-300.fc44.aarch64 running")
+                && l.contains("EXPECTED")
+                && l.contains("launch it again"),
+            "{l}"
+        );
+        let current = "phase complete\nkernel_running 7.3.4\nkernel_installed 7.3.4\nkernel_reboot_pending no\n";
+        assert!(
+            super::kernel_reboot_line(current)
+                .unwrap()
+                .contains("no reboot pending")
+        );
+        assert_eq!(super::kernel_reboot_line("phase complete\n"), None);
+    }
+
     #[test]
     fn provision_record_distinguishes_complete_aborted_and_failed() {
         let complete = "tillandsias-provision-state v1\nwritten_at 1800000000\nphase complete\n";

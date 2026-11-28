@@ -68,13 +68,13 @@ PROMPT_MODE="${TILLANDSIAS_OPENCODE_PROMPT:-}"
 # launch, and to make Step 4 skip inference runtime pulls and wait for
 # inference health. Nothing in this tree sets it today (grep the repo) --
 # an intentional, currently-unused activation seam, not dead code (see
-# order 1170-e5im and scripts/test-orchestrate-enclave.sh, whose arm 2
+# order 1170-e5im and scripts/lua/test-orchestrate-enclave.lua, whose arm 2
 # proves this seam still behaves when the variable IS set).
 STATUS_CHECK_MODE="${TILLANDSIAS_STATUS_CHECK:-}"
 # ORDER 923-rmtw. Was a pasted copy, frozen at its pre-801-kqme value for
 # eleven days: `git-service` still named after the Rust constant dropped it,
 # `nix-cache` never added after 801-kqme added it. One definition now, kept in
-# step with ENCLAVE_NO_PROXY_BASE by scripts/test-enclave-proxy-lib.sh.
+# step with ENCLAVE_NO_PROXY_BASE by scripts/lua/test-enclave-proxy-lib.lua.
 # shellcheck source=scripts/lib/enclave-proxy.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/enclave-proxy.sh"
 if [ -n "$PROMPT_MODE" ]; then
@@ -445,7 +445,7 @@ podman rm -f "$FORGE_CONTAINER" 2>/dev/null || true
 # scripts/check-dead-env-branches.sh reports READ (line 65) and never
 # ASSIGNED anywhere in this tree, so the guard was never true on a real
 # invocation and this launch never ran. It must run unconditionally; see
-# scripts/test-orchestrate-enclave.sh, whose mutation-control arm rewraps
+# scripts/lua/test-orchestrate-enclave.lua, whose mutation-control arm rewraps
 # exactly this block (between the two markers below) to prove the fixture
 # still catches the regression if it comes back.
 # forge-launch-unconditional-begin

@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-workers-push-and-pull-request-step-stops-on-a-red-fixture
+    order: "2345-7ri8"
+    status: ready
+    kind: debt
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [workflow, fixtures]
+    estimated_hours: 2
+    owned_files:
+      - scripts/relay-preflight.sh
+    title: "no repo helper refuses to push a work ref or open its pull request when a fixture the change touches is red on that head"
+    context: |
+      On 2026-11-25 yoga's own shell loop ran three fixtures after a green relay-preflight, printed the last line of each, and
+      pushed and opened 1541 with one of them red (gate-keep-going arm 7). The loop was not a repo script and did not read exit
+      codes. The preflight did not run that fixture: it is neither added nor edited by the change, and the change edits build.sh,
+      which it drives.
+    exit_criteria:
+      - "One repo command takes a work ref and its fixtures, runs each on the merged head, and refuses to push or open the pull request when any exits non-zero. Pre-fix result: FAILS, no such command."
+      - "NEGATIVE CONTROL: with every fixture green it pushes, and the remote head equals the local one."
+      - "Either the preflight selects a fixture that names a changed file in its step's STEP_READS, or the row says why it should not."
+    unscoreable: "fixture-scored: a fixture with a stub git and a red fixture pins it"
+    next_action: "Not to be taken before the coordinator says so."
+    provenance: "coordinator macuahuitl-fedora 2026-11-25, from yoga's #1541"
+    related: [2343-3ch4, 2332-rxkr]
+    events:
+      - {type: filed, ts: "2026-11-25T10:56:42Z", host: yoga, summary: "filed on the request of the coordinator; not taken"}

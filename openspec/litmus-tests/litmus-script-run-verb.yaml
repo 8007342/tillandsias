@@ -20,16 +20,21 @@ severity: high
 size: quick
 
 preconditions:
-  - workspace contains scripts/test-script-run-verb.sh
+  - workspace contains scripts/lua/test-script-run-verb.lua
   - a runnable tillandsias-plan that knows `script`, or the fixture skips by name
 
 critical_path:
   - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-script-run-verb.sh && test -x scripts/test-script-run-verb.sh && echo 'ok: script-run-verb-parses'"
+    command: "test -f scripts/lua/test-script-run-verb.lua && echo 'ok: script-run-verb-parses'"
     timeout_ms: 5000
     expected_behavior: "ok: script-run-verb-parses"
 
   - step: "the seven arms of the row's verifiable_closure hold"
-    command: "bash scripts/test-script-run-verb.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-script-run-verb.lua"
     timeout_ms: 600000
-    expected_behavior: "script-run-verb: 7 passed, 0 failed"
+    expected_behavior: "ok:script-run-verb:7 arms"
+
+  - step: "order 2343-3ch4: a gate step that skips at exit 0 is a named skip and never STEP_OK; a real pass, and a pass with one skipped arm, still print it"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-gate-step-skip-is-not-a-pass.lua 2>&1"
+    timeout_ms: 300000
+    expected_behavior: "ok:gate-step-skip-is-not-a-pass:5 arms"

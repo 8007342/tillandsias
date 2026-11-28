@@ -84,38 +84,105 @@ pub struct HostKindReading {
     pub disagreement: Option<String>,
 }
 
-/// Derive the host kind from `TILLANDSIAS_HOST_KIND` and the container
-/// runtime's record of the image this process runs in (`image="…"` in
-/// `/run/.containerenv`, written root-owned by podman; a forge agent runs
-/// non-root and cannot rewrite it).
+/// The forge marker, baked into the forge image by `images/default/Containerfile`
+/// (order 2354-5biy, operator ruling 2026-11-27, "B decides"): root-owned, mode
+/// 0444, content `kind=forge`. A forge agent runs unprivileged and can neither
+/// write it nor create it; a bare-metal user cannot create it without root.
+pub const FORGE_MARKER_PATH: &str = "/etc/tillandsias/forge";
+
+/// The launch record the launcher bind-mounts read-only ("A carries the
+/// details"): `key=value` lines naming `kind`, `image`, `version`, `project`
+/// and `launch_id`. It describes a forge; it never declares one.
+pub const FORGE_RECORD_PATH: &str = "/run/tillandsias/forge-launch";
+
+/// What [`FORGE_MARKER_PATH`] looked like on this host.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarkerState {
+    /// No file at the path.
+    Absent,
+    /// A regular file, owned by uid 0, writable by nobody, saying `kind=forge`.
+    Valid,
+    /// Something is there but it is not the marker: a symlink, a file an
+    /// unprivileged user owns or could write, or the wrong content. Never
+    /// forge evidence; reported.
+    Untrusted(&'static str),
+}
+
+/// Inspect the marker at `path` without following a symlink.
+pub fn marker_state(path: &Path) -> MarkerState {
+    let Ok(meta) = std::fs::symlink_metadata(path) else {
+        return MarkerState::Absent;
+    };
+    if !meta.file_type().is_file() {
+        return MarkerState::Untrusted("not-a-regular-file");
+    }
+    #[cfg(not(unix))]
+    {
+        // No forge is a native Windows process (SafeRoots::forge is a Linux
+        // container layout), so nothing on this platform is forge evidence.
+        let _ = meta;
+        MarkerState::Untrusted("not-a-linux-container")
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if meta.uid() != 0 {
+            return MarkerState::Untrusted("not-root-owned");
+        }
+        if meta.mode() & 0o222 != 0 {
+            return MarkerState::Untrusted("writable");
+        }
+        match std::fs::read_to_string(path) {
+            Ok(s) if record_field(&s, "kind") == Some("forge") => MarkerState::Valid,
+            _ => MarkerState::Untrusted("content"),
+        }
+    }
+}
+
+/// The value of `key` in a `key=value` record (`/run/.containerenv`, the
+/// forge marker, the launch record), quotes trimmed.
+pub fn record_field<'a>(record: &'a str, key: &str) -> Option<&'a str> {
+    record.lines().find_map(|l| {
+        l.trim()
+            .strip_prefix(key)
+            .and_then(|r| r.strip_prefix('='))
+            .map(|v| v.trim().trim_matches('"'))
+            .filter(|v| !v.is_empty())
+    })
+}
+
+/// Derive the host kind from evidence (order 2354-5biy, operator ruling
+/// 2026-11-27).
+///
+/// **The marker decides.** [`FORGE_MARKER_PATH`], valid per [`marker_state`],
+/// means `forge`, however the container started: the launcher, `podman exec`
+/// or `queue.submit`. Nothing else makes a forge: not `TILLANDSIAS_HOST_KIND`,
+/// not `/run/.containerenv` naming the forge image, not the launch record. A
+/// forge is where `soft-reset` is pre-authorised, so anything that could claim
+/// one would be a way round the consent.
+///
+/// **The record carries details.** When [`FORGE_RECORD_PATH`] is present with
+/// the marker, its `kind` and `image` must agree with the marker and the
+/// container record; a disagreement is reported. A record WITHOUT the marker is
+/// not forge evidence: it is reported and the host stays as it otherwise reads.
 ///
 /// `root` is accepted for the callers' convenience and deliberately NOT
-/// consulted: evidence never comes from a file in the workspace, which any
-/// writer of a directory can plant (1467-c8qg: a stray
-/// `/tmp/.forge-startup-context.md` made cwd=/tmp read as a forge on bare
-/// metal). And the FILE'S PRESENCE is not evidence either: every podman
-/// container has one, so the builder toolbox (where bare-metal gates run) and
-/// a distrobox read as a forge by presence alone. Only the forge image names a
-/// forge; any other container is `container-other`, treated as bare metal.
-///
-/// A FORGE NEEDS PHYSICAL EVIDENCE. The environment variable alone cannot
-/// declare one, because a forge is where `soft-reset` is pre-authorised: a
-/// variable that could claim it would be a way round the consent. Evidence
-/// wins over the variable, and a disagreement between them is reported.
+/// consulted: evidence never comes from a file in the workspace (1467-c8qg).
 pub fn read_host_kind(_root: &Path) -> HostKindReading {
     let env = std::env::var("TILLANDSIAS_HOST_KIND").ok();
     let containerenv = std::fs::read_to_string("/run/.containerenv").ok();
-    read_host_kind_from(env.as_deref(), containerenv.as_deref())
+    let record = std::fs::read_to_string(FORGE_RECORD_PATH).ok();
+    read_host_kind_from(
+        env.as_deref(),
+        containerenv.as_deref(),
+        marker_state(Path::new(FORGE_MARKER_PATH)),
+        record.as_deref(),
+    )
 }
 
 /// The `image="…"` value of a `/run/.containerenv` record.
 pub fn containerenv_image(record: &str) -> Option<&str> {
-    record.lines().find_map(|l| {
-        l.trim()
-            .strip_prefix("image=")
-            .map(|v| v.trim_matches('"'))
-            .filter(|v| !v.is_empty())
-    })
+    record_field(record, "image")
 }
 
 /// Whether an image reference is the Tillandsias forge image
@@ -128,59 +195,95 @@ pub fn is_forge_image(image: &str) -> bool {
 }
 
 /// Pure half of [`read_host_kind`], so the rule is testable without a
-/// container. `containerenv` is the record's content, `None` when absent.
-pub fn read_host_kind_from(env: Option<&str>, containerenv: Option<&str>) -> HostKindReading {
+/// container. `containerenv` and `record` are file contents, `None` when absent.
+pub fn read_host_kind_from(
+    env: Option<&str>,
+    containerenv: Option<&str>,
+    marker: MarkerState,
+    record: Option<&str>,
+) -> HostKindReading {
     let env_kind = env.and_then(HostKind::parse);
     let image = containerenv.and_then(containerenv_image);
-    if image.is_some_and(is_forge_image) {
-        let image = image.unwrap_or_default();
-        let disagreement = match (env, env_kind) {
-            (Some(e), Some(k)) if k != HostKind::Forge => Some(format!(
-                "TILLANDSIAS_HOST_KIND={e} but /run/.containerenv names the forge image {image}"
+    let mut notes: Vec<String> = Vec::new();
+    if let MarkerState::Untrusted(why) = marker {
+        notes.push(format!(
+            "{FORGE_MARKER_PATH} is present but untrusted ({why}); it is not forge evidence"
+        ));
+    }
+    if marker == MarkerState::Valid {
+        match (env, env_kind) {
+            (Some(e), Some(k)) if k != HostKind::Forge => notes.push(format!(
+                "TILLANDSIAS_HOST_KIND={e} but the forge marker is present"
             )),
-            (Some(e), None) => Some(format!(
-                "TILLANDSIAS_HOST_KIND={e} is not a host kind; /run/.containerenv names the \
-                 forge image {image}"
+            (Some(e), None) => notes.push(format!(
+                "TILLANDSIAS_HOST_KIND={e} is not a host kind; the forge marker is present"
             )),
-            _ => None,
-        };
+            _ => {}
+        }
+        if let Some(rec) = record {
+            let rk = record_field(rec, "kind");
+            if rk != Some("forge") {
+                notes.push(format!(
+                    "{FORGE_RECORD_PATH} says kind={} but the forge marker is present",
+                    rk.unwrap_or("none")
+                ));
+            }
+            if let (Some(ri), Some(ci)) = (record_field(rec, "image"), image)
+                && ri != ci
+            {
+                notes.push(format!(
+                    "{FORGE_RECORD_PATH} names image {ri} but /run/.containerenv names {ci}"
+                ));
+            }
+        }
         return HostKindReading {
             kind: HostKind::Forge,
-            source: "evidence",
-            disagreement,
+            source: "marker",
+            disagreement: join_notes(notes),
         };
+    }
+    if record.is_some() {
+        notes.push(format!(
+            "{FORGE_RECORD_PATH} is present without the forge marker; a launch record is not \
+             forge evidence"
+        ));
+    }
+    if image.is_some_and(is_forge_image) {
+        notes.push(format!(
+            "/run/.containerenv names the forge image {} but the forge marker is absent; the \
+             image name alone is not forge evidence",
+            image.unwrap_or_default()
+        ));
     }
     let fallback = if containerenv.is_some() {
         "container-other"
     } else {
         "default"
     };
-    match (env, env_kind) {
-        (Some(e), Some(HostKind::Forge)) => HostKindReading {
-            kind: HostKind::BareMetal,
-            source: fallback,
-            disagreement: Some(format!(
-                "TILLANDSIAS_HOST_KIND={e} but no container record names the forge image \
-                 (image={}); a forge is not self-declared",
-                image.unwrap_or("none")
-            )),
-        },
-        (Some(_), Some(k)) => HostKindReading {
-            kind: k,
-            source: "env",
-            disagreement: None,
-        },
-        (Some(e), None) => HostKindReading {
-            kind: HostKind::BareMetal,
-            source: fallback,
-            disagreement: Some(format!("TILLANDSIAS_HOST_KIND={e} is not a host kind")),
-        },
-        (None, _) => HostKindReading {
-            kind: HostKind::BareMetal,
-            source: fallback,
-            disagreement: None,
-        },
+    let (kind, source) = match (env, env_kind) {
+        (Some(e), Some(HostKind::Forge)) => {
+            notes.push(format!(
+                "TILLANDSIAS_HOST_KIND={e} but the forge marker is absent; a forge is not \
+                 self-declared"
+            ));
+            (HostKind::BareMetal, fallback)
+        }
+        (Some(_), Some(k)) => (k, "env"),
+        (Some(e), None) => {
+            notes.push(format!("TILLANDSIAS_HOST_KIND={e} is not a host kind"));
+            (HostKind::BareMetal, fallback)
+        }
+        (None, _) => (HostKind::BareMetal, fallback),
+    };
+    HostKindReading {
+        kind,
+        source,
+        disagreement: join_notes(notes),
     }
+}
+
+fn join_notes(notes: Vec<String>) -> Option<String> {
+    (!notes.is_empty()).then(|| notes.join("; "))
 }
 
 #[derive(Debug, Clone)]
@@ -1941,6 +2044,91 @@ pub fn audit_log_path(workspace: &Path) -> PathBuf {
         .join(AUDIT_BASENAME)
 }
 
+// ORDER 2430-s7ii: the log grew without bound (8.8 GB on macuahuitl, 1.9 GB on yoga
+// at ~32 MB/day), and `policy audit` read all of it into memory. Past a size cap the
+// live file is RENAMED to a timestamped generation beside it (atomic: an appender
+// holding the old descriptor finishes into the generation, nothing is lost). A
+// generation is removed only when the total is over a cap AND it is entirely older
+// than AUDIT_PRUNE_AGE, so the 14-day retirement window (1443-we89) is never pruned.
+const AUDIT_MAX_BYTES: u64 = 256 * 1024 * 1024;
+const AUDIT_TOTAL_MAX_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+const AUDIT_PRUNE_AGE: std::time::Duration = std::time::Duration::from_secs(30 * 24 * 3600);
+
+fn env_bytes(name: &str, default: u64) -> u64 {
+    std::env::var(name)
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(default)
+}
+
+/// The rotated generations of `path`, oldest first (their names sort by time).
+pub fn audit_generations(path: &Path) -> Vec<PathBuf> {
+    let (Some(dir), Some(base)) = (path.parent(), path.file_name().and_then(|n| n.to_str())) else {
+        return Vec::new();
+    };
+    let prefix = format!("{base}.");
+    let mut out: Vec<PathBuf> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| {
+            let n = e.file_name().to_str()?.to_string();
+            n.starts_with(&prefix).then(|| e.path())
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+/// Rotate `path` when it has reached `max`, then prune generations while the total is
+/// over `total_max`, oldest first, but only generations last written before `now - age`.
+pub fn audit_rotate(
+    path: &Path,
+    max: u64,
+    total_max: u64,
+    age: std::time::Duration,
+    now: std::time::SystemTime,
+) {
+    let Ok(meta) = std::fs::metadata(path) else {
+        return;
+    };
+    if meta.len() < max {
+        return;
+    }
+    let stamp = chrono::DateTime::<chrono::Utc>::from(now).format("%Y%m%dT%H%M%S%.6fZ");
+    let mut target = path.as_os_str().to_owned();
+    target.push(format!(".{stamp}-{}", std::process::id()));
+    if std::fs::rename(path, &target).is_err() {
+        return;
+    }
+    let gens = audit_generations(path);
+    let mut total: u64 = gens
+        .iter()
+        .filter_map(|g| std::fs::metadata(g).ok())
+        .map(|m| m.len())
+        .sum();
+    for g in &gens {
+        if total <= total_max {
+            break;
+        }
+        let Ok(m) = std::fs::metadata(g) else {
+            continue;
+        };
+        let old = m
+            .modified()
+            .ok()
+            .and_then(|t| now.duration_since(t).ok())
+            .is_some_and(|d| d > age);
+        if !old {
+            break; // generations sort by time: everything after this one is younger
+        }
+        if std::fs::remove_file(g).is_ok() {
+            total = total.saturating_sub(m.len());
+        }
+    }
+}
+
 fn audit_append(path: &Path, line: &serde_json::Value) {
     if cfg!(test) || std::env::var("TILLANDSIAS_POLICY_AUDIT").as_deref() == Ok("off") {
         return;
@@ -1948,6 +2136,16 @@ fn audit_append(path: &Path, line: &serde_json::Value) {
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
+    audit_rotate(
+        path,
+        env_bytes("TILLANDSIAS_POLICY_AUDIT_MAX_BYTES", AUDIT_MAX_BYTES),
+        env_bytes(
+            "TILLANDSIAS_POLICY_AUDIT_TOTAL_MAX_BYTES",
+            AUDIT_TOTAL_MAX_BYTES,
+        ),
+        AUDIT_PRUNE_AGE,
+        std::time::SystemTime::now(),
+    );
     use std::io::Write;
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
@@ -2025,11 +2223,26 @@ pub fn audit_summary(
     since: Option<chrono::Duration>,
     caller: Option<&str>,
 ) -> Option<Vec<AuditRow>> {
-    let text = std::fs::read_to_string(path).ok()?;
+    use std::io::BufRead;
+    // 2430-s7ii: every rotated generation, then the live file, streamed line by line
+    // (read_to_string held all of an 8.8 GB log in memory). None only when NONE exists.
+    let mut files = audit_generations(path);
+    files.push(path.to_path_buf());
+    let readers: Vec<_> = files
+        .iter()
+        .filter_map(|f| std::fs::File::open(f).ok())
+        .collect();
+    if readers.is_empty() {
+        return None;
+    }
     let cutoff = since.map(|d| chrono::Utc::now() - d);
     let mut counts: std::collections::BTreeMap<(String, String), usize> =
         std::collections::BTreeMap::new();
-    for line in text.lines() {
+    for line in readers
+        .into_iter()
+        .flat_map(|f| std::io::BufReader::new(f).lines().map_while(Result::ok))
+    {
+        let line = line.as_str();
         let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
             continue;
         };
@@ -2073,6 +2286,127 @@ pub fn parse_since(s: &str) -> Option<chrono::Duration> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── 2430-s7ii: the audit log rotates by size and keeps its window ────────────────
+    fn audit_dir(tag: &str) -> PathBuf {
+        let d = crate::test_scratch::dir(format!("audit-rotate-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+    fn line(rule: &str) -> String {
+        format!(
+            "{{\"ts\":\"{}\",\"caller\":\"c\",\"rule_id\":\"{rule}\",\"decision\":\"deny\"}}\n",
+            chrono::Utc::now().to_rfc3339()
+        )
+    }
+    fn backdate(p: &Path, secs: u64) {
+        let f = std::fs::OpenOptions::new().write(true).open(p).unwrap();
+        f.set_modified(std::time::SystemTime::now() - std::time::Duration::from_secs(secs))
+            .unwrap();
+    }
+    const DAY: u64 = 24 * 3600;
+
+    #[test]
+    fn audit_rotates_at_the_cap_and_loses_no_line() {
+        let d = audit_dir("cap");
+        let p = d.join(AUDIT_BASENAME);
+        std::fs::write(&p, line("a").repeat(10)).unwrap();
+        audit_rotate(
+            &p,
+            1 << 20,
+            u64::MAX,
+            AUDIT_PRUNE_AGE,
+            std::time::SystemTime::now(),
+        );
+        assert!(
+            p.exists() && audit_generations(&p).is_empty(),
+            "under the cap nothing rotates"
+        );
+        audit_rotate(
+            &p,
+            16,
+            u64::MAX,
+            AUDIT_PRUNE_AGE,
+            std::time::SystemTime::now(),
+        );
+        let g = audit_generations(&p);
+        assert!(
+            !p.exists(),
+            "at the cap the live file is renamed, so the next append starts it empty"
+        );
+        assert_eq!(g.len(), 1);
+        assert_eq!(
+            std::fs::read_to_string(&g[0]).unwrap().lines().count(),
+            10,
+            "every line is in the generation"
+        );
+    }
+
+    #[test]
+    fn audit_prune_never_removes_a_young_generation_however_large() {
+        let d = audit_dir("young");
+        let p = d.join(AUDIT_BASENAME);
+        for i in 0..3 {
+            std::fs::write(&p, line(&format!("r{i}")).repeat(50)).unwrap();
+            audit_rotate(&p, 16, 1, AUDIT_PRUNE_AGE, std::time::SystemTime::now());
+        }
+        assert_eq!(
+            audit_generations(&p).len(),
+            3,
+            "total over the cap, but all inside the window: keep all"
+        );
+    }
+
+    #[test]
+    fn audit_prune_removes_an_old_generation_over_the_total_cap() {
+        let d = audit_dir("old");
+        let p = d.join(AUDIT_BASENAME);
+        std::fs::write(&p, line("old").repeat(50)).unwrap();
+        audit_rotate(
+            &p,
+            16,
+            u64::MAX,
+            AUDIT_PRUNE_AGE,
+            std::time::SystemTime::now(),
+        );
+        let old = audit_generations(&p).remove(0);
+        backdate(&old, 40 * DAY);
+        std::fs::write(&p, line("new").repeat(50)).unwrap();
+        audit_rotate(&p, 16, 1, AUDIT_PRUNE_AGE, std::time::SystemTime::now());
+        let g = audit_generations(&p);
+        assert_eq!(
+            g.len(),
+            1,
+            "the 40-day-old generation goes once the total is over the cap"
+        );
+        assert!(
+            std::fs::read_to_string(&g[0]).unwrap().contains("\"new\""),
+            "the young one stays"
+        );
+    }
+
+    #[test]
+    fn audit_summary_reads_every_generation_and_the_live_file() {
+        let d = audit_dir("summary");
+        let p = d.join(AUDIT_BASENAME);
+        std::fs::write(&p, line("x").repeat(3)).unwrap();
+        audit_rotate(
+            &p,
+            16,
+            u64::MAX,
+            AUDIT_PRUNE_AGE,
+            std::time::SystemTime::now(),
+        );
+        std::fs::write(&p, line("x").repeat(2)).unwrap();
+        let rows = audit_summary(&p, Some(chrono::Duration::days(14)), None).unwrap();
+        let n: usize = rows
+            .iter()
+            .filter(|((r, _), _)| r == "x")
+            .map(|(_, n)| *n)
+            .sum();
+        assert_eq!(n, 5, "3 rotated + 2 live: the window spans the rotation");
+    }
 
     fn req(argv: &[&str], k: HostKind) -> Request {
         Request {
@@ -2331,36 +2665,135 @@ mod tests {
 
     #[test]
     fn a_forge_is_not_self_declared() {
+        use MarkerState::{Absent, Untrusted, Valid};
         const FORGE: &str = "engine=\"podman-5.8.7\"\nname=\"forge-x\"\nimage=\"localhost/tillandsias-forge:v0.5.1\"\nrootless=1\n";
         const TOOLBOX: &str = "engine=\"podman-5.8.7\"\nname=\"tillandsias-builder\"\nimage=\"registry.fedoraproject.org/fedora-toolbox:44\"\nrootless=1\n";
-        let r = read_host_kind_from(Some("forge"), None);
+        let r = read_host_kind_from(Some("forge"), None, Absent, None);
         assert_eq!(r.kind, HostKind::BareMetal);
         assert!(r.disagreement.is_some());
-        let r = read_host_kind_from(Some("bare-metal"), Some(FORGE));
-        assert_eq!(r.kind, HostKind::Forge);
+        // 2354-5biy: the image name alone no longer makes a forge.
+        let r = read_host_kind_from(None, Some(FORGE), Absent, None);
+        assert_eq!(r.kind, HostKind::BareMetal);
         assert!(r.disagreement.is_some());
-        let r = read_host_kind_from(None, Some(FORGE));
-        assert_eq!((r.kind, r.disagreement.is_none()), (HostKind::Forge, true));
-        assert_eq!(read_host_kind_from(None, None).kind, HostKind::BareMetal);
+        let r = read_host_kind_from(Some("forge"), Some(FORGE), Absent, None);
+        assert_eq!(r.kind, HostKind::BareMetal);
+        assert_eq!(
+            read_host_kind_from(None, None, Absent, None).kind,
+            HostKind::BareMetal
+        );
         // Presence is not evidence: a toolbox, an empty record, a base stage.
-        let r = read_host_kind_from(None, Some(TOOLBOX));
+        let r = read_host_kind_from(None, Some(TOOLBOX), Absent, None);
         assert_eq!((r.kind, r.source), (HostKind::BareMetal, "container-other"));
-        let r = read_host_kind_from(Some("forge"), Some(TOOLBOX));
+        let r = read_host_kind_from(Some("forge"), Some(TOOLBOX), Absent, None);
         assert_eq!(r.kind, HostKind::BareMetal);
         assert!(r.disagreement.is_some());
         assert_eq!(
-            read_host_kind_from(None, Some("")).kind,
+            read_host_kind_from(None, Some(""), Absent, None).kind,
             HostKind::BareMetal
         );
+        // An untrusted marker (a user-owned or writable file) is not evidence.
+        let r = read_host_kind_from(
+            Some("forge"),
+            Some(FORGE),
+            Untrusted("not-root-owned"),
+            None,
+        );
+        assert_eq!(r.kind, HostKind::BareMetal);
+        assert!(r.disagreement.unwrap().contains("untrusted"));
+        // The marker decides, and a contrary variable is reported, not obeyed.
+        let r = read_host_kind_from(Some("bare-metal"), Some(FORGE), Valid, None);
+        assert_eq!((r.kind, r.source), (HostKind::Forge, "marker"));
+        assert!(r.disagreement.is_some());
         assert!(is_forge_image("tillandsias-forge"));
         assert!(is_forge_image(
             "localhost/tillandsias-forge:latest@sha256:ab"
         ));
         assert!(!is_forge_image("localhost/tillandsias-forge-base:v1"));
         assert!(!is_forge_image("docker.io/evil/not-tillandsias-forge:v1"));
-        assert_eq!(read_host_kind_from(Some("ci"), None).kind, HostKind::Ci);
+        assert_eq!(
+            read_host_kind_from(Some("ci"), None, Absent, None).kind,
+            HostKind::Ci
+        );
     }
 
+    // ── 2354-5biy exit criteria (operator ruling 2026-11-27) ────────────────
+    const LAUNCH: &str = "kind=forge\nimage=localhost/tillandsias-forge:v0.5.1\nversion=0.5.1\nproject=tillandsias\nlaunch_id=abc\n";
+
+    #[test]
+    fn an_unprivileged_forge_reports_forge_from_the_marker_alone() {
+        // podman exec / queue.submit: no variable, no image in the record,
+        // no launch record. The marker alone decides.
+        let r = read_host_kind_from(None, Some("rootless=1\n"), MarkerState::Valid, None);
+        assert_eq!((r.kind, r.source), (HostKind::Forge, "marker"));
+        assert!(r.disagreement.is_none());
+        let r = read_host_kind_from(None, None, MarkerState::Valid, Some(LAUNCH));
+        assert_eq!(r.kind, HostKind::Forge);
+        assert!(r.disagreement.is_none(), "{:?}", r.disagreement);
+    }
+
+    #[test]
+    fn a_launch_record_must_agree_with_the_marker() {
+        const CENV: &str = "image=\"localhost/tillandsias-forge:v0.5.2\"\n";
+        let r = read_host_kind_from(None, Some(CENV), MarkerState::Valid, Some(LAUNCH));
+        assert_eq!(r.kind, HostKind::Forge);
+        assert!(r.disagreement.unwrap().contains("names image"));
+        let r = read_host_kind_from(None, None, MarkerState::Valid, Some("kind=bare-metal\n"));
+        assert_eq!(r.kind, HostKind::Forge);
+        assert!(r.disagreement.unwrap().contains("kind=bare-metal"));
+    }
+
+    #[test]
+    fn bare_metal_with_a_forged_record_and_no_marker_stays_bare_metal() {
+        let r = read_host_kind_from(None, None, MarkerState::Absent, Some(LAUNCH));
+        assert_eq!(r.kind, HostKind::BareMetal);
+        assert!(r.disagreement.unwrap().contains("not forge evidence"));
+        let r = read_host_kind_from(Some("forge"), None, MarkerState::Absent, Some(LAUNCH));
+        assert_eq!(r.kind, HostKind::BareMetal);
+    }
+
+    #[test]
+    fn hard_reset_is_denied_in_a_marked_forge_with_the_variable_unset() {
+        let kind = read_host_kind_from(None, None, MarkerState::Valid, None).kind;
+        let d = floor_decide(&req(&["tillandsias-tray", "--reset-guest"], kind), &[])
+            .expect("the floor answers a reset");
+        assert_eq!(d.token, "refused:policy:hard-reset:not-grantable-in-forge");
+    }
+
+    #[test]
+    fn the_in_forge_grant_refusal_holds_with_the_variable_unset() {
+        let kind = read_host_kind_from(None, None, MarkerState::Valid, None).kind;
+        assert_eq!(
+            grant_refusal(None, kind),
+            Some("refused:consent:not-grantable-in-forge")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn marker_state_trusts_only_a_root_owned_unwritable_file() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("forge");
+        assert_eq!(marker_state(&p), MarkerState::Absent);
+        std::fs::write(&p, "kind=forge\n").unwrap();
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o444)).unwrap();
+        // The test runs unprivileged, so the file it wrote is not root's.
+        assert_eq!(marker_state(&p), MarkerState::Untrusted("not-root-owned"));
+        let l = dir.path().join("link");
+        std::os::unix::fs::symlink(&p, &l).unwrap();
+        assert_eq!(
+            marker_state(&l),
+            MarkerState::Untrusted("not-a-regular-file")
+        );
+        // A root-owned file with the wrong content is not the marker either.
+        let etc = Path::new("/etc/hostname");
+        if let Ok(m) = std::fs::metadata(etc) {
+            use std::os::unix::fs::MetadataExt;
+            if m.uid() == 0 && m.mode() & 0o222 == 0 {
+                assert_eq!(marker_state(etc), MarkerState::Untrusted("content"));
+            }
+        }
+    }
     #[test]
     fn a_seed_that_loosens_is_refused_whole_and_one_that_tightens_applies() {
         let loosen = "version: 1\nrules:\n  - id: let-me\n    program: gh\n    args: [auth, refresh]\n    decision: allow\n";

@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-liveness-probe-behaviour-skew-gate-divergence-fixtures-to-lua
+    order: 2341-324y
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      Three whole-file shell-to-Lua ports: test-forge-liveness-probe.sh, test-expert-capability-behaviour-skew.sh and test-gate-divergence-is-declared.sh become scripts/lua/*.lua.
+    context: |
+      Coordinator queue 2026-11-25: lenovinha has scripts/test-[d-h]*.sh. Sixth batch, after 2333-rqjn.
+      The liveness litmus greps the fixture and never runs it; the port makes that step run it.
+      ports: scripts/test-forge-liveness-probe.sh scripts/test-expert-capability-behaviour-skew.sh scripts/test-gate-divergence-is-declared.sh
+      No origin/work/* ref modifies or deletes any of the three (checked against every ref, 2026-11-25).
+    exit_criteria:
+      - "each .lua gives the same verdict as its .sh on the trunk tree, and the same red arm as the .sh under a mutant"
+      - "every caller runs the .lua; the three .sh files are deleted"
+    unscoreable: "unpinnable-until-the-guard-exists: the mutant parity is the deliverable."
+    next_action: "Port, mutant-parity each, rewire steps 090 and 478 and the liveness litmus, delete the .sh."
+    provenance: coordinator queue; filed by lenovinha.
+    related: [2333-rqjn]
+    events:
+      - {type: filed, ts: '2026-11-25T08:22:14Z', host: lenovinha, summary: sixth d-h batch filed}

@@ -192,7 +192,7 @@ vault operator unseal "$UNSEAL_KEY_HEX"
 wait "$VAULT_PID"
 ```
 
-**Verification**: `vault status | grep Sealed` must report `false` within 5s of container start, with zero user input. The litmus `litmus-vault-auto-unseal-no-prompt.yaml` asserts this end-to-end.
+**Verification**: `vault status | grep Sealed` must report `false` within 5s of container start, with zero user input. No test asserts this today: `litmus-vault-auto-unseal-no-prompt.yaml` is retired (2357-5quw), its commands no longer exist.
 
 ### Failure path — installation-uuid lost
 

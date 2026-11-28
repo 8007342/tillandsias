@@ -22,6 +22,6 @@ critical_path:
     expected_behavior: "ok: clean tree"
 
   - step: "the gate is wired into the build suite"
-    command: "grep -q 'check-no-spawn-in-if-not.lua' build.sh && echo 'ok: wired'"
+    command: "grep -qE '^STEP_LUA=\"scripts/lua/check-no-spawn-in-if-not\\.lua\"|_run_lua_decider \"scripts/lua/check-no-spawn-in-if-not\\.lua\"' build.sh scripts/gate-steps.d/*.step && echo 'ok: wired'"
     timeout_ms: 3000
     expected_behavior: "ok: wired"

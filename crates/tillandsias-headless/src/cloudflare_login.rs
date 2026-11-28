@@ -1802,7 +1802,7 @@ pub fn run_cli(args: &[String]) -> i32 {
         debug,
         may_start_vault: true,
     };
-    let host_is_forge = std::env::var("TILLANDSIAS_HOST_KIND").as_deref() == Ok("forge");
+    let host_is_forge = tillandsias_core::forge_marker::refuse_as_forge();
     let mut stdout = std::io::stdout();
     let result = match cmd {
         Command::Logout => logout(
@@ -3544,7 +3544,7 @@ mod tests {
     }
 
     // ── against the REAL tillandsias-fake-cloudflare (ignored; the script
-    //    scripts/test-cloudflare-login.sh builds the fake and runs these) ──
+    //    scripts/lua/test-cloudflare-login.lua builds the fake and runs these) ──
 
     mod fake {
         use super::*;
@@ -3580,7 +3580,7 @@ mod tests {
                 });
             assert!(
                 bin.exists(),
-                "fake-cloudflare not found at {bin:?}; run scripts/test-cloudflare-login.sh"
+                "fake-cloudflare not found at {bin:?}; run scripts/lua/test-cloudflare-login.lua"
             );
             let dir = std::env::temp_dir().join(format!("cf-login-{name}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
@@ -3731,7 +3731,7 @@ mod tests {
     // ARM loopback: ?auto=approve ends ok:cloudflare-login:stored and both
     // records are in the store; no token, verifier or code in the output.
     #[test]
-    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-login.sh"]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/lua/test-cloudflare-login.lua"]
     fn cloudflare_login_fake_loopback_approve_stores() {
         let server = fake::start("loopback");
         let http = cloudflare_oauth::ReqwestHttpClient::default();
@@ -3773,7 +3773,7 @@ mod tests {
     // ARM deny: ?auto=deny ends refused:cloudflare-login:access-denied, the
     // ledger has nothing past /oauth2/auth, the store was never touched.
     #[test]
-    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-login.sh"]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/lua/test-cloudflare-login.lua"]
     fn cloudflare_login_fake_deny_writes_nothing() {
         let server = fake::start("deny");
         let http = cloudflare_oauth::ReqwestHttpClient::default();
@@ -3797,7 +3797,7 @@ mod tests {
 
     // ARM state: a tampered state is refused and NO token request is made.
     #[test]
-    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-login.sh"]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/lua/test-cloudflare-login.lua"]
     fn cloudflare_login_fake_state_mismatch_makes_no_exchange() {
         let server = fake::start("state");
         let http = cloudflare_oauth::ReqwestHttpClient::default();
@@ -3921,7 +3921,7 @@ mod tests {
     // ARM qr: the QR decodes to the authorize URL and nothing else; the relay
     // poll hands back the code; stored; no verifier anywhere in the output.
     #[test]
-    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-login.sh"]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/lua/test-cloudflare-login.lua"]
     fn cloudflare_login_fake_qr_relay_poll_stores_and_qr_is_only_the_url() {
         let server = fake::start("qr");
         let real = cloudflare_oauth::ReqwestHttpClient::default();
@@ -3955,7 +3955,7 @@ mod tests {
     // ARM paste: a code from the fake, pasted as the address-bar URL, stores.
     // CONTROL: a bare code (no state) is refused and stores nothing.
     #[test]
-    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-login.sh"]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/lua/test-cloudflare-login.lua"]
     fn cloudflare_login_fake_paste_stores() {
         let server = fake::start("paste");
         let http = cloudflare_oauth::ReqwestHttpClient::default();
@@ -4013,7 +4013,7 @@ mod tests {
     // ARM litmus: LITMUS stops every receiver before any exchange; the ledger
     // shows discovery only and the store is never touched.
     #[test]
-    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-login.sh"]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/lua/test-cloudflare-login.lua"]
     fn cloudflare_login_fake_litmus_stops_before_exchange() {
         let server = fake::start("litmus");
         let http = cloudflare_oauth::ReqwestHttpClient::default();
@@ -4048,7 +4048,7 @@ mod tests {
     // ARM logout: after a real login, logout revokes at the fake, deletes the
     // pair and leaves secret/cloudflare/mesh byte-for-byte unchanged.
     #[test]
-    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-login.sh"]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/lua/test-cloudflare-login.lua"]
     fn cloudflare_logout_fake_deletes_pair_keeps_mesh() {
         let server = fake::start("logout");
         let http = cloudflare_oauth::ReqwestHttpClient::default();
@@ -4138,7 +4138,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-login.sh"]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/lua/test-cloudflare-login.lua"]
     fn cloudflare_login_fake_device_approve_stores_and_qr_is_only_the_verification_uri() {
         let server = device_fake("device-approve", "approve");
         let store = MemStore::with_mesh();
@@ -4182,7 +4182,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-login.sh"]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/lua/test-cloudflare-login.lua"]
     fn cloudflare_login_fake_device_slow_down_widens_and_still_stores() {
         let server = device_fake("device-slow", "slow_down");
         let store = MemStore::with_mesh();
@@ -4205,7 +4205,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-login.sh"]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/lua/test-cloudflare-login.lua"]
     fn cloudflare_login_fake_device_deny_and_expire_store_nothing() {
         for (mode, reason) in [("deny", "access-denied"), ("expire", "device-code-expired")] {
             let server = device_fake(&format!("device-{mode}"), mode);
@@ -4218,7 +4218,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-login.sh"]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/lua/test-cloudflare-login.lua"]
     fn cloudflare_login_fake_device_refused_falls_back_and_no_grant_never_asks() {
         // Cloudflare refuses this client the grant: a named note, then the code
         // flow (here: paste, which refuses a non-terminal stdin).
@@ -4255,7 +4255,7 @@ mod tests {
     /// LITMUS_PODMAN_MODE into $CF_LOGIN_QR_CAPTURE): the QR decodes to the
     /// printed authorize URL and nothing else.
     #[test]
-    #[ignore = "reads a capture made by scripts/test-cloudflare-login.sh"]
+    #[ignore = "reads a capture made by scripts/lua/test-cloudflare-login.lua"]
     fn cloudflare_login_binary_qr_capture_is_only_the_authorize_url() {
         let path = std::env::var("CF_LOGIN_QR_CAPTURE").expect("CF_LOGIN_QR_CAPTURE");
         let relay = std::env::var("CF_LOGIN_QR_RELAY").expect("CF_LOGIN_QR_RELAY");

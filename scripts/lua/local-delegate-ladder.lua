@@ -1,4 +1,5 @@
--- @trace order:1834-ujsf, spec:local-coding-delegation
+-- @env TILLANDSIAS_REPO_ROOT
+-- @trace order:1834-ujsf, spec:local-coding-delegation, order:2427-ldrr
 --
 -- local-delegate-ladder.lua — the outcome-token grammar and the rung
 -- aggregator, behind `scripts/delegate-outcome.sh local-record` and called
@@ -95,9 +96,10 @@ end
 
 local function scan(files)
     local groups, keys = {}, {}
+    local SRC = require("common.listed_read").read_all(PROG, files)
     for _, f in ipairs(files) do
-        local okr, text = pcall(fs.read, f)
-        if okr and type(text) == "string" then
+        local text = SRC[f]
+        if type(text) == "string" then
             for line in (text .. "\n"):gmatch("([^\n]*)\n") do
                 local pos = 1
                 while true do

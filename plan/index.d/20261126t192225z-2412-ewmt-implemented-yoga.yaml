@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: shell-fixtures-ported-to-lua-batch-8
+    field: status
+    value: implemented
+    ts: "2026-11-26T19:22:25Z"
+    host: yoga
+events:
+  - packet_id: shell-fixtures-ported-to-lua-batch-8
+    event:
+      type: implemented
+      ts: "2026-11-26T19:22:25Z"
+      host: yoga
+      summary: |
+        Three ports on work/2412-ewmt, each .sh deleted and its caller repointed (build.sh x2, local-ci-landed-guards,
+        the harness-rollback litmus): plan-binary-probe-usage-determinism 2 arms, harness-rollback 7,
+        unrunnable-platform-arms 11. Each agrees with its .sh; 2 subject mutants each, all caught.
+        One hole closed: unrunnable-platform-arms' auditor arm passed when audit-guard-activation printed no
+        orphans: line at all; it now requires the guard's own active: line.
+        THREE, NOT SIX, of the claimed candidates, by measurement of each, not by choice:
+        check-yaml-reader-availability proves the plan binary runs (bootstrap allowlist), so a Lua port is circular;
+        test-uninstall-matcher-spares-bystanders runs only on Darwin; test-capture-helper.sh is the history subject
+        of test-bare-mktemp.lua. Also refused on reading: image-usability-check (macOS STEP_SECOND_REGIME would go
+        stale), awk-float-lc-numeric (subject of three fixtures, two darwin regimes), plan-binary-probe (cases 7-8
+        MSYS-only), build-image-installed-version-alias (named in openspec change lua-door-environment-inheritance).
+        Skill line added (coordinate-multihost-work batch section): filter against open refs and PRs before claiming.

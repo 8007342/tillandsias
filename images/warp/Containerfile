@@ -24,11 +24,16 @@ FROM docker.io/library/debian:bookworm-slim
 # credited, with its upstream licence, in docs/credits/stack.v1.json.
 LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 
-ARG WARP_VERSION=2026.7.1377.0
+ARG WARP_VERSION=2026.8.2115.0
 
+# 2413-jvhh: Lua 5.4 with the forge's lfs and lpeg, for in-image glue (operator ruling
+# 2026-11-26: Lua, then Rust, then Go in every container). Same layer as the vendor install.
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates curl gnupg; \
+    apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+      lua5.4 lua-filesystem lua-lpeg; \
+    ln -sf lua5.4 /usr/bin/lua; \
+    lua -e 'require "lfs"; require "lpeg"'; \
     curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg \
       | gpg --dearmor -o /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg; \
     echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ bookworm main" \

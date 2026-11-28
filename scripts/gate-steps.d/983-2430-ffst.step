@@ -1,0 +1,13 @@
+# Gate step 2430-ffst — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. The gate-step pool fails fast: without --keep-going, a finished
+# red stops dispatch instead of waiting for every worker, and
+# TILLANDSIAS_GATE_STEP_ORDER starts the likeliest reds first. The fixture drives
+# the real step loop over scratch roots at jobs=2 and times a red against a green.
+STEP_DESC="Checking the gate-step pool fails fast on a red (2430-ffst)"
+STEP_LUA="scripts/lua/test-gate-pool-fail-fast.lua"
+STEP_ERROR="the gate-step pool no longer stops at a red, or the dispatch order is ignored (2430-ffst); see which arm failed above"
+STEP_OK="the pool stops dispatching at the first red and honours the dispatch order"
+STEP_READS="build.sh scripts/lua/test-gate-pool-fail-fast.lua"
+STEP_SECOND_REGIME="doris 2026-11-27 msys skip:gate-pool-fail-fast:MSYS_NT-10.0-26300-re-execs-build-sh-into-wsl"
+STEP_SERIAL="runs four nested build.sh --gate-steps gates and times them"

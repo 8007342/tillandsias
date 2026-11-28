@@ -27,29 +27,29 @@ size: quick
 
 inputs:
   - scripts/run-litmus-test.sh
-  - scripts/test-litmus-podman-preflight-diagnosis.sh
+  - scripts/lua/test-litmus-podman-preflight-diagnosis.lua
 
 preconditions:
   - workspace contains scripts/run-litmus-test.sh
-  - workspace contains scripts/test-litmus-podman-preflight-diagnosis.sh
+  - workspace contains scripts/lua/test-litmus-podman-preflight-diagnosis.lua
   - host is Linux (the preflight is Linux-gated by design)
 
 critical_path:
   - step: "two fixtures against the real runner: an instantly-failing podman is not called a stall, a stalling podman is"
-    command: "bash scripts/test-litmus-podman-preflight-diagnosis.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-podman-preflight-diagnosis.lua"
     timeout_ms: 180000
-    success_pattern: "PASS: podman preflight distinguishes timeout from immediate failure"
+    success_pattern: "ok:litmus-podman-preflight-diagnosis:"
     failure_pattern: "FAIL:"
 
   - step: "ORDER 1464-v3xq: the preflight fires on a podman INVOCATION (command position, wrappers, a quoted -c script), not on the word in quoted prose"
-    command: "bash scripts/test-litmus-podman-preflight-trigger.sh 2>&1 | tail -n 1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-podman-preflight-trigger.lua"
     timeout_ms: 300000
-    expected_behavior: "PASS: litmus-podman-preflight-trigger"
+    expected_behavior: "ok:litmus-podman-preflight-trigger:"
 
 observability:
   traces:
     - "@trace spec:litmus-framework"
-  expected_log: "PASS: podman preflight distinguishes timeout from immediate failure (797-5kqe)"
+  expected_log: "ok:litmus-podman-preflight-diagnosis:"
   log_fields:
     spec: "litmus-framework"
     test: "litmus-podman-preflight-diagnosis-shape"

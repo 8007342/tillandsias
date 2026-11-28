@@ -3,8 +3,9 @@
 # measured one at a time on lenovinha). As a .step it is no build.sh edit, so it
 # never makes intake HEAVY; it runs in the pool (it writes only its own scratch).
 STEP_DESC="Checking the gate-stamp scope fixture (887-bz88)"
-STEP_SCRIPT="scripts/test-gate-stamp-scope.sh"
+STEP_LUA="scripts/lua/test-gate-stamp-scope.lua"
 STEP_ERROR="the gate-stamp scope fixture regressed — what the stamp covers is unproven, and a too-narrow stamp once let a lost exec bit reach the trunk"
 STEP_OK="gate-stamp scope fixture passed"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-23 darwin PASS gate-stamp-scope 17/17 at 35680bdf4 (run directly, idle host)"
-STEP_READS="scripts/test-gate-stamp-scope.sh"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-25 darwin ok:gate-stamp-scope:18 arms at 5d3922b75 (the Lua fixture, 2348-yxde; bash 3.2, relayed by macuahuitl)"
+STEP_SECOND_REGIME="yolanda 2026-11-25 msys ok:gate-stamp-scope:18 arms (plan binary unset, /c/ and C:/ forms, rc 0 each)"
+STEP_READS="scripts/lua/test-gate-stamp-scope.lua"

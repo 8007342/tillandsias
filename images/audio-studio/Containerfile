@@ -40,9 +40,14 @@ FROM docker.io/library/python:3.12.16-slim-bookworm
 # licence in docs/credits/stack.v1.json.
 LABEL org.opencontainers.image.licenses="GPL-3.0-or-later AND GPL-2.0-or-later"
 
+# 2413-ucx2: plus Lua 5.4 with the forge's lfs and lpeg, for in-image glue (operator ruling
+# 2026-11-26: Lua, then Rust, then Go in every container).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg sox rubberband-cli libsndfile1 ca-certificates \
+         lua5.4 lua-filesystem lua-lpeg \
     && rm -rf /var/lib/apt/lists/* \
+    && ln -sf lua5.4 /usr/bin/lua \
+    && lua -e 'require "lfs"; require "lpeg"' \
     && ffmpeg -hide_banner -encoders 2>/dev/null | grep -q ' libopus ' \
     && ffmpeg -hide_banner -encoders 2>/dev/null | grep -qE '^ A[A-Z.]+ aac ' \
     && ! ffmpeg -hide_banner -buildconf 2>/dev/null | grep -q fdk \

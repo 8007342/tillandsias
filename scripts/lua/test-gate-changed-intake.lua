@@ -30,6 +30,27 @@
 --  11 BUILD-MACH   the same diff plus one non-block line (a variable) stays
 --                  heavy:guard:build.sh
 --  12 BUILD-LEGACY without --intake the block-only diff is still select:all
+--  13 SERIAL       (2256-mvmy) in a scratch tree, two inline build.sh fixtures
+--                  and a STEP_SERIAL step never overlap under --intake --run,
+--                  and a phase:serial-fixtures line counts them (3)
+--  14 POOL-CONTROL the same tree without --intake runs the inline pair side
+--                  by side (NEGATIVE CONTROL: arm 13 can tell)
+--  15 PLAN-LANE    a plan-only diff prints route:plan-lane and selects no
+--                  fixture
+--  17 CASE-ARM     (2261-8gx5 (1)) a helper's `case` arm (`scripts/*|x) …`)
+--                  is a pattern, not a read: its executor does not read scripts/
+--  18 DECLARED     (2261-8gx5 (4)) a fixture with a dynamic path that declares
+--                  `# inputs: scripts/a.sh` reads scripts/a.sh, not scripts/
+--  19 DECIDER      --check-declared refuses a declaration that misses a literal
+--                  path the fixture names, and accepts it once declared
+--  20 ON-TOUCH     (2263-6xsp) a changed scripts/test-* fixture that reads the
+--                  whole scripts/ and declares nothing gets ONE advisory hint
+--                  naming `# inputs:`; a declared one gets none; exit stays 0
+--  16 NO-DEADLOCK  (2256-mvmy) the same tree padded past the 64 KB pipe buffer
+--                  (as the real population is, ~80 KB): a serial row's `wait`
+--                  must not sit on the loop's own input. Before the fix the
+--                  run hung in do_wait with `tr` blocked in anon_pipe_write;
+--                  it must now finish inside a 3-minute deadline
 --
 -- Verdict: ok:gate-changed-intake:<n> arms | violation:gate-changed-intake:<n>-failed
 
@@ -210,5 +231,211 @@ T:arm("11 BUILD-MACH one non-block line keeps build.sh a guard (heavy)",
 rc, o = gc_env({ "--list", "--files", BONLY }, { TILLANDSIAS_GATE_CHANGED_BUILD_DIFF = diff_file("bd-legacy", {}) })
 T:arm("12 BUILD-LEGACY without --intake a block-only build.sh diff is still select:all",
     rc == 0 and first(o, "select:all reason=guard:build.sh") ~= nil, "rc=" .. rc .. " " .. (first(o, "") or ""))
+
+-- 13-14: a scratch tree whose fixtures log their own start/end.
+do
+    local X = T:scratch("serial-tree")
+    local function w(rel, body) fs.write(X.rel .. "/" .. rel, body) end
+    proc.run{ argv = { "mkdir", "-p", X.abs .. "/scripts/gate-steps.d" } }
+    w("Cargo.toml", "[workspace]\nmembers = [\n]\n")
+    w("scripts/shared.txt", "x\n")
+    local function fx(name)
+        w("scripts/test-" .. name .. ".sh", table.concat({
+            "#!/usr/bin/env bash", 'cat "$(dirname "$0")/../scripts/shared.txt" >/dev/null',
+            'echo "start ' .. name .. ' $(date +%s%N)" >> "$SERIAL_LOG"', "sleep 1",
+            'echo "end ' .. name .. ' $(date +%s%N)" >> "$SERIAL_LOG"', "exit 0", "" }, "\n"))
+    end
+    for _, n in ipairs({ "a", "b", "c", "d" }) do fx(n) end
+    local blk = {}
+    for _, n in ipairs({ "a", "b" }) do
+        blk[#blk + 1] = '    _step "Inline ' .. n .. '..."'
+        blk[#blk + 1] = '    if ! _run bash "$SCRIPT_DIR/scripts/test-' .. n .. '.sh" 2>&1; then'
+        blk[#blk + 1] = '        _error "' .. n .. '"'
+        blk[#blk + 1] = "        exit 1"
+        blk[#blk + 1] = "    fi"
+    end
+    w("build.sh", 'if [[ "$FLAG_CHECK" == true ]]; then\n' .. table.concat(blk, "\n")
+        .. '\nelif [[ "$FLAG_TEST$FLAG_CHECK" == x ]]; then\n    :\nfi\n')
+    w("scripts/gate-steps.d/100-c.step", 'STEP_DESC="c"\nSTEP_SCRIPT="scripts/test-c.sh"\nSTEP_SERIAL="planted serial step"\n')
+    w("scripts/gate-steps.d/110-d.step", 'STEP_DESC="d"\nSTEP_SCRIPT="scripts/test-d.sh"\n')
+    T:must{ "git", "init", "-q", X.abs }
+    T:must{ "git", "-C", X.abs, "add", "-A" }
+    T:must{ "git", "-C", X.abs, "-c", "user.email=f@f", "-c", "user.name=f", "-c", "commit.gpgsign=false", "commit", "-qm", "tree" }
+    fs.write(S.rel .. "/serial-changed", "scripts/shared.txt\n")
+    local function run_tree(intake, logname)
+        fs.write(S.rel .. "/" .. logname, "")
+        local argv = { SH, GC, "--run" }
+        if intake then argv[#argv + 1] = "--intake" end
+        argv[#argv + 1] = "--files"; argv[#argv + 1] = S.abs .. "/serial-changed"
+        local r = proc.run{ argv = argv, cwd = X.abs, timeout_ms = 300000,
+            env = { TILLANDSIAS_GATE_CHANGED_ROOT = X.abs, SERIAL_LOG = S.abs .. "/" .. logname, GATE_CHANGED_JOBS = "4" } }
+        local iv = {}
+        for _, l in ipairs(text.lines(fs.read(S.rel .. "/" .. logname) or "")) do
+            local k, n, t = l:match("^(%a+) (%a) (%d+)$")
+            if k then iv[n] = iv[n] or {}; iv[n][k] = tonumber(t) end
+        end
+        return r, iv
+    end
+    local function overlap(iv, a, b)
+        local x, y = iv[a], iv[b]
+        if not (x and y and x.start and x["end"] and y.start and y["end"]) then return nil end
+        return x.start < y["end"] and y.start < x["end"]
+    end
+    local r13, iv13 = run_tree(true, "serial-intake.log")
+    local o13 = (r13.stdout or "")
+    local sline = first(o13, "phase:serial-fixtures") or ""
+    T:arm("13 SERIAL inline fixtures and a STEP_SERIAL step never overlap at intake",
+        overlap(iv13, "a", "b") == false and overlap(iv13, "a", "c") == false and overlap(iv13, "b", "c") == false
+            and sline:find(" n=3", 1, true) ~= nil,
+        "a/b=" .. tostring(overlap(iv13, "a", "b")) .. " a/c=" .. tostring(overlap(iv13, "a", "c"))
+            .. " b/c=" .. tostring(overlap(iv13, "b", "c")) .. " " .. sline .. " out=" .. o13:sub(1, 300))
+    local r14, iv14 = run_tree(false, "serial-legacy.log")
+    T:arm("14 POOL-CONTROL without --intake the inline pair runs side by side",
+        overlap(iv14, "a", "b") == true, "a/b=" .. tostring(overlap(iv14, "a", "b")) .. " out=" .. (r14.stdout or ""):sub(1, 300))
+end
+
+-- 16: the scratch tree again, padded so its population exceeds a pipe buffer.
+do
+    local X = T:scratch("deadlock-tree")
+    local function w(rel, body) fs.write(X.rel .. "/" .. rel, body) end
+    proc.run{ argv = { "mkdir", "-p", X.abs .. "/scripts/gate-steps.d" } }
+    w("Cargo.toml", "[workspace]\nmembers = [\n]\n")
+    w("scripts/shared.txt", "x\n")
+    w("scripts/test-a.sh", '#!/usr/bin/env bash\ncat "$(dirname "$0")/../scripts/shared.txt" >/dev/null\nexit 0\n')
+    w("scripts/test-b.sh", '#!/usr/bin/env bash\ncat "$(dirname "$0")/../scripts/shared.txt" >/dev/null\nexit 0\n')
+    w("build.sh", 'if [[ "$FLAG_CHECK" == true ]]; then\n'
+        .. '    _step "Inline a..."\n    if ! _run bash "$SCRIPT_DIR/scripts/test-a.sh" 2>&1; then\n        _error "a"\n        exit 1\n    fi\n'
+        .. '    _step "Inline b..."\n    if ! _run bash "$SCRIPT_DIR/scripts/test-b.sh" 2>&1; then\n        _error "b"\n        exit 1\n    fi\n'
+        .. 'elif [[ "$FLAG_TEST$FLAG_CHECK" == x ]]; then\n    :\nfi\n')
+    local pad = string.rep("padding-so-the-population-outgrows-a-pipe-buffer ", 8)
+    -- One script per filler: the population keeps one row per (path,args), so
+    -- fillers sharing a script collapse into one row and the pipe never fills.
+    for i = 1, 260 do
+        w("scripts/test-filler-" .. i .. ".sh", "#!/usr/bin/env bash\nexit 0\n")
+        w(string.format("scripts/gate-steps.d/%03d-filler.step", 100 + i),
+            'STEP_DESC="filler ' .. i .. " " .. pad .. '"\nSTEP_SCRIPT="scripts/test-filler-' .. i .. '.sh"\n')
+    end
+    T:must{ "git", "init", "-q", X.abs }
+    T:must{ "git", "-C", X.abs, "add", "-A" }
+    T:must{ "git", "-C", X.abs, "-c", "user.email=f@f", "-c", "user.name=f", "-c", "commit.gpgsign=false", "commit", "-qm", "tree" }
+    fs.write(S.rel .. "/deadlock-changed", "scripts/shared.txt\n")
+    local t0 = time.now_ms()
+    local r = proc.run{ argv = { SH, GC, "--run", "--intake", "--files", S.abs .. "/deadlock-changed" }, cwd = X.abs,
+        timeout_ms = 180000, env = { TILLANDSIAS_GATE_CHANGED_ROOT = X.abs, GATE_CHANGED_JOBS = "4" } }
+    local o16 = r.stdout or ""
+    T:arm("16 NO-DEADLOCK a serial row's wait does not sit on the loop's own input (population > 64 KB)",
+        r.status == "exited" and r.code == 0 and first(o16, "ok:gate-changed:intake") ~= nil,
+        "status=" .. tostring(r.status) .. " rc=" .. tostring(r.code) .. " ms=" .. (time.now_ms() - t0) .. " out=" .. o16:sub(1, 200))
+end
+
+-- 15: a plan-only diff goes to the plan lane.
+local PLANONLY = changes("plan-only", { "plan/index.d/README.md" })
+rc, o = gc{ "--list", "--intake", "--files", PLANONLY }
+local _, ro = gc_env({ "--run", "--intake", "--files", PLANONLY }, {})
+T:arm("15 PLAN-LANE a plan-only diff routes to the plan lane and selects no fixture",
+    first(ro, "route:plan-lane") ~= nil and count(ro, "ok:gate-changed:fixture:") == 0
+        and (first(ro, "ok:gate-changed:intake:plan-lane") ~= nil or first(ro, "fail:gate-changed:intake:plan-lane") ~= nil),
+    "out=" .. ro:sub(1, 400))
+
+-- 17-19: tiny scratch trees, judged through --map and --check-declared.
+do
+    local function tree(tag, files)
+        local X = T:scratch(tag)
+        proc.run{ argv = { "mkdir", "-p", X.abs .. "/scripts/gate-steps.d" } }
+        fs.write(X.rel .. "/Cargo.toml", "[workspace]\nmembers = [\n]\n")
+        for rel, body in pairs(files) do fs.write(X.rel .. "/" .. rel, body) end
+        T:must{ "git", "init", "-q", X.abs }
+        T:must{ "git", "-C", X.abs, "add", "-A" }
+        T:must{ "git", "-C", X.abs, "-c", "user.email=f@f", "-c", "user.name=f", "-c", "commit.gpgsign=false", "commit", "-qm", "t" }
+        return X
+    end
+    local function run_in(X, args)
+        local argv = { SH, GC }
+        for _, a in ipairs(args) do argv[#argv + 1] = a end
+        local r = proc.run{ argv = argv, cwd = X.abs, timeout_ms = 120000, env = { TILLANDSIAS_GATE_CHANGED_ROOT = X.abs } }
+        return (r.status == "exited" and r.code or -1), (r.stdout or "")
+    end
+    local function reads(map, unit, input)
+        for _, l in ipairs(text.lines(map)) do if l == unit .. "\t" .. input then return true end end
+        return false
+    end
+    local BUILD = 'if [[ "$FLAG_CHECK" == true ]]; then\n'
+        .. '    _step "Fixture f..."\n    if ! _run bash "$SCRIPT_DIR/scripts/test-f.sh" 2>&1; then\n        _error "f"\n        exit 1\n    fi\n'
+        .. 'elif [[ "$FLAG_TEST$FLAG_CHECK" == x ]]; then\n    :\nfi\n'
+
+    -- 17
+    local X17 = tree("case-arm", {
+        ["build.sh"] = BUILD,
+        ["scripts/helper.sh"] = '#!/usr/bin/env bash\ncase "$1" in\n    scripts/*|flake.nix)  echo build-scripts ;;\nesac\n',
+        ["scripts/test-f.sh"] = '#!/usr/bin/env bash\nbash scripts/helper.sh x\n',
+        ["scripts/other.sh"] = "#!/usr/bin/env bash\n",
+    })
+    local _, m17 = run_in(X17, { "--map" })
+    T:arm("17 CASE-ARM a helper's case arm is not read as the whole scripts/ directory",
+        reads(m17, "fx:scripts/test-f.sh", "scripts/helper.sh") and not reads(m17, "fx:scripts/test-f.sh", "scripts/"),
+        "map=" .. m17:sub(1, 300))
+
+    -- 18
+    local DYN = '#!/usr/bin/env bash\n# inputs: scripts/a.sh\nn=a\nbash "$(dirname "$0")/../scripts/${n}.sh"\n'
+    local X18 = tree("declared", {
+        ["build.sh"] = BUILD, ["scripts/test-f.sh"] = DYN,
+        ["scripts/a.sh"] = "#!/usr/bin/env bash\n", ["scripts/b.sh"] = "#!/usr/bin/env bash\n",
+    })
+    local _, m18 = run_in(X18, { "--map" })
+    T:arm("18 DECLARED a declared fixture reads its declaration, not the whole scripts/ directory",
+        reads(m18, "fx:scripts/test-f.sh", "scripts/a.sh") and not reads(m18, "fx:scripts/test-f.sh", "scripts/"),
+        "map=" .. m18:sub(1, 300))
+
+    -- 19
+    local MISS = '#!/usr/bin/env bash\n# inputs: scripts/a.sh\ncat scripts/b.sh >/dev/null\n'
+    local X19 = tree("decider", {
+        ["build.sh"] = BUILD, ["scripts/test-f.sh"] = MISS,
+        ["scripts/a.sh"] = "#!/usr/bin/env bash\n", ["scripts/b.sh"] = "#!/usr/bin/env bash\n",
+    })
+    local rc19, o19 = run_in(X19, { "--check-declared" })
+    fs.write(X19.rel .. "/scripts/test-f.sh", '#!/usr/bin/env bash\n# inputs: scripts/a.sh scripts/b.sh\ncat scripts/b.sh >/dev/null\n')
+    local rc19b, o19b = run_in(X19, { "--check-declared" })
+    T:arm("19 DECIDER a declaration missing a literal path is refused, and accepted once it is declared",
+        rc19 == 1 and o19:find("undeclared:scripts/test-f.sh:scripts/b.sh", 1, true) ~= nil
+            and rc19b == 0 and o19b:find("ok:gate-changed-declared-inputs:1 declaring", 1, true) ~= nil,
+        "rc=" .. rc19 .. " out=" .. o19:sub(1, 160) .. " | after rc=" .. rc19b .. " out=" .. o19b:sub(1, 120))
+end
+
+-- 20: the on-touch hint, on a scratch repo whose base commit precedes the edit.
+do
+    local X = T:scratch("on-touch")
+    local function w(rel, body) fs.write(X.rel .. "/" .. rel, body) end
+    proc.run{ argv = { "mkdir", "-p", X.abs .. "/scripts/gate-steps.d" } }
+    w("Cargo.toml", "[workspace]\nmembers = [\n]\n")
+    -- the real shape: "$ROOT/scripts/${n}.sh" tokenizes as ROOT/scripts/, the
+    -- whole directory (a bare "scripts/${n}.sh" yields no token at all)
+    local DYN = 'bash "$ROOT/scripts/${n}.sh"\n'
+    w("scripts/a.sh", "#!/usr/bin/env bash\n")
+    w("scripts/test-undeclared.sh", "#!/usr/bin/env bash\nn=a\n" .. DYN)
+    w("scripts/test-declared.sh", "#!/usr/bin/env bash\n# inputs: scripts/a.sh\nn=a\n" .. DYN)
+    w("build.sh", 'if [[ "$FLAG_CHECK" == true ]]; then\n'
+        .. '    _step "u..."\n    if ! _run bash "$SCRIPT_DIR/scripts/test-undeclared.sh" 2>&1; then\n        _error "u"\n        exit 1\n    fi\n'
+        .. '    _step "d..."\n    if ! _run bash "$SCRIPT_DIR/scripts/test-declared.sh" 2>&1; then\n        _error "d"\n        exit 1\n    fi\n'
+        .. 'elif [[ "$FLAG_TEST$FLAG_CHECK" == x ]]; then\n    :\nfi\n')
+    local function g(args)
+        local argv = { "git", "-C", X.abs, "-c", "user.email=f@f", "-c", "user.name=f", "-c", "commit.gpgsign=false" }
+        for _, a in ipairs(args) do argv[#argv + 1] = a end
+        return T:must(argv)
+    end
+    T:must{ "git", "init", "-q", X.abs }
+    g{ "add", "-A" }; g{ "commit", "-qm", "base" }
+    local base = text.trim(g{ "rev-parse", "HEAD" }.stdout or "")
+    -- touch both fixtures after the base
+    w("scripts/test-undeclared.sh", "#!/usr/bin/env bash\nn=a\n" .. DYN .. "# touched\n")
+    w("scripts/test-declared.sh", "#!/usr/bin/env bash\n# inputs: scripts/a.sh\nn=a\n" .. DYN .. "# touched\n")
+    local r = proc.run{ argv = { SH, GC, "--check-declared", base }, cwd = X.abs, timeout_ms = 120000,
+        env = { TILLANDSIAS_GATE_CHANGED_ROOT = X.abs } }
+    local o20 = r.stdout or ""
+    T:arm("20 ON-TOUCH only the undeclared scripts/ reader that the change touches gets the hint, and exit stays 0",
+        r.status == "exited" and r.code == 0
+            and o20:find("hint:scripts/test-undeclared.sh reads the whole scripts/", 1, true) ~= nil
+            and not o20:find("hint:scripts/test-declared.sh", 1, true),
+        "rc=" .. tostring(r.code) .. " out=" .. o20:sub(1, 400))
+end
 
 T:finish()

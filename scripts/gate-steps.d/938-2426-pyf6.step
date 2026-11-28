@@ -1,0 +1,15 @@
+# Gate step 2426-pyf6 — the bootstrap-shell allowlist matches the tree (decider-retirement
+# arm 4a among the fixture's 13 arms). WHY: arm 4a ran only in the ci-release litmus tier,
+# which --check skips, so 2421-7wvs's new scripts/windows-host-capability-query.ps1 turned
+# trunk red without any gate seeing it. Now a new .ps1, hook or entrypoint missing from
+# scripts/portability/bootstrap-shell-allowlist.txt fails ./build.sh --check.
+# About 4 s, scratch trees only, no network.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the bootstrap-shell allowlist and decider retirement (2426-pyf6)"
+STEP_LUA="scripts/lua/test-decider-retirement.lua"
+STEP_ERROR="decider retirement or the bootstrap-shell allowlist is wrong — see the FAIL lines above (a new .ps1, hook or entrypoint belongs in scripts/portability/bootstrap-shell-allowlist.txt if section 6.5 says it stays shell)"
+STEP_OK="the bootstrap-shell allowlist matches the tree"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-27 darwin ok:decider-retirement:13 arms at 9d5c0fe9f (red at c14688738 on GNU-only realpath -s, fixed here)"
+STEP_SECOND_REGIME="yolanda 2026-11-26 msys ok:decider-retirement:13 arms at 9d5c0fe9f (local release plan .exe via TILLANDSIAS_PLAN_BIN, TILLANDSIAS_SKIP_WSL2=1; a C:/ root reaching absdir() inferred from git rev-parse, not instrumented)"
+STEP_READS="scripts/lua/test-decider-retirement.lua scripts/lua/check-decider-retirement.lua scripts/portability/bootstrap-shell-allowlist.txt scripts/build-and-install-windows-local.ps1 scripts/build-windows-tray.ps1 scripts/clear-vault-host-credentials.ps1 scripts/diagnose-windows.ps1 scripts/install-windows.ps1 scripts/measure-sc11-idle-cpu.ps1 scripts/sign-windows-artifact.ps1 scripts/test-sign-windows-artifact.ps1 scripts/tray-diagnose.ps1 scripts/windows-host-capability-query.ps1 scripts/hooks/** images/**"

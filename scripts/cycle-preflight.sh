@@ -283,7 +283,8 @@ if [ "${CYCLE_PREFLIGHT_SKIP_BUILD:-0}" != "1" ]; then
     # colon-free so the pinned line arity is preserved.
     case "$(uname -s 2>/dev/null)" in
         MINGW* | MSYS* | CYGWIN*)
-            wsl_verdict="$(bash "$ROOT/scripts/wsl-plan-expert-ensure.sh" 2>/dev/null | tail -1)"
+            # 2421-7wvs: the outer lane is Lua; it re-execs the .sh's inner lane in the guest.
+            wsl_verdict="$(cd "$ROOT" && "$plan_bin" script run scripts/lua/wsl-plan-expert-ensure.lua 2>/dev/null | tail -1)"
             case "$wsl_verdict" in
                 ok:wsl-plan-expert:*) wsl_report="wsl-ok" ;;
                 skip:* | degraded:*) wsl_report="wsl-$(printf '%s' "$wsl_verdict" | tr ':' '-' | cut -c1-60)" ;;

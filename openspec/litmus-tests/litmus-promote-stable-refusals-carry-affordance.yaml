@@ -16,12 +16,29 @@ description: >
 preconditions:
   - workspace contains scripts/promote-stable.sh
   - workspace contains scripts/lua/test-promote-stable-affordances.lua
+  - workspace contains scripts/lua/test-promote-gate.lua
+  - workspace contains scripts/lua/test-smoke-record.lua
 
 critical_path:
   - step: "the caller-error refusals carry why and remedy, and no verdict site lacks an affordance"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-promote-stable-affordances.lua 2>&1"
     timeout_ms: 120000
     success_pattern: "ok:promote-stable-affordances:4 arms"
+
+  - step: "promotion asks for a smoke record per platform of the exact tag and an idle queue, and no other answer passes (2296-pn45)"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-promote-gate.lua 2>&1"
+    timeout_ms: 120000
+    success_pattern: "ok:promote-gate-fixture:27 arms"
+
+  - step: "promote-stable.sh asks that gate, and its refusal, its silence or its absence refuses (2296-pn45)"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-promote-stable-evidence-gate.lua 2>&1"
+    timeout_ms: 120000
+    success_pattern: "ok:promote-stable-evidence-gate:48 arms"
+
+  - step: "a smoke record is derived from the pushed attestation, and the gate reads it (2300-j4cv)"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-smoke-record.lua 2>&1"
+    timeout_ms: 120000
+    success_pattern: "ok:smoke-record-fixture:11 arms"
 
 observability:
   traces:

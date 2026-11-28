@@ -1589,10 +1589,12 @@ mod tests {
     /// @trace plan/issues/guest-pty-write-wedge-2026-07-27.md
     #[tokio::test]
     async fn full_write_queue_past_deadline_kills_wedged_session() {
-        let hermetic_home = std::env::temp_dir()
-            .join(format!("tillandsias-wedge-pty-{}", std::process::id()))
-            .to_string_lossy()
-            .into_owned();
+        let hermetic_home = tillandsias_core::test_scratch::path(format!(
+            "tillandsias-wedge-pty-{}",
+            std::process::id()
+        ))
+        .to_string_lossy()
+        .into_owned();
         std::fs::create_dir_all(&hermetic_home).expect("hermetic HOME creates");
         let (mut store, mut rx) = store();
         store
@@ -1697,10 +1699,12 @@ mod tests {
 
     #[tokio::test]
     async fn quiet_pty_pump_emits_empty_to_host_heartbeat() {
-        let hermetic_home = std::env::temp_dir()
-            .join(format!("tillandsias-quiet-pty-{}", std::process::id()))
-            .to_string_lossy()
-            .into_owned();
+        let hermetic_home = tillandsias_core::test_scratch::path(format!(
+            "tillandsias-quiet-pty-{}",
+            std::process::id()
+        ))
+        .to_string_lossy()
+        .into_owned();
         std::fs::create_dir_all(&hermetic_home).expect("hermetic HOME creates");
         let (tx, mut rx) = mpsc::channel(64);
         let mut store = PtySessionStore {
@@ -1786,10 +1790,12 @@ mod tests {
     #[tokio::test]
     async fn guest_pty_clears_echo_family_but_keeps_isig() {
         use nix::sys::termios::{LocalFlags, tcgetattr};
-        let hermetic_home = std::env::temp_dir()
-            .join(format!("tillandsias-echo-pty-{}", std::process::id()))
-            .to_string_lossy()
-            .into_owned();
+        let hermetic_home = tillandsias_core::test_scratch::path(format!(
+            "tillandsias-echo-pty-{}",
+            std::process::id()
+        ))
+        .to_string_lossy()
+        .into_owned();
         std::fs::create_dir_all(&hermetic_home).expect("hermetic HOME creates");
         let (mut store, _rx) = store();
         store

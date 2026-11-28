@@ -37,7 +37,7 @@ preconditions:
   - workspace contains images/default/config-overlay/mcp/forge-plan.sh
   - workspace contains images/default/config-overlay/codex/register-experts.sh
   - workspace contains images/default/entrypoint-forge-codex.sh
-  - workspace contains scripts/test-codex-mcp-registration.sh
+  - workspace contains scripts/lua/test-codex-mcp-registration.lua
   - workspace contains scripts/fixtures/codex-mcp-stub.sh
   - workspace contains images/default/config-overlay/opencode/instructions/forge-discovery.md
   - shell utilities (grep, jq) are available in PATH
@@ -108,10 +108,10 @@ critical_path:
     # unrelated config keys and MCP servers are preserved. Uses the real Codex
     # CLI when available and the committed stub otherwise, so it is hermetic on
     # hosts without Codex.
-    command: "scripts/test-codex-mcp-registration.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-codex-mcp-registration.lua 2>&1"
     timeout_ms: 30000
-    expected_behavior: "PASS: Codex expert MCP registration is idempotent, auth/config-preserving, forwards the lane socket to host-browser, and is wired before launch"
-    assert_output_contains: "PASS: Codex expert MCP registration is idempotent, auth/config-preserving, forwards the lane socket to host-browser, and is wired before launch"
+    expected_behavior: "ok:codex-mcp-registration:"
+    assert_output_contains: "ok:codex-mcp-registration:"
 
   - step: "default image copies and installs the Codex registration helper"
     # Order 605-u9g5 exit criterion 1a: the executable helper is COPYed into
@@ -146,7 +146,7 @@ observability:
   log_fields:
     spec: "forge-environment-discoverability"
     test: "forge-experts-discoverability-shape"
-    artifact: "images/default/config-overlay/{opencode/config.json,claude/mcp.json,mcp/forge-plan.sh,codex/register-experts.sh} + images/default/{entrypoint-forge-codex.sh,entrypoint-forge-claude.sh,lib-common.sh} + scripts/test-codex-mcp-registration.sh"
+    artifact: "images/default/config-overlay/{opencode/config.json,claude/mcp.json,mcp/forge-plan.sh,codex/register-experts.sh} + images/default/{entrypoint-forge-codex.sh,entrypoint-forge-claude.sh,lib-common.sh} + scripts/lua/test-codex-mcp-registration.lua"
 
 rollback:
   on_failure: >

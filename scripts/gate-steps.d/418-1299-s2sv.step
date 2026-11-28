@@ -68,18 +68,18 @@
 # never the string "null" on that host's jq build. ASK FOR THAT RUN BEFORE
 # TREATING THIS STEP'S GREEN AS FLEET-WIDE.
 #
-# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a variable
+# STEP_LUA is a LITERAL path on purpose: a binding assembled from a variable
 # is invisible to every name-based scan, including the bound-or-retired guard
 # (1063-nraf). Keep it a plain string.
 STEP_DESC="Checking a timing record says which checkout wrote it, and absent reads as absent (1299-s2sv)"
-STEP_SCRIPT="scripts/test-timing-record-carries-root.sh"
+STEP_LUA="scripts/lua/test-timing-record-carries-root.lua"
 STEP_ERROR="a timing record can again fail to say where it was written from, or an absent root reads as a value instead of as pre-field (1299-s2sv) — read which arm failed above; ARM 4b failing means the field is no longer inert for existing readers"
 STEP_OK="Timing records carry their checkout; absent reads as absent"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:timing-record-root:5/5"
+STEP_SECOND_REGIME="yolanda 2026-11-25 msys ok:timing-record-root:6 arms"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
 STEP_LANES="timing"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/cycle-metrics.sh scripts/metrics-log-path.sh scripts/test-timing-record-carries-root.sh"
+STEP_READS="scripts/cycle-metrics.sh scripts/metrics-log-path.sh scripts/lua/test-timing-record-carries-root.lua"

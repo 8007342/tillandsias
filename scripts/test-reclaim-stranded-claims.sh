@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# inputs: images/default/lib-common.sh plan/index.yaml scripts/check-plan-binary-current.sh scripts/check-resumable-claim-dirt.sh scripts/check-stranded-in-progress.sh scripts/cycle-preflight.sh scripts/lib/tool-dispatch.sh scripts/lua/check-fragment-status-loss.lua scripts/lua/test-plan-binary-probe-release-over-debug.lua scripts/plan-binary-probe.sh scripts/reclaim-stranded-claims.sh scripts/regenerate-cheatsheet-index.sh scripts/select-work-batch.sh scripts/with-wsl2-builder.sh scripts/wsl-plan-expert-ensure.sh VERSION lib/lua/common/ crates/tillandsias-plan/
 # @trace order:662-s9z5, spec:ci-release
 #
 # Hermetic fixture for scripts/reclaim-stranded-claims.sh after its 662-s9z5

@@ -150,7 +150,7 @@ set -uo pipefail
 # digest in the same "<hex>  <name>" line shape, so every first-field parse
 # below works with either tool and the emitted frames — and therefore existing
 # stamps — stay byte-identical across hosts (pinned by
-# scripts/test-gate-stamp-portable-digest.sh). Same dispatch as
+# scripts/lua/test-gate-stamp-portable-digest.lua). Same dispatch as
 # scripts/build-sidecar.sh::_sha256; kept local because this script is
 # deliberately self-contained.
 if command -v sha256sum >/dev/null 2>&1; then
@@ -258,7 +258,7 @@ GATE_STAMP_EMIT_MANIFEST=""
 # C-sorted — the exec bit compute() folds in and movers compares.
 #
 # TRACKED paths: the INDEX mode, exactly as before (887-bz88, 889-8tcb, and the
-# pins in test-mode-only-regression-887-bz88.sh): what a commit carries is the
+# pins in test-mode-only-regression-887-bz88.lua): what a commit carries is the
 # index, a staged or `update-index --chmod` mode change moves the stamp, and an
 # unstaged chmod does not (the worktree arm of check-script-exec-bits.sh refuses
 # that one at gate time).
@@ -422,7 +422,7 @@ compute() {
         # what moved. Code, specs, scripts, images, methodology and
         # plan/index.yaml itself (the compacted BASE, which a fold rewrites)
         # all still hash; a change to any of them re-gates. Negative control:
-        # scripts/test-gate-stamp.sh cases 6-7. Skipping here cannot desync the
+        # scripts/lua/test-gate-stamp.lua cases 6-7. Skipping here cannot desync the
         # exec-bit lockstep below: the pointer catches up on the next path.
         #
         # ORDER 1142-85zx adds plan/issues/*.md, and the arithmetic is the same

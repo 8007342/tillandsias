@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: freshness-regime-budget-answers-unknown-for-apfs-on-macos
+    order: "2376-t2gi"
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, build-speed]
+    estimated_hours: 1
+    title: "freshness-regime-budget.sh answers fs=unknown on macOS, so a native APFS checkout gets the remote budget"
+    context: |
+      The probe uses findmnt, which macOS lacks; the fallback tries pwd -W (MSYS) and then fstype=unknown, which maps to the remote budget.
+      The classifier lists apfs as native but nothing ever answers it. Measured by macbookair 2026-11-25 (relayed by macuahuitl):
+      "note: the live-selection arm was not exercised — unclassified fs 'unknown' on this host". The looser budget can hide a regression there.
+    exit_criteria:
+      - "on macOS the selector prints fs=apfs regime=native (stat -f, or diskutil/mount output), and the fixture's live-selection arm runs there"
+      - "Linux and MSYS answers are unchanged"
+    unscoreable: "unpinnable-until-the-guard-exists: needs a macOS run."
+    next_action: "read the filesystem from mount(8) or stat -f when findmnt is absent."
+    provenance: filed by lenovinha from macbookair's darwin run of #1580.
+    related: [1038-d7vw, 2373-f26m]
+    events:
+      - {type: filed, ts: '2026-11-25T20:23:25Z', host: lenovinha, summary: macOS fs probe answers unknown}

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: five-r-s-shell-fixtures-ported-to-lua
+    order: "2386-zxgc"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, portability, fixtures]
+    estimated_hours: 6
+    owned_files:
+      - scripts/lua/test-run-verb-agent-door.lua
+      - scripts/lua/test-salvage-audit.lua
+      - scripts/lua/test-scorable-obligation-gate.lua
+      - scripts/lua/test-scorable-obligation-splitter.lua
+      - scripts/lua/test-spec-index-durable-tier-demotion.lua
+    title: "five r-s shell fixtures ported to Lua"
+    context: |
+      ports: run-verb-agent-door salvage-audit scorable-obligation-gate scorable-obligation-splitter spec-index-durable-tier-demotion. Claimed by yoga before the work; the other 22 unowned r/s are in other hosts' open PRs, and
+      test-reset-flags-are-accepted stays with macbookair's note (the soft-reset policy asks for consent).
+    exit_criteria:
+      - "Each port agrees with its .sh on one tree and its main assertions are mutated; callers run the .lua; the five .sh are deleted."
+    unscoreable: "fixture-scored: the fixtures are the deliverable, run by gate steps and litmus tests"
+    provenance: "coordinator 2026-11-26 (r and s fixtures), yoga"
+    related: [2383-j7bp]
+    events:
+      - {type: claimed, ts: "2026-11-26T01:56:55Z", host: yoga, summary: "claimed; work ref work/2386-zxgc"}

@@ -390,7 +390,7 @@ mod tests {
     fn n_scratch_indexes_stay_under_the_snapshot_cap() {
         let _g = env_guard();
         let cache_dir =
-            std::env::temp_dir().join(format!("tilland-cache-cap-{}", std::process::id()));
+            crate::test_scratch::path(format!("tilland-cache-cap-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&cache_dir);
         std::fs::create_dir_all(&cache_dir).expect("mk cache dir");
         // SAFETY: single-threaded with respect to this variable — every test in
@@ -431,7 +431,7 @@ mod tests {
     #[test]
     fn the_byte_cap_evicts_oldest_first() {
         let _g = env_guard();
-        let dir = std::env::temp_dir().join(format!("tilland-cache-bytes-{}", std::process::id()));
+        let dir = crate::test_scratch::path(format!("tilland-cache-bytes-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("mk");
         let base =
@@ -462,7 +462,7 @@ mod tests {
     }
 
     fn tmp_ledger(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("tilland-cache-{tag}-{}", std::process::id()));
+        let dir = crate::test_scratch::path(format!("tilland-cache-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("plan/index.d")).expect("mk");
         std::fs::write(

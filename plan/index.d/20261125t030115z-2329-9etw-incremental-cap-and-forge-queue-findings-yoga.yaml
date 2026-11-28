@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: disk-preflight-prunes-the-cargo-incremental-cache-below-the-floor
+    order: "2329-9etw"
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [rust, disk, land-queue]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-plan/src/disk_preflight.rs
+    title: "disk-preflight prunes target/debug/incremental below the floor, and never touches deps/ or build/"
+    context: |
+      Coordinator, 2026-11-25: target/debug/incremental reached 189G on the land-queue host and twice took the shared target
+      below the queue's 40G floor, so runs 58 and 60 landed nothing. deps/ is 143G and must stay.
+    exit_criteria:
+      - "With free space under the floor and incremental/ holding the bulk, disk-preflight prunes the oldest crate-session dirs first, stops at the floor, prints the bytes freed and returns ok. Pre-fix result: FAILS, refused:disk-low."
+      - "deps/ and build/ are untouched, byte for byte."
+      - "NEGATIVE CONTROL: at or above the floor nothing is pruned; while a build holds the target nothing is pruned and the verdict says so."
+    unscoreable: "fixture-scored: the Rust unit tests and a fixture that drives the verb are the guard"
+    provenance: "coordinator macuahuitl-fedora 2026-11-25"
+    related: [1878-2cwt, 1807-shtg, 709-in2f]
+    events:
+      - {type: claimed, ts: "2026-11-25T03:01:15Z", host: yoga, summary: "filed and claimed on the coordinator's word; work ref work/2329-9etw"}
+  - packet_id: a-forge-queue-job-runs-with-the-forges-environment-and-host-kind
+    order: "2329-at6p"
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, queue, environment]
+    estimated_hours: 4
+    title: "a job started by queue.submit in a forge runs without the forge's env vars, and is audited as bare-metal"
+    context: |
+      Reported by pirria (CPU-only forge, build 56.11.23.1), relayed by the coordinator; not reproduced by the filer. The job lacks
+      about 64 of the forge's env vars, among them CARGO_TARGET_DIR, RUSTUP_HOME, TMPDIR and TILLANDSIAS_HOST_KIND. It gets
+      CARGO_HOME=/usr/local/cargo, which is unwritable, so a cargo step fails rc 101 (pirria reproduced that on one step). The audit
+      records host_kind=bare-metal inside a forge. The runner counts could-not-run as fail.
+    exit_criteria:
+      - "A job submitted in a forge sees the forge's CARGO_TARGET_DIR, RUSTUP_HOME, TMPDIR and TILLANDSIAS_HOST_KIND and a writable CARGO_HOME. Pre-fix result: FAILS."
+      - "Its audit record says host_kind=forge."
+      - "NEGATIVE CONTROL: a credential variable is not added to a job's environment by the fix."
+      - "A could-not-run step is reported apart from a failed one."
+    next_action: "needs a host that can run the forge's queue tools (queue.submit)"
+    unscoreable: "unpinnable-until-the-guard-exists: needs a forge run"
+    provenance: "coordinator macuahuitl-fedora 2026-11-25, from pirria"
+    related: [2329-t27x]
+    events:
+      - {type: filed, ts: "2026-11-25T03:01:15Z", host: yoga, summary: "filed on the request of the coordinator; not taken"}
+  - packet_id: a-forge-queue-jobs-stdout-can-be-retrieved
+    order: "2329-t27x"
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, queue]
+    estimated_hours: 3
+    title: "queue.status and watch.wait return only exit codes, so a forge job's verdict lines cannot be read"
+    context: |
+      Reported by pirria (CPU-only forge, build 56.11.23.1), relayed by the coordinator; not reproduced by the filer. Neither call
+      returns a job's stdout, so a verdict line it printed cannot be retrieved.
+    exit_criteria:
+      - "The last verdict line and a bounded tail of a finished job's output are returned by queue.status, or by a call it names. Pre-fix result: FAILS, exit code only."
+      - "NEGATIVE CONTROL: output past the bound is cut and says so, and a token-shaped literal is redacted."
+    next_action: "needs a host that can run the forge's queue tools (queue.status, watch.wait)"
+    unscoreable: "unpinnable-until-the-guard-exists: needs a forge run"
+    provenance: "coordinator macuahuitl-fedora 2026-11-25, from pirria"
+    related: [2329-at6p]
+    events:
+      - {type: filed, ts: "2026-11-25T03:01:15Z", host: yoga, summary: "filed on the request of the coordinator; not taken"}

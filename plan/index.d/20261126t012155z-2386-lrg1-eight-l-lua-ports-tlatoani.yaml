@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-26. l range, batch 1 (the l range is this host's, per macuahuitl 2026-11-25).
+packets:
+- packet_id: port-l-fixtures-batch-1
+  order: 2386-lrg1
+  status: implemented
+  kind: chore
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [shell-to-lua, macos, fixtures, portability]
+  size: M
+  implementer_tier: sonnet
+  estimated_hours: 4
+  title: 'Eight whole-file shell-to-Lua ports from the l range (batch 1)'
+  ports: [scripts/test-litmus-tracked-file-kill-safety.sh, scripts/test-litmus-runner-reports-rc.sh, scripts/test-local-delegate.sh, scripts/test-litmus-structured-assert.sh, scripts/test-ledger-node-claim-resolution.sh, scripts/test-land-discipline-probe.sh, scripts/test-litmus-runner-reads-without-jq.sh, scripts/test-litmus-bindings.sh]
+  context: >-
+    Each port keeps its arms and moves to the common.fixture grammar. None re-enters build.sh. Callers: gate steps
+    905, 412, 996 (land-discipline-probe, from #1574), 530 (STEP_LUA, fresh darwin regime lines); local-ci-landed-guards
+    (the rc-reporting gate as a Lua row) and gate-divergence-declared; litmus image-build-convergence-shape,
+    ledger-node-claim-shape, land-discipline-probe-shape and litmus-bindings-reconciliation-shape (no pipes, and the awk
+    tally moved to the kit verdict); one cheatsheet pointer. Held for their own PRs, because another fixture runs their
+    .sh by path:
+    - litmus-step-pipefail (test-checkout-writers and step 461).
+    - litmus-budget-tally (test-gate-step-metrics-isolation and step 380).
+    Also held: three podman-heavy litmus fixtures, test-land-queue (2,523 lines), and the stale-draft files, which
+    are batch 2.
+  exit_criteria:
+  - 'Each .lua gives the same verdict as its .sh on the trunk tree, and the same red arms under a mutant.'
+  - 'Every caller runs the .lua; the eight .sh files and their floor lines are gone.'
+  verifiable_closure: 'Mutant parity in the PR; the four gate steps and four litmus tests green on darwin and in the Linux land gate.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the mutant parity is the deliverable.'
+  next_action: 'Implemented.'
+  provenance: 'tlatoanis-macbook-air 2026-11-26, on macuahuitl-fedora''s direction.'
+  related: [2385-psbb, 2384-svqx]
+  events:
+  - {type: filed, ts: '2026-11-26T01:21:55Z', host: tlatoanis-macbook-air, summary: 'filed with the PR, implemented'}

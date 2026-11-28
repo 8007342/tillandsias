@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: unit-tests-can-encode-linux-only-assumptions-that-only-the-gate-lane-satisfies
+    field: status
+    value: implemented
+    ts: "2026-11-26T16:38:23Z"
+    host: yoga
+events:
+  - packet_id: unit-tests-can-encode-linux-only-assumptions-that-only-the-gate-lane-satisfies
+    event:
+      type: implemented
+      ts: "2026-11-26T16:38:23Z"
+      host: yoga
+      summary: |
+        Option (b), coordinator-approved 2026-11-26: scripts/lua/check-test-host-paths.lua, wired into
+        ./build.sh --check. It refuses ungated Rust test code (#[cfg(test)] items, files under tests/)
+        that reads a /proc, /sys or /dev literal or builds MetricsSampler::new(); a cfg(target_os/unix/
+        windows) item, a comment, or "// host-path: <reason>" passes. Red first on instance 1's own
+        pre-fix code: sampler.rs at 71496d6e5^ is refused on 8 lines (test-check-test-host-paths.lua
+        arm 1, read from git); two mutants (drop the sampler rule, ignore gates) each fail arms.
+        The live tree had one hit, tests/support/fixture_child.rs:77 (/proc/self/stat), which already
+        degrades with .ok(); marked host-path rather than gated.
+        Instance 2 is 806-6y3h's (host precondition, skip rather than fail); no new row.
+        Instance 3 (the core.symlinks litmus on Windows) is already fixed by 1055-6yp8, which asks the
+        index instead of test -L; no new row.
+        Option (a), native gates on doris, yolanda and macbookair, is the existing practice and how
+        instance 1 was found; recorded, nothing to build.

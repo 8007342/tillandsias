@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# doris-windows 2026-11-26: 2415-fbyd claimed and implemented at the runner; new row 2416-pscn from the red-first run.
+packets:
+  - packet_id: podman-sync-budgets-find-branch-reads-nothing-on-windows-and-reports-ok
+    order: 2416-pscn
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, msys, deciders, fail-closed]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/check-podman-sync-budgets.lua
+    related: [2415-fbyd]
+    title: |
+      check-podman-sync-budgets' explicit-root branch on Windows lists /tmp/... paths through msys find, native fs.read cannot open them, pcall skips each silently, and the check reports ok:0
+    context: |
+      Measured on doris while red-first testing 2415-fbyd. With PODMAN_SYNC_SEARCH_ROOT=/tmp/psr (unconverted,
+      as a native parent passes it) holding a Command::new("podman") violation, the check said
+      ok:podman-sync-bounded:0. find printed msys paths, and lines_matching wraps fs.read in pcall and
+      drops a read that fails. So a root it cannot read is reported clean. (An msys shell converts the env
+      var to C:/..., which takes the fs.walk branch instead and correctly reports the violation.)
+    exit_criteria:
+      - RED FIRST, the /tmp/psr case above reports ok:0.
+      - A file the listing names but fs.read cannot open makes the check blocked (exit 2), never ok.
+      - On Windows a /-root is mapped or refused. Linux is unchanged.
+    verifiable_closure: |
+      With an unconverted /-root holding one violation, the check is violation:direct-command:1 or blocked:..., never ok.
+    unscoreable: "no fixture pins this yet; the red-first case in exit_criteria becomes the pin"
+    next_action: >
+      Make an unreadable listed file blocked rather than skipped, then the Windows root mapping.
+status:
+  - packet_id: lua-spawns-of-msys-tools-with-quoted-glob-args-are-expanded-by-msys-and-silently-mis-scope
+    field: status
+    value: implemented
+    ts: "2026-11-26T21:15:29Z"
+    host: doris
+  - packet_id: lua-spawns-of-msys-tools-with-quoted-glob-args-are-expanded-by-msys-and-silently-mis-scope
+    field: next_action
+    value: "Implemented at ONE point, the runner: tillandsias-exec's Windows apply_args now forces quotes on any argument holding * ? or [, as it already did for CR/LF (1553-q3wi). msys never globs a quoted argument, and a native child parses it back byte-identically (the std-parity test, whose set already holds *.rs, stays green). All 16 sites are fixed with no per-site edit. Red first: executor_contract a_glob_argument_arrives_literally_at_an_msys_child got \"decoy.rs\" for \"*.rs\"; fixed, tillandsias-exec 17/17 contract tests. End to end through the plan runner: find -name '*.yaml' beside a decoy lists the groundtruth sets, and echo '*.rs' prints *.rs. No Lua guard: the hazard is gone at the spawn seam, and the contract test pins it. Found during red-first: 2416-pscn (podman-sync-budgets' find branch reads nothing on Windows)."
+    ts: "2026-11-26T21:15:29Z"
+    host: doris
+  - packet_id: podman-sync-budgets-find-branch-reads-nothing-on-windows-and-reports-ok
+    field: status
+    value: ready
+    ts: "2026-11-26T21:15:29Z"
+    host: doris

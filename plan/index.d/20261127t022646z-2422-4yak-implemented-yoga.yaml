@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: gate-changed-reads-a-url-as-the-scripts-directory
+    field: status
+    value: implemented
+    ts: "2026-11-27T02:26:46Z"
+    host: yoga
+events:
+  - packet_id: gate-changed-reads-a-url-as-the-scripts-directory
+    event:
+      type: implemented
+      ts: "2026-11-27T02:26:46Z"
+      host: yoga
+      summary: |
+        On work/2422-4yak. resolve(): a strip that lands on a bare top-level directory counts only when the component it
+        dropped last is a repo-root name (ROOT REPO_ROOT REPO TOP SCRIPT_DIR repo root ..); a token starting with /
+        takes its root from the identifier just before it ("$ROOT"/x, ROOT .. "/x"); a token inside a URL is skipped.
+        Red first: test-gate-changed-selects-by-input.lua arms 12 (URL) and 13 (scratch foo/bar/notes) fail on trunk,
+        control 14 ("$ROOT"/notes) passes on both; 14 arms green. MEASURED on yoga, --list --files <one subject>:
+        merge-floor-driver.sh 125/481 crates=1/28 -> 61/481 crates=0/28; check-issue-citation-convention.sh
+        130 -> 66, 1 -> 0; portability/checkout-writers.txt 128 -> 65, 1 -> 0. Census (coordinator's check): 67 units
+        lose scripts/, all from scratch trees or URLs, each keeps a non-self scripts/ input (0 without); 8 lose crates/,
+        the 5 left without any crates/ input all build scratch crates (REL/rel/tree/W/src), none reads the real tree.

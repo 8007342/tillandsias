@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: relay-preflight-selects-zero-runs-for-fixtures-the-change-touches
+    order: "2435-fdqw"
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [linux, preflight, gate-selection]
+    estimated_hours: 3
+    title: "relay-preflight lists three fixtures the change edits as 'selected 0' and never runs them"
+    context: |
+      relay-preflight of work/2354-5biy at a9c4698a1 (#1708) printed:
+        item: fixture:test-command-policy-consent.lua selected 0
+        item: fixture:test-smoke-skill-reset-env-matches-policy.lua selected 0
+        item: fixture:test-host-kind-evidence-not-from-workspace selected 0
+      The change edits all three. The third is the step-995 fixture whose arm 3 had evicted the same PR
+      from run 110, so a red in it was invisible to preflight and reached only the land gate. They passed
+      when run by hand (8/8, 16 arms, 9 arms). The edit that most needed checking went unchecked.
+    exit_criteria:
+      - "A change that edits a fixture's own file selects that fixture in relay-preflight (or the item line names why not, e.g. a podman lane it cannot drive)."
+      - "Measured: re-run relay-preflight on a ref that edits scripts/test-host-kind-evidence-not-from-workspace.sh and see it run."
+    unscoreable: "the selection rule is the subject; pin once the arm exists"
+    next_action: "Read how relay-preflight turns touched fixtures into item lines ('selected N') and why an edited fixture scores 0."
+    provenance: "coordinator macuahuitl-fedora 2026-11-27, from #1708 preflight"
+    related: [a-forge-queue-jobs-audit-record-says-bare-metal]
+    events:
+      - {type: filed, ts: "2026-11-27T13:11:01Z", host: lenovinha, summary: "filed at p3 on the coordinator's word"}

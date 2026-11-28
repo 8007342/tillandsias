@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: litmus-steps-that-pass-on-their-own-failure-line-are-judged-by-status
+    order: "2307-rdj6"
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, vacuous-check]
+    estimated_hours: 4
+    owned_files:
+      - openspec/litmus-tests/litmus-git-mirror-yaml-gate-shape.yaml
+      - openspec/litmus-tests/litmus-external-logs-layer-shape.yaml
+      - openspec/litmus-tests/litmus-filesystem-scanner-shape.yaml
+      - openspec/litmus-tests/litmus-fix-windows-image-routing-shape.yaml
+      - openspec/litmus-tests/litmus-app-lifecycle-tray-state-api-shape.yaml
+    title: "Litmus steps whose expected text is inside their own failure line, with no assert_exit, go red when their subject breaks"
+    context: |
+      behavior_matches_output is a case-insensitive substring match that ignores the exit status. A sweep on 2026-11-24
+      (source-literal scan, not a run) read 2467 steps judged that way. Definite members of the class:
+      git-mirror-yaml-gate-shape, whose steps expect OK while their FAIL lines say "hook" (h-ok); six cargo test steps
+      that expect the test's own name, which "test X ... FAILED" also prints; app-lifecycle-tray-state-api-shape #7,
+      whose awk prints the expected words on both branches. 2306-3hr6 fixed the diagnose step.
+      Looser, not yet judged: numeric counts ("1" is in "10"), cargo test steps expecting "test result: ok" that also
+      pass when the filter matches zero tests, and grep chains expecting an earlier link's text.
+    exit_criteria:
+      - "Every step in the definite list declares assert_exit 0 and an anchored output match, and is green on a tree where its subject holds."
+      - "Each changed step has a mutant of its subject that is green on the old step and red on the new one, recorded with the step."
+      - "The looser classes are listed on the row with counts, for later batches."
+    unscoreable: "unpinnable-until-the-guard-exists: the mutants are the deliverable"
+    next_action: "Fix the definite list first, one mutant per changed step."
+    provenance: "coordinator macuahuitl-fedora 2026-11-24, from 2306-3hr6"
+    related: [2306-3hr6, 1252-znbn, 1258-8wfb]
+    events:
+      - {type: filed, ts: '2026-11-24T15:19:39Z', host: yolanda, summary: filed on the request of the coordinator}

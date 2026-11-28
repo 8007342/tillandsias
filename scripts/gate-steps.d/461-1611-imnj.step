@@ -1,5 +1,5 @@
 # Gate step 1611-imnj — the checkout-writers scan's arms on constructed roots,
-# and the door kill on scripts/test-litmus-step-pipefail.sh in one run: held in
+# and the door kill on scripts/test-litmus-step-pipefail.sh (read from history since 2399-lrg3) in one run: held in
 # ARM 3 and killed (TERM, 1 s, KILL), the pre-fix file leaves its runner copy in
 # scripts/ and the file as it stands leaves nothing in the checkout.
 #
@@ -8,11 +8,12 @@ STEP_DESC="Checking the checkout-writers scan and the door-kill fixture (1611-im
 STEP_LUA="scripts/lua/test-checkout-writers.lua"
 STEP_ERROR="the checkout-writers scan or the moved fixture no longer does what its fixture constructs (1611-imnj) — see the FAIL lines above"
 STEP_OK="Checkout-writers scan and door-kill fixture passed"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-11 darwin ok:checkout-writers-fixture:13 arms"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-26 darwin ok:checkout-writers-fixture:22 arms (work/2399-lrg3 @ 56c4964e9)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
 STEP_LANES="checkout"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/lua/check-checkout-writers.lua scripts/lua/test-checkout-writers.lua scripts/test-litmus-step-pipefail.sh"
+STEP_READS="scripts/lua/check-checkout-writers.lua scripts/lua/test-checkout-writers.lua"
+STEP_SECOND_REGIME="yolanda 2026-11-24 msys ok:checkout-writers-fixture:22 arms at f1f56dd04 (run directly in a checkout with history; fleet-run's one-commit tree prints not run for 10-12 and 17)"

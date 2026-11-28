@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-metrics-isolation-gate-changed-affinity-git-identity-fixtures-to-lua
+    order: 2344-zk8r
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      Four whole-file shell-to-Lua ports: test-gate-step-metrics-isolation.sh, test-gate-changed-selects-by-input.sh, test-harness-affinity-selection.sh and test-forge-git-identity-source.sh become scripts/lua/*.lua.
+    context: |
+      Coordinator queue 2026-11-25: lenovinha has scripts/test-[d-h]*.sh. Eighth batch, after 2342-9f4k.
+      ports: scripts/test-gate-step-metrics-isolation.sh scripts/test-gate-changed-selects-by-input.sh scripts/test-harness-affinity-selection.sh scripts/test-forge-git-identity-source.sh
+      No origin/work/* ref modifies or deletes any of the four (checked against every ref, 2026-11-25).
+    exit_criteria:
+      - "each .lua gives the same verdict as its .sh on the trunk tree, and the same red arm as the .sh under a mutant"
+      - "every caller runs the .lua; the four .sh files are deleted"
+    unscoreable: "unpinnable-until-the-guard-exists: the mutant parity is the deliverable."
+    next_action: "Port, mutant-parity each, rewire steps 380 and 842, two litmus files and the four prose/Lua callers, delete the .sh."
+    provenance: coordinator queue; filed by lenovinha.
+    related: [2342-9f4k]
+    events:
+      - {type: filed, ts: '2026-11-25T10:51:13Z', host: lenovinha, summary: eighth d-h batch filed}

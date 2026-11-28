@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: windows-corner-shell-to-lua-batch-host-side-scripts
+    field: status
+    value: implemented
+    ts: "2026-11-27T04:09:38Z"
+    host: doris
+  - packet_id: windows-corner-shell-to-lua-batch-host-side-scripts
+    field: next_action
+    value: "Slices 1 (windows-host-capability-probe, step 971) and 2 (wsl-plan-expert-ensure outer lane, step 972) done, each red-first with live parity on doris. Slice 3 is NOT ported, deliberately: test-wsl-builder-kill-reaches-guest.sh measures MSYS signal delivery itself (Git Bash kill TERM/INT/HUP/KILL on a host bash and its exec'd wsl.exe, under set -m). A Lua runner's kill takes a different path (TerminateJobObject, 2392-tv47), so a port would either shell out every kill to bash or measure something else. It stays shell, cited here as the reason, unless the coordinator rules otherwise."
+    ts: "2026-11-27T04:09:38Z"
+    host: doris
