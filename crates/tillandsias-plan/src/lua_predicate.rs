@@ -654,7 +654,7 @@ pub(crate) fn proc_result_to_lua(
 /// on native Windows while porting the archiver, order 1380-u7sq). Strip the
 /// prefix for drive-letter paths only; UNC and device paths are left as they
 /// are. A no-op everywhere else.
-fn strip_verbatim(p: PathBuf) -> PathBuf {
+pub(crate) fn strip_verbatim(p: PathBuf) -> PathBuf {
     #[cfg(windows)]
     {
         if let Some(s) = p.to_str()
@@ -665,6 +665,30 @@ fn strip_verbatim(p: PathBuf) -> PathBuf {
         }
     }
     p
+}
+
+/// ORDER 2453-ap8y (census item cens-a). A path a script received from Git bash on Windows is in
+/// msys form, `/c/Users/...`. Natively that has a root but no drive prefix, so
+/// `is_absolute()` is false and `root.join` turned it into `C:\c\Users\...`,
+/// which every fs verb then refused as "outside the repository root" even for
+/// a scratch dir under <repo>/target (doris's msys census, 2026-11-27: about 9
+/// fixtures failed on this alone). Translate a leading `/<letter>/` (or a bare
+/// `/<letter>`) to `<LETTER>:/`. Windows only; everywhere else `/c/x` is an
+/// ordinary absolute path and is returned unchanged.
+pub(crate) fn host_path_str(s: &str) -> std::borrow::Cow<'_, str> {
+    if cfg!(windows) {
+        let b = s.as_bytes();
+        if b.len() >= 2
+            && b[0] == b'/'
+            && b[1].is_ascii_alphabetic()
+            && (b.len() == 2 || b[2] == b'/')
+        {
+            let drive = (b[1] as char).to_ascii_uppercase();
+            let rest = if b.len() == 2 { "/" } else { &s[2..] };
+            return std::borrow::Cow::Owned(format!("{drive}:{rest}"));
+        }
+    }
+    std::borrow::Cow::Borrowed(s)
 }
 
 /// The path the CONTAINMENT test compares against the (canonical) root: the
@@ -716,7 +740,8 @@ fn resolve_write_path(root: &Path, path_str: &str, verb: &str) -> Result<PathBuf
     if path_str.is_empty() {
         return Err(format!("{verb}: refused — empty path"));
     }
-    let path = Path::new(path_str);
+    let host = host_path_str(path_str);
+    let path = Path::new(host.as_ref());
     let normalized = if path.is_absolute() {
         normalize_path(path)
     } else {
@@ -1493,7 +1518,8 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
                         "fs.read: refused — empty path".to_string(),
                     ));
                 }
-                let path = Path::new(&path_str);
+                let host = host_path_str(&path_str);
+                let path = Path::new(host.as_ref());
                 let normalized = if path.is_absolute() {
                     normalize_path(path)
                 } else {
@@ -1911,6 +1937,26 @@ impl PredicateRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// ORDER 2453-ap8y (census item cens-a). On Windows an msys path gains its drive; elsewhere
+    /// `/c/x` is an ordinary absolute path and is left exactly as written.
+    /// Strings that only look similar (`/cx`, `//c/x`, a relative `c/x`) never
+    /// translate.
+    #[test]
+    fn an_msys_path_gains_its_drive_on_windows_only() {
+        let cases = [("/c/Users/x", "C:/Users/x"), ("/d", "D:/"), ("/c/", "C:/")];
+        for (input, windows) in cases {
+            let want = if cfg!(windows) { windows } else { input };
+            assert_eq!(host_path_str(input), want, "{input}");
+        }
+        for unchanged in ["/cx/y", "//c/x", "c/x", "C:/Users/x", "", "/", "/1/x"] {
+            assert_eq!(
+                host_path_str(unchanged),
+                unchanged,
+                "{unchanged:?} must not translate"
+            );
+        }
+    }
 
     /// Order 1470-dbuw: replacing source must never replay the old verdict.
     #[test]
