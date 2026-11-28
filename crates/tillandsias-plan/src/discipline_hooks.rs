@@ -438,7 +438,13 @@ mod tests {
         let cfg = t.path().join("gitconfig");
         std::fs::write(
             &cfg,
-            format!("[core]\n\thooksPath = {}\n", global_hooks.display()),
+            // 2433-4xa2: a backslash in a git config value starts an escape, so a
+            // Windows path made the file unparseable and `git init` failed.
+            // Forward slashes are valid on every platform git runs on.
+            format!(
+                "[core]\n\thooksPath = {}\n",
+                global_hooks.display().to_string().replace('\\', "/")
+            ),
         )
         .unwrap();
         let st = Command::new("git")
@@ -448,7 +454,20 @@ mod tests {
             .env("GIT_CONFIG_NOSYSTEM", "1")
             .status()
             .unwrap();
-        assert!(st.success());
+        assert!(st.success(), "git init under the scratch global config");
+        // 2433-4xa2: the written value round-trips through git, so a path git
+        // cannot parse (a raw Windows backslash path) fails HERE, by name.
+        let got = Command::new("git")
+            .args(["config", "--global", "--get", "core.hooksPath"])
+            .env("GIT_CONFIG_GLOBAL", &cfg)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&got.stdout).trim(),
+            global_hooks.display().to_string().replace('\\', "/"),
+            "core.hooksPath round-trips through git config"
+        );
         (t, repo, global_hooks, cfg)
     }
 
@@ -470,13 +489,27 @@ mod tests {
         let (scope, value) = local.split_once('\t').unwrap();
         assert_eq!(scope, "local", "the repo now carries its own hooksPath");
         assert_eq!(PathBuf::from(value), done.dir);
-        assert!(done.dir.ends_with("hooks") && done.dir.starts_with(repo.canonicalize().unwrap()));
+        // Canonicalize BOTH sides (2433-4xa2): on Windows canonicalize answers a
+        // verbatim \\?\C:\... path, which never prefixes git's C:/... spelling.
+        assert!(
+            done.dir.ends_with("hooks")
+                && done
+                    .dir
+                    .canonicalize()
+                    .unwrap()
+                    .starts_with(repo.canonicalize().unwrap())
+        );
         assert!(done.dir.join("pre-push").is_file());
         let note = done
             .hooks_path_set
             .as_deref()
             .expect("it says that it set it");
-        assert!(note.contains(value) && note.contains(&global_hooks.to_string_lossy().to_string()));
+        // The note names the global hooksPath as git reports it: the spelling
+        // the fixture wrote, forward slashes (2433-4xa2).
+        assert!(
+            note.contains(value)
+                && note.contains(&global_hooks.to_string_lossy().replace('\\', "/"))
+        );
         // NEGATIVE CONTROL (1442-wyf9): nothing lands in the global dir.
         assert_eq!(std::fs::read_dir(&global_hooks).unwrap().count(), 0);
     }
