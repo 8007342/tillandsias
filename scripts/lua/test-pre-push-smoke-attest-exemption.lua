@@ -27,6 +27,7 @@
 local fixture = require "common.fixture"
 local T = fixture.new("pre-push-smoke-attest-exemption")
 local HOOK = "scripts/hooks/pre-push-local-gate.sh"
+local SH = fixture.posix_shell()
 local EXEMPT = "local gate: coordination marker ref"
 local W = T:scratch()
 local REPO = W.abs .. "/repo"
@@ -67,7 +68,7 @@ local ZERO = string.rep("0", 40)
 
 local function run_hook(hook_body, stdin)
     fs.write(W.rel .. "/repo/" .. HOOK, hook_body)
-    local r = proc.run({ argv = { "bash", REPO .. "/" .. HOOK, "origin", "https://example.invalid/repo.git" },
+    local r = proc.run({ argv = { SH, REPO .. "/" .. HOOK, "origin", "https://example.invalid/repo.git" },
         stdin = stdin, cwd = REPO, timeout_ms = 60000, env = { PATH = env.get("PATH"), HOME = W.abs } })
     local o = (r.stdout or "") .. (r.stderr or "")
     return r.code == 0 and text.contains(o, EXEMPT), o
