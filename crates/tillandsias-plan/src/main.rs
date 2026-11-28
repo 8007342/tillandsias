@@ -5477,13 +5477,27 @@ fn run_policy(args: &[String]) -> ! {
     use tillandsias_plan::command_policy as cp;
     let usage = || -> ! {
         eprintln!(
-            "usage: tillandsias-plan policy eval [--host-kind bare-metal|forge|ci] [--regime interactive|gate|fixture|hook|relay] [--caller c] [--cwd dir] [--root dir] [--seed path] -- <argv...>\n       tillandsias-plan policy show [--root dir] [--seed path]\n       tillandsias-plan policy audit [--since 24h|7d|30m] [--caller c] [--root dir]\n       tillandsias-plan policy consent grant <soft-reset|hard-reset|workspace-destroy|force-push> [--ttl 30m] [--root dir] -- <argv...>   (the OPERATOR, on the host)\n       tillandsias-plan policy classify-bash --hook | --status | --command <cmd>"
+            "usage: tillandsias-plan policy eval [--host-kind bare-metal|forge|ci] [--regime interactive|gate|fixture|hook|relay] [--caller c] [--cwd dir] [--root dir] [--seed path] -- <argv...>\n       tillandsias-plan policy show [--root dir] [--seed path]\n       tillandsias-plan policy audit [--since 24h|7d|30m] [--caller c] [--root dir]\n       tillandsias-plan policy consent grant <soft-reset|hard-reset|workspace-destroy|force-push> [--ttl 30m] [--root dir] -- <argv...>   (the OPERATOR, on the host)\n       tillandsias-plan policy classify-bash --hook | --status | --command <cmd>\n       tillandsias-plan policy host-kind   (read-only: the detected host kind and its evidence)"
         );
         std::process::exit(2);
     };
     let Some(verb) = args.first() else { usage() };
     if verb == "classify-bash" {
         run_classify_bash(&args[1..]);
+    }
+    // ORDER 2444-vn38 — `policy host-kind`: what the policy engine reads as
+    // this host's kind, and the evidence behind it (marker, launch record,
+    // container record, env), with a note for each piece it ignored. Read-only
+    // and override-free: it takes no argument at all, so no flag can make it
+    // print a kind the engine would not use. Exit 0.
+    if verb == "host-kind" {
+        if args.len() > 1 {
+            usage();
+        }
+        for line in cp::host_kind_report_here() {
+            println!("{line}");
+        }
+        std::process::exit(0);
     }
     // ORDER 1443-w9hf — `policy audit [--since 24h|7d|…] [--caller c] [--root dir]`:
     // one line per (rule_id, decision) with its count, then the total. With no

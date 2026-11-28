@@ -1,12 +1,15 @@
 # Gate step 2371-knda — data, not code (order 1072-b7eq).
 #
 # Nothing ran this fixture: its litmus is bound to a draft spec, which the runner does not select.
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf). Ported from the .sh in 2444-vn38.
 STEP_DESC="Checking the host kind is not read from workspace content (2371-knda)"
-STEP_SCRIPT="scripts/test-host-kind-evidence-not-from-workspace.sh"
+STEP_LUA="scripts/lua/test-host-kind-evidence-not-from-workspace.lua"
 STEP_ERROR="workspace content can again decide which host kind a command policy applies to — see the FAIL lines above"
 STEP_OK="host-kind-evidence-not-from-workspace fixture passed"
-STEP_SECOND_REGIME="yolanda 2026-11-25 msys ok:rc0-no-verdict-line"
-STEP_READS="scripts/plan-binary-probe.sh scripts/test-host-kind-evidence-not-from-workspace.sh"
+# msys record of the .lua port (2444-vn38), plan binary from 71f325ea4: arms 1, 2, 8 ok; 3, 4, 5, 7
+# skip (no unprivileged userns with a /run tmpfs); 6 skips (no builder toolbox). ffe2656fa then added
+# --root to arm 1, which this run predates. It replaces yolanda 2026-11-25 msys, taken on the .sh.
+STEP_SECOND_REGIME="doris 2026-11-28 msys ok:host-kind-evidence:pass=3:skipped=2"
+STEP_READS="scripts/lua/test-host-kind-evidence-not-from-workspace.lua crates/tillandsias-plan/src/command_policy.rs"
 STEP_SERIAL="drives podman on a Linux host with a builder toolbox"
 STEP_LANES="podman"
