@@ -29,7 +29,8 @@ local NAME = "forge-pi-omp-harness"
 local top = proc.run({ argv = { "git", "rev-parse", "--show-toplevel" }, timeout_ms = 30000 })
 local ROOT = text.trim(top.stdout or "")
 if top.code ~= 0 or ROOT == "" then verdict.could_not_run(NAME, "git rev-parse --show-toplevel did not answer") end
-if proc.run({ argv = { "jq", "--version" } }).code ~= 0 then verdict.could_not_run(NAME, "jq is not on this host (the forge base has it)") end
+local PLAN = require("common.fixture").plan_binary()
+if PLAN == nil or PLAN == "" then verdict.could_not_run(NAME, "no plan binary to run lua/local-models-pi.lua with") end
 local LIB = ROOT .. "/images/default/lib-local-models.sh"
 
 local REL = "target/plan-scratch/pi-omp-harness-" .. tostring(time.now_ms())
@@ -71,7 +72,7 @@ fs.write(REL .. "/drive.sh", table.concat({
 
 local BASE = "http://lemonade.test:13305/api/v1"
 local function run(mode, args, url)
-    local argv = { "env", "TILLANDSIAS_LEMONADE_URL=" .. (url or BASE), "bash", ABS .. "/drive.sh", LIB, mode }
+    local argv = { "env", "TILLANDSIAS_LEMONADE_URL=" .. (url or BASE), "TILLANDSIAS_PLAN_BIN=" .. PLAN, "bash", ABS .. "/drive.sh", LIB, mode }
     for _, a in ipairs(args or {}) do argv[#argv + 1] = a end
     return proc.run({ argv = argv, timeout_ms = 60000 })
 end

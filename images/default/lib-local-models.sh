@@ -13,7 +13,7 @@
 #   lemonade_pi_config   <models.json answer> <agent dir>  → models.json + settings.json
 #   lemonade_omp_config  <agent dir>                       → models.yml + config.yml
 #   lemonade_fetch_models <out file>                       → GET $base/models
-# Needs jq (the forge base has it).
+# No jq: the Pi generator is lua/local-models-pi.lua on tillandsias-plan.
 
 LEMONADE_DEFAULT_URL="http://lemonade:13305/api/v1"
 
@@ -63,59 +63,41 @@ lemonade_fetch_models() {
     curl -fsS --max-time 15 "$base/models" -o "$1"
 }
 
-# The jq filter shared by the lanes: downloaded models labelled chat or
-# tool-calling, and none labelled for another modality.
-_LEMONADE_CHAT_FILTER='
-  (.data // [])
-  | map(select(
-      .downloaded == true
-      and ((.labels // []) | any(. == "chat" or . == "tool-calling"))
-      and ((.labels // []) | any(. as $l
-            | ["image", "audio", "tts", "transcription", "embeddings", "embedding", "3d", "reranking"]
-            | index($l)) | not)
-    ))'
-
-lemonade_chat_models() {
-    jq -c "$_LEMONADE_CHAT_FILTER" "$1"
-}
-
 # Pi has no model discovery, so its models.json is generated from the answer.
+# The selection and the JSON are lua/local-models-pi.lua on `tillandsias-plan
+# script run --helper` (openspec forge-lua-helpers): new forge code carries no
+# jq. The module sits beside this file (images/default/lua/ in a checkout,
+# /usr/local/lib/tillandsias/lua/ in the image).
 lemonade_pi_config() {
-    local answer="$1" dir="$2" base n
+    local answer="$1" dir="$2" base lua="" c plan
     base="$(lemonade_base_url)" || return 1
     mkdir -p "$dir" || return 1
-    n="$(jq "$_LEMONADE_CHAT_FILTER | length" "$answer" 2>/dev/null)" || n=""
-    if [ -z "$n" ] || [ "$n" -eq 0 ]; then
-        echo "refused:pi-config:no-local-chat-model (Lemonade lists no downloaded chat or tool-calling model)" >&2
+    for c in "${BASH_SOURCE[0]%/*}/lua/local-models-pi.lua" /usr/local/lib/tillandsias/lua/local-models-pi.lua; do
+        if [ -r "$c" ]; then lua="$c"; break; fi
+    done
+    plan="${TILLANDSIAS_PLAN_BIN:-tillandsias-plan}"
+    if [ -z "$lua" ] || ! command -v "$plan" >/dev/null 2>&1; then
+        echo "refused:pi-config:helper-missing (lua/local-models-pi.lua or $plan is absent from this image)" >&2
         return 1
     fi
-    jq --arg base "$base" "$_LEMONADE_CHAT_FILTER"' as $m | {
-        providers: {
-          lemonade: {
-            baseUrl: $base,
-            api: "openai-completions",
-            apiKey: "lemonade-local",
-            models: ($m | map(
-              ((.context_length // 8192) | if . < 1024 then 1024 else . end) as $ctx
-              | {
-                  id: .id,
-                  name: .id,
-                  contextWindow: $ctx,
-                  maxTokens: ([16384, (($ctx / 4) | floor)] | min),
-                  reasoning: ((.labels // []) | index("reasoning") != null),
-                  input: (["text"] + (if ((.labels // []) | index("vision")) then ["image"] else [] end)),
-                  compat: { supportsDeveloperRole: false, supportsStore: false }
-                }))
-          }
-        }
-      }' "$answer" > "$dir/models.json.tmp" && mv -f "$dir/models.json.tmp" "$dir/models.json" || return 1
-    # The default model prefers one that can call tools.
-    local default
-    default="$(jq -r "$_LEMONADE_CHAT_FILTER"' | (map(select((.labels // []) | index("tool-calling"))) + .) | .[0].id' "$answer")"
-    local settings="$dir/settings.json"
-    [ -s "$settings" ] || echo '{}' > "$settings"
-    jq --arg m "$default" '.defaultProvider = "lemonade" | .defaultModel = $m | .enabledModels = ["lemonade/*"]' \
-        "$settings" > "$settings.tmp" && mv -f "$settings.tmp" "$settings"
+    _lemonade_pi_emit models "$dir/models.json" "$answer" "$dir/settings.json" "$lua" "$plan" "$base" || return 1
+    _lemonade_pi_emit settings "$dir/settings.json" "$answer" "$dir/settings.json" "$lua" "$plan" || return 1
+}
+
+# One helper call → one file. A helper may not call verdict.*, so a refusal is
+# the helper's only stdout line, starting `refused:`; it goes to stderr here and
+# nothing is written.
+_lemonade_pi_emit() {
+    local mode="$1" dest="$2" answer="$3" settings="$4" lua="$5" plan="$6" first
+    shift 6
+    LEMONADE_MODELS_ANSWER="$answer" PI_SETTINGS_FILE="$settings" \
+        "$plan" script run --helper "$lua" -- "$mode" "$@" > "$dest.tmp" || { rm -f "$dest.tmp"; return 1; }
+    IFS= read -r first < "$dest.tmp" || first=""
+    case "$first" in
+        refused:*) printf '%s\n' "$first" >&2; rm -f "$dest.tmp"; return 1 ;;
+        "{"*) mv -f "$dest.tmp" "$dest" ;;
+        *) echo "refused:pi-config:helper-gave-no-json:$mode" >&2; rm -f "$dest.tmp"; return 1 ;;
+    esac
 }
 
 # omp discovers the models itself (openai-models-list); the file names only the

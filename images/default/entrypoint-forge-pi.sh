@@ -116,7 +116,7 @@ if ! lemonade_pi_config "$_answer" "$PI_CODING_AGENT_DIR"; then
     exit 1
 fi
 rm -f "$_answer"
-trace_lifecycle "models" "pi: $(jq '.providers.lemonade.models | length' "$PI_CODING_AGENT_DIR/models.json") local model(s)"
+trace_lifecycle "models" "pi: $("${TILLANDSIAS_PLAN_BIN:-tillandsias-plan}" json get '.providers.lemonade.models | length' "$PI_CODING_AGENT_DIR/models.json") local model(s)"
 
 forge_step_line total "$((($(_forge_now_us) - ${FORGE_ENTRY_T0_US:-$(_forge_now_us)}) / 1000))"
 trace_lifecycle "exec" "launching pi"
