@@ -10632,6 +10632,24 @@
       "from": "image:imagegen-corridorkey",
       "kind": "package",
       "optional": false,
+      "to": "pkg:debian:lua-filesystem"
+    },
+    {
+      "from": "image:imagegen-corridorkey",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua-lpeg"
+    },
+    {
+      "from": "image:imagegen-corridorkey",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:lua5.4"
+    },
+    {
+      "from": "image:imagegen-corridorkey",
+      "kind": "package",
+      "optional": false,
       "to": "pypi:requirements:imagegen-corridorkey"
     },
     {
@@ -58494,6 +58512,7 @@
       "pulled_by": [
         "image:audio-studio",
         "image:flutter",
+        "image:imagegen-corridorkey",
         "image:imagegen-cuda",
         "image:imagegen-studio",
         "image:web-wrangler",
@@ -58516,6 +58535,7 @@
       "pulled_by": [
         "image:audio-studio",
         "image:flutter",
+        "image:imagegen-corridorkey",
         "image:imagegen-cuda",
         "image:imagegen-studio",
         "image:web-wrangler",
@@ -58538,6 +58558,7 @@
       "pulled_by": [
         "image:audio-studio",
         "image:flutter",
+        "image:imagegen-corridorkey",
         "image:imagegen-cuda",
         "image:imagegen-studio",
         "image:web-wrangler",
@@ -61402,7 +61423,7 @@
   "schema": "tillandsias-stack/v1",
   "summary": {
     "components": 57,
-    "edges": 3155,
+    "edges": 3161,
     "license_families": {
       "model": 7,
       "permissive": 1720,
