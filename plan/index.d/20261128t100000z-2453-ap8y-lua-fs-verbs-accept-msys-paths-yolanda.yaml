@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: lua-fs-verbs-accept-msys-and-native-windows-paths-inside-the-repo
+    order: "2453-ap8y"
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [tillandsias-plan, lua-runner, msys]
+    estimated_hours: 3
+    owned_paths: [crates/tillandsias-plan/src/lua_predicate.rs, crates/tillandsias-plan/src/script_run.rs]
+    title: "The Lua runner's fs verbs refuse an in-repo path in msys form (/c/...), and fs.walk refuses the C:/ form too"
+    context: |
+      Census item cens-a of plan/issues/msys-lua-fixture-census-2026-11-27.md (doris-windows), routed to
+      yolanda by macuahuitl-fedora. Reproduced on yolanda 2026-11-28: fs.exists/fs.read of
+      /c/<repo>/target/... refused as "outside the repository root" (natively /c/x has no drive prefix,
+      so is_absolute() is false and root.join made it C:\c\...), and fs.walk refused both spellings
+      (the msys one as not repo-relative, the C:/ one because its in-repo check compared a verbatim
+      \?\C:\ canonical path with the C:\ root).
+    exit_criteria:
+      - "a fixture red on the trunk binary and green after: exists/read/walk in msys form and walk in C:/ form inside <repo>/target, plus a negative arm (an msys path outside the repo is still refused)"
+      - "the census's named fixtures re-run before and after, with the counts reported"
+    unscoreable: "fixture-row: closure is scripts/lua/test-fs-msys-path-scope.lua in its gate step, run on msys (Windows-only by construction)."
+    next_action: "open the PR from work/2453-ap8y."
+    provenance: filed and claimed by yolanda at macuahuitl-fedora's direction; the census item had no ledger row.
+    related: [2436-wsbg, 2446-pmtx]
+    events:
+      - {type: filed, ts: '2026-11-28T10:00:00Z', host: yolanda, summary: census item cens-a filed as a row}
+      - {type: claimed, ts: '2026-11-28T10:00:00Z', host: yolanda, summary: claimed by yolanda; work ref work/2453-ap8y}
