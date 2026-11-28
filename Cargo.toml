@@ -1,0 +1,89 @@
+[package]
+name = "tillandsias-macos-tray"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Native AppKit NSStatusItem tray for Tillandsias on macOS; drives a Virtualization.framework-hosted headless tillandsias VM."
+publish = false
+
+[[bin]]
+name = "tillandsias-tray"
+path = "src/main.rs"
+
+[dependencies]
+# 1420-83vf: the tillandsia progress renderer for --provision / --reset-state.
+tillandsias-progress-tty = { path = "../tillandsias-progress-tty" }
+sha2.workspace = true
+tillandsias-control-wire = { path = "../tillandsias-control-wire" }
+tillandsias-core = { path = "../tillandsias-core" }
+tillandsias-host-shell = { path = "../tillandsias-host-shell" }
+tillandsias-secure-channel = { workspace = true }
+tillandsias-vm-layer = { path = "../tillandsias-vm-layer", features = ["recipe", "download"] }
+tokio = { workspace = true, features = ["full"] }
+# Order 795-5itp: the shared LengthDelimitedCodec instead of a hand-rolled
+# u32-BE reader, and the Sink/Stream extension traits Framed needs.
+tokio-util = { workspace = true }
+futures-util = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# 1420-inak: dup2 for the GUI-mode tray log (src/tray_log.rs). Already in the lock.
+libc = "0.2"
+# 1886-hf9j: SSHSIG armor for the approval signer.
+base64 = { workspace = true }
+objc2 = "0.5"
+block2 = "0.5"
+objc2-app-kit = { version = "0.2", features = [
+    "NSApplication",
+    "NSResponder",
+    "NSRunningApplication",
+    "NSStatusBar",
+    "NSStatusItem",
+    "NSStatusBarButton",
+    "NSButton",
+    "NSControl",
+    "NSMenu",
+    "NSMenuItem",
+    "NSImage",
+    "NSWorkspace",
+    "NSEvent",
+    # Required by src/status_item.rs: NSStatusItem::button returns
+    # NSStatusBarButton (an NSView subclass) gated on NSView; NSMenuItem::
+    # setState + NSControlStateValueOn live in the NSCell feature.
+    "NSView",
+    "NSCell",
+    # 1420-v3zt: the palette-coloured progress bar beside the menu-bar icon.
+    "NSColor",
+    "NSAttributedString",
+] }
+objc2-foundation = { version = "0.2", features = [
+    # 1503-qrgz: the did-wake observer (addObserverForName:object:queue:usingBlock:).
+    "NSNotification",
+    "NSOperation",
+    "block2",
+    "NSData",
+    "NSString",
+    "NSURL",
+    "NSArray",
+    "NSDictionary",
+    "NSUUID",
+    "NSThread",
+    "NSRunLoop",
+    "NSDate",
+    "NSGeometry",
+    "NSAttributedString",
+] }
+objc2-virtualization = "0.2"
+
+[dev-dependencies]
+tempfile = "3"
+# test-util: paused-clock tests for the tick-loop wait (SC-16 slice 3);
+# precedent: tillandsias-metrics.
+tokio = { workspace = true, features = ["full", "test-util"] }
+
+[lints]
+workspace = true

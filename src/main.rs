@@ -1,0 +1,1040 @@
+//! Native AppKit NSStatusItem tray for Tillandsias on macOS.
+//!
+//! On macOS this drives a Virtualization.framework-hosted Fedora VM and
+//! renders the parity menu from `tillandsias-host-shell::MenuStructure`.
+//! On non-macOS targets the binary still compiles (so the Linux dev box's
+//! `cargo check --workspace` stays green) but `main` only prints a notice
+//! pointing at the spec and exits 1.
+//!
+//! @trace spec:macos-native-tray
+
+#![allow(dead_code)]
+#![allow(unused)]
+
+// Modules that have a real macOS body live behind `cfg(target_os = "macos")`.
+// Their unit-testable portable bits (AppleScript formatting, menu mapping)
+// re-export functions from sub-modules that compile everywhere — see
+// `terminal_attach` and `menu_disabled_v2` for the pattern.
+#[cfg(target_os = "macos")]
+mod action_host;
+#[cfg(target_os = "macos")]
+mod app_delegate;
+#[cfg(target_os = "macos")]
+mod approval_signer;
+#[cfg(target_os = "macos")]
+mod bringup_timer;
+#[cfg(target_os = "macos")]
+mod diagnose;
+#[cfg(target_os = "macos")]
+mod guest_binary;
+#[cfg(target_os = "macos")]
+mod guest_exec_relay;
+#[cfg(target_os = "macos")]
+mod installation_uuid;
+#[cfg(target_os = "macos")]
+mod main_thread;
+#[cfg(target_os = "macos")]
+mod preview_relay;
+#[cfg(target_os = "macos")]
+mod pty_vsock_bridge;
+// THE ATTRIBUTE IS LOAD-BEARING and every sibling above carries it. Without it
+// this module compiles on EVERY target while diagnose/installation_uuid do not,
+// so it references siblings that are not there (E0433) and reaches for
+// std::os::unix on Windows. A macOS gate cannot see any of it: here the
+// siblings are present and the module compiles. Found by the Linux workspace
+// compile on relay (656-spux shape).
+#[cfg(target_os = "macos")]
+mod reset_state;
+#[cfg(target_os = "macos")]
+mod status_item;
+#[cfg(target_os = "macos")]
+mod tray_log;
+
+// These modules compile on every target: their public surface is host-shell
+// data + plain Rust formatting that we want to test from the Linux dev box.
+mod menu_disabled_v2;
+// 1420-inak: pure, ungated (no crate:: / unix), so its tests run on every host.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+mod provision_error;
+// 1420-83vf: pure (no crate:: / unix), so its tests run on every host.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+mod provision_progress;
+mod terminal_attach;
+
+/// The `--version` / `-V` line: release version, git SHA and build time from
+/// one source (635-bhkb).
+///
+/// Extracted from `main` so it is TESTABLE — and deliberately NOT target-gated,
+/// for the same reason `build_exec_guest_shell_cmd` below is not: its pin must
+/// compile and run on every host, or the fleet-wide test run stops guarding it
+/// and only a Mac can catch a regression. Named to match the Windows tray's
+/// `version_line` / `version_line_uses_workspace_version_and_commit` pair
+/// rather than inventing a second convention, so the cross-tray pattern of
+/// identically-named pins extends to versioning.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn version_line() -> String {
+    format!(
+        "tillandsias-tray {} (git {}, built {})",
+        // 1238-b825: VERSION, or VERSION+built.<date> when built on a later
+        // day; always starts with WORKSPACE_VERSION.
+        env!("BUILD_VERSION_LABEL"),
+        env!("TILLANDSIAS_GIT_SHA"),
+        env!("TILLANDSIAS_BUILD_TIME"),
+    )
+}
+
+#[cfg(test)]
+mod version_line_tests {
+    use super::version_line;
+
+    /// 635-bhkb. `--version` must report the WORKSPACE_VERSION the diagnose
+    /// JSON's `version` field uses, plus the build SHA, so an operator who
+    /// runs `--version` and then `--diagnose --json` sees one identifier in
+    /// both. Same assertions and same name as the Windows tray's pin.
+    #[test]
+    fn version_line_uses_workspace_version_and_commit() {
+        let line = version_line();
+        assert!(
+            line.contains(env!("WORKSPACE_VERSION")),
+            "version line missing WORKSPACE_VERSION: {line}"
+        );
+        assert!(
+            line.contains(env!("TILLANDSIAS_GIT_SHA")),
+            "version line missing TILLANDSIAS_GIT_SHA: {line}"
+        );
+        assert!(
+            line.starts_with("tillandsias-tray "),
+            "version line should start with binary name: {line}"
+        );
+        // Guard against the static-Cargo.toml regression class: this is the
+        // exact shape the packet was filed from, observed live on an installed
+        // app reporting `tillandsias-tray 0.1.0 (git 0548ee1f2, …)` while its
+        // Info.plist carried 0.4.
+        assert!(
+            !line.contains("0.1.0 ("),
+            "version line still reporting CARGO_PKG_VERSION shape: {line}"
+        );
+    }
+
+    /// The reason this was not merely cosmetic. `pty_vsock_bridge` compares the
+    /// guest's reported build_version against the tray's own version and warns
+    /// on mismatch; while that read CARGO_PKG_VERSION it compared real guest
+    /// versions against the literal "0.1.0", so the skew warning fired on EVERY
+    /// connection to a healthy guest. A warning that is always true is one an
+    /// operator learns to scroll past — and build-version skew is precisely the
+    /// signal 648-772y needed legible when an older tray wedged a newer guest.
+    ///
+    /// Pinning the VALUE, not the call site: any future edit that reintroduces
+    /// a hardcoded version here fails, whether or not it spells it the old way.
+    #[test]
+    fn workspace_version_is_not_the_frozen_crate_version() {
+        assert_ne!(
+            env!("WORKSPACE_VERSION"),
+            "0.1.0",
+            "WORKSPACE_VERSION resolved to the frozen crate version — the \
+             VERSION file was unreadable at build time and build.rs fell back"
+        );
+    }
+}
+
+/// Order 277: true iff a live tray process holds the app singleton.
+/// The one-shot CLI modes boot their own VZ VM against the same root
+/// disk the tray's VM has attached, so VZ fails with the opaque
+/// "storage device attachment is invalid" (hit live in the 2026-07-10
+/// attended smoke, blocking every in-session forensics attempt). Probe
+/// the tray's own singleton lock instead of pattern-matching that
+/// error: acquiring and immediately dropping the guard is side-effect
+/// free when the lock is free, and `Ok(None)` (WouldBlock) means a
+/// running tray owns the VM. A probe infrastructure error returns
+/// false — the one-shot proceeds and at worst surfaces the raw VZ
+/// error as before, never a false refusal.
+#[cfg(target_os = "macos")]
+fn live_tray_holds_singleton() -> bool {
+    matches!(
+        tillandsias_core::singleton::SingletonGuard::try_acquire("tillandsias-macos-tray"),
+        Ok(None)
+    )
+}
+
+/// Order 277 enforcement for VM-booting one-shot modes: fail fast with
+/// operator guidance instead of the raw VZ storage error.
+#[cfg(target_os = "macos")]
+fn require_no_live_tray(mode: &str) {
+    if live_tray_holds_singleton() {
+        eprintln!(
+            "Error: {mode} needs to boot the VM, but a running Tillandsias tray owns it.\n\
+             Use the tray menu instead, or quit the tray (menu bar \u{2192} \u{274C} Quit Tillandsias) and re-run."
+        );
+        std::process::exit(3);
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn main() {
+    // Argv-driven sub-modes (mirrors windows-tray's `--diagnose`
+    // pattern from commit 20fb9d1f). `--diagnose` runs the static
+    // health report and exits before AppKit gets a chance to
+    // initialize, so the binary can be invoked from a terminal
+    // session without putting a stray menu-bar icon up.
+    let args: Vec<String> = std::env::args().collect();
+    // Fast-exit metadata flags MUST short-circuit before the tray/VM fallthrough
+    // below — otherwise `--version`/`--help` boot the Virtualization.framework VM
+    // and put up a menu-bar icon instead of printing and exiting (see plan
+    // packet macos-tray/version-help-flags-boot-vm).
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        // Include git SHA + build time (embedded by build.rs) so freshness is
+        // verifiable — the VERSION file alone can't tell a stale artifact from
+        // a HEAD build. The version itself is WORKSPACE_VERSION, read from the
+        // repo-root VERSION file at build time (635-bhkb); it was
+        // CARGO_PKG_VERSION, which is never bumped per release and so printed
+        // "0.1.0" on every build this project has ever shipped.
+        println!("{}", version_line());
+        std::process::exit(0);
+    }
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        println!(
+            "tillandsias-tray {}\n\n\
+             Native macOS menu-bar tray for Tillandsias.\n\n\
+             USAGE:\n    \
+             tillandsias-tray [FLAGS]\n\n\
+             FLAGS:\n    \
+             (no flags)    Launch the menu-bar tray and auto-boot the VM\n    \
+             --provision   Provision the VM disk from the manifest, then exit\n    \
+             --reset-guest HARD RESET: wipe the guest disk (and with it the\n                  \
+             in-VM vault), clear the vault Keychain items, and reprovision\n                  \
+             from scratch. Needs a per-run approval: add --approve-hard-reset\n                  \
+             (or set TILLANDSIAS_HARD_RESET_APPROVED=1). You'll sign in again\n    \
+             --reset-state SOFT RESET (order 1437-8c6p): keeps the VM, its guest\n                  \
+             and Vault store, your sign-ins and the downloads; the guest\n                  \
+             rebuilds its containers at its next boot. The installer runs it on\n                  \
+             every install. TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 skips it\n    \
+             --exec-guest <cmd...>  Boot the VM, run a command in the guest over\n                  \
+             the control wire, print its output + exit, then stop. An ABSOLUTE\n                  \
+             argv[0] is sent as a verbatim argv vector with no shell in the\n                  \
+             chain, so arguments keep their exact bytes (--exec-guest\n                  \
+             /bin/echo \"a b\"). Anything else is treated as a shell command and\n                  \
+             run via `/bin/bash -lc`; quote pipelines as ONE string\n                  \
+             (--exec-guest 'a | b') and never add your own bash/sh wrapper\n    \
+             --github-login  Boot the VM and log in to GitHub in the guest;\n                  \
+             prompts for your git name, email, and PAT (token hidden)\n    \
+             --list-cloud-projects  Boot the VM and list GitHub repos via the\n                  \
+             stored Vault token; streams the repo listing to stdout\n    \
+             --cloud <owner>/<repo> --opencode [--prompt <text>]  Boot the VM and\n                  \
+             launch the OpenCode forge on that GitHub project inside the guest;\n                  \
+             streams forge output to this terminal. With --prompt runs\n                  \
+             non-interactively (one shot).\n    \
+             --diagnose    Print a static health report, then exit\n    \
+             --with-metrics  With --diagnose: boot the VM, read the guest\n                  \
+             metrics snapshot over the control wire, print it in the report,\n                  \
+             then stop the VM. Plain --diagnose never boots anything\n    \
+             --json        With --diagnose, emit JSON instead of human text\n    \
+             --attach-pty <slave-tty> --session-sock <path>  (internal) in-terminal\n                  \
+             attach client the tray spawns inside Terminal.app for live PTY\n                  \
+             sessions; owns the window tty and forwards resize events\n    \
+             -V, --version Print version and exit\n    \
+             -h, --help    Print this help and exit",
+            env!("WORKSPACE_VERSION")
+        );
+        std::process::exit(0);
+    }
+    // In-terminal attach client (terminal-attach@v2): the process
+    // Terminal.app runs inside the window for a live PTY attach. Owns the
+    // window's tty (raw mode, SIGWINCH → event-driven resize on the
+    // per-session socket, boundary mode resets). Boots no VM and touches
+    // no AppKit — dispatch before the singleton guard, like --diagnose;
+    // the running tray is the one that spawned us.
+    // @trace spec:macos-native-tray.lifecycle.terminal-attach@v2
+    if let Some(i) = args.iter().position(|a| a == "--attach-pty") {
+        let slave = args.get(i + 1).cloned();
+        let sock = args
+            .iter()
+            .position(|a| a == "--session-sock")
+            .and_then(|j| args.get(j + 1))
+            .cloned();
+        match (slave, sock) {
+            (Some(slave), Some(sock)) => std::process::exit(
+                tillandsias_host_shell::pty::attach_client::run(&slave, &sock),
+            ),
+            _ => {
+                eprintln!("usage: tillandsias-tray --attach-pty <slave-tty> --session-sock <path>");
+                std::process::exit(2);
+            }
+        }
+    }
+    // 778-n9z2: the metrics read is an OPT-IN verb, not a widening of
+    // --diagnose. install-macos.sh runs `--diagnose --json` synchronously
+    // during install; a default-path VM boot there would start a guest
+    // mid-install. Gated like every other VM-booting one-shot (order 277).
+    if args.iter().any(|a| a == "--with-metrics") {
+        require_no_live_tray("--diagnose --with-metrics");
+        let format = if args.iter().any(|a| a == "--json") {
+            diagnose::DiagnoseFormat::Json
+        } else {
+            diagnose::DiagnoseFormat::Human
+        };
+        std::process::exit(diagnose::metrics_snapshot_main(format));
+    }
+    if args.iter().any(|a| a == "--provision") {
+        std::process::exit(diagnose::provision_main());
+    }
+    // Intentional EPHEMERAL RESET (windows-260717-4): wipe the provisioned
+    // boot artifacts (rootfs + in-VM vault) and reprovision from scratch.
+    // Destructive by design — one re-auth is the only cost. Order-277 gated:
+    // never wipes the disk out from under a running tray's VM.
+    if args.iter().any(|a| a == "--reset-guest") {
+        require_no_live_tray("--reset-guest");
+        std::process::exit(diagnose::reset_guest_main());
+    }
+    // ORDER 1286-4437, re-scoped by 1437-8c6p — the same flag name and the same
+    // meaning on all three platforms: the SOFT reset. It keeps the VM, the
+    // guest's Vault store and the Keychain items; HARD is --reset-guest above.
+    //
+    // IT TAKES THE SAME ORDER-277 GUARD AS --reset-guest. It leaves the guest a
+    // wipe request and reprovisions, and a live tray owning the VM would boot
+    // through that underneath it.
+    //
+    // Err => exit 1, one convention across the fleet. See reset_state.rs's note
+    // on why this returns Result while its three siblings return i32.
+    if args.iter().any(|a| a == "--reset-state") {
+        require_no_live_tray("--reset-state");
+        match reset_state::run_reset_state() {
+            Ok(()) => std::process::exit(0),
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+    }
+    // Headless guest-exec smoke: boot the provisioned VM, run a command in the
+    // guest over the control wire (VzRuntime::exec path), print its output +
+    // exit, then stop. Real-path proof for the idiomatic exec layer and a
+    // reusable smoke tool. MUST run on the main thread (Vz start() pumps the
+    // main dispatch queue from its calling thread) — exec_guest_main uses a
+    // current-thread runtime for exactly that. See
+    // plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md.
+    // Order 1886-hf9j: the approval key. Enrol prints the allowed-signers
+    // line; sign asks for Touch ID and prints the SSHSIG. Neither touches the
+    // VM, so neither needs the tray quit.
+    // One key per repo slug (operator 2026-10-27).
+    if let Some(idx) = args.iter().position(|a| a == "--approval-enrol") {
+        let Some(slug) = args.get(idx + 1) else {
+            eprintln!("usage: --approval-enrol <owner/name>");
+            std::process::exit(2);
+        };
+        std::process::exit(approval_signer::enrol_main(slug));
+    }
+    if let Some(idx) = args.iter().position(|a| a == "--approval-sign") {
+        let (Some(slug), Some(file)) = (args.get(idx + 1), args.get(idx + 2)) else {
+            eprintln!("usage: --approval-sign <owner/name> <statement-file>");
+            std::process::exit(2);
+        };
+        std::process::exit(approval_signer::sign_main(slug, file));
+    }
+    if let Some(idx) = args.iter().position(|a| a == "--exec-guest") {
+        // 1897-y7j2: a running tray relays the command instead of refusing.
+        // The tray is asked only after the request is classified below.
+        let tray_owns_vm = live_tray_holds_singleton();
+        // 795-zshi: the guest allowlist now has TWO arms, so this call site
+        // DISCRIMINATES instead of flattening everything. An absolute argv[0]
+        // with no shell metacharacters anywhere is sent as a verbatim argv
+        // VECTOR (no shell in the chain, no quoting layer to get wrong);
+        // anything else is a genuine shell request and keeps the flattened
+        // `/bin/bash -lc <string>` shape that 838-48ca decided to KEEP.
+        //
+        // The flattening comment this replaces was true when written and is now
+        // false: verbatim argv pass-through IS an option, and saying otherwise
+        // is what kept every caller on the quoting path.
+        let request = match classify_exec_guest(&args[idx + 1..]) {
+            Ok(req) => req,
+            Err(msg) => {
+                eprintln!("{msg}");
+                std::process::exit(2);
+            }
+        };
+        let (guest_argv, required_cap) = match request {
+            // Feature-detected on HelloAck.server_caps, never on a wire
+            // version: an older guest lacking the verbatim arm gets a refusal
+            // naming the missing capability, not a silent re-flattening.
+            ExecGuestRequest::Verbatim(argv) => {
+                (argv, Some(tillandsias_control_wire::CAP_EXEC_ARGV_VECTOR))
+            }
+            ExecGuestRequest::Shell(cmd) => {
+                (vec!["/bin/bash".to_string(), "-lc".to_string(), cmd], None)
+            }
+        };
+        if tray_owns_vm {
+            match diagnose::exec_guest_via_tray(guest_argv, required_cap) {
+                Some(code) => std::process::exit(code),
+                None => require_no_live_tray("--exec-guest"),
+            }
+            std::process::exit(3);
+        }
+        std::process::exit(diagnose::exec_guest_main(guest_argv, required_cap));
+    }
+    // Shared GuestTransport conformance fixtures (order 128) against the live
+    // VZ backend (order 126 exit criterion 3). Boots the provisioned VM, runs
+    // vm-layer::transport_conformance::run_all over GuestEndpoint::MacVz, and
+    // prints the falsifiable verdict line `transport-conformance: PASS n=<N>`
+    // (or `FAIL <fixture>: <reason>`), then stops the VM. Main-thread rule as
+    // for --exec-guest.
+    // 1918-vzsr criterion 3: time one VZ save and restore-to-podman-info.
+    if args.iter().any(|a| a == "--measure-save-restore") {
+        require_no_live_tray("--measure-save-restore");
+        std::process::exit(diagnose::measure_save_restore_main());
+    }
+    if args.iter().any(|a| a == "--transport-conformance") {
+        require_no_live_tray("--transport-conformance");
+        std::process::exit(diagnose::transport_conformance_main());
+    }
+    // Headless GitHub login: boot the VM and drive the guest --github-login over
+    // the control wire. Prompts the user on the host terminal for THEIR own git
+    // name, email, and PAT (token echo suppressed) and feeds the guest prompts
+    // via the proven expect-style PTY input path; token never enters argv/logs.
+    //   tillandsias-tray --github-login
+    if args.iter().any(|a| a == "--github-login") {
+        require_no_live_tray("--github-login");
+        std::process::exit(diagnose::github_login_main());
+    }
+    // List GitHub cloud projects using the token stored in guest Vault.
+    // Mirrors the Linux `tillandsias --list-cloud-projects` CLI mode.
+    if args.iter().any(|a| a == "--list-cloud-projects") {
+        require_no_live_tray("--list-cloud-projects");
+        std::process::exit(diagnose::list_cloud_projects_main());
+    }
+    // `--cloud <owner>/<repo> --opencode [--prompt <text>]`: boot VM and launch
+    // the forge in the guest (1925-mcld: the cloud is the only launch).
+    if args.iter().any(|a| a == "--opencode") {
+        let cloud = match diagnose::opencode_cloud_target(&args) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("{{\"error\":\"{e}\"}}");
+                std::process::exit(2);
+            }
+        };
+        require_no_live_tray("--opencode");
+        let prompt = args
+            .iter()
+            .position(|a| a == "--prompt")
+            .and_then(|i| args.get(i + 1))
+            .cloned();
+        std::process::exit(diagnose::opencode_main(cloud, prompt));
+    }
+    if args.iter().any(|a| a == "--diagnose") {
+        let format = if args.iter().any(|a| a == "--json") {
+            diagnose::DiagnoseFormat::Json
+        } else {
+            diagnose::DiagnoseFormat::Human
+        };
+        std::process::exit(diagnose::main(format));
+    }
+
+    // Every recognized mode above exits the process. Anything flag-shaped that
+    // reaches here is unknown, and falling through would launch the full tray:
+    // (build_exec_guest_shell_cmd lives below the mode dispatch; the
+    // fall-through unknown-flag refusal keeps its existing shape.)
+    // an unrelated GUI comes up AND the tray takes the VM singleton, so the
+    // operator's *next* one-shot refuses (order 277) or wedges on the VZ
+    // storage lock (663-69kp). `--with-token` — a real tillandsias-headless
+    // flag with no macOS equivalent — cost one session two blind credential
+    // runs exactly this way (663-acdw). Refuse loudly instead.
+    if let Some(unknown) = args.iter().skip(1).find(|a| a.starts_with('-')) {
+        eprintln!(
+            "Error: unknown flag {unknown}\n\
+             Run `tillandsias-tray --help` for the supported flags.\n\
+             Note: --with-token is a tillandsias-headless (guest) flag; on macOS the host \
+             drives the guest login over the control wire, so pipe the credentials to \
+             `tillandsias-tray --github-login` on stdin instead."
+        );
+        std::process::exit(2);
+    }
+
+    let _singleton_guard =
+        match tillandsias_core::singleton::SingletonGuard::try_acquire("tillandsias-macos-tray") {
+            Ok(Some(guard)) => guard,
+            Ok(None) => {
+                eprintln!(
+                    "[tillandsias-tray] another macOS tray instance is already running; exiting"
+                );
+                std::process::exit(0);
+            }
+            Err(err) => {
+                eprintln!("[tillandsias-tray] singleton guard failed: {err}");
+                std::process::exit(1);
+            }
+        };
+    // 1420-inak: GUI mode gets a real log file (tray.log) before anything else
+    // runs, so a failed first provision leaves something a user can send.
+    tray_log::install_for_gui_mode(&version_line());
+    status_item::run();
+}
+
+/// 773-fx3u: build the `--exec-guest` shell command string from the raw CLI
+/// words. The words are space-joined and run as `/bin/bash -lc "<joined>"`
+/// (the guest allowlist admits no other shape), so caller quoting inside a
+/// word does not survive — a caller-supplied shell wrapper is therefore
+/// always a silent rewrite and is refused with the correct spelling shown.
+// Pure string logic with no macOS dependency — deliberately NOT target-gated
+// so its #[cfg(test)] pins compile and run on every host. It shipped gated
+// while the tests were not (2026-08-16), which broke `--all-targets` builds
+// on every non-macOS host: the fleet-wide test run is the guard against a
+// recurrence, so keep this un-gated even though only macOS calls it.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn build_exec_guest_shell_cmd(words: &[String]) -> Result<String, String> {
+    if words.is_empty() {
+        return Err("Error: --exec-guest requires a command, e.g. --exec-guest uname -a".into());
+    }
+    let first = words[0].as_str();
+    if matches!(
+        first,
+        "bash" | "sh" | "/bin/bash" | "/bin/sh" | "/usr/bin/env"
+    ) {
+        return Err(format!(
+            "Error: --exec-guest words are JOINED and already run via `/bin/bash -lc`; \
+             a leading `{first}` re-wraps the command and its inner quoting is lost \
+             (the pipeline silently becomes `{first} …` with the rest as positional \
+             args — see packet 773-fx3u for the failure this manufactures).\n\
+             Write the command as ONE quoted string instead:\n\
+             tillandsias-tray --exec-guest 'head -c 100 /dev/zero | base64'"
+        ));
+    }
+    Ok(words.join(" "))
+}
+
+/// What shape a `--exec-guest` request should take on the wire (795-zshi).
+///
+/// The guest allowlist admits two arms, so the host must CHOOSE one rather than
+/// flattening unconditionally — the unconditional flatten is what forced every
+/// escaping workaround this packet deletes.
+#[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+enum ExecGuestRequest {
+    /// argv[0] is an absolute path and no word carries a shell metacharacter:
+    /// send the words verbatim as an argv vector. No shell is in the chain, so
+    /// no quoting rule can be got wrong and hostile words travel as DATA.
+    /// Requires the guest to advertise `CAP_EXEC_ARGV_VECTOR`.
+    Verbatim(Vec<String>),
+    /// A genuine shell request — a relative command name, or any word carrying
+    /// a metacharacter (`ls -la | wc -l`). Keeps the flattened
+    /// `/bin/bash -lc <string>` arm, per 838-48ca's KEEP decision.
+    Shell(String),
+}
+
+/// Shell metacharacters whose presence means the caller wrote a shell command,
+/// not a program plus arguments. Deliberately generous: misrouting a shell
+/// request to the verbatim arm would deliver `|` to a program as a literal
+/// argument and silently change what the user asked for, which is the same
+/// class of quiet rewrite as the flattening itself.
+const EXEC_GUEST_SHELL_METACHARS: &[char] = &[
+    ' ', '\t', '\n', '|', '&', ';', '<', '>', '(', ')', '$', '`', '"', '\'', '\\', '*', '?', '[',
+    ']', '{', '}', '~', '#', '!',
+];
+
+/// Decide which arm a `--exec-guest` word list takes.
+///
+/// Pure logic with no macOS dependency — deliberately NOT target-gated, for the
+/// same reason `build_exec_guest_shell_cmd` is not: its pins must compile and
+/// run on every host, or a non-macOS `--all-targets` build stops guarding it
+/// (the 2026-08-16 breakage).
+///
+/// @trace spec:vsock-exec-authz, order:795-zshi
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn classify_exec_guest(words: &[String]) -> Result<ExecGuestRequest, String> {
+    // Runs FIRST so the empty-argv and shell-wrapper refusals keep firing
+    // unchanged on both arms — the verbatim arm must not become a way to
+    // smuggle `--exec-guest bash -lc '…'` past 773-fx3u's refusal.
+    let shell_cmd = build_exec_guest_shell_cmd(words)?;
+    // THE ARM IS DECIDED BY argv[0] ALONE, and the later words are never
+    // inspected. That is not an oversight to tighten later: inspecting an
+    // ARGUMENT to choose the wire shape would put a host-side parser back in
+    // front of user data, which is the defect class this packet deletes. On the
+    // verbatim arm arguments reach execve as elements, so no parser sees them
+    // and no quoting rule can be got wrong — `openspec/specs/vsock-exec-authz`
+    // clause 4 states this as policy for the guest, and it is only true
+    // end-to-end if the host honours it too.
+    //
+    // A caller who wants a pipeline writes it the way this CLI has always
+    // documented — as ONE quoted string — whose first word then carries
+    // whitespace and takes the shell arm below.
+    let first = words[0].as_str();
+    if !first.starts_with('/') || first.contains(EXEC_GUEST_SHELL_METACHARS) {
+        return Ok(ExecGuestRequest::Shell(shell_cmd));
+    }
+    // The guest refuses a `..` component (a path can start with a good prefix
+    // and still end at a shell). Refuse it HERE too, with a message that says
+    // what to do — a host-side refusal that names the fix beats a remote
+    // `exec allowlist violation` that does not.
+    if first.split('/').any(|c| c == "..") {
+        return Err(format!(
+            "Error: --exec-guest argv[0] `{first}` contains a `..` component; the guest's \
+             verbatim-argv allowlist refuses traversal because a path may start under an \
+             allowed prefix and still resolve to a shell. Pass the resolved absolute path."
+        ));
+    }
+    Ok(ExecGuestRequest::Verbatim(words.to_vec()))
+}
+
+#[cfg(test)]
+mod exec_guest_classify_tests {
+    use super::{ExecGuestRequest, classify_exec_guest};
+
+    fn w(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// The discriminator 795-zshi's next_action names: an absolute argv[0] with
+    /// clean words takes the verbatim arm, and — the point of the whole packet —
+    /// a hostile argument arrives as ONE element, byte-identical, rather than
+    /// being split by a shell it never reaches.
+    #[test]
+    fn absolute_clean_argv_goes_verbatim() {
+        assert_eq!(
+            classify_exec_guest(&w(&["/bin/echo", "HELLO"])).unwrap(),
+            ExecGuestRequest::Verbatim(w(&["/bin/echo", "HELLO"]))
+        );
+        let hostile = classify_exec_guest(&w(&["/usr/bin/tillandsias", "a'b"])).unwrap();
+        match hostile {
+            ExecGuestRequest::Verbatim(argv) => assert_eq!(argv[1], "a'b"),
+            other => panic!("hostile argument must travel as data, got {other:?}"),
+        }
+    }
+
+    /// NEGATIVE CONTROL for the arm choice: everything that is genuinely a
+    /// shell request must STAY on the flattened arm. A relative command name
+    /// resolves through PATH (environment the caller also controls), and a
+    /// first word carrying whitespace or a metacharacter is a pipeline the
+    /// caller quoted as one string — the documented way to ask for a shell.
+    #[test]
+    fn shell_shapes_stay_on_the_shell_arm() {
+        for words in [
+            w(&["uname", "-a"]),           // relative name
+            w(&["/bin/ls -la | wc -l"]),   // one quoted pipeline
+            w(&["/bin/echo $HOME"]),       // caller wants expansion
+            w(&["/bin/echo hi > /tmp/x"]), // caller wants redirection
+        ] {
+            assert!(
+                matches!(
+                    classify_exec_guest(&words).unwrap(),
+                    ExecGuestRequest::Shell(_)
+                ),
+                "{words:?} must take the shell arm"
+            );
+        }
+    }
+
+    /// The arm is chosen from argv[0] ALONE — an ARGUMENT never steers it.
+    /// This is the pin that stops someone "hardening" the classifier by
+    /// scanning arguments for metacharacters: doing so would put a host-side
+    /// parser back in front of user data and split `a'b` across a shell it is
+    /// never supposed to reach, which is precisely 795-zshi's defect class.
+    #[test]
+    fn arguments_never_steer_the_arm() {
+        for hostile in ["a'b", "a b", "a$(id)b", "a;b", "a|b"] {
+            match classify_exec_guest(&w(&["/usr/bin/tillandsias", hostile])).unwrap() {
+                ExecGuestRequest::Verbatim(argv) => {
+                    assert_eq!(argv.len(), 2);
+                    assert_eq!(argv[1], hostile, "must be byte-identical, as ONE element");
+                }
+                other => panic!("`{hostile}` must travel as data, got {other:?}"),
+            }
+        }
+    }
+
+    /// Traversal is refused on the verbatim arm rather than sent for the guest
+    /// to reject: `/usr/bin/../../bin/bash` starts under an allowed prefix and
+    /// ends at a shell.
+    #[test]
+    fn traversal_is_refused_with_the_reason() {
+        let err = classify_exec_guest(&w(&["/usr/bin/../../bin/bash"])).unwrap_err();
+        assert!(err.contains(".."), "message must name the cause: {err}");
+    }
+
+    /// The 773-fx3u refusals still fire — the new arm is not a bypass.
+    #[test]
+    fn wrapper_and_empty_refusals_survive_the_new_arm() {
+        assert!(classify_exec_guest(&w(&[])).is_err());
+        assert!(classify_exec_guest(&w(&["/bin/bash", "-lc", "id"])).is_err());
+        assert!(classify_exec_guest(&w(&["/usr/bin/env", "id"])).is_err());
+    }
+}
+
+#[cfg(test)]
+mod exec_guest_argv_tests {
+    use super::build_exec_guest_shell_cmd;
+
+    fn w(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// 773-fx3u pins: plain words join unchanged (no regression for
+    /// `--exec-guest uname -a`), single quoted strings pass through, and a
+    /// caller-supplied shell wrapper is refused with the contract in the
+    /// message — never silently rewritten.
+    #[test]
+    fn join_contract() {
+        assert_eq!(
+            build_exec_guest_shell_cmd(&w(&["uname", "-a"])).unwrap(),
+            "uname -a"
+        );
+        assert_eq!(
+            build_exec_guest_shell_cmd(&w(&["head -c 100 /dev/zero | base64"])).unwrap(),
+            "head -c 100 /dev/zero | base64"
+        );
+        let err = build_exec_guest_shell_cmd(&w(&["bash", "-lc", "echo a | wc -w"])).unwrap_err();
+        assert!(err.contains("JOINED"), "refusal must state the contract");
+        assert!(err.contains("773-fx3u"));
+        assert!(
+            build_exec_guest_shell_cmd(&w(&["/bin/sh", "-c", "x"])).is_err(),
+            "sh spellings refuse too"
+        );
+        assert!(build_exec_guest_shell_cmd(&[]).is_err());
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn main() {
+    eprintln!(
+        "tillandsias-macos-tray runs on macOS only — see openspec/specs/macos-native-tray/spec.md"
+    );
+    std::process::exit(1);
+}
+
+#[cfg(test)]
+mod tests {
+    /// A MODULE THAT REACHES FOR ITS SIBLINGS OR FOR UNIX MUST BE GATED.
+    ///
+    /// Most of this crate's modules are macOS-only and carry
+    /// `#[cfg(target_os = "macos")]`. A declaration WITHOUT it compiles on every
+    /// target — fine for a genuinely portable module (menu_disabled_v2 and
+    /// terminal_attach are, and the latter gates the macOS parts internally),
+    /// and fatal for one that names `crate::` siblings which are themselves
+    /// gated, or touches `std::os::unix`. Those fail with E0433 on a Linux or
+    /// Windows workspace check.
+    ///
+    /// A macOS GATE CANNOT SEE ANY OF IT: here the siblings are present and it
+    /// all compiles. That asymmetry is why this is a test and not a convention —
+    /// the host most likely to add a module to this crate is the one host whose
+    /// gate is blind to the mistake.
+    ///
+    /// MEASURED: `mod reset_state;` landed on osx-next at 5b10d4a22 without the
+    /// attribute, after a green macOS gate, and the Linux workspace compile on
+    /// relay produced three E0433s with two more on the Windows cross-check
+    /// (`std::os::unix`, `Permissions::mode`) — one missing line, 656-spux
+    /// shape. It was inserted by a text replace anchored on `mod diagnose;`,
+    /// which landed the new line below THAT module's attribute instead of below
+    /// a copy of it.
+    ///
+    /// The rule is deliberately narrower than "gate everything": a blanket rule
+    /// fails on the two portable modules above, and a guard that must be
+    /// allowlisted on first contact teaches people to allowlist.
+    #[test]
+    fn modules_touching_siblings_or_unix_are_gated_on_macos() {
+        let source = include_str!("main.rs");
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let lines: Vec<&str> = source.lines().collect();
+        let mut bad: Vec<String> = Vec::new();
+        for (i, line) in lines.iter().enumerate() {
+            if !line.starts_with("mod ") || !line.trim().ends_with(';') {
+                continue;
+            }
+            let name = line.trim_start_matches("mod ").trim_end_matches(';').trim();
+            let body = match std::fs::read_to_string(dir.join(format!("{name}.rs"))) {
+                Ok(b) => b,
+                Err(_) => continue, // a directory module; not the shape this guards
+            };
+            let needs_macos = body.contains("crate::") || body.contains("std::os::unix");
+            if !needs_macos {
+                continue;
+            }
+            // Walk back over comments to the nearest real line.
+            let mut k = i;
+            let gated = loop {
+                if k == 0 {
+                    break false;
+                }
+                k -= 1;
+                let prev = lines[k].trim();
+                if prev.starts_with("//") || prev.is_empty() {
+                    continue;
+                }
+                break prev == "#[cfg(target_os = \"macos\")]";
+            };
+            if !gated {
+                bad.push(format!("line {}: mod {name};", i + 1));
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "these modules name `crate::` siblings or `std::os::unix` but are NOT gated on \
+             macOS, so they compile on every target and will fail there: {bad:?}"
+        );
+    }
+
+    #[test]
+    fn singleton_guard_applies_only_to_appkit_tray_mode() {
+        let source = include_str!("main.rs");
+        // rfind: the LAST acquisition is the app-mode guard in main();
+        // the first occurrence is order 277's live-tray probe helper.
+        let guard_idx = source
+            .rfind("SingletonGuard::try_acquire(\"tillandsias-macos-tray\")")
+            .expect("macOS tray must acquire a non-destructive singleton guard");
+        let diagnose_idx = source
+            .find("diagnose::main(format)")
+            .expect("--diagnose handler must exist");
+        let appkit_idx = source
+            .find("status_item::run()")
+            .expect("AppKit tray launch must exist");
+
+        assert!(
+            diagnose_idx < guard_idx,
+            "CLI utility modes must exit before the singleton guard"
+        );
+        assert!(
+            guard_idx < appkit_idx,
+            "AppKit tray mode must acquire the singleton guard before launch"
+        );
+    }
+
+    /// Order 606-r42f pin: both macOS provisioning surfaces — the tray's
+    /// auto-boot worker and the `--provision`/`--reset-guest` CLI — must
+    /// drive the LIVE qcow2 path (`VzRuntime::fetch_fedora_cloud_image`).
+    /// The legacy `VzLifecycle`/`VmRuntime::provision` tarball path was
+    /// removed after order 598-kibt found it dead and panicking. Source
+    /// scan (platform-independent `include_str!`) because both files are
+    /// `cfg(target_os = "macos")` and invisible to Linux `cargo check`.
+    #[test]
+    fn provisioning_surfaces_use_live_qcow2_path() {
+        let action_host = include_str!("action_host.rs");
+        assert!(
+            action_host.contains("fetch_fedora_cloud_image"),
+            "tray auto-boot (run_start) must provision via \
+             VzRuntime::fetch_fedora_cloud_image (order 606-r42f)"
+        );
+        let diagnose = include_str!("diagnose.rs");
+        assert!(
+            diagnose.contains("fetch_fedora_cloud_image"),
+            "--provision (provision_main) must provision via \
+             VzRuntime::fetch_fedora_cloud_image (order 606-r42f)"
+        );
+        let main_src = include_str!("main.rs");
+        // Needle built by concatenation so this test can't match its own
+        // literal in the include_str! source.
+        let dead_mod = format!("mod vz_{};", "lifecycle");
+        assert!(
+            !main_src.contains(&dead_mod),
+            "the dead VzLifecycle wrapper must stay removed (order 606-r42f)"
+        );
+    }
+
+    /// Order 277 pin: every VM-booting one-shot mode fails fast with
+    /// operator guidance when a live tray owns the VM, instead of the
+    /// opaque VZ storage-attachment error. Source-scan: each dispatch
+    /// branch calls `require_no_live_tray` before its diagnose:: entry.
+    #[test]
+    fn vm_booting_oneshots_guard_against_live_tray() {
+        let source = include_str!("main.rs");
+        for (mode, entry) in [
+            ("--exec-guest", "diagnose::exec_guest_main"),
+            ("--github-login", "diagnose::github_login_main()"),
+            (
+                "--list-cloud-projects",
+                "diagnose::list_cloud_projects_main()",
+            ),
+            ("--opencode", "diagnose::opencode_main"),
+            (
+                "--transport-conformance",
+                "diagnose::transport_conformance_main()",
+            ),
+            // windows-260717-4: the destructive reset must never wipe the
+            // disk out from under a running tray's VM.
+            ("--reset-guest", "diagnose::reset_guest_main()"),
+            // 1286-4437 / 1437-8c6p: --reset-state reprovisions too, so order
+            // 277's guard applies to it. Asserted here rather than trusted,
+            // because the two dispatches sit side by side and a copy that drops
+            // the guard line still compiles.
+            ("--reset-state", "reset_state::run_reset_state()"),
+        ] {
+            let guard_call = format!("require_no_live_tray(\"{mode}\")");
+            let g = source
+                .find(&guard_call)
+                .unwrap_or_else(|| panic!("{mode} must call require_no_live_tray (order 277)"));
+            let e = source
+                .find(entry)
+                .unwrap_or_else(|| panic!("{entry} dispatch must exist"));
+            assert!(
+                g < e,
+                "{mode}: require_no_live_tray must run before {entry} (order 277)"
+            );
+        }
+    }
+
+    /// Guest crash-loop DETECTION wiring pin. `diagnose.rs` is
+    /// `cfg(target_os = "macos")` and so is NOT compiled on the Linux dev box
+    /// where `cargo check -p tillandsias-macos-tray` runs; this source-scan
+    /// (a platform-independent `include_str!`) keeps `--diagnose`'s
+    /// pinned-grammar guest-health line wired in on every host.
+    ///
+    /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    #[test]
+    fn diagnose_wires_in_crashloop_verdict() {
+        let source = include_str!("diagnose.rs");
+        assert!(
+            source.contains("pub fn guest_health_verdict()"),
+            "diagnose must expose the guest-health verdict reader"
+        );
+        assert!(
+            source.contains("crashloop::CrashLoopDetector::load(&crashloop_state_path())"),
+            "the verdict must load the persisted crash-loop detector state"
+        );
+        assert!(
+            source.contains("Guest health:"),
+            "--diagnose must print the guest-health verdict line"
+        );
+    }
+
+    /// Guest crash-loop LIVE-feed wiring pin (macOS write side — the follow-up
+    /// the wave-1 event named: "macOS LIVE feed/toast needs action_host.rs
+    /// wiring"). `action_host.rs` is `cfg(target_os = "macos")` and cannot be
+    /// type-checked on the Linux dev box, so this platform-independent
+    /// source-scan keeps the four load-bearing hooks from silently
+    /// regressing on any host — mirroring windows-tray's
+    /// `notify_icon_wires_in_crashloop_detection` pin.
+    ///
+    /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    #[test]
+    fn action_host_wires_in_crashloop_live_feed() {
+        let src = include_str!("action_host.rs");
+        // 1. The detector is fed from the single VM-status funnel — and LAST,
+        //    so the verdict overwrites the ordinary phase chip.
+        let apply_body = src
+            .split("fn apply_vm_status(")
+            .nth(1)
+            .expect("apply_vm_status must exist")
+            .split("\nasync fn ")
+            .next()
+            .unwrap();
+        let feed_at = apply_body
+            .find("note_crashloop_observation(")
+            .expect("apply_vm_status must feed the crash-loop detector");
+        let chip_at = apply_body
+            .rfind("apply_status_text_main_thread(")
+            .expect("apply_vm_status must write the chip");
+        assert!(
+            feed_at > chip_at,
+            "the crash-loop feed must run LAST (after the ordinary chip write)"
+        );
+        // 2. The detector is the shared control-wire one, seeded from and
+        //    persisted to the SAME state file --diagnose reads — the write
+        //    side that closes the wave-1 read-only gap.
+        assert!(
+            src.contains("CrashLoopDetector::load(") && src.contains("CRASH_LOOP_DETECTOR"),
+            "the live tray must seed the process-global detector from disk"
+        );
+        assert!(
+            src.contains(".save(&crate::diagnose::crashloop_state_path())"),
+            "every observation must persist state for --diagnose"
+        );
+        // 3. Edge-triggered banner via the osascript mechanism.
+        assert!(
+            src.contains("CRASH_LOOP_NOTIFIED"),
+            "the banner must be edge-triggered (once per trip)"
+        );
+        assert!(
+            src.contains("fn notify_crash_loop(") && src.contains("Guest crash-loop"),
+            "a trip must raise the Notification Center banner"
+        );
+    }
+
+    /// EPHEMERAL RESET wiring pin (windows-260717-4, amended 2026-07-22 by
+    /// operator order — tray-ux "UX curation governance"). The macOS bodies
+    /// are `cfg(target_os = "macos")` and cannot be type-checked on the
+    /// Linux dev box, so this platform-independent source-scan keeps the
+    /// contract from silently regressing on any host: the MENU dispatch arm
+    /// is GONE (the `Reset Guest…` leaf was an unapproved UX surface), while
+    /// the stop→wipe→reboot worker, the crash-loop history clear, and the
+    /// `--reset-guest` CLI verb REMAIN.
+    ///
+    /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    #[test]
+    fn reset_guest_menu_wiring_absent_cli_and_worker_present() {
+        let action_host = include_str!("action_host.rs");
+        // 1. ABSENCE: no menu dispatch arm may reach the guest reset. The
+        //    `MenuAction::ResetGuest` variant itself was deleted from
+        //    host-shell, so ANY mention here means the click path came back.
+        assert!(
+            !action_host.contains("MenuAction::ResetGuest"),
+            "the reset-guest menu click wiring must stay REMOVED \
+             (operator order 2026-07-22; tray-ux \"UX curation governance\")"
+        );
+        assert!(
+            action_host.contains("pub fn reset_guest_async(&self)"),
+            "the stop→wipe→reboot worker must exist (runtime/CLI reuse)"
+        );
+        // 2. The wipe uses the shared vm-layer primitive (tested on Linux).
+        assert!(
+            action_host.contains("wipe_provisioned_artifacts()"),
+            "the reset must call VzRuntime::wipe_provisioned_artifacts"
+        );
+        // 3. A fresh guest clears the persisted crash-loop history.
+        assert!(
+            action_host.contains("remove_file(crate::diagnose::crashloop_state_path())"),
+            "the reset must clear the persisted crash-loop state"
+        );
+        // 4. The reboot re-enters the SAME boot path a first launch uses.
+        assert!(
+            action_host.contains("boot_vm_async(\"Reset guest\")"),
+            "the reset must re-enter boot_vm_async after the wipe"
+        );
+        // 5. The CLI verb exists and main dispatches it.
+        let diagnose = include_str!("diagnose.rs");
+        assert!(
+            diagnose.contains("pub fn reset_guest_main()"),
+            "--reset-guest CLI mode must exist"
+        );
+        let main_src = include_str!("main.rs");
+        assert!(
+            main_src.contains("diagnose::reset_guest_main()"),
+            "main must dispatch --reset-guest"
+        );
+    }
+
+    /// Login transitive-state wiring pin (windows-260719-2). action_host.rs
+    /// is cfg(macos)-gated and untype-checkable on the Linux dev box; this
+    /// source-scan keeps the click→LoggingIn flip + explicit NSMenu rebuild
+    /// (an NSMenu is static until rebuilt, unlike the per-paint HMENU) from
+    /// silently regressing on any host. The type/rendering logic itself is
+    /// fully unit-pinned in tillandsias-host-shell (compiled everywhere).
+    #[test]
+    fn login_transitive_state_wiring_is_present() {
+        let src = include_str!("action_host.rs");
+        let arm = src
+            .split("MenuAction::GithubLogin => {")
+            .nth(1)
+            .expect("the GithubLogin dispatch arm must exist")
+            .split("attach_pty(")
+            .next()
+            .unwrap();
+        // 1. The click flips to LoggingIn immediately (local signal, before
+        //    the PTY attach / any wire round-trip), gated on LoggedOut.
+        assert!(
+            arm.contains("GithubLoginState::LoggingIn"),
+            "the click must flip to LoggingIn before the attach"
+        );
+        assert!(
+            arm.contains("GithubLoginState::LoggedOut"),
+            "the flip must be gated on the current LoggedOut state"
+        );
+        // 2. The flip triggers an explicit menu rebuild (NSMenu is static).
+        assert!(
+            arm.contains("dispatch_rebuild("),
+            "the flip must rebuild the NSMenu to render immediately"
+        );
+        // 3. The confirmed probe/push path maps only LoggedIn/LoggedOut, so
+        //    it always clears the transitional state; and the post-login
+        //    cloud prime fires on the confirmed flip (`changed && logged_in`
+        //    covers LoggingIn→LoggedIn too).
+        assert!(
+            src.contains("fn map_login_state(") && src.contains("changed && logged_in"),
+            "the confirm path + prompt cloud prime must be wired"
+        );
+    }
+}
