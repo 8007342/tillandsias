@@ -37,7 +37,7 @@ fn main() {
 fn usage() {
     eprintln!("Usage:");
     eprintln!(
-        "  tillandsias-policy check-cheatsheet-tiers [--repo-root <path>] [--quiet] [--strict]"
+        "  tillandsias-policy check-cheatsheet-tiers [--repo-root <path>] [--quiet] [--strict] [--require-fingerprints]"
     );
     eprintln!("  tillandsias-policy check-cheatsheet-sources [--repo-root <path>] [--no-sha]");
     eprintln!("  tillandsias-policy audit-cheatsheet-sources [--repo-root <path>]");
@@ -70,6 +70,7 @@ fn usage() {
 fn check_cheatsheet_tiers(args: &[String]) {
     let mut quiet = false;
     let mut strict = false;
+    let mut require_fingerprints = false;
     let mut repo_root = env::current_dir().unwrap_or_else(|err| {
         eprintln!("failed to read current dir: {err}");
         process::exit(2);
@@ -80,6 +81,7 @@ fn check_cheatsheet_tiers(args: &[String]) {
         match args[idx].as_str() {
             "--quiet" => quiet = true,
             "--strict" => strict = true,
+            "--require-fingerprints" => require_fingerprints = true,
             "--repo-root" => {
                 idx += 1;
                 let Some(value) = args.get(idx) else {
@@ -90,7 +92,7 @@ fn check_cheatsheet_tiers(args: &[String]) {
             }
             other => {
                 eprintln!(
-                    "usage: check-cheatsheet-tiers [--repo-root <path>] [--quiet] [--strict]"
+                    "usage: check-cheatsheet-tiers [--repo-root <path>] [--quiet] [--strict] [--require-fingerprints]"
                 );
                 eprintln!("unexpected argument: {other}");
                 process::exit(2);
@@ -174,6 +176,21 @@ fn check_cheatsheet_tiers(args: &[String]) {
         process::exit(1);
     }
 
+    // 588-8mh8: a bundled sheet with no image_baked_sha256 has nothing that
+    // verified it. Plain --strict keeps treating that as a note, because the
+    // gate runs --strict and today every bundled sheet is unfingerprinted;
+    // this flag is the strict mode that fails until the gaps are closed.
+    if require_fingerprints && !report.unfingerprinted.is_empty() {
+        println!(
+            "\nrefused:cheatsheet-tiers:unfingerprinted:{} bundled cheatsheet(s) have no image_baked_sha256, so nothing verified them",
+            report.unfingerprinted.len()
+        );
+        for rel in &report.unfingerprinted {
+            println!("  UNVERIFIED: {rel}");
+        }
+        process::exit(1);
+    }
+
     if !quiet {
         println!("OK: all tier checks passed.");
     }
@@ -189,6 +206,8 @@ struct CheatsheetTierReport {
     errors: Vec<String>,
     warnings: Vec<String>,
     notes: Vec<String>,
+    /// Bundled cheatsheets with no image_baked_sha256 (588-8mh8).
+    unfingerprinted: Vec<String>,
 }
 
 // @trace spec:cheatsheets-license-tiered
@@ -333,6 +352,7 @@ fn inspect_cheatsheet_tier(
             report.notes.push(format!(
                 "{rel}: tier=bundled has no image_baked_sha256 yet (set at forge build)"
             ));
+            report.unfingerprinted.push(rel.to_string());
         }
         _ => {}
     }
@@ -4829,7 +4849,10 @@ fn regen_process_file(
                 let prefix: String = parsed.image_baked_sha256.chars().take(8).collect();
                 Some(format!(" [bundled, verified: {prefix}]"))
             } else {
-                Some(" [bundled, partial-verify]".to_string())
+                // 588-8mh8: no fingerprint means nothing verified this
+                // sheet. The old "partial-verify" read as a partial pass to
+                // agents while marking exactly the case with no hash at all.
+                Some(" [bundled, unverified]".to_string())
             }
         }
         "distro-packaged" => {
