@@ -248,6 +248,8 @@ fn agent_flag(agent: SelectedAgent) -> &'static str {
         SelectedAgent::OpenCode => "--opencode",
         SelectedAgent::Antigravity => "--antigravity",
         SelectedAgent::Copilot => "--copilot",
+        SelectedAgent::Pi => "--pi",
+        SelectedAgent::Omp => "--omp",
     }
 }
 
@@ -913,6 +915,21 @@ pub fn pump_io<M: PtyMaster>(session: PtySession, master: M) -> tokio::task::Joi
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// @trace order:2454-lhar, order:2455-lomp
+    #[test]
+    fn pi_and_omp_agents_launch_their_own_lane_flags() {
+        assert_eq!(agent_flag(SelectedAgent::Pi), "--pi");
+        assert_eq!(agent_flag(SelectedAgent::Omp), "--omp");
+        assert_eq!(
+            crate::menu_action::resolve("agent.pi"),
+            crate::menu_action::MenuAction::SelectAgent(SelectedAgent::Pi)
+        );
+        assert_eq!(
+            crate::menu_action::resolve(SelectedAgent::Omp.id()),
+            crate::menu_action::MenuAction::SelectAgent(SelectedAgent::Omp)
+        );
+    }
 
     #[derive(Default)]
     struct FakeTransport {

@@ -153,6 +153,10 @@ pub mod ids {
     pub const AGENT_OPENCODE: &str = "agent.opencode";
     pub const AGENT_ANTIGRAVITY: &str = "agent.antigravity";
     pub const AGENT_COPILOT: &str = "agent.copilot";
+    /// Pi coding agent on local Lemonade models (@trace order:2454-lhar).
+    pub const AGENT_PI: &str = "agent.pi";
+    /// Oh My Pi on local Lemonade models (@trace order:2455-lomp).
+    pub const AGENT_OMP: &str = "agent.omp";
     pub const OBSERVATORIUM: &str = "observatorium";
     pub const OPENCODE_WEB: &str = "opencode-web";
 
@@ -164,6 +168,10 @@ pub mod ids {
     pub const VERB_ANTIGRAVITY: &str = "antigravity";
     /// GitHub Copilot CLI lane (2063-nfag).
     pub const VERB_COPILOT: &str = "copilot";
+    /// Pi lane, local models only (@trace order:2454-lhar).
+    pub const VERB_PI: &str = "pi";
+    /// Oh My Pi lane, local models only (@trace order:2455-lomp).
+    pub const VERB_OMP: &str = "omp";
     pub const VERB_OPENCODE_WEB: &str = "opencode-web";
     pub const VERB_OBSERVATORIUM: &str = "observatorium";
     pub const VERB_MAINTENANCE: &str = "maintenance";
@@ -298,6 +306,10 @@ pub enum SelectedAgent {
     Antigravity,
     /// GitHub Copilot CLI (2063-nfag).
     Copilot,
+    /// Pi coding agent, Lemonade local models only (2454-lhar).
+    Pi,
+    /// Oh My Pi, Lemonade local models only (2455-lomp).
+    Omp,
 }
 
 impl SelectedAgent {
@@ -308,6 +320,8 @@ impl SelectedAgent {
             SelectedAgent::OpenCode => "OpenCode",
             SelectedAgent::Antigravity => "Antigravity",
             SelectedAgent::Copilot => "Copilot",
+            SelectedAgent::Pi => "Pi",
+            SelectedAgent::Omp => "Oh My Pi",
         }
     }
 
@@ -318,6 +332,8 @@ impl SelectedAgent {
             SelectedAgent::OpenCode => ids::AGENT_OPENCODE,
             SelectedAgent::Antigravity => ids::AGENT_ANTIGRAVITY,
             SelectedAgent::Copilot => ids::AGENT_COPILOT,
+            SelectedAgent::Pi => ids::AGENT_PI,
+            SelectedAgent::Omp => ids::AGENT_OMP,
         }
     }
 }
@@ -889,6 +905,8 @@ fn build_agent_rows(state: &MenuState) -> Vec<MenuItem> {
         (ids::VERB_OPENCODE, "\u{1F4BB} OpenCode"),
         (ids::VERB_ANTIGRAVITY, "\u{1FA90} Antigravity"),
         (ids::VERB_COPILOT, "\u{1F6E9}\u{FE0F} Copilot"),
+        (ids::VERB_PI, "\u{1F967} Pi"),
+        (ids::VERB_OMP, "\u{1F370} Oh My Pi"),
         (ids::VERB_OPENCODE_WEB, "\u{1F4D0} OpenCode Web"),
         (ids::VERB_OBSERVATORIUM, "\u{1F52D} Observatorium"),
         (ids::VERB_MAINTENANCE, "\u{1F527} Maintenance"),
@@ -1001,6 +1019,8 @@ fn build_agents(state: &MenuState) -> MenuItem {
         SelectedAgent::OpenCode,
         SelectedAgent::Antigravity,
         SelectedAgent::Copilot,
+        SelectedAgent::Pi,
+        SelectedAgent::Omp,
     ] {
         children.push(MenuItem::checkmark(
             agent.id(),
@@ -1067,6 +1087,8 @@ fn build_project_submenu(
         (ids::VERB_OPENCODE, "\u{1F4BB} OpenCode"),
         (ids::VERB_ANTIGRAVITY, "\u{1FA90} Antigravity"),
         (ids::VERB_COPILOT, "\u{1F6E9}\u{FE0F} Copilot"),
+        (ids::VERB_PI, "\u{1F967} Pi"),
+        (ids::VERB_OMP, "\u{1F370} Oh My Pi"),
         (ids::VERB_OPENCODE_WEB, "\u{1F4D0} OpenCode Web"),
         (ids::VERB_OBSERVATORIUM, "\u{1F52D} Observatorium"),
         (ids::VERB_MAINTENANCE, "\u{1F527} Maintenance"),
@@ -1568,7 +1590,7 @@ mod tests {
         // the projects sit under each. The flat-by-default property is
         // unchanged and is asserted where it now lives: every project at one
         // level UNDER ITS AGENT, no page link.
-        assert_eq!(cloud_node.children.len(), 8, "eight agent rows");
+        assert_eq!(cloud_node.children.len(), 10, "ten agent rows");
         for agent in &cloud_node.children {
             assert_eq!(
                 agent.children.len(),
@@ -1595,7 +1617,7 @@ mod tests {
         // DISTINCT project names are counted rather than the leaves.
         assert_eq!(
             reachable(cloud_node),
-            8 * 22,
+            10 * 22,
             "one leaf per (project, agent)"
         );
         let mut names: Vec<&str> = Vec::new();
@@ -2008,7 +2030,7 @@ mod tests {
             .iter()
             .find(|i| i.id == ids::CLOUD_PROJECTS)
             .expect("cloud-projects submenu present");
-        assert_eq!(cloud.children.len(), 8, "eight agent rows");
+        assert_eq!(cloud.children.len(), 10, "ten agent rows");
         assert!(
             cloud.children.iter().all(|a| a.enabled),
             "the AGENT rows stay enabled so their projects remain reachable"
@@ -2018,7 +2040,7 @@ mod tests {
             .iter()
             .flat_map(|a| a.children.iter())
             .collect();
-        assert_eq!(leaves.len(), 8, "one leaf per (project, verb)");
+        assert_eq!(leaves.len(), 10, "one leaf per (project, verb)");
         assert!(leaves.iter().all(|l| !l.enabled));
         assert!(
             leaves
@@ -2056,7 +2078,7 @@ mod tests {
             .iter()
             .find(|i| i.id == ids::CLOUD_PROJECTS)
             .expect("cloud-projects submenu present");
-        assert_eq!(cloud.children.len(), 8, "eight agent rows");
+        assert_eq!(cloud.children.len(), 10, "ten agent rows");
         for agent in &cloud.children {
             assert_eq!(agent.children.len(), 1, "one project under each agent");
             assert!(agent.children.iter().all(|l| l.enabled));
@@ -2068,7 +2090,10 @@ mod tests {
         assert!(cloud.children[3].children[0].id.ends_with(".antigravity"));
         // 2063-nfag: Copilot sits after Antigravity, before the browser rows.
         assert!(cloud.children[4].children[0].id.ends_with(".copilot"));
-        assert!(cloud.children[7].children[0].id.ends_with(".maintenance"));
+        // 2454-lhar / 2455-lomp: Pi and Oh My Pi follow Copilot.
+        assert!(cloud.children[5].children[0].id.ends_with(".pi"));
+        assert!(cloud.children[6].children[0].id.ends_with(".omp"));
+        assert!(cloud.children[9].children[0].id.ends_with(".maintenance"));
         assert!(
             cloud.children[0].children[0]
                 .id
@@ -2182,7 +2207,7 @@ mod tests {
         // sit under each. The property is the same one this test was written
         // for — no page link when nothing overflows — asserted at the level
         // where overflow can now occur.
-        assert_eq!(cloud.children.len(), 8, "eight agent rows");
+        assert_eq!(cloud.children.len(), 10, "ten agent rows");
         for agent in &cloud.children {
             assert_eq!(agent.children.len(), 3, "three projects under each agent");
             assert!(

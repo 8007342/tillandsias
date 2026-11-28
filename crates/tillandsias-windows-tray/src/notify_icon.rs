@@ -5727,6 +5727,9 @@ mod tests {
             ("antigravity", PtyIntent::Agent(SelectedAgent::Antigravity)),
             // 2063-nfag
             ("copilot", PtyIntent::Agent(SelectedAgent::Copilot)),
+            // 2454-lhar, 2455-lomp
+            ("pi", PtyIntent::Agent(SelectedAgent::Pi)),
+            ("omp", PtyIntent::Agent(SelectedAgent::Omp)),
         ];
         for (label, intent) in &lanes {
             for project in ["myapp", "8007342/tillandsias"] {

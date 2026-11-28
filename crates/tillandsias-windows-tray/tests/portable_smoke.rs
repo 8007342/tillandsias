@@ -140,6 +140,8 @@ fn agent_picker_lists_three_agents_in_canonical_order() {
             "opencode",
             "antigravity",
             "copilot",
+            "pi",
+            "omp",
             "opencode-web",
             "observatorium",
             "maintenance"
