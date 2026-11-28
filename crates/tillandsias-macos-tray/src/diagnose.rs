@@ -2032,6 +2032,8 @@ pub fn exec_guest_main(argv: Vec<String>, required_cap: Option<&'static str>) ->
                 }
             }
         };
+        // 2450-gkop: name a dead guest before stop() appends to its console.
+        let result = result.map_err(|e| vz.explain_exec_error(e));
         credentials_before_stop(&vz, &credentials).await;
         let _ = vz.stop(Duration::from_secs(10)).await;
         report_exec(result)
@@ -2890,6 +2892,8 @@ pub fn list_cloud_projects_main() -> i32 {
             },
         )
         .await;
+        // 2450-gkop: name a dead guest before stop() appends to its console.
+        let result = result.map_err(|e| vz.explain_exec_error(e));
         credentials_before_stop(&vz, &credentials).await;
         let _ = vz.stop(Duration::from_secs(10)).await;
 
@@ -3075,6 +3079,8 @@ pub fn opencode_main(cloud: String, prompt: Option<String>) -> i32 {
             let _ = std::io::stdout().flush();
         })
         .await;
+        // 2450-gkop: name a dead guest before stop() appends to its console.
+        let result = result.map_err(|e| vz.explain_exec_error(e));
         credentials_before_stop(&vz, &credentials).await;
         let _ = vz.stop(Duration::from_secs(10)).await;
 

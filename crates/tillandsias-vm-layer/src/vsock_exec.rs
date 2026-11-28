@@ -63,7 +63,7 @@ fn exec_idle_timeout_from(value: Option<&str>) -> Result<std::time::Duration, St
     Ok(std::time::Duration::from_secs(seconds))
 }
 
-fn exec_idle_timeout() -> Result<std::time::Duration, String> {
+pub(crate) fn exec_idle_timeout() -> Result<std::time::Duration, String> {
     exec_idle_timeout_from(std::env::var(EXEC_IDLE_TIMEOUT_ENV).ok().as_deref())
 }
 
