@@ -1,0 +1,39 @@
+# @trace spec:meta-orchestration
+# @trace order:1324-emdf
+#
+# Since 1286-4437 every installer runs `--reset-state` itself, so §1 of the
+# curl-install smoke destroys (the SOFT reset: containers and images). The
+# runbook's authorisation gate sat at the top of §2, so a run that followed it
+# in order quoted its consent after the destruction (yolanda-windows,
+# v56.9.20.1, 2026-09-21). The fixture checks that the gate and its =0 stop
+# precede the §1 heading, that §1 carries DESTRUCTIVE, and that §2 says per
+# platform what it still destroys without a gate of its own. It also checks
+# that each installer still calls --reset-state, so the premise is still true.
+# Mutants for each refusal shape. Red on the runbook before 1324-emdf.
+name: litmus:smoke-gate-precedes-destruction
+spec: meta-orchestration
+phase: pre-build
+description: The smoke runbook reads its authorisation before §1, the first step that destroys
+severity: medium
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary); offline, reads the smoke skill and the three installers only
+
+critical_path:
+  - step: "the consent gate precedes the first destructive step"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-smoke-gate-precedes-destruction.lua 2>&1"
+    timeout_ms: 60000
+    expected_behavior: "ok:smoke-gate-precedes-destruction:5"
+
+observability:
+  traces:
+    - "@trace spec:meta-orchestration"
+  expected_log: "five arms: the live runbook passes; a gate moved after §1, a §1 heading without DESTRUCTIVE, a §2 missing a platform line, and a restored §2 =0 gate are each refused"
+  log_fields:
+    spec: "meta-orchestration"
+    test: "smoke-gate-precedes-destruction"
+
+rollback:
+  on_failure: "read the FAIL arm; put §0 step 6 (AUTHORISATION GATE) back before the §1 heading, or, if the verdict says premise-gone, re-read the installers: the gate's position follows wherever the first destructive call lives"
+  command: "grep -nE '^## [0-9] — |AUTHORISATION GATE' skills/smoke-curl-install-and-test-e2e/SKILL.md"
