@@ -3509,6 +3509,71 @@ pub fn discrete_vram_gb(memory_model: Option<&str>, total_bytes: Option<u64>) ->
     total_bytes.filter(|&b| b > 0).map(|b| b as f64 / GIB)
 }
 
+/// What one DXGI adapter says about its memory (order 968-mp4e).
+///
+/// Filled on a Windows host from `IDXGIAdapter1::GetDesc1` and, when the
+/// adapter is an `IDXGIAdapter3`, `QueryVideoMemoryInfo` for both segment
+/// groups. Kept platform-neutral so the classifier is tested everywhere.
+///
+/// `Win32_VideoController.AdapterRAM` IS DELIBERATELY ABSENT and must stay so.
+/// It is a uint32 that saturates at 4 GiB (an 8 GiB or 16 GiB board reports
+/// 4095 MB), and on an integrated part it reports the shared-memory
+/// reservation rather than any heap of the device's own. A number that is
+/// present, plausible, and answers a different question; there is no field
+/// here to put it in, pinned by
+/// `dxgi_evidence_has_no_adapter_ram_input`.
+#[derive(Debug, Clone, Default, PartialEq)]
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub struct DxgiAdapterEvidence {
+    /// PCI vendor / device id, to match the adapter to a CIM row.
+    pub vendor_id: u32,
+    pub device_id: u32,
+    /// `DXGI_ADAPTER_DESC1.DedicatedVideoMemory` (a SIZE_T, not saturated).
+    pub dedicated_video_memory: u64,
+    /// `DXGI_ADAPTER_DESC1.SharedSystemMemory`.
+    pub shared_system_memory: u64,
+    /// `DXGI_ADAPTER_FLAG_SOFTWARE`: the Basic Render Driver / WARP.
+    pub software: bool,
+    /// `QueryVideoMemoryInfo(LOCAL).Budget`, `None` without IDXGIAdapter3.
+    pub local_budget: Option<u64>,
+    /// `QueryVideoMemoryInfo(NON_LOCAL).Budget`, `None` without IDXGIAdapter3.
+    pub non_local_budget: Option<u64>,
+}
+
+/// Classify a Windows GPU's memory from DXGI (order 968-mp4e).
+///
+/// Returns `(memory_model, own_memory_bytes)`. `own_memory_bytes` is the
+/// DedicatedVideoMemory of a `discrete` device and `None` otherwise, so
+/// [`discrete_vram_gb`] reports the real size of a board above 4 GiB.
+///
+/// THE SIGNAL is the segment-group split, not the size of a number. On a UMA
+/// adapter Windows puts all of the GPU's memory in the LOCAL segment group and
+/// the NON_LOCAL group is empty (budget 0); a discrete adapter has its VRAM as
+/// LOCAL and system memory reachable over PCIe as NON_LOCAL. The desc sizes
+/// alone do not separate the two: an APU with a large UMA frame buffer set in
+/// firmware has a DedicatedVideoMemory the size of a small discrete card.
+///
+/// - no DXGI evidence, or the software adapter => `None`, never a guess;
+/// - NON_LOCAL budget 0 and a LOCAL budget => `unified`;
+/// - NON_LOCAL budget > 0 and DedicatedVideoMemory > 0 => `discrete`;
+/// - anything else (no IDXGIAdapter3) => `None`.
+// @trace order:968-mp4e, spec:accel-capability-probe
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub fn memory_model_from_dxgi(
+    e: Option<&DxgiAdapterEvidence>,
+) -> (Option<&'static str>, Option<u64>) {
+    let Some(e) = e.filter(|e| !e.software) else {
+        return (None, None);
+    };
+    match (e.local_budget, e.non_local_budget) {
+        (Some(local), Some(0)) if local > 0 => (Some("unified"), None),
+        (Some(_), Some(nl)) if nl > 0 && e.dedicated_video_memory > 0 => {
+            (Some("discrete"), Some(e.dedicated_video_memory))
+        }
+        _ => (None, None),
+    }
+}
+
 /// The first NVIDIA GPU's total memory in bytes, from
 /// `nvidia-smi --query-gpu=memory.total` (MiB), or `None`.
 #[cfg(target_os = "linux")]
@@ -4085,6 +4150,73 @@ fn pci_pair(instance_id: &str) -> Option<String> {
     ))
 }
 
+/// Enumerate DXGI adapters with their memory evidence (order 968-mp4e).
+///
+/// `None` when DXGI itself is unavailable (no factory), so the caller reports
+/// `memory_model: None` rather than a guess. The software adapter (Basic Render
+/// Driver) is returned flagged, and the classifier excludes it.
+#[cfg(target_os = "windows")]
+// @trace order:968-mp4e, spec:accel-capability-probe
+fn dxgi_adapters() -> Option<Vec<DxgiAdapterEvidence>> {
+    use windows::Win32::Graphics::Dxgi::{
+        CreateDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE, DXGI_MEMORY_SEGMENT_GROUP,
+        DXGI_MEMORY_SEGMENT_GROUP_LOCAL, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL,
+        DXGI_QUERY_VIDEO_MEMORY_INFO, IDXGIAdapter3, IDXGIFactory1,
+    };
+    use windows::core::Interface;
+
+    // SAFETY: plain COM calls on interfaces the windows crate owns and
+    // releases; the out-pointer is a live local.
+    unsafe {
+        let factory: IDXGIFactory1 = CreateDXGIFactory1().ok()?;
+        let mut out = Vec::new();
+        let mut i = 0u32;
+        while let Ok(adapter) = factory.EnumAdapters1(i) {
+            i += 1;
+            let Ok(desc) = adapter.GetDesc1() else {
+                continue;
+            };
+            let a3 = adapter.cast::<IDXGIAdapter3>().ok();
+            let budget = |g: DXGI_MEMORY_SEGMENT_GROUP| -> Option<u64> {
+                let mut info = DXGI_QUERY_VIDEO_MEMORY_INFO::default();
+                a3.as_ref()?.QueryVideoMemoryInfo(0, g, &mut info).ok()?;
+                Some(info.Budget)
+            };
+            out.push(DxgiAdapterEvidence {
+                vendor_id: desc.VendorId,
+                device_id: desc.DeviceId,
+                dedicated_video_memory: desc.DedicatedVideoMemory as u64,
+                shared_system_memory: desc.SharedSystemMemory as u64,
+                software: desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32 != 0,
+                local_budget: budget(DXGI_MEMORY_SEGMENT_GROUP_LOCAL),
+                non_local_budget: budget(DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL),
+            });
+        }
+        Some(out)
+    }
+}
+
+/// The DXGI evidence for a CIM row's `vvvv:dddd` pair, or `None` when no
+/// hardware adapter matches or two match with different evidence (an
+/// ambiguous match is no answer, not the first one).
+// @trace order:968-mp4e
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn dxgi_evidence_for_pair<'a>(
+    adapters: &'a [DxgiAdapterEvidence],
+    pair: Option<&str>,
+) -> Option<&'a DxgiAdapterEvidence> {
+    let (v, d) = pair?.split_once(':')?;
+    let (v, d) = (
+        u32::from_str_radix(v, 16).ok()?,
+        u32::from_str_radix(d, 16).ok()?,
+    );
+    let mut hits = adapters
+        .iter()
+        .filter(|a| !a.software && a.vendor_id == v && a.device_id == d);
+    let first = hits.next()?;
+    hits.all(|a| a == first).then_some(first)
+}
+
 /// Enumerate GPUs on native Windows via `Win32_VideoController`.
 ///
 /// HOST-NATIVE LANE ONLY, deliberately. Presence of a display adapter says
@@ -4099,6 +4231,7 @@ fn windows_gpus() -> Option<Vec<DeviceRecord>> {
         "Get-CimInstance Win32_VideoController -ErrorAction Stop | \
          ForEach-Object { $_.Name + '|' + $_.PNPDeviceID + '|' + $_.DriverVersion }",
     )?;
+    let dxgi = dxgi_adapters();
     Some(
         lines
             .iter()
@@ -4111,6 +4244,13 @@ fn windows_gpus() -> Option<Vec<DeviceRecord>> {
                 let instance = f.next().unwrap_or("").trim();
                 let driver = f.next().unwrap_or("").trim();
                 let pair = pci_pair(instance);
+                // Order 968-mp4e: memory model from DXGI, NEVER from
+                // Win32_VideoController's 4 GiB-saturating uint32 RAM field
+                // (see DxgiAdapterEvidence). No DXGI => None.
+                let (memory_model, own_bytes) = memory_model_from_dxgi(
+                    dxgi.as_deref()
+                        .and_then(|a| dxgi_evidence_for_pair(a, pair.as_deref())),
+                );
                 Some(DeviceRecord {
                     device_class: "gpu".to_string(),
                     vendor: match pair.as_deref().and_then(|p| p.split(':').next()) {
@@ -4135,8 +4275,8 @@ fn windows_gpus() -> Option<Vec<DeviceRecord>> {
                     cpu_flags: None,
                     cpu_cores: None,
                     system_ram_gb: None,
-                    vram_gb: None,
-                    memory_model: None,
+                    vram_gb: discrete_vram_gb(memory_model, own_bytes),
+                    memory_model: memory_model.map(str::to_string),
                 })
             })
             .collect(),
@@ -9788,6 +9928,160 @@ GPU1:
                     .count(),
                 1,
                 "exactly one budget, nothing to add it to: {env}"
+            );
+        }
+    }
+
+    // ── order 968-mp4e: the Windows DXGI memory-model arm ──────────────────
+    const DX_GIB: u64 = 1024 * 1024 * 1024;
+
+    /// A discrete 16 GiB board: above the 4 GiB AdapterRAM saturation, and it
+    /// must report its TRUE size.
+    // @trace order:968-mp4e
+    #[test]
+    fn dxgi_discrete_16gib_board_reports_its_real_size() {
+        let e = DxgiAdapterEvidence {
+            vendor_id: 0x10de,
+            device_id: 0x2782,
+            dedicated_video_memory: 16 * DX_GIB,
+            shared_system_memory: 16 * DX_GIB,
+            software: false,
+            local_budget: Some(15 * DX_GIB),
+            non_local_budget: Some(15 * DX_GIB),
+        };
+        let (mm, own) = memory_model_from_dxgi(Some(&e));
+        assert_eq!(mm, Some("discrete"));
+        assert_eq!(own, Some(16 * DX_GIB));
+        assert_eq!(discrete_vram_gb(mm, own), Some(16.0));
+    }
+
+    /// An APU (doris's Radeon 860M shape): small dedicated carve-out, large
+    /// shared, NON_LOCAL empty => unified, and no "own" memory reported.
+    // @trace order:968-mp4e
+    #[test]
+    fn dxgi_apu_with_small_dedicated_and_large_shared_is_unified() {
+        let e = DxgiAdapterEvidence {
+            vendor_id: 0x1002,
+            device_id: 0x1114,
+            dedicated_video_memory: 512 * 1024 * 1024,
+            shared_system_memory: 15 * DX_GIB,
+            software: false,
+            local_budget: Some(14 * DX_GIB),
+            non_local_budget: Some(0),
+        };
+        assert_eq!(memory_model_from_dxgi(Some(&e)), (Some("unified"), None));
+    }
+
+    /// An APU whose firmware UMA frame buffer is large (8 GiB) is STILL
+    /// unified: the segment split decides, not the size of DedicatedVideoMemory.
+    // @trace order:968-mp4e
+    #[test]
+    fn dxgi_apu_with_a_large_uma_frame_buffer_is_still_unified() {
+        let e = DxgiAdapterEvidence {
+            dedicated_video_memory: 8 * DX_GIB,
+            shared_system_memory: 12 * DX_GIB,
+            local_budget: Some(18 * DX_GIB),
+            non_local_budget: Some(0),
+            ..Default::default()
+        };
+        assert_eq!(memory_model_from_dxgi(Some(&e)).0, Some("unified"));
+    }
+
+    /// DXGI unavailable => None; an adapter without IDXGIAdapter3 (no budgets)
+    /// => None as well, never a guess from the desc sizes.
+    // @trace order:968-mp4e
+    #[test]
+    fn dxgi_absent_or_without_budgets_is_none() {
+        assert_eq!(memory_model_from_dxgi(None), (None, None));
+        let no_adapter3 = DxgiAdapterEvidence {
+            dedicated_video_memory: 16 * DX_GIB,
+            shared_system_memory: 16 * DX_GIB,
+            ..Default::default()
+        };
+        assert_eq!(memory_model_from_dxgi(Some(&no_adapter3)), (None, None));
+    }
+
+    /// The Basic Render Driver (DXGI_ADAPTER_FLAG_SOFTWARE) is excluded even
+    /// though it reports a UMA-looking split.
+    // @trace order:968-mp4e
+    #[test]
+    fn dxgi_software_adapter_is_excluded() {
+        let warp = DxgiAdapterEvidence {
+            vendor_id: 0x1414,
+            device_id: 0x008c,
+            shared_system_memory: 16 * DX_GIB,
+            software: true,
+            local_budget: Some(16 * DX_GIB),
+            non_local_budget: Some(0),
+            ..Default::default()
+        };
+        assert_eq!(memory_model_from_dxgi(Some(&warp)), (None, None));
+    }
+
+    /// AdapterRAM is never an input: the Windows arm must not read it. It is a
+    /// uint32 saturating at 4 GiB, and on an iGPU it is the shared reservation.
+    // @trace order:968-mp4e
+    #[test]
+    fn dxgi_evidence_has_no_adapter_ram_input() {
+        let src = include_str!("accel_probe.rs");
+        let needle = ["Adapter", "RAM"].concat();
+        for (i, line) in src.lines().enumerate() {
+            let code = line.trim_start();
+            if code.starts_with("//") {
+                continue;
+            }
+            assert!(
+                !code.contains(&needle) || code.contains("let needle"),
+                "line {}: the saturating CIM field is used as code: {line}",
+                i + 1
+            );
+        }
+    }
+
+    /// A CIM pair matches only a hardware adapter, and two hardware adapters
+    /// with one pair but different evidence are ambiguous => None.
+    // @trace order:968-mp4e
+    #[test]
+    fn dxgi_pair_match_skips_software_and_refuses_ambiguity() {
+        let apu = DxgiAdapterEvidence {
+            vendor_id: 0x1002,
+            device_id: 0x1114,
+            local_budget: Some(1),
+            non_local_budget: Some(0),
+            ..Default::default()
+        };
+        let warp = DxgiAdapterEvidence {
+            vendor_id: 0x1002,
+            device_id: 0x1114,
+            software: true,
+            ..Default::default()
+        };
+        let both = [warp.clone(), apu.clone()];
+        assert_eq!(dxgi_evidence_for_pair(&both, Some("1002:1114")), Some(&apu));
+        assert_eq!(dxgi_evidence_for_pair(&both, Some("10de:2782")), None);
+        assert_eq!(dxgi_evidence_for_pair(&both, None), None);
+        let mut other = apu.clone();
+        other.dedicated_video_memory = 1;
+        assert_eq!(
+            dxgi_evidence_for_pair(&[apu, other], Some("1002:1114")),
+            None
+        );
+    }
+
+    /// Host measurement, not a gate: prints what DXGI says on this machine.
+    /// `cargo test -p tillandsias-headless --bin tillandsias dxgi_measure_this_host -- --ignored --nocapture`
+    // @trace order:968-mp4e
+    #[cfg(target_os = "windows")]
+    #[test]
+    #[ignore]
+    fn dxgi_measure_this_host() {
+        for a in dxgi_adapters().expect("DXGI factory") {
+            println!("{a:?} => {:?}", memory_model_from_dxgi(Some(&a)));
+        }
+        for g in windows_gpus().unwrap_or_default() {
+            println!(
+                "{} {:?} mm={:?} vram_gb={:?}",
+                g.name, g.device_node, g.memory_model, g.vram_gb
             );
         }
     }

@@ -87,6 +87,12 @@ zvariant = { version = "4.2.0", optional = true }
 [target.'cfg(target_os = "linux")'.dependencies]
 tokio-vsock = { workspace = true, optional = true }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+# Order 968-mp4e: the Windows host arm reads a GPU's memory segments from DXGI
+# (IDXGIAdapter3::QueryVideoMemoryInfo, DXGI_ADAPTER_DESC1). Same windows 0.58
+# already in the lock file via the tray, exec, host-shell and vm-layer crates.
+windows = { version = "0.58", features = ["Win32_Graphics_Dxgi"] }
+
 [dev-dependencies]
 # @trace spec:tillandsias-vault — integration tests use wiremock to exercise
 # the AppRole + KV write paths without a real Vault binary. The
