@@ -1,43 +1,43 @@
 # @trace spec:command-policies
+# @trace order:1467-c8qg, order:2354-5biy, order:2444-vn38
 name: litmus:host-kind-evidence-not-from-workspace
 spec: command-policies
 phase: pre-build
 description: >
-  Order 1467-c8qg. Forge evidence is the container runtime's record of the
-  forge image (image= in /run/.containerenv), never a file in the workspace
-  and never the record's mere presence: a planted cwd marker is ignored; a
-  record naming the forge image reads forge (simulated under unshare -rm with
-  a /run tmpfs); a toolbox, forge-base or look-alike image does not; no record
-  reads bare metal; the real builder toolbox is not a forge. Unavailable
-  regimes are NAMED skips.
+  Order 1467-c8qg, amended by 2354-5biy. Forge evidence is the root-owned 0444
+  marker the forge image bakes in (/etc/tillandsias/forge), never a file in the
+  workspace, never the container record's mere presence and never the forge
+  image's name alone. A planted cwd marker is ignored. The marker reads forge
+  and a writable one does not, simulated under unshare -rm with tmpfs over
+  /run and /etc. A toolbox, forge-base or look-alike image does not read
+  forge, no record reads bare metal, and the real builder toolbox is not a
+  forge. Since 2444-vn38, `policy host-kind` reports the decision and its
+  evidence in each shape, refuses an override argument, and agrees with
+  `policy eval` on this host. Unavailable regimes are NAMED skips. Ported from
+  the .sh in 2444-vn38.
 severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-host-kind-evidence-not-from-workspace.sh
+  - the plan binary (resolve_plan_binary); offline
 
 critical_path:
-  - step: "fixture parses and is executable"
-    command: "bash -n scripts/test-host-kind-evidence-not-from-workspace.sh && test -x scripts/test-host-kind-evidence-not-from-workspace.sh && echo 'ok: parse'"
-    timeout_ms: 2000
-    expected_behavior: "ok: parse"
-
-  - step: "a planted workspace marker is not forge evidence; a real forge still is"
-    command: "bash scripts/test-host-kind-evidence-not-from-workspace.sh 2>&1 | tail -n 1"
-    timeout_ms: 60000
-    expected_behavior: "PASS: host-kind-evidence-not-from-workspace"
+  - step: "a planted workspace marker is not forge evidence; the marker is, and policy host-kind says so"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-host-kind-evidence-not-from-workspace.lua 2>&1"
+    timeout_ms: 90000
+    success_pattern: "^ok:host-kind-evidence:pass=[0-9]+:skipped=[0-9]+$"
 
 observability:
   traces:
     - "@trace spec:command-policies"
-  expected_log: "PASS: host-kind-evidence-not-from-workspace"
+  expected_log: "ok:host-kind-evidence:pass=<n>:skipped=<m>, with each skip named on its own skip: line"
   log_fields:
     spec: "command-policies"
     test: "host-kind-evidence-not-from-workspace"
-    artifact: "crates/tillandsias-plan/src/command_policy.rs (read_host_kind)"
+    artifact: "crates/tillandsias-plan/src/command_policy.rs (read_host_kind, host_kind_report)"
 
 rollback:
   on_failure: >
     A host kind readable from a file any directory writer can plant is the
-    defect: evidence must come from the container runtime, never the workspace.
-  command: "bash scripts/test-host-kind-evidence-not-from-workspace.sh"
+    defect: evidence must come from the marker the image bakes in, never the workspace.
+  command: "tillandsias-plan script run scripts/lua/test-host-kind-evidence-not-from-workspace.lua"
