@@ -63,12 +63,13 @@ else bad("trailing comment mention failed (rc=" .. rc .. ": " .. o .. ")") end
 -- 4: the retired terminal lines, assembled so this file cannot match itself.
 local NEEDLES = { "PA" .. "SS: no-end-user-brew-instruction guard", "FA" .. "IL: no-end-user-brew-instruction guard" }
 local SELF = "scripts/lua/test-no-end-user-brew-instruction.lua"
+local R = require("common.listed_read").reader("no-end-user-brew-instruction-census")
 local searched, hits = 0, {}
 for _, root in ipairs({ "scripts", "openspec/litmus-tests" }) do
     for _, f in ipairs(fs.walk(root)) do
         if f ~= SELF and (f:sub(-3) == ".sh" or f:sub(-4) == ".lua" or f:sub(-5) == ".step" or f:sub(-5) == ".yaml") then
             searched = searched + 1
-            local okr, body = pcall(fs.read, f)
+            local body = R:read(f); local okr = body ~= nil
             if okr then
                 for _, n in ipairs(NEEDLES) do
                     if text.contains(body, n) then hits[#hits + 1] = f; break end
@@ -77,6 +78,7 @@ for _, root in ipairs({ "scripts", "openspec/litmus-tests" }) do
         end
     end
 end
+R:done()
 if #hits == 0 and searched > 100 then
     ok("the retired PASS:/FAIL: terminal lines have 0 readers (" .. searched .. " files searched: scripts/, gate steps, litmus specs)")
 else

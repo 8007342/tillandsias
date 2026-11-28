@@ -38,4 +38,25 @@ function M.read_all(name, items, path_of)
     return sources
 end
 
+-- A reader for a loop that filters as it walks, where collecting the listing
+-- first would duplicate the filter. read(p) answers the body, or nil after
+-- recording p; done() blocks, exactly as read_all does, when any read failed.
+--
+--   local R = listed.reader("my-check")
+--   for _, f in ipairs(walked) do local body = R:read(f) ... end
+--   R:done()
+function M.reader(name)
+    local r = { failed = {}, seen = {} }
+    function r:read(p)
+        local ok, body = pcall(fs.read, p)
+        if ok and type(body) == "string" then return body end
+        if not self.seen[p] then self.seen[p] = true; self.failed[#self.failed + 1] = p end
+        return nil
+    end
+    function r:done()
+        if #self.failed > 0 then M.read_all(name, self.failed) end
+    end
+    return r
+end
+
 return M

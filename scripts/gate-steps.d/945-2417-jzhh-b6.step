@@ -1,0 +1,14 @@
+# Gate step 2417-jzhh B-fixture batch — data, not code.
+#
+# common.listed_read.reader, which ten fixtures' census arms now read through,
+# must block (exit 2) at done() naming each file it could not read, once, and
+# pass when every file reads. Those census arms walk scripts/ and litmus specs
+# for a retired line and used to skip an unreadable file.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the listing reader blocks on an unreadable file (2417-jzhh B-fixture batch)"
+STEP_LUA="scripts/lua/test-listed-read-reader.lua"
+STEP_ERROR="common.listed_read.reader passed over a file it could not read (2417-jzhh) — see the FAIL lines above"
+STEP_OK="the listing reader blocks on unreadable files"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-27 darwin ok:listed-read-reader:4 arms at 732138c0e (red 3/4 on the trunk helper first)"
+STEP_READS="scripts/lua/test-listed-read-reader.lua lib/lua/common/listed_read.lua"
