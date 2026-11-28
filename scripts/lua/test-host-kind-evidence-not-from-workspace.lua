@@ -18,7 +18,8 @@
 -- (forge => ok:policy:soft-reset:forge-preauthorised; otherwise
 -- consent:policy:soft-reset):
 --   1  a planted `.forge-startup-context.md` in the cwd is ignored     (host)
---   2  same marker: the bridge asks, and a grant is not refused as a forge
+--   2  same marker: the bridge asks, and a grant is refused only by the
+--      self-consent floor (this door never mints consent), never as a forge
 --   3  the marker with a record naming the forge image reads forge (namespace)
 --   3b the forge image named WITHOUT the marker is not a forge (2354-5biy)
 --   3c the marker alone reads forge; a writable (0644) marker does not
@@ -92,14 +93,21 @@ else
     check(rc == 4 and out == BARE_ANS, "arm 1: a planted cwd marker is not forge evidence (" .. out .. ")",
         "arm 1: rc=" .. tostring(rc) .. " out=[" .. out .. "] (the planted marker was read as forge evidence)")
     local rb = run({ PLAN, "policy", "classify-bash", "--command", "tillandsias --reset-state", "--cwd", C })
-    local rg, gout = run({ PLAN, "policy", "consent", "grant", "soft-reset", "--root", C, "--",
-        "tillandsias", "--reset-state" })
-    check(rb == 4 and rg == 0 and gout:sub(1, #"ok:consent:soft-reset") == "ok:consent:soft-reset",
-        "arm 2: the bridge asks and a grant is not refused as a forge",
-        "arm 2: bridge rc=" .. tostring(rb) .. " (4 ask); grant rc=" .. tostring(rg) .. " out=[" .. gout .. "]")
-    -- arm 2 minted a token; later arms must not spend it
-    ENV.TILLANDSIAS_CONSENT_DIR = W .. "/consent-after-arm-2"
-    fs.mkdir(REL .. "/consent-after-arm-2")
+    -- The grant half cannot be RUN from here, by design: this door refuses a
+    -- consent grant before spawning it (floor:no-self-consent, 1443-9f5w), so
+    -- no agent script can approve itself. The .sh ran it outside the door.
+    -- What remains checkable is WHICH rule refuses: the self-consent floor,
+    -- never the forge rule (not-grantable-in-forge), so the planted marker
+    -- still did not make this host read as a forge. Measured on msys by
+    -- doris-windows, 2026-11-28: the old arm read rc=nil (policy_denied).
+    local g = proc.run({ argv = { PLAN, "policy", "consent", "grant", "soft-reset", "--root", C, "--",
+        "tillandsias", "--reset-state" }, cwd = C, env = ENV, env_unset = UNSET, timeout_ms = 60000 })
+    local gdec = tostring(g.decision)
+    check(rb == 4 and g.status == "policy_denied" and g.rule_id == "no-self-consent"
+            and not gdec:find("forge", 1, true),
+        "arm 2: the bridge asks, and a grant is refused only as self-consent, never as a forge",
+        "arm 2: bridge rc=" .. tostring(rb) .. " (4 ask); grant status=" .. tostring(g.status)
+            .. " rule=" .. tostring(g.rule_id) .. " decision=" .. gdec)
 end
 
 -- ── 3, 4, 5, 7: simulated container records ────────────────────────────────
