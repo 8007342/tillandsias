@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by doris-windows at macuahuitl's request: the CA-key reboot wedge blocks promoting v56.11.28.1.
+packets:
+  - packet_id: ca-key-guest-reboot-wedge
+    order: 2444-ckrb
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [vault, ca, wsl, guest]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-headless/src/ca_key_store.rs
+    related: [2096-e3te, 2003-kypa, 1898-hyhf, 2007-ckun]
+    title: |
+      After any guest reboot the tray wedges at "Starting Vault (ca-key…" forever
+    context: |
+      Seen on doris (Windows, unstable 56.11.28.1) after a host restart. In a VM guest the at-rest
+      passphrase is a tmpfs pass file (/run/user/0/tillandsias/ca-key-pass) that lives one boot,
+      while the encrypted CA key lives on durable disk. 2096-e3te made a key that does not decrypt
+      under this process's passphrase answer Unavailable (kept, refused) instead of Gone, so after a
+      reboot ready-gate:vault retried every 30s forever with all menus disabled. Evidence: the key was
+      dated Nov 26 11:00 and the pass file Nov 27 23:39; the journal repeated ca-key-pass-mismatch.
+      Fix: publish stamps the boot id beside the key (<key>.boot). On a mismatch, a per-boot passphrase
+      store plus a stamp from another boot (or, for an unstamped pre-2444 key, an mtime before this
+      boot's btime) proves the passphrase is gone: the key is scrubbed and the CA re-minted (operator
+      ruling: vault material is thrown away, not recovered). A same-boot mismatch (2096-e3te's two
+      live processes) still keeps the key and refuses. Bare metal is not affected: its passphrase is
+      in the OS keyring, which survives a reboot, so a boot change there proves nothing and the
+      discard is gated off.
+    verifiable_closure: |
+      cargo test -p tillandsias-headless --bin tillandsias ca_key_store (Linux): 16 ok, including
+      a_guest_key_stamped_in_a_previous_boot_is_discarded_for_a_re_mint,
+      an_unstamped_guest_key_older_than_this_boot_is_discarded,
+      a_same_boot_mismatch_still_keeps_the_key_and_refuses (negative arm),
+      a_keyring_host_never_discards_on_a_boot_change, and
+      publishing_an_encrypted_key_stamps_this_boot. With the discard disabled, the two reboot arms fail.
+      Operator check: reboot a Windows host with a provisioned guest; the tray reaches Ready.
+    unscoreable: "a fail-closed bug fix; its own mutation check"
+    next_action: Land it, then promote v56.11.28.1 once a reboot on doris reaches Ready.
