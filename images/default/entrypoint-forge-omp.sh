@@ -2,7 +2,7 @@
 # entrypoint-forge-omp.sh — Oh My Pi forge entrypoint (order 2455-lomp).
 #
 # omp runs on LOCAL models only: the Lemonade Server the host serves, at
-# TILLANDSIAS_LEMONADE_URL (default http://lemonade:13305/api/v1). models.yml
+# TILLANDSIAS_LEMONADE_URL (default http://127.0.0.1:13305/api/v1). models.yml
 # names that one provider (openai-models-list discovery, no auth) and
 # config.yml disables every built-in provider omp documents. No cloud
 # credential reaches this forge (the launcher maps the lane to no provider).

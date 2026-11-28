@@ -143,8 +143,8 @@ arm("4 OMP only lemonade (auth none, openai-models-list, env baseUrl); every clo
 local r5 = run("url", {}, 'http://evil"\n  x: 1')
 local r5b = run("url", {}, "file:///etc/passwd")
 local r5c = run("url", {}, "")
-arm("5 URL an injecting or non-http base URL is refused; the default is the enclave alias",
-    r5.code ~= 0 and r5b.code ~= 0 and text.trim(r5c.stdout or "") == "http://lemonade:13305/api/v1",
+arm("5 URL an injecting or non-http base URL is refused; the default is the per-forge relay at 127.0.0.1:13305",
+    r5.code ~= 0 and r5b.code ~= 0 and text.trim(r5c.stdout or "") == "http://127.0.0.1:13305/api/v1",
     tostring(r5.code) .. "/" .. tostring(r5b.code) .. "/" .. (r5c.stdout or ""))
 
 -- 6 wired

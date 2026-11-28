@@ -2,7 +2,7 @@
 # entrypoint-forge-pi.sh — Pi coding agent forge entrypoint (order 2454-lhar).
 #
 # Pi runs on LOCAL models only: the Lemonade Server the host serves, at
-# TILLANDSIAS_LEMONADE_URL (default http://lemonade:13305/api/v1). Pi has no
+# TILLANDSIAS_LEMONADE_URL (default http://127.0.0.1:13305/api/v1). Pi has no
 # model discovery, so models.json is generated from Lemonade's /models answer
 # by lib-local-models.sh at every launch. No cloud credential reaches this
 # forge (the launcher maps the lane to no provider).

@@ -4,8 +4,8 @@
 # @trace order:2454-lhar, order:2455-lomp, spec:default-image
 #
 # Both lanes talk ONLY to the Lemonade Server the host runs. The endpoint is
-# TILLANDSIAS_LEMONADE_URL (default http://lemonade:13305/api/v1); the enclave
-# alias and relay that make that name answer are order 2456-lrly, not this
+# TILLANDSIAS_LEMONADE_URL (default http://127.0.0.1:13305/api/v1): inside each forge
+# the per-forge relay forwarder (order 2456-lrly) listens there; not this
 # file. Nothing here names a cloud model API host.
 #
 # Pure functions over files, so scripts/lua/test-forge-pi-omp-harness.lua runs
@@ -15,7 +15,7 @@
 #   lemonade_fetch_models <out file>                       → GET $base/models
 # No jq: the Pi generator is lua/local-models-pi.lua on tillandsias-plan.
 
-LEMONADE_DEFAULT_URL="http://lemonade:13305/api/v1"
+LEMONADE_DEFAULT_URL="http://127.0.0.1:13305/api/v1"
 
 # Every built-in cloud provider omp v19.2.1 documents (docs/models.md and
 # docs/environment-variables.md), plus its implicit local discoveries, which
