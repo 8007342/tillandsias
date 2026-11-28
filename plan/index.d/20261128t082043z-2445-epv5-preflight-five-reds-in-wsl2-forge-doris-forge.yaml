@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: five-preflight-guards-refuse-on-a-clean-linux-next-inside-the-doris-wsl2-forge
+    order: "2445-epv5"
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, preflight, fixtures]
+    estimated_hours: 3
+    title: "./build.sh --preflight refuses five guards on a clean linux-next (21f2454cb) inside the doris WSL2 forge, so every work ref preflighted there reads refused=5 whatever it changed"
+    context: |
+      Measured 2026-11-28 by the doris forge (WSL2 kernel 6.18.58.1, forge v56.11.28.1), preflighting
+      work/1324-emdf and work/2445-p2n2: both refused the same five guards, and each guard run alone on clean
+      linux-next at 21f2454cb fails identically, so these are trunk/regime reds, not either change:
+        - test-branch-discipline-verb.lua: 2f "two hosts and a work ref derive level 2 — got derived=1"; 2g
+          got warn:discipline:ref-outside-grammar:seed-ahead-of-reality
+        - test-claim-confirmation-names-the-earliest-claimant.lua: "a claim whose push was REFUSED is not
+          confirmed (claim-not-on-origin) — rc=0 out=ok:claim-confirmed:9999-zzzz"
+        - test-command-policy-consent.lua: refused:command-policy-consent:stub-argv-left-its-class (the soft
+          reset reads forge-preauthorised here, which is correct for a forge; the fixture seems to assume bare metal)
+        - test-hooks-armed.lua: could-not-run, "no plan binary named (TILLANDSIAS_PLAN_BIN or
+          TILLANDSIAS_SCRIPT_RUNNER_BIN)" when run alone; refused under preflight
+        - test-preflight-bench.lua: arms 5, 6, 7, 14 (records come back nil)
+      Related: 2280-vzsr (preflight-bench on trunk), 2224-gdir / 2166-zvst (fixtures judging the caller's repo).
+    exit_criteria:
+      - "In a forge on a clean linux-next, ./build.sh --preflight reports none of these five as refused:preflight:<guard>; each either passes or names a forge regime skip."
+      - "Each fixture that assumes bare metal (command-policy-consent) states that and skips with a named token in a forge, instead of refusing."
+    unscoreable: "fixture-scored"
+    provenance: "doris-forge preflight of work/1324-emdf and work/2445-p2n2, 2026-11-28"
+    related: [2280-vzsr, 2224-gdir, 2166-zvst, 2165-uu9j]
