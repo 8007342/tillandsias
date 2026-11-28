@@ -1,0 +1,13 @@
+# Gate step 2454-lhar / 2455-lomp — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. The Pi and Oh My Pi lanes use ONLY the host's Lemonade
+# models. The generators in lib-local-models.sh must emit only the lemonade
+# provider, only downloaded chat/tool-calling models (Pi), and disable every
+# cloud provider (omp); omp stays pinned by version and sha256. Moving
+# lib-local-models.sh away reds all seven arms (measured 2026-11-28 on doris).
+STEP_DESC="Checking the Pi and Oh My Pi lanes stay on local Lemonade models (2454-lhar, 2455-lomp)"
+STEP_LUA="scripts/lua/test-forge-pi-omp-harness.lua"
+STEP_ERROR="a local-model lane would reach a non-Lemonade provider or an unpinned harness (2454-lhar, 2455-lomp); see which arm failed above"
+STEP_OK="Pi and Oh My Pi are configured for local Lemonade models only"
+STEP_READS="images/default/lib-local-models.sh images/default/lib-common.sh images/default/entrypoint-forge-pi.sh images/default/entrypoint-forge-omp.sh images/default/Containerfile scripts/lua/test-forge-pi-omp-harness.lua"
+STEP_SECOND_REGIME="doris 2026-11-28 msys ok:forge-pi-omp-harness:7 arms"
