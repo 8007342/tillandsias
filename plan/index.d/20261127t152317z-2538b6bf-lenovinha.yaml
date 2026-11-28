@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-forge-queue-jobs-audit-record-says-bare-metal
+    field: status
+    value: completed
+    ts: "2026-11-27T15:23:17Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-forge-queue-jobs-audit-record-says-bare-metal
+    event:
+      type: completed
+      ts: "2026-11-27T15:23:17Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 52146c14b2310653dd88fa22522dfa6b8730d416
+  - packet_id: a-forge-queue-jobs-audit-record-says-bare-metal
+    event:
+      type: note
+      ts: "2026-11-27T15:23:17Z"
+      host: lenovinha
+      summary: |-
+        landed: slice B #1708 as 7f25ca0c3 (marker decides forge), slice A #1721 as 52146c14b (launch record + sidecar-test Lua port, waiver paid); both on origin/linux-next

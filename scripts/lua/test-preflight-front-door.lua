@@ -1,4 +1,5 @@
 -- @trace order:1305-udgs, order:2272-cuxh, order:2404-grd6
+-- inputs: build.sh Cargo.toml plan/index.yaml scripts/build-macos-tray.sh scripts/check-plan-binary-current.sh scripts/cycle-preflight.sh scripts/hooks/pre-push-local-gate.sh scripts/install.sh scripts/lua/check-bash-dialect.lua scripts/lua/test-expire-claims-write-is-opt-in.lua scripts/lua/test-macos-model-share-writable.lua scripts/plan-binary-probe.sh scripts/run-litmus-test.sh scripts/test-macos-vsock-inference-closure.sh scripts/test-plan-only-lane-structural.sh scripts/timing-log.sh scripts/with-wsl2-builder.sh lib/lua/common/ crates/tillandsias-plan/
 -- @env PATH HOME USER LOGNAME TOOLBOX_PATH container TILLANDSIAS_SKIP_TOOLBOX TILLANDSIAS_SHARED_TARGET_HELD TILLANDSIAS_SHARED_TARGET CARGO_TARGET_DIR TILLANDSIAS_FRONT_DOOR_LIVE TILLANDSIAS_PREFLIGHT_BUDGET_S
 --
 -- test-preflight-front-door.lua — the preflight front door (`./build.sh --preflight`) cannot lie.

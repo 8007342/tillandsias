@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: workspace-tests-skip-on-scripts-only-lands-beside-a-guarded-broad-reader-set
+    field: status
+    value: obsoleted
+    ts: "2026-11-27T14:03:07Z"
+    host: yoga
+events:
+  - packet_id: workspace-tests-skip-on-scripts-only-lands-beside-a-guarded-broad-reader-set
+    event:
+      type: note
+      ts: "2026-11-27T14:03:07Z"
+      host: yoga
+      summary: |
+        OBSOLETED (coordinator 2026-11-27). MEASURED, not guessed: (1) the guard cannot be made tight. Over a name-based
+        call graph of crates/**/*.rs, "a test naming the real root that reaches chunk_corpus or a directory walk" flags
+        186 tests across headless, plan, core, macos-tray and policy, and narrowing it to walks that can cover scripts/
+        leaves 186, because common Rust method names (new, run, read) connect nearly every test to some walk; a
+        186-test BROAD_READERS is unreviewable and a narrower graph is a false-negative risk. (2) the payoff is small:
+        a BROAD subset still builds every workspace test binary (warm build 64.9 s idle, the larger half), and the run's
+        critical path (fragments::compaction_on_the_real_ledger..., 22.8 s) reads the real ledger and stays in BROAD, so
+        the idle saving is ~31.5 s -> ~23 s, about 8 s per scripts-only land; macuahuitl's 313 s was contention.
+        Work left on yoga's local ref work/2438-kfgv (never pushed): scanner --exclude/--skip-broad, cargo-test-inputs
+        markers, and three scratch-literal fixes (lua_predicate.rs x2, policy main.rs) that part 2 may reuse.

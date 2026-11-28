@@ -1,0 +1,13 @@
+# Gate step 2435-lqpn — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. A PR that becomes landable while a land run gates is taken by
+# that same run (2143-z5uj: pass 1 re-reads the queue before every pick). The
+# continuous-queue design (2433-lqcm) rests on it. Disabling the re-read reds
+# arms 1 and 2 (measured 2026-11-27 in the WSL guest on doris).
+STEP_DESC="Checking a PR arriving mid-run lands in that run (2435-lqpn)"
+STEP_LUA="scripts/lua/test-land-queue-mid-run-arrival.lua"
+STEP_ERROR="a PR that became landable during a land run was left for the next run (2143-z5uj, 2435-lqpn); see which arm failed above"
+STEP_OK="arrivals during a run land in that run"
+STEP_READS="scripts/land-queue.sh lib/lua/common/land_queue_fixture.lua scripts/lua/test-land-queue-mid-run-arrival.lua"
+STEP_SECOND_REGIME="doris 2026-11-27 msys skip:land-queue-mid-run-arrival:MSYS_NT-10.0-26300-land-queue-fixtures-need-a-posix-host"
+STEP_SERIAL="runs real land-queue.sh invocations over scratch git remotes"

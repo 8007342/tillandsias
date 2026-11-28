@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: images-flutter-has-no-lua-runtime
+    field: status
+    value: completed
+    ts: "2026-11-27T15:51:59Z"
+    host: lenovinha
+
+events:
+  - packet_id: images-flutter-has-no-lua-runtime
+    event:
+      type: completed
+      ts: "2026-11-27T15:51:59Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 0b60f604351de58cce8be262cd258b18433733d6
+  - packet_id: images-flutter-has-no-lua-runtime
+    event:
+      type: note
+      ts: "2026-11-27T15:51:59Z"
+      host: lenovinha
+      summary: |-
+        landed: #1724 as 0b60f6043 on origin/linux-next; flutter runs lua -e (Lua 5.4, lfs 1.8.0, lpeg 1.0.2), +1,291,921 bytes

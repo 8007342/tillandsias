@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-27, at macuahuitl's request (seen during relay-preflight of #1692).
+packets:
+- packet_id: two-methodology-accountability-litmus-steps-are-red-on-darwin-only
+  order: 2428-dwrd
+  status: ready
+  priority: p2
+  owner_host: macos
+  pickup_role: macos
+  verifiable_closure: 'litmus:loop-status-fragment-overlay and litmus:cycle-metrics-answer-rate-shape both green on a darwin host (scripts/run-litmus-test.sh methodology-accountability --test <name>), each still green on linux.'
+  notes: |
+    size: S
+    implementer_tier: sonnet
+  next_action: >-
+    REGIME: tlatoanis-macbook-air, macOS 27.2.1 (aarch64), /usr/bin/grep is BSD grep 2.6.0-FreeBSD (an interactive
+    shell shims grep to ugrep 7.8.4; litmus steps get the BSD one), measured 2026-11-27 on a detached origin/linux-next
+    and on work/2417-b2kq with identical results. Linux hosts are green.
+    (1) litmus:loop-status-fragment-overlay step 3 runs grep -q '**base theme**'. GNU grep treats a leading * as a
+    literal; BSD grep refuses the pattern ("grep: repetition-operator operand invalid", exit 2), so set -e fails the
+    step. Use grep -F, or escape the asterisks.
+    (2) litmus:cycle-metrics-answer-rate-shape step 1 gets empty output. scripts/cycle-metrics.sh refuses with
+    violation:metrics-log-split, because this host has a second timing log, /tmp/tillandsias-timing.jsonl (16 entries,
+    last written 2026-11-25), beside .cache/metrics/tillandsias-timing.jsonl, and the step reads only the experts: line.
+    Decide whether the step should name its own TILLANDSIAS_TIMING_LOG (the reporter's documented stand-down), so it
+    does not depend on host debris, and what wrote the /tmp log. The file was left in place: deleting host state
+    needs the operator.
+  events:
+  - {type: filed, ts: "2026-11-27T08:09:16Z", host: tlatoanis-macbook-air, summary: 'filed at macuahuitl''s request: two darwin-only reds in methodology-accountability, both reproduced on trunk'}

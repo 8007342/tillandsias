@@ -37,11 +37,16 @@ else
     end
 end
 
-local violations = {}
+local listed = {}
 for _, f in ipairs(files) do
-    if f ~= "scripts/check-no-spawn-in-if-not.sh" and f ~= "scripts/lua/check-no-spawn-in-if-not.lua" then
-        local ok, content = pcall(fs.read, f)
-        if ok then
+    if f ~= "scripts/check-no-spawn-in-if-not.sh" and f ~= "scripts/lua/check-no-spawn-in-if-not.lua" then listed[#listed + 1] = f end
+end
+local SRC = require("common.listed_read").read_all("no-spawn-in-if-not", listed)
+local violations = {}
+for _, f in ipairs(listed) do
+    do
+        local content = SRC[f]
+        if content then
             local n = 0
             for _, line in ipairs(text.lines(content)) do
                 n = n + 1

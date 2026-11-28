@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: high-the-tray-authenticates-to-vault-with-its-own-scoped-token-and-no-root-token-is-kept
+    field: next_action
+    value: D1 is answered (required). Left to do, everything. First write the failing mock-keyring test for three things, no root token entry after bootstrap, the tray client token carries tray-policy and not root, and the unseal share is not readable from the place the tray credential rests. Do 2080-dy3a first so there is one seam to change. Do not add a recovery step; an unopenable store is still wiped.
+    ts: "2026-11-11T19:02:11Z"
+    host: macuahuitl
+    replaces_sha256: "32fc67a1a53b1e6a44218213cb4ff83442b5ca55c2afe8f56eff21043534a871"
+
+events:
+  - packet_id: high-the-tray-authenticates-to-vault-with-its-own-scoped-token-and-no-root-token-is-kept
+    event:
+      type: note
+      ts: "2026-11-11T19:02:11Z"
+      host: macuahuitl
+      summary: |-
+        the WAIT on D1 is discharged by the operator answer

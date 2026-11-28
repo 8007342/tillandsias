@@ -1,0 +1,27 @@
+packets:
+  - packet_id: audio-studio-separate-litmus-reds-on-a-host-without-weights
+    order: "2441-web3"
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [litmus, audio-studio]
+    estimated_hours: 1
+    owned_paths: [openspec/litmus-tests/litmus-audio-studio-separates-stems-from-safetensors-only.yaml]
+    title: "litmus:audio-studio-separates-stems-from-safetensors-only fails (rather than skips) on a host with no registered weights, reddening every local-web-preview preflight"
+    context: |
+      Measured on lenovinha 2026-11-27, during relay-preflight of work/2413-3bc5 (an image-only flutter change).
+      The fixture's six arms passed ("audio-studio separate fixture: 6 passed, 0 failed"). It then printed
+      could-not-run:audio-studio-separate:no-registered-weights, and the test's failure_pattern includes
+      could-not-run:, so the step reads FAIL and the whole local-web-preview spec turns red. That refuses the
+      preflight for any change that scopes that spec in.
+      A host that lacks the model weights cannot judge the real-weights arm. That should be a named skip that
+      the spec does not count as a pass, not a failure attributed to the change under test.
+    exit_criteria:
+      - "on a host with no registered weights the step reports a named skip (not FAIL) and local-web-preview is not refused for it; with weights registered, a reconstruction under 20 dB still fails"
+    verifiable_closure: litmus:audio-studio-separates-stems-from-safetensors-only
+    next_action: "decide whether the absence verdict becomes a skip pattern in the litmus yaml or the fixture emits a skip: line; keep the with-weights arm strict."
+    provenance: filed by lenovinha from relay-preflight of work/2413-3bc5.
+    events:
+      - {type: filed, ts: '2026-11-27T15:13:32Z', host: lenovinha, summary: separate litmus reds without weights}

@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by doris-windows: census packet 2428-cens-c, fixed in the runner.
+packets:
+  - packet_id: windows-runner-spawns-shebang-scripts-through-git-bash
+    order: 2436-wsbg
+    status: in_progress
+    kind: fix
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, msys, exec, fixtures]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-exec/src/lib.rs
+      - crates/tillandsias-exec/src/managed.rs
+      - crates/tillandsias-exec/tests/shebang_script.rs
+    related: [2428-cens]
+    title: |
+      On Windows, a #! script named as argv[0] runs through Git's bash, as exec(2) would run it
+    context: |
+      CreateProcess runs only PE images, so a fixture's stub gh/git/podman (a #! script) failed with
+      os error 193, or was not found by bare name. tillandsias-exec now rewrites such an argv to
+      [git-bash, script, args...] in all three spawn paths (Command::run, Command::spawn, managed). It
+      does this only for a file that starts with #!, found by path or on the command's PATH, and only
+      when no PATHEXT file answers the name first. Windows-only (cfg(windows)); Linux and macOS are
+      unchanged.
+    verifiable_closure: |
+      crates/tillandsias-exec/tests/shebang_script.rs: 2 passed on doris, 2 failed (os error 193) with
+      trunk's lib.rs. The census group-(c) fixtures on doris, before and after: codex-mcp-registration,
+      ensure-toolbox-properties, git-mirror-existing-volume-hardening, git-mirror-relay-token-expiry and
+      litmus-decide go to ok; command-policy-consent goes from 4-failed to 2-failed.
+    unscoreable: "pinned by the crate test; the fixtures are its field evidence"
+    next_action: >
+      The rc=127 half of group (c) (`env: 'bash': No such file`: credential-channel-names-a-locked-keyring,
+      copilot-vault-auth, forge-copilot-harness, harness-rollback, and others) is a different cause: the
+      child's PATH has no bash. Diagnose it separately. The land-queue fixtures also stay red.

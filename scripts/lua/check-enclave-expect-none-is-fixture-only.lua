@@ -61,10 +61,11 @@ for _, d in ipairs({ "scripts", "images", "crates", "openspec" }) do
 end
 table.sort(files)
 
+local SRC = require("common.listed_read").read_all("expect-none-fixture-only", files)
 local checked, violations = 0, {}
 for _, f in ipairs(files) do
-    local okr, body = pcall(fs.read, f)
-    if okr and body then
+    local body = SRC[f]
+    if body then
         local rel = f:sub(#prefix + 1)
         local n = 0
         for l in (body .. "\n"):gmatch("(.-)\n") do

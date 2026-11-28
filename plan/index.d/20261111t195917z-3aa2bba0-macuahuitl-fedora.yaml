@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: medium-vault-memory-is-locked-so-it-cannot-reach-swap
+    field: next_action
+    value: 'Operator answer D7 2026-11-11: keep disable_mlock (rootless podman cannot mlock without a host memlock change, which no-sudo refuses). Instead run the Vault container with swap off for its cgroup (--memory-swap equal to --memory) and a modest explicit memory limit. Write the run-args test first and watch it fail; then set both flags in launch_vault_container. The original mlock exit criteria are superseded by verifiable_closure.'
+    ts: "2026-11-11T19:59:17Z"
+    host: macuahuitl-fedora
+    replaces_sha256: "26dece3136968b905888ed6476d5b5a70be7fd73ba4072eb918432a5ab7abfc3"
+
+events:
+  - packet_id: medium-vault-memory-is-locked-so-it-cannot-reach-swap
+    event:
+      type: note
+      ts: "2026-11-11T19:59:17Z"
+      host: macuahuitl-fedora
+      summary: |-
+        operator answer D7

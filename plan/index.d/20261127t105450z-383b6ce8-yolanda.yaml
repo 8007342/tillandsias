@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: check-batch-4-release-tier-freshness-to-lua
+    field: status
+    value: completed
+    ts: "2026-11-27T10:54:50Z"
+    host: yolanda
+
+events:
+  - packet_id: check-batch-4-release-tier-freshness-to-lua
+    event:
+      type: completed
+      ts: "2026-11-27T10:54:50Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: 060b95d48 land(1654); Linux land gate green incl. ok:release-tier-ci-full:8, ok:release-tier-freshness:20 arms
+  - packet_id: check-batch-4-release-tier-freshness-to-lua
+    event:
+      type: note
+      ts: "2026-11-27T10:54:50Z"
+      host: yolanda
+      summary: |-
+        Landed as PR 1654 in land run 96 (060b95d48): release-tier-freshness decider and its two fixtures ported to Lua, .sh deleted.

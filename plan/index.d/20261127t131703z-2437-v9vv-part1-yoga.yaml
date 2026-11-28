@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: the-four-ungated-cargo-phases-skip-when-nothing-they-read-changed
+    event:
+      type: note
+      ts: "2026-11-27T13:17:03Z"
+      host: yoga
+      summary: |
+        PART 1 on work/2437-v9vv (guest-feature tests), and a CORRECTION to this row's prediction. The whole-workspace scan
+        widens to scripts/**, and one source is a REAL read: crates/tillandsias-plan/tests/lua_source_agreements.rs:570
+        walks every file under root.join("scripts"). So the workspace-test phase cannot skip on a scripts-only change
+        as filed (~510 s was wrong). Revised plan (coordinator 2026-11-27): (1) guest-feature tests gate on
+        _CARGO_FEATURE_TEST_INPUTS (same headless closure; features change what compiles, not what is read), ~67 s/land
+        on macuahuitl's trace; (2) both clippy passes gate on a compile-only scan (include_str/include_bytes/build.rs),
+        ~130 s; (3) the workspace tests could gate on Rust classes if the one real whole-scripts/ reader moves to its
+        own step. Part 1: test-cargo-guest-tests-class-gated.lua (5 arms; the wiring arm red on trunk; a scripts/lua
+        change skips, a crates/ change and a missing full marker run). The coordinator's mutant is covered for this
+        list by step 954's fixture, test-scan-cargo-test-repo-roots.lua arms 2-4 (an exec or read path left out of
+        _CARGO_FEATURE_TEST_INPUTS is refused).

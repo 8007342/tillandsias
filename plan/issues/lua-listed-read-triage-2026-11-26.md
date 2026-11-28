@@ -15,6 +15,7 @@ A checker that wraps each read of a LISTED file in `pcall(fs.read)` and drops th
 **Method**: a script found each site, its enclosing `for … do` loop, and whether the next six lines report the failure. Every in-loop site was then read by hand. The overrides are the eight rows whose reasons differ from the defaults.
 
 Batch 1 is done: scripts/lua/test-listed-read-blocks-batch1.lua (gate step 962), red 8/8 first. check-centicolon-ratchet:71 and check-cheatsheet-source-anchors:72 moved to A while it was built (they fail safe).
+Batch 4 is done: test-listed-read-blocks-batch4.lua (gate step 943), red 9/9 first.
 Batch 5 is done: test-listed-read-blocks-batch5.lua (gate step 944), red 10/10 first. litmus-decide file-grep also stops dropping a --path that neither reads nor lists.
 
 ## Batches (8–10 checkers per PR, each red first on a planted unreadable listed file)

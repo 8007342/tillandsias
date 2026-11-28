@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-27, at macuahuitl's request (found during 2417-jzhh batch 4).
+packets:
+- packet_id: local-delegate-ladder-aggregate-without-repo-raises-on-an-undeclared-env-var
+  order: 2427-ldrr
+  status: implemented
+  priority: p3
+  owner_host: any
+  pickup_role: any
+  verifiable_closure: 'tillandsias-plan script run scripts/lua/test-local-delegate-ladder.lua: arms 9a and 9b (red on trunk first).'
+  unscoreable: |
+    pinned-by-a-gate-step-not-a-litmus. The regression arms (9a, 9b) live in
+    scripts/lua/test-local-delegate-ladder.lua, which gate step
+    902-1834-ujsf.step runs on every --check; no litmus wraps that fixture, and
+    adding one only to name it here would duplicate the gate step.
+  notes: |
+    size: S
+    implementer_tier: haiku
+  next_action: >-
+    Implemented. local-delegate-ladder.lua aggregate, run with no --repo, read TILLANDSIAS_REPO_ROOT through env.get
+    without declaring it in its header, so the runner raised "env.get: 'TILLANDSIAS_REPO_ROOT' is not declared" and the
+    bare form never ran on any host. The header now declares it. test-local-delegate-ladder arm 9 runs aggregate with
+    TILLANDSIAS_REPO_ROOT set to a scratch ledger (9a) and with neither it nor --repo (9b).
+  events:
+  - {type: filed, ts: "2026-11-27T05:58:02Z", host: tlatoanis-macbook-air, summary: 'filed and claimed at macuahuitl''s request; found while running 2417-jzhh batch 4 over the real tree'}
+  - {type: implemented, ts: "2026-11-27T05:58:02Z", host: tlatoanis-macbook-air, summary: 'header declares TILLANDSIAS_REPO_ROOT; fixture arms 9a/9b red on trunk, now 31/31'}

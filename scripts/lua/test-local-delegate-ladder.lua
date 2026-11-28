@@ -10,6 +10,7 @@
 --   3 rung boundaries                      4 R3 / R4
 --   5 demotion                             6 a later revert supersedes the acceptance
 --   7 stable order, identical reruns       8 the older token grammar is unchanged
+--   9 aggregate without --repo (2427-ldrr)
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-local-delegate-ladder.lua
 -- Verdict: ok:local-delegate-ladder:<n> arms | violation:...
@@ -109,4 +110,20 @@ T:arm("7b groups are sorted by model and quant", table.concat(heads, ",") == "al
 T:arm("7c a small group stays none:sample", text.contains(o1, "model=alpha quant=Q4 rung=none:sample"), why)
 local rc, tok = outcome{ "token", "abc", "done" }
 T:arm("8 the delegate-outcome token is unchanged", rc == 0 and tok == "delegate-outcome:abc:done", tok)
+-- 9 (2427-ldrr): aggregate with no --repo reads TILLANDSIAS_REPO_ROOT, so the
+-- script must declare it; undeclared, env.get raised and the bare form never ran.
+local function bare(env_)
+    local r = proc.run{ argv = { PLAN, "script", "run", ROOT .. "/scripts/lua/local-delegate-ladder.lua", "--", "aggregate" }, cwd = ROOT,
+        env_unset = { "TILLANDSIAS_*" }, env = env_, timeout_ms = 60000 }
+    return r.code, (r.stdout or ""):gsub("\r", ""), "rc=" .. tostring(r.code) .. " " .. (r.stdout or "") .. (r.stderr or "")
+end
+fs.mkdir(d.rel .. "/repo/plan/index.d")
+fs.write(d.rel .. "/repo/plan/index.yaml", gen("alpha", "Q4", "A", 0, "r"))
+fs.write(d.rel .. "/repo/plan/index.d/a.yaml", gen("alpha", "Q4", "A", 0, "s"))
+local rc9, o9, why9 = bare{ PATH = env.get("PATH"), HOME = env.get("HOME"), TILLANDSIAS_REPO_ROOT = d.abs .. "/repo" }
+T:arm("9a aggregate with no --repo reads TILLANDSIAS_REPO_ROOT's ledger and fragments", rc9 == 0
+    and text.contains(o9, "model=alpha quant=Q4 ") and text.contains(o9, "outcomes=2"), why9)
+local rc9b, o9b, why9b = bare{ PATH = env.get("PATH"), HOME = env.get("HOME") }
+T:arm("9b aggregate with neither --repo nor TILLANDSIAS_REPO_ROOT reads this checkout", rc9b == 0
+    and text.contains(o9b, "ok:local-delegate-ladder:"), why9b)
 T:finish()
