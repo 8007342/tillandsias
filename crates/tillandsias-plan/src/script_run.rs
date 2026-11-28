@@ -732,8 +732,10 @@ fn register(
                 fs_t.set(
                     "read",
                     lua.create_function(move |_, p: String| {
-                        if std::path::Path::new(&p).is_absolute()
-                            && let Some(c) = within(&p)
+                        // 2453-ap8y: msys /c/... is absolute here too.
+                        let host = crate::lua_predicate::host_path_str(&p).into_owned();
+                        if std::path::Path::new(&host).is_absolute()
+                            && let Some(c) = within(&host)
                         {
                             return std::fs::read_to_string(&c)
                                 .map_err(|e| LuaError::RuntimeError(format!("fs.read: {p}: {e}")));
@@ -746,14 +748,21 @@ fn register(
             fs_t.set(
                 "walk",
                 lua.create_function(move |lua, (dir, opts): (String, Option<LuaTable>)| {
-                    if std::path::Path::new(&dir).is_absolute() {
+                    // 2453-ap8y: msys /c/... is an absolute path on Windows too.
+                    let host = crate::lua_predicate::host_path_str(&dir).into_owned();
+                    if std::path::Path::new(&host).is_absolute() {
                         // An absolute path is walkable when its realpath is inside
                         // the repo (a fixture's target/plan-scratch) or inside a
                         // declared read root; anywhere else is refused.
-                        let in_repo = crate::lua_predicate::find_repo_root()
-                            .ok()
-                            .and_then(|r| std::fs::canonicalize(&dir).ok().filter(|c| c.starts_with(&r)));
-                        let Some(base) = in_repo.or_else(|| within(&dir)) else {
+                        // strip_verbatim (2453-ap8y): Windows canonicalize answers
+                        // \\?\C:\..., which never starts_with the C:\ root.
+                        let in_repo = crate::lua_predicate::find_repo_root().ok().and_then(|r| {
+                            std::fs::canonicalize(&host)
+                                .ok()
+                                .map(crate::lua_predicate::strip_verbatim)
+                                .filter(|c| c.starts_with(&r))
+                        });
+                        let Some(base) = in_repo.or_else(|| within(&host)) else {
                             return Err(LuaError::RuntimeError(format!(
                                 "fs.walk: '{dir}' is outside the repo and every declared read root (-- @read-env)"
                             )));
