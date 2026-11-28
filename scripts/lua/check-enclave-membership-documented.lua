@@ -62,10 +62,11 @@ local FN_NAME = [[fn ([a-z_]+)]]
 local ENCLAVE_MARK = [[ENCLAVE_NET|ENCLAVE_ONLY_NET|ENCLAVE_EGRESS_NETS]]
 local BUILD_LAUNCH = [[^(build|launch)_]]
 
+local SRC = require("common.listed_read").read_all("enclave-membership", rs_files)
 local found = {}
 for _, f in ipairs(rs_files) do
-    local ok_r, content = pcall(fs.read, f)
-    if ok_r then
+    local content = SRC[f]
+    if content then
         local fname = nil
         for _, line in ipairs(text.lines(content)) do
             if text.is_match(line, FN_TRIGGER) then

@@ -414,7 +414,7 @@ The forge container SHALL bind-mount `~/.local/state/tillandsias/external-logs/c
 | Tier and state | Suffix |
 |---|---|
 | `tier: bundled`, `image_baked_sha256` set | `[bundled, verified: <sha8>]` |
-| `tier: bundled`, no fingerprint yet | `[bundled, partial-verify]` |
+| `tier: bundled`, no fingerprint yet | `[bundled, unverified]` (no hash exists, so the badge never claims verification, order 588-8mh8) |
 | `tier: distro-packaged`, package present in manifest | `[distro-packaged: <package>]` |
 | `tier: distro-packaged`, package missing from manifest | `[distro-packaged: MISSING]` |
 | `tier: pull-on-demand`, no project-commit | `[pull-on-demand: stub]` |

@@ -23,6 +23,9 @@ scripts/measure-sc11-idle-cpu.ps1
 scripts/sign-windows-artifact.ps1
 scripts/test-sign-windows-artifact.ps1
 scripts/tray-diagnose.ps1
+# A PowerShell query the Windows capability probe runs with -File, because the command
+# policy refuses -Command (2421-7wvs; added to this list by 2426-pyf6).
+scripts/windows-host-capability-query.ps1
 launch.sh
 # The cargo bootstrap: the binary cannot build itself (§6.5 row 2).
 build.sh

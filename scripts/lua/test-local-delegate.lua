@@ -1,4 +1,5 @@
 -- @trace order:1833-ytbe, spec:local-coding-delegation, order:2386-lrg1
+-- inputs: plan/index.yaml scripts/claude-delegate.sh scripts/local-delegate.sh scripts/lua/local-delegate.lua scripts/plan-binary-probe.sh lib/lua/common/ crates/tillandsias-plan/
 -- @env PATH HOME
 --
 -- test-local-delegate.lua — hermetic fixture for scripts/local-delegate.sh. Ported from

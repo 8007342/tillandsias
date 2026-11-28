@@ -1,0 +1,14 @@
+# Gate step 1908-9q4c — data, not code.
+#
+# The retired-synonym check flags an ADDED line using a phrase that
+# methodology/glossary.yaml retires, and stays silent on the same phrase in an
+# unchanged line. The fixture runs the decider over scratch repos, plus three
+# mutants of it; nothing here reads the real tree's diff.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the glossary retired-synonym check flags added lines only (1908-9q4c)"
+STEP_LUA="scripts/lua/test-glossary-retired-synonyms.lua"
+STEP_ERROR="the glossary retired-synonym check no longer flags exactly the added lines (1908-9q4c) — see the FAIL lines above"
+STEP_OK="glossary retired-synonym check flags added lines, not standing ones"
+STEP_SECOND_REGIME="yolanda 2026-11-27 msys ok:glossary-retired-synonyms-fixture:11 arms"
+STEP_READS="scripts/lua/test-glossary-retired-synonyms.lua scripts/lua/check-glossary-retired-synonyms.lua methodology/glossary.yaml"

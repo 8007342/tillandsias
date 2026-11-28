@@ -26,9 +26,14 @@ LABEL io.tillandsias.imagegen-studio.comfyui-ref="${COMFYUI_REF}" \
       io.tillandsias.imagegen-studio.comfyui-sha="${COMFYUI_SHA}" \
       io.tillandsias.imagegen-studio.torch="${TORCH_VERSION}"
 
+# 2413-y9jz: plus Lua 5.4 with the forge's lfs and lpeg, for in-image glue (operator ruling
+# 2026-11-26: Lua, then Rust, then Go in every container).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates libgl1 libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
+         lua5.4 lua-filesystem lua-lpeg \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf lua5.4 /usr/bin/lua \
+    && lua -e 'require "lfs"; require "lpeg"'
 
 # The commit is verified, not trusted from the tag name.
 RUN git clone --filter=blob:none https://github.com/comfyanonymous/ComfyUI /opt/comfyui \

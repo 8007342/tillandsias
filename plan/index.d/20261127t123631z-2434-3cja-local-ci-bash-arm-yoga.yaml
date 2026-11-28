@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: local-ci-landed-guards-drops-its-dead-bash-runtime-arm
+    order: "2434-3cja"
+    status: in_progress
+    kind: debt
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [local-ci, lua]
+    estimated_hours: 1
+    owned_files: [scripts/local-ci.sh, scripts/lua/local-ci-landed-guards.lua, scripts/lua/test-local-ci-landed-guards.lua]
+    title: "local-ci's landed-guards loop drops its bash-runtime arm: every roster row is Lua since 2412-ewmt"
+    context: |
+      2412-ewmt (#1658) ported the roster's last bash gate (unrunnable-platform-arms); the roster then had 0 rows with
+      runtime=bash and its gate() helper had no caller. The loop in scripts/local-ci.sh kept an else-arm that runs a
+      row with bash. Coordinator 2026-11-27: remove dead code first.
+    exit_criteria:
+      - "The loop runs a lua row through the runner and refuses any other runtime as a tracked failure naming the row; the roster fixture's shape arm accepts lua only; a planted non-lua row is refused (fixture arm)."
+    unscoreable: "fixture-scored: test-local-ci-landed-guards.lua"
+    provenance: "coordinator 2026-11-27; yoga"
+    related: [2412-ewmt, 2231-zmzd]
+    events:
+      - {type: claimed, ts: "2026-11-27T12:36:31Z", host: yoga, summary: "claimed; work ref work/2434-3cja"}

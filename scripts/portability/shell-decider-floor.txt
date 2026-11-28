@@ -74,7 +74,6 @@ scripts/test-guest-binaries-nix-lane.sh
 scripts/test-guest-crashloop-detection.sh
 scripts/test-guest-staging-refuses-a-wireless-binary.sh
 scripts/test-headless-env-lock-is-single.sh
-scripts/test-headless-sidecar-target-gate.sh
 scripts/test-hook-mover-enumeration-is-batched.sh
 scripts/test-host-kind-evidence-not-from-workspace.sh
 scripts/test-host-slug-resolution.sh

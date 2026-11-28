@@ -12,7 +12,9 @@ FROM docker.io/library/alpine:3.22
 LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 COPY tillandsias-enclave-fetch /usr/local/bin/tillandsias-enclave-fetch
 COPY catalog.yaml /etc/tillandsias/fetch-catalog.yaml
-RUN chmod 0755 /usr/local/bin/tillandsias-enclave-fetch \
+RUN apk add --no-cache lua5.4 lua5.4-filesystem lua5.4-lpeg \
+ && ln -sf lua5.4 /usr/bin/lua \
+ && chmod 0755 /usr/local/bin/tillandsias-enclave-fetch \
  && adduser -D -H -u 10790 fetch
 USER 10790
 EXPOSE 8790

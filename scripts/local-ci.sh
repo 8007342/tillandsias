@@ -1514,15 +1514,19 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "$_lg_id" "skipped"
             continue
         fi
+        # ORDER 2434-3cja: every roster row is Lua since 2412-ewmt ported the last bash
+        # gate, so the bash arm went. A row naming another runtime is refused by name
+        # (a report too: it never ran), never run as bash on a guess.
+        if [[ "$_lg_rt" != lua ]]; then
+            log_fail_tracked "$_lg_id" "runtime-not-lua: the roster row says runtime=$_lg_rt, and this loop runs Lua guards only (2434-3cja)"
+            archive_check_log "$_lg_id" "fail"
+            continue
+        fi
         _lg_rc=0
-        if [[ "$_lg_rt" == lua ]]; then
-            if [[ ${#_lg_argv[@]} -gt 0 ]]; then
-                (cd "$REPO_ROOT" && "$_lg_bin" script run "$_lg_path" -- "${_lg_argv[@]}") 2>&1 | tee "$_lg_log" || _lg_rc=$?
-            else
-                (cd "$REPO_ROOT" && "$_lg_bin" script run "$_lg_path") 2>&1 | tee "$_lg_log" || _lg_rc=$?
-            fi
+        if [[ ${#_lg_argv[@]} -gt 0 ]]; then
+            (cd "$REPO_ROOT" && "$_lg_bin" script run "$_lg_path" -- "${_lg_argv[@]}") 2>&1 | tee "$_lg_log" || _lg_rc=$?
         else
-            (cd "$REPO_ROOT" && bash "$_lg_path" ${_lg_argv[@]+"${_lg_argv[@]}"}) 2>&1 | tee "$_lg_log" || _lg_rc=$?
+            (cd "$REPO_ROOT" && "$_lg_bin" script run "$_lg_path") 2>&1 | tee "$_lg_log" || _lg_rc=$?
         fi
         if [[ "$_lg_kind" == report || "$_lg_rc" -eq 0 ]]; then
             log_pass "$_lg_pass"

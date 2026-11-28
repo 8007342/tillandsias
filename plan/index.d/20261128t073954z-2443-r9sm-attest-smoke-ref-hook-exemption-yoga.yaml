@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: pre-push-hook-exempts-shape-checked-smoke-attest-refs
+    order: "2443-r9sm"
+    status: in_progress
+    kind: defect
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [release, hooks, gate]
+    estimated_hours: 2
+    owned_files: [scripts/hooks/pre-push-local-gate.sh, scripts/lua/test-pre-push-smoke-attest-exemption.lua]
+    title: "pre-push hook refuses every refs/attest/smoke/* push, so no smoke attestation has ever reached origin and check-promote-gate can never pass"
+    context: |
+      v56.11.28.1 linux smoke on yoga (2026-11-28): attest-smoke.lua --push answered
+      refused:attest-smoke:push-failed:refs/attest/smoke/linux/6a242328…; the hook exempts refs/attest/daily-*/ and
+      native-lint/ but not smoke/, so it demands a full gate stamp. ls-remote shows zero smoke refs on origin.
+      smoke-record.lua reads the ref as origin holds it, so check-promote-gate.lua refuses every tag.
+      Coordinator approved (2026-11-28) a shape-checked exemption as a fix-forward.
+    exit_criteria:
+      - "A refs/attest/smoke/<darwin|msys|linux>/<40-hex> push whose commit tree is exactly SHA256SUMS, regime.txt, verdict.txt (blobs, top level) and which is a creation or a fast-forward skips the tree-stamp gate."
+      - "Anything else under that name (a fourth file, a subdir, a deletion, a non-ff update, a bad platform or sha) still takes the gate."
+      - "A Lua fixture proves both, with a MUTANT for each refusal shape; d2c009ab pushes after it lands."
+    unscoreable: "fixture-scored"
+    provenance: "smoke v56.11.28.1 yoga; coordinator 2026-11-28"
+    related: [2252-ck7h, 2299-atdg, 2300-j4cv]
+    events:
+      - {type: claimed, ts: "2026-11-28T07:39:54Z", host: yoga, summary: "claimed; work ref work/2443-r9sm"}

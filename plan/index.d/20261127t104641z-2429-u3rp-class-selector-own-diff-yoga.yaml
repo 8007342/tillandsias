@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: land-gate-class-selector-judges-the-candidate-not-the-day
+    order: "2429-u3rp"
+    status: in_progress
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [land-queue, gate, velocity]
+    estimated_hours: 4
+    owned_files: [scripts/land-queue.sh, scripts/change-class.sh, scripts/lua/test-land-gate-class-base-is-the-candidate.lua]
+    title: "the land gate's class selector diffs against the daily proof, so it never skips; judge the candidate's own merge diff"
+    context: |
+      Operator-approved tiered-landing-lanes recommendation (2026-11-27), relayed by the coordinator: 0 class-selector
+      skips in all 15 surviving gate logs of the last week.
+      MEASURED on yoga 2026-11-27: gate_env_for exports TILLANDSIAS_CLASS_BASE=<daily proof commit>; against the
+      newest proof 4da31a5ae (352 trunk commits back) a merged candidate's changed set was 436 paths spanning
+      build-scripts docs images other plan-ledger rust specs, so every step's inputs were touched and nothing skipped.
+      SOUNDNESS of judging the candidate against trunk instead: every first-parent commit since the proof is a land
+      MERGE (69 land, 16 land-train, 2-5 parents) that ran the gate on its own diff, or a single-parent plan-lane
+      commit (20, all plan/ only) that ran no gate; so the changed set must be the candidate's merge diff against
+      the trunk it is gated on PLUS the paths of single-parent first-parent commits since the proof.
+    exit_criteria:
+      - "Red first: a scripts-only candidate on a trunk whose proof..trunk range contains a Rust land gets a class set of build-scripts only (scoped), and a plan-lane commit in that range adds plan-ledger; red on trunk."
+      - "A proof that is absent, stale, red or not an ancestor still runs everything (unchanged)."
+    unscoreable: "fixture-scored: test-land-gate-class-base-is-the-candidate.lua"
+    provenance: "tiered-landing-lanes, operator-approved 2026-11-27; coordinator queue item 1; yoga"
+    related: [2174-dail]
+    events:
+      - {type: claimed, ts: "2026-11-27T10:46:41Z", host: yoga, summary: "claimed; work ref work/2429-u3rp"}

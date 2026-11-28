@@ -877,6 +877,35 @@ fn register(
     Ok(())
 }
 
+/// ORDER 2417-jzhh. A module's source: `<root>/<rel>` first, then the
+/// checkout holding the running script, so a checker that a fixture roots in a
+/// scratch tree (cwd or TILLANDSIAS_REPO_ROOT) still finds the library beside
+/// it. Only `require` looks there; fs.*, proc.run and the root are unchanged.
+/// Neither present: an error naming every path tried.
+fn resolve_module_source(
+    name: &str,
+    rel: &str,
+    root: &std::path::Path,
+    script_root: Option<&std::path::Path>,
+) -> Result<String, String> {
+    let mut tried = vec![root.join(rel)];
+    if let Some(sr) = script_root
+        && sr != root
+    {
+        tried.push(sr.join(rel));
+    }
+    for p in &tried {
+        if let Ok(src) = std::fs::read_to_string(p) {
+            return Ok(src);
+        }
+    }
+    let shown: Vec<String> = tried.iter().map(|p| p.display().to_string()).collect();
+    Err(format!(
+        "require: module '{name}' not found at {rel} (tried {})",
+        shown.join(", ")
+    ))
+}
+
 /// ORDER 2080-zcur. `require "common.fixture"` loads `lib/lua/common/fixture.lua`
 /// from the repo root, once per script. Only `[a-z0-9_]` segments joined by
 /// dots resolve, so a module name can never leave `lib/lua/`. There is no
@@ -905,9 +934,9 @@ fn install_require(lua: &Lua) -> LuaResult<()> {
         }
         let root = crate::lua_predicate::find_repo_root().map_err(LuaError::RuntimeError)?;
         let rel = format!("lib/lua/{}.lua", name.replace('.', "/"));
-        let src = std::fs::read_to_string(root.join(&rel)).map_err(|e| {
-            LuaError::RuntimeError(format!("require: module '{name}' not found at {rel}: {e}"))
-        })?;
+        let script_root = crate::lua_predicate::script_repo_root();
+        let src = resolve_module_source(&name, &rel, &root, script_root.as_deref())
+            .map_err(LuaError::RuntimeError)?;
         let v: LuaValue = lua
             .load(&src)
             .set_name(format!("@{rel}"))
@@ -1553,6 +1582,79 @@ pub fn cli_classify(args: &[String]) -> ! {
 
 #[cfg(test)]
 mod tests {
+
+    // ORDER 2417-jzhh: require's two places, and the error when neither has it.
+    fn module_tree(with: bool) -> tempfile::TempDir {
+        let d = tempfile::tempdir().unwrap();
+        if with {
+            std::fs::create_dir_all(d.path().join("lib/lua/common")).unwrap();
+            std::fs::write(
+                d.path().join("lib/lua/common/m.lua"),
+                format!("return '{}'", d.path().display()),
+            )
+            .unwrap();
+        }
+        d
+    }
+
+    #[test]
+    fn require_reads_the_module_under_the_root_first() {
+        let (root, script) = (module_tree(true), module_tree(true));
+        let src = super::resolve_module_source(
+            "common.m",
+            "lib/lua/common/m.lua",
+            root.path(),
+            Some(script.path()),
+        )
+        .unwrap();
+        assert!(src.contains(&root.path().display().to_string()), "{src}");
+    }
+
+    #[test]
+    fn require_falls_back_to_the_scripts_checkout() {
+        let (root, script) = (module_tree(false), module_tree(true));
+        let src = super::resolve_module_source(
+            "common.m",
+            "lib/lua/common/m.lua",
+            root.path(),
+            Some(script.path()),
+        )
+        .unwrap();
+        assert!(src.contains(&script.path().display().to_string()), "{src}");
+    }
+
+    #[test]
+    fn require_names_both_paths_when_neither_has_the_module() {
+        let (root, script) = (module_tree(false), module_tree(false));
+        let e = super::resolve_module_source(
+            "common.m",
+            "lib/lua/common/m.lua",
+            root.path(),
+            Some(script.path()),
+        )
+        .unwrap_err();
+        assert!(e.contains("module 'common.m' not found"), "{e}");
+        assert!(
+            e.contains(
+                &root
+                    .path()
+                    .join("lib/lua/common/m.lua")
+                    .display()
+                    .to_string()
+            ),
+            "{e}"
+        );
+        assert!(
+            e.contains(
+                &script
+                    .path()
+                    .join("lib/lua/common/m.lua")
+                    .display()
+                    .to_string()
+            ),
+            "{e}"
+        );
+    }
     use super::*;
 
     #[test]

@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: both-clippy-passes-skip-when-no-compile-time-input-changed
+    field: status
+    value: implemented
+    ts: "2026-11-27T14:06:35Z"
+    host: yoga
+events:
+  - packet_id: both-clippy-passes-skip-when-no-compile-time-input-changed
+    event: {type: implemented, ts: "2026-11-27T14:06:35Z", host: yoga, summary: "On work/2440-8893: scan-cargo-test-repo-roots.lua gains --compile-only (a source file's include*!(...) invocations only; a build.rs whole); _CARGO_CLIPPY_INPUTS (rust, manifests, toolchain + 38 scanned compile-time paths, scripts/ named file by file) is generated from it; both clippy passes ask _class_may_skip against it. Step 954's fixture gains arm 5 (the real list covers the compile-only scan) and arm 6, the coordinator's mutant (an include target dropped from the list is refused by name). test-cargo-clippy-class-gated.lua: 7 arms, 3 red on trunk (both wiring arms, the list); a scripts/lua change skips, a crates/ change, an include-target change and a missing marker run. No macro-wrapped include or include_dir!/rust-embed exists in the workspace (checked)."}

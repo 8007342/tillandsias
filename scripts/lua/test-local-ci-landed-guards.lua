@@ -12,11 +12,12 @@
 -- git-init'd scratch repo: stub guards, a stub runner (the roster itself is
 -- read by the real one), and recording stubs for log_* / archive_check_log.
 --
---   1 the roster: 18 rows of 9 fields, unique ids, two reports, every guard present in this tree
+--   1 the roster: 18 rows of 9 fields, unique ids, two reports, every runtime lua, every guard present in this tree
 --   2 a gate that exits 1 fails with its own message; a report that exits 1 still passes
 --   3 a Lua guard gets its arguments after `--`, and its output is its log
 --   4 an absent guard is a missing guard (archived skipped) naming its path
 --   5 no runner: ONE tracked failure, landed-guards, and no guard runs
+--   6 a roster row whose runtime is not lua is refused by name (2434-3cja)
 --
 -- Verdict: ok:local-ci-landed-guards:5 arms | violation:local-ci-landed-guards:<n> failed
 
@@ -50,7 +51,7 @@ for _, l in ipairs(text.lines(r.stdout or "")) do
         for cell in (l .. "\31"):gmatch("([^\31]*)\31") do f[#f + 1] = cell end
         rows[#rows + 1] = f
         if #f ~= 9 or ids[f[1]] or not (f[2] == "gate" or f[2] == "report")
-            or not (f[3] == "bash" or f[3] == "lua") then shape = false end
+            or f[3] ~= "lua" then shape = false end  -- 2434-3cja: Lua only
         ids[f[1] or ""] = true
         if f[2] == "report" then reports = reports + 1 end
         if not B and f[2] == "gate" and f[3] == "bash" then B = { id = f[1], path = f[4], log = (f[6] or ""):match("[^/]+$"), fail = f[8] } end
@@ -81,6 +82,8 @@ W="$1"; REAL="$2"; RBIN="$3"; sc="$4"; gate="$5"
 mkdir -p "$W/scripts/lua" "$W/tmp"
 (unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; git init -q "$W")
 sed "s#/tmp/#$W/tmp/#g" "$REAL/scripts/lua/local-ci-landed-guards.lua" > "$W/scripts/lua/local-ci-landed-guards.lua"
+# 2434-3cja: a planted non-lua row, which the loop must refuse by name
+[ "$sc" = bashrow ] && sed -i 's/{ id = "litmus-dead-inputs", kind = "gate", runtime = "lua",/{ id = "litmus-dead-inputs", kind = "gate", runtime = "bash",/' "$W/scripts/lua/local-ci-landed-guards.lua"
 cat > "$W/runner" <<EOF
 #!/usr/bin/env bash
 [ "\$1" = capabilities ] && { echo script; exit 0; }
@@ -153,6 +156,13 @@ if has(o, "MISSING [landed-guards] a runnable tillandsias-plan to read scripts/l
     ok("5 no runner: one tracked failure, landed-guards, and no guard runs")
 else bad("5 lines=" .. nlines .. " " .. o) end
 
+
+-- 6 (2434-3cja) a roster row whose runtime is not lua is refused by name: every row is Lua since
+-- 2412-ewmt, so the loop no longer runs anything with bash.
+o = run("bashrow")
+if has(o, "FAIL [litmus-dead-inputs] runtime-not-lua") and not has(o, "LOG litmus-dead-inputs.log: lua-guard") then
+    ok("6 a non-lua roster row is refused by name, and not run")
+else bad("6 " .. o) end
 cleanup()
-if failn == 0 then verdict.ok("local-ci-landed-guards:5 arms") end
+if failn == 0 then verdict.ok("local-ci-landed-guards:6 arms") end
 verdict.emit("violation:local-ci-landed-guards:" .. failn .. " failed", 1)

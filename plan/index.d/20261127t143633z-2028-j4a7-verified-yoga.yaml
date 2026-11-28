@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: an-agent-never-starts-a-credential-sign-in-flow-or-relays-its-code-the-operator-signs-in-themselves
+    field: status
+    value: implemented
+    ts: "2026-11-27T14:36:33Z"
+    host: yoga
+events:
+  - packet_id: an-agent-never-starts-a-credential-sign-in-flow-or-relays-its-code-the-operator-signs-in-themselves
+    event:
+      type: implemented
+      ts: "2026-11-27T14:36:33Z"
+      host: yoga
+      summary: |
+        VERIFIED on yoga 2026-11-27 (trunk c49ea1b15): every exit criterion is already met in the tree; the row was never
+        moved off ready. (1) hook: crates/tillandsias-plan/src/command_policy.rs
+        agent_run_sign_in_flows_are_denied_and_read_only_calls_are_not (16 login/logout forms incl. gh auth login and
+        refresh, backgrounded/nohup/env/timeout wrappers, refused:policy:no-credential-mutation on forge and bare
+        metal; gh auth status, --version, --diagnose allowed) and bash_policy.rs the_hook_refuses_agent_run_sign_in_flows
+        (the incident's shapes; the refusal says "OPERATOR signs in from the tray"; ordinary commands allowed):
+        `cargo test -p tillandsias-plan --lib` on both, 2 passed. (2) skills: "Credentials: the operator signs in,
+        never you (2028-j4a7)" at the Vault-wipe step of smoke-curl-install-and-test-e2e, build-install-and-smoke-test-e2e,
+        build-macos-tray, build-windows-tray. (3) methodology/philosophy.yaml agents_never_sign_in (ed929c1c0, 2026-11-07).
+        Picked as plan_next #2 for linux (coordinator 2026-11-27: Direction rows, not velocity).

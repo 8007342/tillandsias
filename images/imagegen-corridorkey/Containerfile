@@ -49,9 +49,14 @@ LABEL io.tillandsias.imagegen-corridorkey.commit="${CORRIDORKEY_SHA}" \
       io.tillandsias.imagegen-corridorkey.status="proof-of-concept"
 
 # ffmpeg: infer.py's writer (require_ffmpeg) and OpenCV's decoder.
+# 2413-yu6p: plus Lua 5.4 with the forge's lfs and lpeg, for in-image glue (operator ruling
+# 2026-11-26: Lua, then Rust, then Go in every container).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates ffmpeg libgl1 libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
+         lua5.4 lua-filesystem lua-lpeg \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf lua5.4 /usr/bin/lua \
+    && lua -e 'require "lfs"; require "lpeg"'
 
 # The commit is verified, not trusted from a branch or tag name. The .git
 # directory goes; the LICENSE and the third-party notices stay.

@@ -72,10 +72,13 @@ local ok_w, walked = pcall(fs.walk, SRC)
 if not ok_w or type(walked) ~= "table" then
     verdict.emit("blocked:forge-image-no-secrets:" .. SRC .. "-unreadable", 2)
 end
-for _, path in ipairs(walked) do
-    if path:find("%.rs$") then
-        local ok, body = pcall(fs.read, path)
-        if ok and body then
+local rs = {}
+for _, path in ipairs(walked) do if path:find("%.rs$") then rs[#rs + 1] = path end end
+local RS_SRC = require("common.listed_read").read_all("forge-image-no-secrets", rs)
+for _, path in ipairs(rs) do
+    do
+        local body = RS_SRC[path]
+        if body then
             sources = sources + 1
             if body:find("podman commit", 1, true)
                 or body:find('"podman"%s*,%s*"commit"')

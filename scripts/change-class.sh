@@ -118,14 +118,19 @@ change_class_paths() {
 # ORDER 2174-dail: TILLANDSIAS_CLASS_BASE (a commit) replaces the trunk ref as the
 # base, so a land gate diffs against the commit its DAILY FULL RUN proved, not the
 # trunk tip: what changed since the proof is what the proof does not vouch for.
+# ORDER 2429-u3rp: the land queue now passes the GATED TRUNK as the base and, in
+# TILLANDSIAS_CLASS_UNGATED_PATHS, the paths trunk took since the proof without a gate;
+# both count. A named file that cannot be read is not "nothing ungated": refuse (FULL).
     local base="${1:-${TILLANDSIAS_CLASS_BASE:-$CHANGE_CLASS_REMOTE/$CHANGE_CLASS_TRUNK}}" mb
     mb="$(git -C "$CHANGE_CLASS_ROOT" merge-base HEAD "$base" 2>/dev/null)" || return 1
     [ -n "$mb" ] || return 1
+    if [ -n "${TILLANDSIAS_CLASS_UNGATED_PATHS:-}" ] && [ ! -r "$TILLANDSIAS_CLASS_UNGATED_PATHS" ]; then return 1; fi
     {
         git -C "$CHANGE_CLASS_ROOT" diff --name-only "$mb" HEAD 2>/dev/null
         git -C "$CHANGE_CLASS_ROOT" diff --name-only HEAD 2>/dev/null
         git -C "$CHANGE_CLASS_ROOT" diff --name-only --cached 2>/dev/null
         git -C "$CHANGE_CLASS_ROOT" ls-files --others --exclude-standard 2>/dev/null
+        [ -z "${TILLANDSIAS_CLASS_UNGATED_PATHS:-}" ] || cat "$TILLANDSIAS_CLASS_UNGATED_PATHS"
     } | LC_ALL=C sort -u
 }
 
