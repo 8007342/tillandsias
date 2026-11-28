@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: script-run-helper-tests-compare-lf-and-fail-on-windows-crlf
+    order: "2451-7wm7"
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [tillandsias-plan, msys, tests]
+    estimated_hours: 1
+    owned_paths: [crates/tillandsias-plan/tests/script_run_helper.rs]
+    title: "tests/script_run_helper.rs fails 5/5 on Windows: stdout carries CRLF and the tests compare LF"
+    context: |
+      Measured on yolanda (msys) 2026-11-28 on clean trunk (origin/linux-next, detached):
+      cargo test -p tillandsias-plan --test script_run_helper fails 0/5. First panic, :29:
+      left "one\r\nA1\r\n", right "one\nA1\n". The other four fail at :69, :83 and nearby asserts on the
+      same output. Found while gating 2433-4xa2; not caused by it. Last touched by 43ddbba33 (2049-w2q6).
+      Not yet determined: whether the CRLF comes from the plan binary's stdout writer on Windows (a product
+      difference script authors would see) or only from the test's expectation. Decide that first.
+    exit_criteria:
+      - "the five tests pass on msys, and still pass on Linux"
+      - "the cause is named: either the runner normalises line endings on Windows (with a test) or the tests compare line-ending-insensitively, with the reason stated"
+    unscoreable: "fixture-row: closure is the five existing cargo tests in tests/script_run_helper.rs passing on msys; no litmus covers a cargo integration test."
+    next_action: "run one helper script under the plan binary on msys and read its raw stdout bytes, to decide product vs test."
+    provenance: filed by yolanda during 2433-4xa2 gating, on the coordinator's red-on-trunk rule.
+    related: [2433-4xa2, 2049-w2q6]
+    events:
+      - {type: filed, ts: '2026-11-28T09:00:00Z', host: yolanda, summary: script_run_helper tests red on Windows from CRLF stdout}
