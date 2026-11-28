@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: check-strict-fragments-refuses-a-duplicate-order-token-and-next-order-names-no-bare-order-beside-the-minted-one
+    field: status
+    value: completed
+    ts: "2026-11-28T08:22:43Z"
+    host: yolanda
+
+events:
+  - packet_id: check-strict-fragments-refuses-a-duplicate-order-token-and-next-order-names-no-bare-order-beside-the-minted-one
+    event:
+      type: completed
+      ts: "2026-11-28T08:22:43Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: 7f25ca0c3 land(1709); Linux land gate green incl. tests/order_token_uniqueness.rs (2 passed, red 2/2 on trunk first)
+  - packet_id: check-strict-fragments-refuses-a-duplicate-order-token-and-next-order-names-no-bare-order-beside-the-minted-one
+    event:
+      type: note
+      ts: "2026-11-28T08:22:43Z"
+      host: yolanda
+      summary: |-
+        Landed as PR 1709 (7f25ca0c3): check --strict-fragments refuses one order on two packet_ids; next-order hint cites no order.
