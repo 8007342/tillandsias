@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: plan-policy-host-kind-subcommand-prints-detected-kind-and-evidence
+    order: "2444-vn38"
+    status: ready
+    kind: gap
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [policy, forge, cli]
+    estimated_hours: 2
+    owned_files: [crates/tillandsias-plan/src/main.rs, crates/tillandsias-plan/src/command_policy.rs]
+    title: "tillandsias-plan has no read-only `policy host-kind`: the detected host kind and its evidence can only be inferred from the policy audit log"
+    context: |
+      Verifying v56.11.28.1 forge detection (2354-5biy) inside the Windows/WSL2 forge on 2026-11-28 for
+      macuahuitl-fedora: /etc/tillandsias/forge (kind=forge, root 0444) and /run/tillandsias/forge-launch
+      (kind=forge, image=localhost/tillandsias-forge:v56.11.28.1, root 0444) agree, but nothing prints what
+      read_host_kind decided. `tillandsias-plan policy host-kind` prints usage and exits 2; `policy show` and
+      `policy classify-bash --status` do not mention host_kind. The only witness was
+      .cache/metrics/command-policy-audit.jsonl ("host_kind":"forge" on all 18 entries).
+      command_policy::read_host_kind already returns HostKindReading {kind, source, disagreement}; this
+      only needs a verb that prints it.
+    exit_criteria:
+      - "`tillandsias-plan policy host-kind` exists and exits 0; today it prints usage and exits 2, so this fails on current code."
+      - "It prints the detected kind (bare-metal|forge|ci|...), the deciding source (marker, env, default, ...), the marker's state (valid, absent, or untrusted with the reason) and the launch record's kind/image, and names any evidence that was ignored or disagreed (record without marker, env override, containerenv image mismatch), one key=value per line."
+      - "It is read-only: it writes no file and appends nothing to the audit log, and it takes no flag that can change the result (no --host-kind override)."
+      - "A test over read_host_kind_from covers the valid-marker, untrusted-marker, record-without-marker and env-disagreement cases, and checks the printed lines for each."
+    unscoreable: "fixture-scored"
+    provenance: "tillandsias-forge (WSL2 forge) on request of macuahuitl-fedora, 2026-11-28"
+    related: [2354-5biy, 2429-gxck]
