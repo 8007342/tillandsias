@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-cold-first-forge-launch-after-a-full-macos-wipe-went-silent-for-300s-and-was-killed-by-the-vsock-exec-idle-timeout
+    event:
+      type: note
+      ts: "2026-11-28T08:31:57Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261128t083157z
+      host: tlatoanis-macbook-air
+      summary: |
+        RECURRED on v56.11.28.1 (macOS smoke, tlatoanis-macbook-air, 2026-11-28, operator-approved run). Cold first forge launch after a full VM wipe: tray --cloud 8007342/tillandsias --opencode ran 691 s and exited 1 with {"error":"opencode: vsock_exec: no data from guest for 300s — connection stale"}. The five image ensures ran in detached helpers that log to /root/.cache/tillandsias/image-build-*.log, not to the exec stream, so the stream went silent; forge-base was at step 3/5 (installing system packages) and no forge image existed afterwards, while vault/proxy/router/git/inference images were built 08:18-08:20Z. Vault did not unseal within 120s; agent turn never ran. Evidence (on the host): target/smoke-e2e/04-opencode.log, 04-guest-evidence.txt; report plan/issues/smoke-e2e-findings-v56.11.28.1-2026-11-28-macos-tlatoanis-macbook-air.md.
