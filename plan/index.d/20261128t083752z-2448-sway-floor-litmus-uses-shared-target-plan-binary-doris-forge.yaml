@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: floor-and-preflight-litmus-run-a-plan-binary-built-from-another-tree-when-worktrees-share-cargo-target-dir
+    order: "2448-sway"
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, floor, litmus, plan-binary]
+    estimated_hours: 2
+    title: "./build.sh --floor on a work ref that changes tillandsias-plan reds its own litmus: resolve_plan_binary picks $CARGO_TARGET_DIR/release/tillandsias-plan, which in a forge is shared by every worktree and was built from another tree"
+    context: |
+      Measured 2026-11-28 in the doris forge on work/2444-vn38 (a new `policy host-kind` verb).
+      CARGO_TARGET_DIR=/home/forge/.cache/tillandsias-project/cargo/target is set forge-wide, so every
+      git worktree shares one target dir. scripts/plan-binary-probe.sh resolved
+      $CARGO_TARGET_DIR/release/tillandsias-plan, a binary built earlier from a different tree without the
+      verb. The floor reported violation:floor:litmus:host-kind-evidence-not-from-workspace (arm 7: rc=2).
+      With TILLANDSIAS_PLAN_BIN pointed at this tree's debug build, the same floor read ok. Nothing in the
+      floor's output says which tree the binary came from, so the red reads as a defect in the change.
+    exit_criteria:
+      - "The floor (and preflight) either run a plan binary built from the tree being checked, or refuse with a named stale-binary verdict naming the binary and its source revision, never a plain litmus red."
+      - "A fixture proves it: a resolved binary whose build-id/source-revision differs from HEAD's tillandsias-plan sources is reported as stale."
+    unscoreable: "fixture-scored"
+    provenance: "doris-forge, work/2444-vn38, 2026-11-28"
+    related: [2444-vn38, 2310-eji3]
