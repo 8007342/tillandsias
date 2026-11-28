@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Claimed by doris-windows: the Windows host arm needs a Windows host to measure DXGI on.
+packets:
+- packet_id: windows-gpu-memory-model-from-dxgi
+  order: 968-mp4e
+  status: in_progress
+  kind: enhancement
+  priority: p3
+  desired_release: v0.6
+  pickup_role: windows
+  title: |
+    The Windows arm classifies a GPU's memory model from a DXGI heap, and specifically not from Win32_VideoController.AdapterRAM, which is a plausible wrong number.
+  next_action: 'Implement the DXGI arm in accel_probe.rs windows_gpus(), measure on doris (Radeon 860M), hand to the coordinator for push.'
+  events:
+  - type: claimed
+    ts: '2026-11-28T20:58:20Z'
+    host: doris
+    agent_id: doris-windows
+    summary: claimed in_progress by doris-windows on work/968-mp4e
