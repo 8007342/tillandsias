@@ -7,13 +7,13 @@
 -- run by the tillandsias-policy binary (`check-cheatsheet-tiers`), which this
 -- builds and then hands the tree to. Same verdicts, same exit codes:
 --
---   usage: ... [--quiet] [--strict]                         exit 2 (bad flag)
+--   usage: ... [--quiet] [--strict] [--require-fingerprints] exit 2 (bad flag)
 --   ERROR: cheatsheets/ directory not found at <dir>       exit 1
 --   skip:cheatsheet-tiers:cargo-absent (...)               exit 0
 --   skip:policy-binary-not-host-executable (...)           exit 0
 --   otherwise the policy binary's own output and exit status
 --
--- Usage: tillandsias-plan script run scripts/lua/check-cheatsheet-tiers.lua [-- --quiet] [-- --strict]
+-- Usage: tillandsias-plan script run scripts/lua/check-cheatsheet-tiers.lua [-- --quiet] [-- --strict] [-- --require-fingerprints]
 --
 -- COULD-NOT-RUN IS NOT A VIOLATION (1005-m6rz): a host with no toolchain gets
 -- a named skip, never a bare `cargo: command not found` under an ERROR
@@ -26,12 +26,13 @@
 -- target/debug, each bare then .exe — as plan-binary-probe.sh
 -- resolve_target_binary does; rc 126/127 (cannot execute) is not a candidate.
 
-local quiet, strict = false, false
+local quiet, strict, fingerprints = false, false, false
 for _, a in ipairs(arg or {}) do
     if a == "--quiet" then quiet = true
     elseif a == "--strict" then strict = true
+    elseif a == "--require-fingerprints" then fingerprints = true -- 588-8mh8
     else
-        log.raw("usage: check-cheatsheet-tiers [--quiet] [--strict]")
+        log.raw("usage: check-cheatsheet-tiers [--quiet] [--strict] [--require-fingerprints]")
         verdict.emit("usage:check-cheatsheet-tiers:unknown-flag:" .. a, 2)
     end
 end
@@ -83,6 +84,7 @@ end
 local argv = { POLICY, "check-cheatsheet-tiers", "--repo-root", ROOT }
 if quiet then argv[#argv + 1] = "--quiet" end
 if strict then argv[#argv + 1] = "--strict" end
+if fingerprints then argv[#argv + 1] = "--require-fingerprints" end
 local p = proc.run{ argv = argv, timeout_ms = 600000 }
 log.raw(p.stderr or "")
 for _, l in ipairs(text.lines(p.stdout or "")) do out.line(l) end
