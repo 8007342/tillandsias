@@ -436,9 +436,10 @@ pub(crate) fn kernel_reboot_line(text: &str) -> Option<String> {
     let installed = field("kernel_installed").unwrap_or_else(|| "unknown".into());
     match field("kernel_reboot_pending")?.as_str() {
         "yes" => Some(format!(
-            "Guest kernel: {installed} installed, {running} running. EXPECTED after a first \
-             provision: the OS upgrade takes effect at the VM's next cold boot. Quit the tray \
-             and launch it again to boot the new kernel."
+            "Guest kernel: {installed} installed, {running} running. Provisioning reboots \
+             once into an upgraded kernel before building anything (2449-kxrb), and this \
+             guest is still on the old one. Quit the tray and launch it again to boot the \
+             new kernel."
         )),
         "no" => Some(format!(
             "Guest kernel: {running}, the newest installed; no reboot pending."
@@ -4422,7 +4423,7 @@ mod tests {
         assert!(
             l.contains("7.3.4-200.fc44.aarch64 installed")
                 && l.contains("6.19.10-300.fc44.aarch64 running")
-                && l.contains("EXPECTED")
+                && l.contains("2449-kxrb")
                 && l.contains("launch it again"),
             "{l}"
         );

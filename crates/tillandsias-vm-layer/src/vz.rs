@@ -688,6 +688,12 @@ impl VzRuntime {
             .unwrap_or(false)
     }
 
+    /// The provision record as text, empty when absent (order 2449-kxrb reads
+    /// it when the guest stops on its own; see `guest_stopped_verdict`).
+    pub(crate) fn provision_state_text(&self) -> String {
+        std::fs::read_to_string(self.provision_state_path()).unwrap_or_default()
+    }
+
     /// Host-side directory shared into the guest so the provisioning script can
     /// report its own outcome where the host can read it (order 1055-e8ie).
     ///
@@ -1333,6 +1339,66 @@ else
   echo "tillandsias-guest-upgrade FAILED rc=$? running_kernel=$(uname -r) (continuing on release-day packages) $(date -u +%FT%TZ)" >> /var/log/tillandsias-provision-marker
 fi
 
+# Order 2449-kxrb. BOOT THE UPGRADED KERNEL BEFORE ANYTHING IS BUILT ON IT.
+# The upgrade above replaces the kernel in place, but the guest keeps running the
+# release-day one until it boots again. Everything below (podman, the headless,
+# Vault, the five image builds) then ran on the kernel just replaced. Measured on
+# the v56.11.28.1 macOS smoke (2026-11-28, n=1): the guest oopsed in the vsock
+# transport and then in the 6.19.10 btrfs extent-map shrinker during the image
+# builds, and the lane died at the 300 s idle timeout.
+#
+# So when a newer kernel is installed than the one running, this run stops HERE.
+# It records `phase reboot-requested` for the host, enables a one-shot unit that
+# re-runs this same script on the next boot, and powers off cleanly. The host
+# boots the VM once more (VzRuntime: guest_stopped_verdict), and the re-run finds
+# the kernel current and provisions normally. The re-run is safe because this
+# script is already re-runnable (1055-e8ie re-provision). No headless unit,
+# Vault or CA has started yet, so nothing has to survive the reboot (2444-ckrb).
+#
+# AT MOST ONE REBOOT. The flag says this run IS the resumed one. If the kernel
+# is still not current then (GRUB did not pick the new entry), provisioning goes
+# on, on the running kernel, and says so, rather than rebooting forever.
+TILLANDSIAS_RESUME_FLAG=/var/lib/tillandsias/provision-resume
+_kr_running="$(uname -r 2>/dev/null || true)"
+_kr_installed="$(rpm -q --last kernel-core 2>/dev/null | head -1 | cut -d' ' -f1 || true)"
+_kr_installed="${_kr_installed#kernel-core-}"
+if [ -n "$_kr_running" ] && [ -n "$_kr_installed" ] && [ "$_kr_running" != "$_kr_installed" ]; then
+  if [ -e "$TILLANDSIAS_RESUME_FLAG" ]; then
+    echo "tillandsias-provision-reboot-skipped kernel_running=$_kr_running kernel_installed=$_kr_installed (already rebooted once; provisioning on the running kernel) $(date -u +%FT%TZ)" >> /var/log/tillandsias-provision-marker
+    rm -f "$TILLANDSIAS_RESUME_FLAG"
+  else
+    mkdir -p /var/lib/tillandsias /usr/local/libexec
+    cp -- "$0" /usr/local/libexec/tillandsias-provision.sh
+    chmod 0755 /usr/local/libexec/tillandsias-provision.sh
+    : > "$TILLANDSIAS_RESUME_FLAG"
+    cat > /etc/systemd/system/tillandsias-provision-resume.service << 'RESUME_UNIT'
+[Unit]
+Description=Tillandsias: finish provisioning on the upgraded kernel (2449-kxrb)
+ConditionPathExists=/var/lib/tillandsias/provision-resume
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/libexec/tillandsias-provision.sh
+
+[Install]
+WantedBy=multi-user.target
+RESUME_UNIT
+    systemctl daemon-reload
+    systemctl enable tillandsias-provision-resume.service
+    echo "tillandsias-provision-reboot-requested kernel_running=$_kr_running kernel_installed=$_kr_installed $(date -u +%FT%TZ)" >> /var/log/tillandsias-provision-marker
+    { echo "tillandsias-provision-state v1"; echo "written_at $(date -u +%s)"; echo "written_at_iso $(date -u +%FT%TZ)"; echo "phase reboot-requested"; echo "kernel_running $_kr_running"; echo "kernel_installed $_kr_installed"; echo "kernel_reboot_pending yes"; } > "$PROV_STATE" 2>/dev/null || true
+    sync
+    systemctl poweroff --no-block
+    exit 0
+  fi
+elif [ -e "$TILLANDSIAS_RESUME_FLAG" ]; then
+  echo "tillandsias-provision-resumed kernel_running=$_kr_running $(date -u +%FT%TZ)" >> /var/log/tillandsias-provision-marker
+  rm -f "$TILLANDSIAS_RESUME_FLAG"
+fi
+
 # socat is the readiness probe's only external dependency (order 740-3k4s).
 #
 # MEASURED, and the reason this line exists: the packet recorded "socat ships
@@ -1943,6 +2009,8 @@ HEADLESS_LOG="$(journalctl -u tillandsias-headless.service -n 20 --no-pager 2>/d
 # provisioning runs once, on the first boot. The tray's quit is a cold stop, so the
 # next launch boots the new kernel. Recorded here so the host can say so instead of
 # leaving an installed/running mismatch for a smoke to find (v56.11.24.1 finding 3).
+# Since 2449-kxrb the first run reboots into the new kernel before reaching this
+# point, so `yes` here now means that one reboot did not boot the new kernel.
 KERNEL_RUNNING="$(uname -r 2>/dev/null || true)"; [ -n "$KERNEL_RUNNING" ] || KERNEL_RUNNING=unknown
 KERNEL_INSTALLED="$(rpm -q --last kernel-core 2>/dev/null | head -1 | cut -d' ' -f1 || true)"
 KERNEL_INSTALLED="${KERNEL_INSTALLED#kernel-core-}"; [ -n "$KERNEL_INSTALLED" ] || KERNEL_INSTALLED=unknown
@@ -4188,106 +4256,158 @@ impl VmRuntime for VzRuntime {
         // start → wait_ready → vsock connect has consistent perceived
         // latency in the tray.
 
-        // ── Stage 1: structural state-poll ────────────────────────────
-        let deadline = Instant::now() + timeout;
-        let backoff_ms = [250u64, 500, 1000, 2000, 4000];
-        let mut step = 0usize;
-        loop {
-            // Re-acquire the lock briefly each iteration so we don't hold
-            // it across the multi-second CFRunLoop pump (would block
-            // concurrent stop()).
-            let state = {
-                let guard = self
-                    .vm
-                    .lock()
-                    .map_err(|e| format!("vm lock poisoned: {e}"))?;
-                let vm = match guard.as_ref() {
-                    Some(h) => &h.0,
-                    None => {
-                        return Err("VzRuntime::wait_ready: VM not running (start() first)".into());
-                    }
+        // Order 2449-kxrb: as in wait_phase_ready, a guest that powers off to
+        // boot its upgraded kernel is started again once, with a fresh deadline.
+        let mut rebooted = false;
+        'boot: loop {
+            // ── Stage 1: structural state-poll ────────────────────────────
+            let deadline = Instant::now() + timeout;
+            let backoff_ms = [250u64, 500, 1000, 2000, 4000];
+            let mut step = 0usize;
+            loop {
+                // Re-acquire the lock briefly each iteration so we don't hold
+                // it across the multi-second CFRunLoop pump (would block
+                // concurrent stop()).
+                let state = {
+                    let guard = self
+                        .vm
+                        .lock()
+                        .map_err(|e| format!("vm lock poisoned: {e}"))?;
+                    let vm = match guard.as_ref() {
+                        Some(h) => &h.0,
+                        None => {
+                            return Err(
+                                "VzRuntime::wait_ready: VM not running (start() first)".into()
+                            );
+                        }
+                    };
+                    unsafe { vm.state() }.0
                 };
-                unsafe { vm.state() }.0
-            };
-            // 1 = VZVirtualMachineStateRunning → proceed to stage 2.
-            if state == 1 {
-                break;
+                // 1 = VZVirtualMachineStateRunning → proceed to stage 2.
+                if state == 1 {
+                    break;
+                }
+                // 3 = Error; abort immediately.
+                if state == 3 {
+                    return Err(format!(
+                        "VzRuntime::wait_ready: VM state Error (={state}) during stage 1"
+                    ));
+                }
+                if Instant::now() >= deadline {
+                    return Err(format!(
+                        "VzRuntime::wait_ready: stage 1 timeout after {}s; final state={state}",
+                        timeout.as_secs()
+                    ));
+                }
+                let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
+                step = step.saturating_add(1);
+                boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
             }
-            // 3 = Error; abort immediately.
-            if state == 3 {
-                return Err(format!(
-                    "VzRuntime::wait_ready: VM state Error (={state}) during stage 1"
-                ));
-            }
-            if Instant::now() >= deadline {
-                return Err(format!(
-                    "VzRuntime::wait_ready: stage 1 timeout after {}s; final state={state}",
-                    timeout.as_secs()
-                ));
-            }
-            let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
-            step = step.saturating_add(1);
-            boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
-        }
 
-        // ── Stage 2: functional vsock-probe ───────────────────────────
-        // CONTROL_WIRE_VSOCK_PORT comes from tillandsias-control-wire (the
-        // shared canonical constant). The in-VM headless's vsock_server
-        // binds (VMADDR_CID_ANY, 42420) on startup; we treat a successful
-        // host-side connect as proof the listener is up.
-        use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
-        let mut step = 0usize;
-        loop {
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            if remaining.is_zero() {
-                return Err(format!(
-                    "VzRuntime::wait_ready: stage 2 timeout after {}s (vsock listener \
+            // ── Stage 2: functional vsock-probe ───────────────────────────
+            // CONTROL_WIRE_VSOCK_PORT comes from tillandsias-control-wire (the
+            // shared canonical constant). The in-VM headless's vsock_server
+            // binds (VMADDR_CID_ANY, 42420) on startup; we treat a successful
+            // host-side connect as proof the listener is up.
+            use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+            let mut step = 0usize;
+            loop {
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    return Err(format!(
+                        "VzRuntime::wait_ready: stage 2 timeout after {}s (vsock listener \
                      never came up at port {CONTROL_WIRE_VSOCK_PORT})",
-                    timeout.as_secs()
-                ));
-            }
-            // Cap per-probe budget at 1s so we don't burn the whole
-            // remaining timeout in a single connect attempt that hits
-            // VFR-internal slow paths.
-            let probe_timeout = remaining.min(Duration::from_secs(1));
-            let connect_result = {
-                let guard = self
-                    .vm
-                    .lock()
-                    .map_err(|e| format!("vm lock poisoned: {e}"))?;
-                let vm = match guard.as_ref() {
-                    Some(h) => &h.0,
-                    None => {
-                        return Err("VzRuntime::wait_ready: VM stopped during stage 2".into());
-                    }
+                        timeout.as_secs()
+                    ));
+                }
+                if self
+                    .reboot_if_guest_requested(rebooted, "VzRuntime::wait_ready")
+                    .await?
+                {
+                    rebooted = true;
+                    continue 'boot;
+                }
+                // Cap per-probe budget at 1s so we don't burn the whole
+                // remaining timeout in a single connect attempt that hits
+                // VFR-internal slow paths.
+                let probe_timeout = remaining.min(Duration::from_secs(1));
+                let connect_result = {
+                    let guard = self
+                        .vm
+                        .lock()
+                        .map_err(|e| format!("vm lock poisoned: {e}"))?;
+                    let vm = match guard.as_ref() {
+                        Some(h) => &h.0,
+                        None => {
+                            return Err("VzRuntime::wait_ready: VM stopped during stage 2".into());
+                        }
+                    };
+                    crate::transport_macos::connect_to_vm_vsock(
+                        vm,
+                        CONTROL_WIRE_VSOCK_PORT,
+                        probe_timeout,
+                    )
                 };
-                crate::transport_macos::connect_to_vm_vsock(
-                    vm,
-                    CONTROL_WIRE_VSOCK_PORT,
-                    probe_timeout,
-                )
-            };
-            match connect_result {
-                Ok(_vsock_fd) => {
-                    // Drop immediately — the probe is success-on-connect.
-                    // Hello/HelloAck handshake is the host-shell's job.
-                    return Ok(());
-                }
-                Err(crate::transport_macos::ConnectError::NoSocketDevice)
-                | Err(crate::transport_macos::ConnectError::UnexpectedSocketDeviceKind) => {
-                    // Structural config error — no point retrying.
-                    return Err(
-                        "VzRuntime::wait_ready: VM config missing virtio-vsock device".to_string(),
-                    );
-                }
-                Err(_transient) => {
-                    // Timeout / VzError / NullConnection — keep retrying.
-                    let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
-                    step = step.saturating_add(1);
-                    boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
+                match connect_result {
+                    Ok(_vsock_fd) => {
+                        // Drop immediately — the probe is success-on-connect.
+                        // Hello/HelloAck handshake is the host-shell's job.
+                        return Ok(());
+                    }
+                    Err(crate::transport_macos::ConnectError::NoSocketDevice)
+                    | Err(crate::transport_macos::ConnectError::UnexpectedSocketDeviceKind) => {
+                        // Structural config error — no point retrying.
+                        return Err(
+                            "VzRuntime::wait_ready: VM config missing virtio-vsock device"
+                                .to_string(),
+                        );
+                    }
+                    Err(_transient) => {
+                        // Timeout / VzError / NullConnection — keep retrying.
+                        let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
+                        step = step.saturating_add(1);
+                        boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
+                    }
                 }
             }
         }
+    }
+}
+
+/// Order 2449-kxrb. What a ready-wait does when the guest STOPPED on its own.
+///
+/// The provisioning script powers the guest off once, on purpose, when the OS
+/// upgrade installed a newer kernel than the one running, so that nothing is
+/// built on the replaced kernel (v56.11.28.1 macOS smoke, n=1: two kernel oopses
+/// during the image builds). It records `phase reboot-requested` first. That
+/// stop is answered by booting the VM again, once. Any other stop while waiting,
+/// or a second request in one wait, is an error that names its case.
+#[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) enum GuestStopped {
+    BootUpgradedKernel,
+    Fail(String),
+}
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) fn guest_stopped_verdict(
+    provision_state: &str,
+    already_rebooted: bool,
+    who: &str,
+) -> GuestStopped {
+    let requested = provision_state
+        .lines()
+        .any(|l| l.trim() == "phase reboot-requested");
+    match (requested, already_rebooted) {
+        (true, false) => GuestStopped::BootUpgradedKernel,
+        (true, true) => GuestStopped::Fail(format!(
+            "{who}: the guest asked for a second kernel reboot in one boot sequence \
+             (2449-kxrb allows one); not rebooting again"
+        )),
+        (false, _) => GuestStopped::Fail(format!(
+            "{who}: the guest powered off while the host waited for it, without \
+             requesting a kernel reboot"
+        )),
     }
 }
 
@@ -4299,6 +4419,40 @@ impl VmRuntime for VzRuntime {
 /// @trace plan/issues/osx-next-work-queue-2026-05-25.md#macos-tray/wait-ready-phase-signal
 #[cfg(target_os = "macos")]
 impl VzRuntime {
+    /// The VZ state now, `None` when no VM handle is held. 0 is stopped.
+    fn vm_state_now(&self) -> Result<Option<isize>, VmError> {
+        let guard = self
+            .vm
+            .lock()
+            .map_err(|e| format!("vm lock poisoned: {e}"))?;
+        Ok(guard.as_ref().map(|h| unsafe { h.0.state() }.0))
+    }
+
+    /// Order 2449-kxrb: when the guest stopped on its own, boot it again if it
+    /// asked for that (`Ok(true)`), else return the named error. `Ok(false)`
+    /// means it has not stopped.
+    async fn reboot_if_guest_requested(
+        &self,
+        already_rebooted: bool,
+        who: &str,
+    ) -> Result<bool, VmError> {
+        if self.vm_state_now()? != Some(0) {
+            return Ok(false);
+        }
+        match guest_stopped_verdict(&self.provision_state_text(), already_rebooted, who) {
+            GuestStopped::BootUpgradedKernel => {
+                eprintln!(
+                    "[tillandsias-vz] the guest powered off to boot its upgraded kernel \
+                     before building anything (2449-kxrb); starting it again"
+                );
+                VmRuntime::stop(self, Duration::from_secs(10)).await?;
+                VmRuntime::start(self).await?;
+                Ok(true)
+            }
+            GuestStopped::Fail(msg) => Err(msg),
+        }
+    }
+
     /// Wait until the in-VM headless reports `VmPhase::Ready` (podman up,
     /// enclave network live) via a Hello/HelloAck + `VmStatusRequest` round-trip.
     ///
@@ -4339,73 +4493,87 @@ impl VzRuntime {
         use std::time::Instant;
         use tillandsias_control_wire::VmPhase;
 
-        // Stage 1: wait until VZ kernel is Running (same as wait_ready stage 1).
-        let deadline = Instant::now() + timeout;
-        let backoff_ms = [250u64, 500, 1000, 2000, 4000];
-        let mut step = 0usize;
-        loop {
-            let state = {
-                let guard = self
-                    .vm
-                    .lock()
-                    .map_err(|e| format!("vm lock poisoned: {e}"))?;
-                let vm = match guard.as_ref() {
-                    Some(h) => &h.0,
-                    None => {
-                        return Err(
-                            "VzRuntime::wait_phase_ready: VM not running (start() first)".into(),
-                        );
-                    }
+        // Order 2449-kxrb: a guest that powers off to boot its upgraded kernel
+        // is started again ONCE, and the wait begins again with a fresh
+        // deadline (the first boot spent its window upgrading the OS).
+        let mut rebooted = false;
+        'boot: loop {
+            // Stage 1: wait until VZ kernel is Running (same as wait_ready stage 1).
+            let deadline = Instant::now() + timeout;
+            let backoff_ms = [250u64, 500, 1000, 2000, 4000];
+            let mut step = 0usize;
+            loop {
+                let state = {
+                    let guard = self
+                        .vm
+                        .lock()
+                        .map_err(|e| format!("vm lock poisoned: {e}"))?;
+                    let vm = match guard.as_ref() {
+                        Some(h) => &h.0,
+                        None => {
+                            return Err(
+                                "VzRuntime::wait_phase_ready: VM not running (start() first)"
+                                    .into(),
+                            );
+                        }
+                    };
+                    unsafe { vm.state() }.0
                 };
-                unsafe { vm.state() }.0
-            };
-            if state == 1 {
-                break;
+                if state == 1 {
+                    break;
+                }
+                if state == 3 {
+                    return Err(format!(
+                        "VzRuntime::wait_phase_ready: VM state Error (={state})"
+                    ));
+                }
+                if Instant::now() >= deadline {
+                    return Err(format!(
+                        "VzRuntime::wait_phase_ready: stage 1 timeout after {}s; state={state}",
+                        timeout.as_secs()
+                    ));
+                }
+                let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
+                step = step.saturating_add(1);
+                boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
             }
-            if state == 3 {
-                return Err(format!(
-                    "VzRuntime::wait_phase_ready: VM state Error (={state})"
-                ));
-            }
-            if Instant::now() >= deadline {
-                return Err(format!(
-                    "VzRuntime::wait_phase_ready: stage 1 timeout after {}s; state={state}",
-                    timeout.as_secs()
-                ));
-            }
-            let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
-            step = step.saturating_add(1);
-            boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
-        }
 
-        // Stage 2: probe VmPhase over the control wire until Ready.
-        // Connect → Hello/HelloAck → VmStatusRequest → VmStatusReply.
-        // Retry on Starting/Provisioning (headless up but enclave not yet live).
-        step = 0;
-        loop {
-            if Instant::now() >= deadline {
-                return Err(format!(
-                    "VzRuntime::wait_phase_ready: timeout after {}s (phase never reached Ready)",
-                    timeout.as_secs()
-                ));
-            }
-            match probe_once(Duration::from_secs(2)).await {
-                Ok(VmPhase::Ready) => return Ok(()),
-                Ok(VmPhase::Failed) => {
-                    return Err("VzRuntime::wait_phase_ready: VM phase is Failed".to_string());
+            // Stage 2: probe VmPhase over the control wire until Ready.
+            // Connect → Hello/HelloAck → VmStatusRequest → VmStatusReply.
+            // Retry on Starting/Provisioning (headless up but enclave not yet live).
+            step = 0;
+            loop {
+                if Instant::now() >= deadline {
+                    return Err(format!(
+                        "VzRuntime::wait_phase_ready: timeout after {}s (phase never reached Ready)",
+                        timeout.as_secs()
+                    ));
                 }
-                Ok(phase) => {
-                    // Starting / Provisioning / Draining / Stopping — keep waiting.
-                    let _ = phase; // phase is Debug but we don't want the dep here
-                    let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
-                    step = step.saturating_add(1);
-                    boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
+                if self
+                    .reboot_if_guest_requested(rebooted, "VzRuntime::wait_phase_ready")
+                    .await?
+                {
+                    rebooted = true;
+                    continue 'boot;
                 }
-                Err(_probe_err) => {
-                    // Wire error (headless just started, framing not ready) — retry.
-                    let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
-                    step = step.saturating_add(1);
-                    boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
+                match probe_once(Duration::from_secs(2)).await {
+                    Ok(VmPhase::Ready) => return Ok(()),
+                    Ok(VmPhase::Failed) => {
+                        return Err("VzRuntime::wait_phase_ready: VM phase is Failed".to_string());
+                    }
+                    Ok(phase) => {
+                        // Starting / Provisioning / Draining / Stopping — keep waiting.
+                        let _ = phase; // phase is Debug but we don't want the dep here
+                        let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
+                        step = step.saturating_add(1);
+                        boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
+                    }
+                    Err(_probe_err) => {
+                        // Wire error (headless just started, framing not ready) — retry.
+                        let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
+                        step = step.saturating_add(1);
+                        boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
+                    }
                 }
             }
         }
@@ -5467,6 +5635,195 @@ mod tests {
             m.contains("kernel_reboot_pending=no") && s.contains("kernel_reboot_pending no\n"),
             "{m}{s}"
         );
+    }
+
+    /// 2449-kxrb (v56.11.28.1 macOS smoke, n=1): with a newer kernel installed
+    /// than the one running, the first boot must power off BEFORE anything is
+    /// installed or started on the replaced kernel. Pre-fix: red, the built
+    /// script has no poweroff at all, so the headless starts and the image
+    /// builds run on the old kernel.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_pending_kernel_reboots_before_podman_or_the_headless_start() {
+        let script = provision_user_data("off");
+        let poweroff = script
+            .find("systemctl poweroff --no-block")
+            .expect("pre-fix: provisioning never reboots into the upgraded kernel");
+        let upgrade = script
+            .find("if dnf -y upgrade --refresh; then")
+            .expect("the 1925-gupg upgrade");
+        let podman = script
+            .find("dnf install -y podman socat")
+            .expect("the podman install");
+        let headless = script
+            .find("systemctl start tillandsias-headless-fetch.service tillandsias-headless.service")
+            .expect("the headless start");
+        assert!(
+            upgrade < poweroff && poweroff < podman && poweroff < headless,
+            "the reboot must sit between the OS upgrade and the first install or start: \
+             upgrade={upgrade} poweroff={poweroff} podman={podman} headless={headless}"
+        );
+    }
+
+    /// 2449-kxrb, behavioural: the reboot block cut from the BUILT script is
+    /// run with rpm, uname and systemctl faked and its paths moved into a
+    /// tempdir. Four cases: a pending kernel reboots once; a resumed run whose
+    /// kernel is still old goes on (at most one reboot); a resumed run on the
+    /// new kernel clears its flag and goes on; a current kernel does nothing.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_kernel_reboot_block_reboots_once_and_resumes() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let script = provision_user_data("off");
+        let start = script
+            .find("TILLANDSIAS_RESUME_FLAG=/var/lib/tillandsias/provision-resume")
+            .expect("the reboot block");
+        let resumed = start
+            + script[start..]
+                .find("tillandsias-provision-resumed")
+                .expect("its resumed arm");
+        let end = resumed + script[resumed..].find("\nfi\n").expect("its fi") + "\nfi\n".len();
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        let marker = root.join("marker");
+        let state = root.join("provision.state");
+        let calls = root.join("systemctl.calls");
+        let block = script[start..end]
+            .replace(
+                "/var/log/tillandsias-provision-marker",
+                marker.to_str().unwrap(),
+            )
+            .replace("/var/lib/tillandsias", root.join("var").to_str().unwrap())
+            .replace("/usr/local/libexec", root.join("libexec").to_str().unwrap())
+            .replace("/etc/systemd/system", root.join("etc").to_str().unwrap());
+        std::fs::create_dir_all(root.join("etc")).unwrap();
+        let bin = root.join("bin");
+        std::fs::create_dir(&bin).unwrap();
+        let fake = |name: &str, body: &str| {
+            let p = bin.join(name);
+            std::fs::write(&p, format!("#!/bin/bash\n{body}\n")).unwrap();
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        };
+        fake("uname", "echo 6.19.10-300.fc44.aarch64");
+        fake(
+            "systemctl",
+            &format!("echo \"$*\" >> '{}'", calls.display()),
+        );
+        fake("sync", "true");
+        let self_script = root.join("part-001");
+        std::fs::write(&self_script, "#!/bin/bash\necho provisioning\n").unwrap();
+        let flag = root.join("var").join("provision-resume");
+        let run = |installed: &str, flag_present: bool| -> (String, String, String, String) {
+            fake(
+                "rpm",
+                &format!("echo kernel-core-{installed} Fri 28 Nov 2026"),
+            );
+            for p in [&marker, &state, &calls] {
+                let _ = std::fs::remove_file(p);
+            }
+            let _ = std::fs::remove_file(&flag);
+            if flag_present {
+                std::fs::create_dir_all(flag.parent().unwrap()).unwrap();
+                std::fs::write(&flag, "").unwrap();
+            }
+            let out = std::process::Command::new("/bin/bash")
+                .arg("-c")
+                .arg(format!(
+                    "set -euo pipefail\ntrap 'echo TRAPPED; exit 99' ERR\nPROV_STATE='{}'\n{block}echo CONTINUED\n",
+                    state.display()
+                ))
+                .arg(&self_script)
+                .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+                .output()
+                .expect("bash");
+            let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+            assert!(
+                out.status.success() && !stdout.contains("TRAPPED"),
+                "installed={installed} flag={flag_present}: {stdout}{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            let read = |p: &std::path::Path| std::fs::read_to_string(p).unwrap_or_default();
+            (stdout, read(&marker), read(&state), read(&calls))
+        };
+
+        // 1. Pending, first run: reboot requested, resume unit enabled, stop here.
+        let (out, m, s, c) = run("7.3.6-200.fc44.aarch64", false);
+        assert!(
+            !out.contains("CONTINUED"),
+            "provisioning went on past a pending reboot: {out}"
+        );
+        assert!(
+            m.contains("tillandsias-provision-reboot-requested kernel_running=6.19.10-300.fc44.aarch64 kernel_installed=7.3.6-200.fc44.aarch64"),
+            "{m}"
+        );
+        assert!(
+            s.contains("phase reboot-requested\n") && s.contains("kernel_reboot_pending yes\n"),
+            "{s}"
+        );
+        assert!(
+            c.contains("enable tillandsias-provision-resume.service")
+                && c.contains("poweroff --no-block"),
+            "{c}"
+        );
+        assert!(flag.exists(), "the resume flag was not written");
+        assert!(
+            root.join("libexec")
+                .join("tillandsias-provision.sh")
+                .exists()
+                && root
+                    .join("etc")
+                    .join("tillandsias-provision-resume.service")
+                    .exists(),
+            "the resume script or unit is missing"
+        );
+
+        // 2. Resumed, kernel STILL old: no second reboot, provisioning goes on.
+        let (out, m, _, c) = run("7.3.6-200.fc44.aarch64", true);
+        assert!(out.contains("CONTINUED"), "{out}");
+        assert!(m.contains("tillandsias-provision-reboot-skipped"), "{m}");
+        assert!(!c.contains("poweroff"), "rebooted a second time: {c}");
+        assert!(!flag.exists(), "the resume flag survived");
+
+        // 3. Resumed on the new kernel: say so, clear the flag, go on.
+        let (out, m, _, c) = run("6.19.10-300.fc44.aarch64", true);
+        assert!(
+            out.contains("CONTINUED") && m.contains("tillandsias-provision-resumed"),
+            "{out}{m}"
+        );
+        assert!(c.is_empty(), "{c}");
+        assert!(!flag.exists(), "the resume flag survived");
+
+        // 4. CONTROL: a current kernel on a first run changes nothing.
+        let (out, m, s, c) = run("6.19.10-300.fc44.aarch64", false);
+        assert!(out.contains("CONTINUED"), "{out}");
+        assert!(m.is_empty() && s.is_empty() && c.is_empty(), "{m}{s}{c}");
+    }
+
+    /// 2449-kxrb, host side: a guest stop answers by booting again only after
+    /// a recorded reboot request, and only once.
+    #[test]
+    fn a_guest_stop_reboots_only_on_a_recorded_request_and_only_once() {
+        use super::{GuestStopped, guest_stopped_verdict};
+        let asked =
+            "tillandsias-provision-state v1\nphase reboot-requested\nkernel_reboot_pending yes\n";
+        assert_eq!(
+            guest_stopped_verdict(asked, false, "w"),
+            GuestStopped::BootUpgradedKernel
+        );
+        match guest_stopped_verdict(asked, true, "w") {
+            GuestStopped::Fail(m) => assert!(m.contains("second kernel reboot"), "{m}"),
+            v => panic!("a second request rebooted again: {v:?}"),
+        }
+        for not_asked in [
+            "",
+            "tillandsias-provision-state v1\nphase start\n",
+            "phase complete\n",
+        ] {
+            match guest_stopped_verdict(not_asked, false, "w") {
+                GuestStopped::Fail(m) => assert!(m.contains("without requesting"), "{m}"),
+                v => panic!("rebooted without a request on {not_asked:?}: {v:?}"),
+            }
+        }
     }
 
     /// 2029-b87w: kernel fault reports must reach hvc0 without journald.
