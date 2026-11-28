@@ -1388,6 +1388,11 @@ WantedBy=multi-user.target
 RESUME_UNIT
     systemctl daemon-reload
     systemctl enable tillandsias-provision-resume.service
+    # The kernel's own console on hvc0 (1642-cc54, below) takes effect at the
+    # next boot. Set it now, so the boot that builds the images reports a
+    # kernel oops in console.log (2450-gkop). The 2026-11-28 oops reached no
+    # host-readable log because that boot had no kernel console.
+    grubby --update-kernel=ALL --args="console=hvc0" || true
     echo "tillandsias-provision-reboot-requested kernel_running=$_kr_running kernel_installed=$_kr_installed $(date -u +%FT%TZ)" >> /var/log/tillandsias-provision-marker
     { echo "tillandsias-provision-state v1"; echo "written_at $(date -u +%s)"; echo "written_at_iso $(date -u +%FT%TZ)"; echo "phase reboot-requested"; echo "kernel_running $_kr_running"; echo "kernel_installed $_kr_installed"; echo "kernel_reboot_pending yes"; } > "$PROV_STATE" 2>/dev/null || true
     sync
@@ -5710,6 +5715,10 @@ mod tests {
             &format!("echo \"$*\" >> '{}'", calls.display()),
         );
         fake("sync", "true");
+        fake(
+            "grubby",
+            &format!("echo \"grubby $*\" >> '{}'", calls.display()),
+        );
         let self_script = root.join("part-001");
         std::fs::write(&self_script, "#!/bin/bash\necho provisioning\n").unwrap();
         let flag = root.join("var").join("provision-resume");
@@ -5764,6 +5773,12 @@ mod tests {
             c.contains("enable tillandsias-provision-resume.service")
                 && c.contains("poweroff --no-block"),
             "{c}"
+        );
+        let grubby = c.find("grubby ").unwrap_or(usize::MAX);
+        let poweroff = c.find("poweroff").unwrap_or(0);
+        assert!(
+            grubby < poweroff && c.contains("--args=console=hvc0"),
+            "the kernel console for the building boot must be set before the poweroff: {c}"
         );
         assert!(flag.exists(), "the resume flag was not written");
         assert!(
