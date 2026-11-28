@@ -6012,7 +6012,36 @@ fn mcp_tool_alias(name: &str) -> Option<String> {
         .then_some(candidate)
 }
 
+/// ORDER 2451-7wm7. On Windows the C runtime opens stdout and stderr in TEXT
+/// mode, which rewrites every "\n" as "\r\n". Lua's `print`, `io.write` and
+/// `io.stdout` all write through C stdio, while this binary's own lines go
+/// through Rust's std::io, which writes bytes as given. So one stream carried
+/// both endings: measured on yolanda (msys) 2026-11-28, a decider's stdout was
+/// `x\r\n` (Lua print) then `ok:...\n` (verdict), and a consumer comparing
+/// lines (tests/script_run_helper.rs, 0/5 on Windows) saw a stray "\r". Binary
+/// mode makes the Lua side match. The CRT is linked statically
+/// (.cargo/config.toml +crt-static), so the vendored Lua shares this CRT's
+/// stdio and the mode set here is the mode Lua writes with. Stdin is left in
+/// text mode: io.lines() over Git's stdin relies on its "\r\n" folding.
+#[cfg(windows)]
+fn lua_stdio_binary_mode() {
+    unsafe extern "C" {
+        fn _setmode(fd: i32, mode: i32) -> i32;
+    }
+    const O_BINARY: i32 = 0x8000;
+    for fd in [1, 2] {
+        // SAFETY: _setmode takes a CRT file descriptor and a mode flag; fds 1
+        // and 2 always exist in a console or piped process. A -1 return (no
+        // such fd) leaves the stream as it was, which is the old behaviour.
+        unsafe {
+            _setmode(fd, O_BINARY);
+        }
+    }
+}
+
 fn main() {
+    #[cfg(windows)]
+    lua_stdio_binary_mode();
     let start_time = std::time::Instant::now();
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let mut index = PathBuf::from("plan/index.yaml");
