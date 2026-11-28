@@ -335,6 +335,35 @@ while read -r _l _ls _remote_ref _rs; do
                 _all_salvage=0; _all_marker=0; _all_work=0
             fi
             ;;
+        refs/attest/smoke/*)
+            # SMOKE ATTESTATION REFS (order 2443-r9sm). Written by
+            # scripts/lua/attest-smoke.lua --push after a published-release smoke:
+            # a commit whose tree is DIGESTS ONLY (2299-atdg), read back from
+            # origin by smoke-record.lua for check-promote-gate.lua. It moves no
+            # branch, so the tree stamp measures the wrong subject, and until this
+            # arm the hook refused every one: origin held zero on 2026-11-28 and no
+            # tag could pass the promote gate. Exempt ONLY the proven shape:
+            #   name   refs/attest/smoke/<darwin|msys|linux>/<40 hex>
+            #   tree   exactly SHA256SUMS, regime.txt, verdict.txt, all blobs
+            #   update a creation, or a fast-forward of what origin holds
+            # Anything else under this name (a fourth file, a subtree, a deletion,
+            # a rewrite) takes the gate like any branch.
+            _sm_ok=1
+            [[ "$_remote_ref" =~ ^refs/attest/smoke/(darwin|msys|linux)/[0-9a-f]{40}$ ]] || _sm_ok=0
+            [[ "$_ls" =~ ^0+$ ]] && _sm_ok=0
+            if [[ "$_sm_ok" -eq 1 ]]; then
+                _sm_tree="$(git ls-tree "$_ls" 2>/dev/null | awk '{ print $2 " " $4 }' | LC_ALL=C sort | tr '\n' ';')"
+                [[ "$_sm_tree" == "blob SHA256SUMS;blob regime.txt;blob verdict.txt;" ]] || _sm_ok=0
+            fi
+            if [[ "$_sm_ok" -eq 1 && ! "$_rs" =~ ^0+$ ]]; then
+                git merge-base --is-ancestor "$_rs" "$_ls" 2>/dev/null || _sm_ok=0
+            fi
+            if [[ "$_sm_ok" -eq 1 ]]; then
+                _all_salvage=0; _all_work=0
+            else
+                _all_salvage=0; _all_marker=0; _all_work=0
+            fi
+            ;;
         refs/heads/salvage/*)
             _all_marker=0; _all_work=0   # a salvage ref is not the work lane (1315-4a7j regression caught by litmus:salvage-net-roundtrip, 2026-09-21)
             # DELETION PROTECTION (874-w2gc). The exemption used to wave
@@ -366,7 +395,7 @@ if [[ "$_any_ref" -eq 1 && "$_all_work" -eq 1 ]]; then
     WORK_REF_LANE=1
 fi
 if [[ "$_any_ref" -eq 1 && "$_all_marker" -eq 1 ]]; then
-    echo "${GRN}✓ local gate: coordination marker ref (refs/tillandsias/*, refs/attest/daily-*/<epoch>; 1176-9vqn, 2209-dfix) or self-verifying native-lint attestation (refs/attest/native-lint/, 2112-nlrf) — exempt by design; it is not a branch and moves none${RST}" >&2
+    echo "${GRN}✓ local gate: coordination marker ref (refs/tillandsias/*, refs/attest/daily-*/<epoch>; 1176-9vqn, 2209-dfix) or self-verifying attestation (refs/attest/native-lint/, 2112-nlrf; refs/attest/smoke/, 2443-r9sm) — exempt by design; it is not a branch and moves none${RST}" >&2
     exit 0
 fi
 if [[ "$_any_ref" -eq 1 && "$_all_salvage" -eq 1 ]]; then

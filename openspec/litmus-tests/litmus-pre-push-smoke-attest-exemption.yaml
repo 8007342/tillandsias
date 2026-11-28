@@ -1,0 +1,34 @@
+# @trace spec:ci-release
+# @trace order:2443-r9sm
+#
+# The pre-push hook lets a smoke attestation ref (refs/attest/smoke/<platform>/<sha>) through
+# without a gate stamp only in its proven shape: a tree of exactly SHA256SUMS, regime.txt and
+# verdict.txt, created or fast-forwarded. Red with a mutant that drops the fast-forward check
+# (arm 5) or the tree check (arms 3-4).
+name: litmus:pre-push-smoke-attest-exemption
+spec: ci-release
+phase: pre-build
+description: the pre-push hook exempts a shape-checked smoke attestation ref and gates every other shape under that name
+severity: high
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary); bash; git; a scratch repository under target/plan-scratch; no network, no podman
+
+critical_path:
+  - step: "trunk premise; create and fast-forward exempt; extra file, subtree, rewrite, deletion, bad name and a mixed push gated"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-pre-push-smoke-attest-exemption.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:pre-push-smoke-attest-exemption:9 arms"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "nine arms"
+  log_fields:
+    spec: "ci-release"
+    test: "pre-push-smoke-attest-exemption"
+
+rollback:
+  on_failure: "read the FAIL lines; the arm is refs/attest/smoke/*) in scripts/hooks/pre-push-local-gate.sh"
+  command: "grep -n '2443-r9sm' scripts/hooks/pre-push-local-gate.sh"
