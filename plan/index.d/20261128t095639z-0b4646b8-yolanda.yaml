@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: script-run-helper-tests-compare-lf-and-fail-on-windows-crlf
+    field: status
+    value: in_progress
+    ts: "2026-11-28T09:56:39Z"
+    host: yolanda
+
+events:
+  - packet_id: script-run-helper-tests-compare-lf-and-fail-on-windows-crlf
+    event:
+      type: note
+      ts: "2026-11-28T09:56:39Z"
+      host: yolanda
+      summary: |-
+        claimed by yolanda at coordinator direction; work ref work/2451-7wm7
