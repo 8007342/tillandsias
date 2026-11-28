@@ -1,0 +1,14 @@
+# Gate step 2453-ap8y — data, not code.
+#
+# The Lua runner's fs verbs accept a path under the repo in both spellings a
+# Windows host hands a script, C:/... and msys /c/..., and still refuse an msys
+# path outside the repo. Windows-only by construction: elsewhere the fixture
+# names a skip, so this step's evidence is its msys regime.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the Lua fs verbs accept msys and native paths inside the repo (2453-ap8y)"
+STEP_LUA="scripts/lua/test-fs-msys-path-scope.lua"
+STEP_ERROR="a Lua fs verb refuses an in-repo msys or native Windows path again (2453-ap8y) — see the FAIL lines above"
+STEP_OK="Lua fs verbs accept msys and native in-repo paths"
+STEP_SECOND_REGIME="yolanda 2026-11-28 msys ok:fs-msys-path-scope:6 arms (red 4/6 on the trunk binary first)"
+STEP_READS="scripts/lua/test-fs-msys-path-scope.lua crates/tillandsias-plan/src/lua_predicate.rs crates/tillandsias-plan/src/script_run.rs lib/lua/common/fixture.lua"

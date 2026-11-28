@@ -299,8 +299,14 @@ pub fn parse_header(src: &str) -> Result<Header, crate::child_env::EnvRefusal> {
 }
 
 /// The name a verdict-less script is refused under: the file stem.
+///
+/// ORDER 2451-7wm7. On Windows a path may separate with `\` (a native temp dir,
+/// `C:\Users\...\helper.lua`), and splitting on `/` alone named the verdict
+/// `refused:no-verdict:C:\Users\...\helper`. A backslash is a separator there
+/// only: on unix it is a legal filename character, so it is kept.
 pub fn script_name(path: &str) -> String {
-    let base = path.rsplit('/').next().unwrap_or(path);
+    let is_sep = |c: char| c == '/' || (cfg!(windows) && c == '\\');
+    let base = path.rsplit(is_sep).next().unwrap_or(path);
     base.strip_suffix(".lua").unwrap_or(base).to_string()
 }
 
@@ -732,8 +738,10 @@ fn register(
                 fs_t.set(
                     "read",
                     lua.create_function(move |_, p: String| {
-                        if std::path::Path::new(&p).is_absolute()
-                            && let Some(c) = within(&p)
+                        // 2453-ap8y: msys /c/... is absolute here too.
+                        let host = crate::lua_predicate::host_path_str(&p).into_owned();
+                        if std::path::Path::new(&host).is_absolute()
+                            && let Some(c) = within(&host)
                         {
                             return std::fs::read_to_string(&c)
                                 .map_err(|e| LuaError::RuntimeError(format!("fs.read: {p}: {e}")));
@@ -746,14 +754,21 @@ fn register(
             fs_t.set(
                 "walk",
                 lua.create_function(move |lua, (dir, opts): (String, Option<LuaTable>)| {
-                    if std::path::Path::new(&dir).is_absolute() {
+                    // 2453-ap8y: msys /c/... is an absolute path on Windows too.
+                    let host = crate::lua_predicate::host_path_str(&dir).into_owned();
+                    if std::path::Path::new(&host).is_absolute() {
                         // An absolute path is walkable when its realpath is inside
                         // the repo (a fixture's target/plan-scratch) or inside a
                         // declared read root; anywhere else is refused.
-                        let in_repo = crate::lua_predicate::find_repo_root()
-                            .ok()
-                            .and_then(|r| std::fs::canonicalize(&dir).ok().filter(|c| c.starts_with(&r)));
-                        let Some(base) = in_repo.or_else(|| within(&dir)) else {
+                        // strip_verbatim (2453-ap8y): Windows canonicalize answers
+                        // \\?\C:\..., which never starts_with the C:\ root.
+                        let in_repo = crate::lua_predicate::find_repo_root().ok().and_then(|r| {
+                            std::fs::canonicalize(&host)
+                                .ok()
+                                .map(crate::lua_predicate::strip_verbatim)
+                                .filter(|c| c.starts_with(&r))
+                        });
+                        let Some(base) = in_repo.or_else(|| within(&host)) else {
                             return Err(LuaError::RuntimeError(format!(
                                 "fs.walk: '{dir}' is outside the repo and every declared read root (-- @read-env)"
                             )));
@@ -1582,6 +1597,23 @@ pub fn cli_classify(args: &[String]) -> ! {
 
 #[cfg(test)]
 mod tests {
+
+    /// ORDER 2451-7wm7. The verdict name is the file stem on every platform;
+    /// a backslash separates on Windows only.
+    #[test]
+    fn the_script_name_is_the_stem_for_either_separator() {
+        assert_eq!(super::script_name("scripts/lua/test-x.lua"), "test-x");
+        assert_eq!(super::script_name("helper.lua"), "helper");
+        let back = super::script_name(r"C:\Users\u\.tmpA\helper.lua");
+        if cfg!(windows) {
+            assert_eq!(back, "helper");
+        } else {
+            assert_eq!(
+                back, r"C:\Users\u\.tmpA\helper",
+                "a backslash is a filename char on unix"
+            );
+        }
+    }
 
     // ORDER 2417-jzhh: require's two places, and the error when neither has it.
     fn module_tree(with: bool) -> tempfile::TempDir {

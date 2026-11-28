@@ -311,6 +311,19 @@ mod at_rest {
         // the caller refuses by name (refuse_mint_for_unavailable_key) instead
         // of minting over it.
         if is_encrypted(&bytes) && pass().is_some() && decrypt(persisted).is_err() {
+            // 2444-ckrb: unless the key provably predates this boot of a
+            // per-boot passphrase, in which case nobody holds its passphrase.
+            if key_predates_this_boot(persisted, &boot_view()) {
+                eprintln!(
+                    "[tillandsias] warn:ca-key-prior-boot: {} was encrypted under a previous \
+                     boot's passphrase, which no longer exists; it is discarded and the CA \
+                     minted again (2444-ckrb)",
+                    persisted.display()
+                );
+                super::scrub(persisted);
+                let _ = std::fs::remove_file(stamp_path(persisted));
+                return Materialized::Gone;
+            }
             eprintln!(
                 "[tillandsias] warn:ca-key-pass-mismatch: {} does not decrypt under this \
                  process's passphrase; the key is kept, not re-minted (2096-e3te)",
@@ -319,6 +332,97 @@ mod at_rest {
             return Materialized::Unavailable;
         }
         Materialized::Inactive
+    }
+
+    /// 2444-ckrb: what this process knows about its boot.
+    #[derive(Debug, Clone)]
+    pub(super) struct BootView {
+        /// The passphrase store lives exactly one boot (a guest's tmpfs pass
+        /// file). False on a keyring host, where a new boot proves nothing.
+        pub(super) per_boot_pass: bool,
+        /// /proc/sys/kernel/random/boot_id.
+        pub(super) boot_id: Option<String>,
+        /// When this boot began (/proc/stat btime), for unstamped keys.
+        pub(super) btime: Option<u64>,
+    }
+
+    #[cfg(test)]
+    pub(super) static TEST_BOOT: Mutex<Option<BootView>> = Mutex::new(None);
+
+    fn boot_view() -> BootView {
+        #[cfg(test)]
+        if let Some(v) = TEST_BOOT.lock().unwrap_or_else(|p| p.into_inner()).clone() {
+            return v;
+        }
+        #[cfg(test)]
+        let per_boot_pass = false;
+        #[cfg(all(unix, feature = "vault", not(test)))]
+        let per_boot_pass = crate::vault_bootstrap::is_running_in_vm();
+        #[cfg(all(not(test), not(all(unix, feature = "vault"))))]
+        let per_boot_pass = false;
+        BootView {
+            per_boot_pass,
+            boot_id: std::fs::read_to_string("/proc/sys/kernel/random/boot_id")
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
+            btime: std::fs::read_to_string("/proc/stat").ok().and_then(|s| {
+                s.lines()
+                    .find_map(|l| l.strip_prefix("btime "))
+                    .and_then(|v| v.trim().parse().ok())
+            }),
+        }
+    }
+
+    /// The durable stamp beside a key: the boot whose passphrase encrypted it.
+    pub(super) fn stamp_path(persisted: &Path) -> std::path::PathBuf {
+        let mut name = persisted.file_name().unwrap_or_default().to_os_string();
+        name.push(".boot");
+        persisted.with_file_name(name)
+    }
+
+    /// Proof, not a guess: only a per-boot passphrase store, and only a key
+    /// stamped by another boot (or, unstamped, last written before this boot
+    /// began). Anything uncertain answers false, so 2096-e3te's keep-and-
+    /// refuse path still holds.
+    pub(super) fn key_predates_this_boot(persisted: &Path, view: &BootView) -> bool {
+        if !view.per_boot_pass {
+            return false;
+        }
+        let Some(now) = view.boot_id.as_deref() else {
+            return false;
+        };
+        match std::fs::read_to_string(stamp_path(persisted)) {
+            Ok(stamp) => {
+                let stamp = stamp.trim();
+                !stamp.is_empty() && stamp != now
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                let written = std::fs::metadata(persisted)
+                    .and_then(|m| m.modified())
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs());
+                matches!((written, view.btime), (Some(w), Some(b)) if w < b)
+            }
+            Err(_) => false,
+        }
+    }
+
+    /// Publish an encrypted key and stamp this boot beside it (2444-ckrb).
+    pub(super) fn publish(staged: &Path, persisted: &Path) -> Result<(), String> {
+        std::fs::rename(staged, persisted)
+            .map_err(|e| format!("publish {}: {e}", persisted.display()))?;
+        let stamp = stamp_path(persisted);
+        match boot_view().boot_id {
+            Some(id) => {
+                let _ = std::fs::write(&stamp, format!("{id}\n"));
+            }
+            None => {
+                let _ = std::fs::remove_file(&stamp);
+            }
+        }
+        Ok(())
     }
 }
 
@@ -396,8 +500,7 @@ pub(crate) fn seal(
 ) -> Result<(), String> {
     match session() {
         Some(store) => store.seal(staged, persisted, cert_bytes, keyring),
-        None => std::fs::rename(staged, persisted)
-            .map_err(|e| format!("publish {}: {e}", persisted.display())),
+        None => at_rest::publish(staged, persisted),
     }
 }
 
@@ -831,6 +934,139 @@ mod tests {
             after.as_deref(),
             Some(before.as_slice()),
             "the other process's key was deleted"
+        );
+    }
+
+    // 2444-ckrb: a guest's passphrase lives one boot (tmpfs pass file), the
+    // key it encrypted lives on disk. After a guest reboot the key is
+    // ciphertext under a passphrase nobody holds: provably unrecoverable, so
+    // it is discarded and the CA re-minted (operator ruling: vault material
+    // is thrown away, not recovered). Red before 2444: Unavailable forever,
+    // ready-gate:vault retried every 30s and the tray never left "Starting".
+    fn encrypted_key(dir: &Path, pass: &str) -> PathBuf {
+        let key = dir.join("intermediate.key");
+        let made = std::process::Command::new("openssl")
+            .args([
+                "genpkey",
+                "-algorithm",
+                "EC",
+                "-pkeyopt",
+                "ec_paramgen_curve:P-256",
+            ])
+            .args(["-aes-256-cbc", "-pass", "env:CKRB_PASS", "-out"])
+            .arg(&key)
+            .env("CKRB_PASS", pass)
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap();
+        assert!(made.success());
+        key
+    }
+
+    fn with_boot<T>(view: at_rest::BootView, f: impl FnOnce() -> T) -> T {
+        at_rest::reset_cache();
+        *at_rest::TEST_LOOKUP.lock().unwrap() = Some(this_process_lookup);
+        *at_rest::TEST_BOOT.lock().unwrap() = Some(view);
+        let out = f();
+        *at_rest::TEST_BOOT.lock().unwrap() = None;
+        *at_rest::TEST_LOOKUP.lock().unwrap() = None;
+        at_rest::reset_cache();
+        out
+    }
+
+    fn guest(boot: &str, btime: u64) -> at_rest::BootView {
+        at_rest::BootView {
+            per_boot_pass: true,
+            boot_id: Some(boot.into()),
+            btime: Some(btime),
+        }
+    }
+
+    #[test]
+    fn a_guest_key_stamped_in_a_previous_boot_is_discarded_for_a_re_mint() {
+        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let key = encrypted_key(dir.path(), "last-boots-passphrase");
+        std::fs::write(at_rest::stamp_path(&key), "boot-a\n").unwrap();
+        let answer = with_boot(guest("boot-b", 0), || at_rest::materialize(&key));
+        assert_eq!(
+            answer,
+            Materialized::Gone,
+            "a prior boot's key must re-mint"
+        );
+        assert!(!key.exists(), "the unrecoverable ciphertext is removed");
+        assert!(
+            !at_rest::stamp_path(&key).exists(),
+            "its stamp goes with it"
+        );
+    }
+
+    #[test]
+    fn an_unstamped_guest_key_older_than_this_boot_is_discarded() {
+        // A key minted before 2444 has no stamp; written before this boot
+        // began, it was encrypted under a pass file that no longer exists.
+        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let key = encrypted_key(dir.path(), "last-boots-passphrase");
+        let after_mint = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            + 60;
+        let answer = with_boot(guest("boot-b", after_mint), || at_rest::materialize(&key));
+        assert_eq!(answer, Materialized::Gone);
+        assert!(!key.exists());
+    }
+
+    #[test]
+    fn a_same_boot_mismatch_still_keeps_the_key_and_refuses() {
+        // 2096-e3te's case must not weaken: two live processes, one boot.
+        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let key = encrypted_key(dir.path(), "the-other-processs-passphrase");
+        std::fs::write(at_rest::stamp_path(&key), "boot-b\n").unwrap();
+        let before = std::fs::read(&key).unwrap();
+        let answer = with_boot(guest("boot-b", 0), || at_rest::materialize(&key));
+        assert_eq!(answer, Materialized::Unavailable);
+        assert_eq!(std::fs::read(&key).unwrap(), before);
+        // Unstamped and written during this boot: same answer.
+        std::fs::remove_file(at_rest::stamp_path(&key)).unwrap();
+        let answer = with_boot(guest("boot-b", 0), || at_rest::materialize(&key));
+        assert_eq!(answer, Materialized::Unavailable);
+        assert_eq!(std::fs::read(&key).unwrap(), before);
+    }
+
+    #[test]
+    fn a_keyring_host_never_discards_on_a_boot_change() {
+        // Bare metal keeps its passphrase in the keyring across boots, so a
+        // new boot proves nothing there: keep and refuse, as before.
+        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let key = encrypted_key(dir.path(), "another-passphrase");
+        std::fs::write(at_rest::stamp_path(&key), "boot-a\n").unwrap();
+        let view = at_rest::BootView {
+            per_boot_pass: false,
+            ..guest("boot-b", u64::MAX)
+        };
+        let answer = with_boot(view, || at_rest::materialize(&key));
+        assert_eq!(answer, Materialized::Unavailable);
+        assert!(key.exists());
+    }
+
+    #[test]
+    fn publishing_an_encrypted_key_stamps_this_boot() {
+        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let staged = dir.path().join("intermediate.key.1.tmp");
+        std::fs::write(&staged, "x").unwrap();
+        let persisted = dir.path().join("intermediate.key");
+        with_boot(guest("boot-c", 0), || at_rest::publish(&staged, &persisted)).unwrap();
+        assert!(persisted.is_file());
+        assert_eq!(
+            std::fs::read_to_string(at_rest::stamp_path(&persisted))
+                .unwrap()
+                .trim(),
+            "boot-c"
         );
     }
 

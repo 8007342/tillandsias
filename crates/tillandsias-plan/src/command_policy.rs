@@ -202,6 +202,22 @@ pub fn read_host_kind_from(
     marker: MarkerState,
     record: Option<&str>,
 ) -> HostKindReading {
+    let (kind, source, notes) = host_kind_parts(env, containerenv, marker, record);
+    HostKindReading {
+        kind,
+        source,
+        disagreement: join_notes(notes),
+    }
+}
+
+/// The decision and its notes, kept as a list: a note may itself contain
+/// "; ", so the joined `disagreement` cannot be split back (2444-vn38).
+fn host_kind_parts(
+    env: Option<&str>,
+    containerenv: Option<&str>,
+    marker: MarkerState,
+    record: Option<&str>,
+) -> (HostKind, &'static str, Vec<String>) {
     let env_kind = env.and_then(HostKind::parse);
     let image = containerenv.and_then(containerenv_image);
     let mut notes: Vec<String> = Vec::new();
@@ -236,11 +252,7 @@ pub fn read_host_kind_from(
                 ));
             }
         }
-        return HostKindReading {
-            kind: HostKind::Forge,
-            source: "marker",
-            disagreement: join_notes(notes),
-        };
+        return (HostKind::Forge, "marker", notes);
     }
     if record.is_some() {
         notes.push(format!(
@@ -275,11 +287,74 @@ pub fn read_host_kind_from(
         }
         (None, _) => (HostKind::BareMetal, fallback),
     };
-    HostKindReading {
-        kind,
-        source,
-        disagreement: join_notes(notes),
+    (kind, source, notes)
+}
+
+/// ORDER 2444-vn38 — the `policy host-kind` report: what [`read_host_kind`]
+/// decided and the evidence it read, one `key=value` line each, then one
+/// `note=` line per ignored or disagreeing piece of evidence, then the verdict
+/// `ok:policy-host-kind:<kind>:<source>`. Pure, so the lines are testable
+/// without a container; the inputs are the same as [`read_host_kind_from`].
+/// It reads; it never writes a file or an audit line, and it takes no
+/// override: the point is to show what the policy engine itself will use.
+pub fn host_kind_report(
+    env: Option<&str>,
+    containerenv: Option<&str>,
+    marker: MarkerState,
+    record: Option<&str>,
+) -> Vec<String> {
+    let (kind, source, notes) = host_kind_parts(env, containerenv, marker, record);
+    let mut out = vec![
+        format!("kind={}", kind.as_str()),
+        format!("source={source}"),
+        format!(
+            "marker={}",
+            match marker {
+                MarkerState::Valid => "valid".to_string(),
+                MarkerState::Absent => "absent".to_string(),
+                MarkerState::Untrusted(why) => format!("untrusted:{why}"),
+            }
+        ),
+        format!("marker_path={FORGE_MARKER_PATH}"),
+    ];
+    match record {
+        None => out.push("record=absent".to_string()),
+        Some(rec) => {
+            out.push("record=present".to_string());
+            for key in ["kind", "image", "version"] {
+                out.push(format!(
+                    "record_{key}={}",
+                    record_field(rec, key).unwrap_or("none")
+                ));
+            }
+        }
     }
+    out.push(format!("record_path={FORGE_RECORD_PATH}"));
+    out.push(format!(
+        "containerenv_image={}",
+        match containerenv {
+            None => "absent",
+            Some(c) => containerenv_image(c).unwrap_or("none"),
+        }
+    ));
+    out.push(format!("env_host_kind={}", env.unwrap_or("unset")));
+    out.extend(notes.iter().map(|n| format!("note={n}")));
+    out.push(format!("ok:policy-host-kind:{}:{source}", kind.as_str()));
+    out
+}
+
+/// [`host_kind_report`] over this host's real evidence, read exactly as
+/// [`read_host_kind`] reads it.
+pub fn host_kind_report_here() -> Vec<String> {
+    let env = std::env::var("TILLANDSIAS_HOST_KIND").ok();
+    let containerenv = std::fs::read_to_string("/run/.containerenv").ok();
+    let record = std::fs::read_to_string(FORGE_RECORD_PATH).ok();
+    host_kind_report(
+        env.as_deref(),
+        containerenv.as_deref(),
+        marker_state(Path::new(FORGE_MARKER_PATH)),
+        record.as_deref(),
+    )
 }
 
 fn join_notes(notes: Vec<String>) -> Option<String> {
@@ -2664,6 +2739,81 @@ mod tests {
     }
 
     #[test]
+    fn host_kind_report_names_the_decision_and_its_evidence() {
+        use MarkerState::{Absent, Untrusted, Valid};
+        const FORGE: &str = "image=\"localhost/tillandsias-forge:v56.11.28.1\"\n";
+        const REC: &str =
+            "kind=forge\nimage=localhost/tillandsias-forge:v56.11.28.1\nversion=56.11.28.1\n";
+        let has = |lines: &[String], l: &str| lines.iter().any(|x| x == l);
+        let notes = |lines: &[String]| lines.iter().filter(|x| x.starts_with("note=")).count();
+
+        // Valid marker + agreeing record: forge, decided by the marker, no notes.
+        let r = host_kind_report(None, Some(FORGE), Valid, Some(REC));
+        for l in [
+            "kind=forge",
+            "source=marker",
+            "marker=valid",
+            "record=present",
+            "record_kind=forge",
+            "record_image=localhost/tillandsias-forge:v56.11.28.1",
+            "record_version=56.11.28.1",
+            "containerenv_image=localhost/tillandsias-forge:v56.11.28.1",
+            "env_host_kind=unset",
+        ] {
+            assert!(has(&r, l), "missing {l}: {r:?}");
+        }
+        assert_eq!(notes(&r), 0, "{r:?}");
+        assert_eq!(r.last().unwrap(), "ok:policy-host-kind:forge:marker");
+
+        // Untrusted marker: not a forge, and the reason is printed.
+        let r = host_kind_report(None, None, Untrusted("writable"), None);
+        assert!(has(&r, "kind=bare-metal") && has(&r, "marker=untrusted:writable"));
+        assert!(has(&r, "record=absent") && has(&r, "containerenv_image=absent"));
+        assert!(
+            r.iter()
+                .any(|l| l.starts_with("note=") && l.contains("untrusted (writable)"))
+        );
+        assert_eq!(r.last().unwrap(), "ok:policy-host-kind:bare-metal:default");
+
+        // A record without the marker is reported and ignored.
+        let r = host_kind_report(None, Some(FORGE), Absent, Some(REC));
+        assert!(has(&r, "kind=bare-metal") && has(&r, "marker=absent"));
+        assert!(
+            r.iter()
+                .any(|l| l.starts_with("note=") && l.contains("present without the forge marker"))
+        );
+        assert!(
+            r.iter()
+                .any(|l| l.starts_with("note=") && l.contains("image name alone"))
+        );
+        assert_eq!(notes(&r), 2, "{r:?}");
+
+        // The env disagreeing with a valid marker: still forge, the note names it.
+        let r = host_kind_report(Some("bare-metal"), Some(FORGE), Valid, Some(REC));
+        assert!(has(&r, "kind=forge") && has(&r, "env_host_kind=bare-metal"));
+        assert!(
+            r.iter()
+                .any(|l| l
+                    == "note=TILLANDSIAS_HOST_KIND=bare-metal but the forge marker is present")
+        );
+        // ...and a self-declared forge without the marker is refused, with a note.
+        let r = host_kind_report(Some("forge"), None, Absent, None);
+        assert!(has(&r, "kind=bare-metal"));
+        assert!(
+            r.iter()
+                .any(|l| l.starts_with("note=") && l.contains("not self-declared"))
+        );
+
+        // The record disagreeing with the marker on kind and image.
+        let bad = "kind=other\nimage=localhost/elsewhere:v1\n";
+        let r = host_kind_report(None, Some(FORGE), Valid, Some(bad));
+        assert!(
+            has(&r, "kind=forge") && has(&r, "record_kind=other") && has(&r, "record_version=none")
+        );
+        assert_eq!(notes(&r), 2, "{r:?}");
+    }
+
+    #[test]
     fn a_forge_is_not_self_declared() {
         use MarkerState::{Absent, Untrusted, Valid};
         const FORGE: &str = "engine=\"podman-5.8.7\"\nname=\"forge-x\"\nimage=\"localhost/tillandsias-forge:v0.5.1\"\nrootless=1\n";
@@ -3027,6 +3177,40 @@ mod tests {
             resolve(SOFT, &c).token,
             "consent:policy:soft-reset",
             "=0 opts out"
+        );
+    }
+
+    /// ORDER 2444-vn38 (from 1467-c8qg's arm 2). The grant takes its forge
+    /// evidence from `ConsentCtx::from_env(workspace)`, and `grant_refusal`
+    /// refuses a forge. A workspace holding a planted forge marker must give the
+    /// same evidence as an empty one, so planting cannot turn a bare-metal grant
+    /// into `not-grantable-in-forge`. The Lua fixture cannot run the grant (its
+    /// door refuses self-consent before spawning), so the property is held here,
+    /// on the grant's own evidence path. It holds in any regime, but it can go
+    /// red only where the host itself is not a forge (in a forge both sides read
+    /// forge). The red control (a read_host_kind that trusts <root>/etc/tillandsias/forge)
+    /// was run under `unshare -rm` with a tmpfs over /etc: FAILED as it should.
+    #[test]
+    fn a_planted_workspace_marker_does_not_change_the_grants_evidence() {
+        let planted = tempfile::tempdir().unwrap();
+        let empty = tempfile::tempdir().unwrap();
+        std::fs::write(
+            planted.path().join(".forge-startup-context.md"),
+            "# Forge Startup Context\n\n**Project**: planted\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(planted.path().join("etc/tillandsias")).unwrap();
+        std::fs::write(planted.path().join("etc/tillandsias/forge"), "kind=forge\n").unwrap();
+        let p = ConsentCtx::from_env(planted.path()).evidence;
+        let e = ConsentCtx::from_env(empty.path()).evidence;
+        assert_eq!(
+            p, e,
+            "a planted workspace changed the grant's host-kind evidence"
+        );
+        assert_eq!(
+            grant_refusal(None, p),
+            grant_refusal(None, e),
+            "a planted workspace changed whether the grant is refused"
         );
     }
 

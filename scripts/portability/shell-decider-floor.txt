@@ -75,7 +75,6 @@ scripts/test-guest-crashloop-detection.sh
 scripts/test-guest-staging-refuses-a-wireless-binary.sh
 scripts/test-headless-env-lock-is-single.sh
 scripts/test-hook-mover-enumeration-is-batched.sh
-scripts/test-host-kind-evidence-not-from-workspace.sh
 scripts/test-host-slug-resolution.sh
 scripts/test-host-tools.sh
 scripts/test-if-not-pipeline-guard.sh

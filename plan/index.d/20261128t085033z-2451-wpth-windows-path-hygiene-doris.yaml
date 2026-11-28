@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by doris-windows: two Windows-only path defects seen while running 2444-vn38's fixture on msys.
+packets:
+  - packet_id: consent-token-path-mixed-separators
+    order: 2451-wpth
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, consent, paths]
+    estimated_hours: 1
+    owned_files: []
+    related: [2444-vn38]
+    title: |
+      On Windows, `policy consent grant` prints its token path with mixed separators
+    context: |
+      On doris (msys), with TILLANDSIAS_CONSENT_DIR=C:/…/c, the grant printed
+      `token: C:/Users/bullo/AppData/Local/Temp/tmp.bmX1WYFwzD/c\soft-reset-….json`: the dir is used
+      verbatim and the name joined with `\`. The file is found, but an operator copying the path and any
+      string comparison against it see two spellings of one file.
+    verifiable_closure: |
+      With TILLANDSIAS_CONSENT_DIR in forward-slash form, the printed token path uses one separator
+      style throughout, and the path a run spends matches the one the grant printed.
+    unscoreable: "unpinnable-until-the-guard-exists: the fix ships its own arm in a consent fixture"
+    next_action: Normalise the consent dir once at read time; add the arm.
+  - packet_id: index-d-fragment-name-exceeds-windows-path-limit
+    order: 2452-lpth
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [windows, plan, fragments]
+    estimated_hours: 1
+    owned_files: []
+    related: [2451-wpth]
+    title: |
+      A plan/index.d fragment name is too long for a Windows checkout without core.longpaths
+    context: |
+      `git worktree add` under a scratch dir on doris failed with "Filename too long" on
+      plan/index.d/20260920t071500z-1295-c4tn-regenerate-cheatsheet-index-rewrites-other-sheets-
+      verification-markers-from-gitignored-local-state-esmeraldinha.yaml (156 chars repo-relative).
+      Under MAX_PATH (260) that leaves ~100 chars for the checkout root. Fragments are immutable, so the
+      fix is a cap on NEW names (a fragment checker refuses names over a bound) plus a note that Windows
+      checkouts set core.longpaths=true.
+    verifiable_closure: |
+      The fragment checker refuses a new plan/index.d name longer than the chosen bound (with a fixture
+      arm), and the Windows join instructions set core.longpaths=true.
+    unscoreable: "unpinnable-until-the-guard-exists: the checker arm ships with the cap"
+    next_action: Pick a bound (e.g. 120 chars repo-relative), add the check and its arm.

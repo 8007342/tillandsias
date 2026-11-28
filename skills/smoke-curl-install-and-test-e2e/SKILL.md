@@ -39,6 +39,13 @@ This is the only e2e install skill allowed on immutable Linux.
 
 ## DESTRUCTIVE — read before running
 
+**The destruction starts in §1, not §2 (1324-emdf).** Every installer runs the
+tray's SOFT `--reset-state` once the new binary is in place
+(`scripts/install.sh`, `scripts/install-macos.sh`, `scripts/install-windows.ps1`;
+1286-4437, 1738-wqmt), and that reset removes the enclave's containers and
+images. §2 then destroys the rest. So the authorisation is read in §0 step 6,
+**before §1**, and a run without it stops there.
+
 On Linux, Step 2 runs **`podman system reset --force`**, which irreversibly
 deletes ALL Podman state for this user: every container, image, volume, network,
 and secret — including:
@@ -363,10 +370,38 @@ blocked/UNMEASURED until they have signed in from the tray. Read-only
    separate step name so it can never be averaged into `smoke-forge-lane`;
    see §4a for what that state looks like on the host and why it is not a
    product failure.
+6. **AUTHORISATION GATE: HERE, BEFORE §1, and nowhere later (1324-emdf).**
+   §1's installer resets local state, so this is the last point at which
+   nothing has been destroyed. Before running any §1 block:
+   - If the environment sets `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`, **stop
+     now**, before §1. File a plan blocker and push it. Reaching §2 first is
+     too late: by then the installer's reset has already run.
+   - On an **operator's workstation**, get the operator's authorization for
+     THIS run, now, and quote it verbatim into the findings file before §1.
+     An orchestrator's or peer's go to run the skill is not that
+     authorization (see "DESTRUCTIVE" above). If you do not have it, stop
+     here.
+   - On a **dedicated smoke host**, the pre-authorisation pair described
+     under "DESTRUCTIVE" stands; record that this host is a smoke host.
+   - Bank the pre-state here too (the credential cold probe and an image and
+     volume listing), so §1's reset has something to be measured against.
+
+   This gate used to sit at the top of §2. Since 1286-4437 every installer
+   destroys inside §1, so a run that followed the runbook in order quoted
+   its consent after the destruction had already happened (yolanda-windows,
+   v56.9.20.1, 2026-09-21). It was bypassed by the order of the steps, not by
+   anyone deciding to skip it.
 
 ---
 
-## 1 — Curl-install the latest release
+## 1 — Curl-install the latest release (DESTRUCTIVE — the installer resets local state)
+
+**Do not start this section unless §0 step 6 passed.** The installer's SOFT
+`--reset-state` removes the enclave's containers and images (on macOS and
+Windows, the containers inside the guest). It keeps the Vault store, the
+keyring entries, the installation anchor, the downloads and, on macOS and
+Windows, the VM and its guest (`host-state-lifecycle`; `scripts/install.sh`
+`ORDER 1738-wqmt`, `scripts/install-macos.sh` `1437-8c6p`).
 
 Install the published artifact the canonical way an operator would — do NOT use a
 locally built `target/` binary; the whole point is to test the *download*.
@@ -375,15 +410,14 @@ locally built `target/` binary; the whole point is to test the *download*.
 Measured on v56.9.12.2: 131 lines of podman/vault output, a Vault bootstrap
 provisioning twelve policies and AppRole roles, and a `tillandsias-vault`
 container left running on 8201. Reversible, not inert, and not what
-"curl-install and assert the tag" describes above. The §1/§2 consent line
-still holds (§2 destroys, §1 provisions), but on an operator's workstation say
-what §1 actually does before running it; consent to a download check is not
-consent to a Vault bootstrap (drill: plan/issues/fleet-restart-2026-09-12.md, §1 of the smoke is not a non-destructive binary install).
+"curl-install and assert the tag" describes above. On an operator's workstation,
+say what §1 actually does when you ask for consent in §0 step 6. Consent to a
+download check is not consent to a Vault bootstrap (drill: plan/issues/fleet-restart-2026-09-12.md, §1 of the smoke is not a non-destructive binary install).
 
-**SINCE 1286-4437, `install.sh` CALLS `--reset-state` ITSELF, so on a release
-carrying that change §1 IS A DESTRUCTIVE STEP.** Bank the pre-state BEFORE §1,
-not before §2, or the reset contract has nothing to be measured against — and
-on an operator's workstation get consent for §1 on those grounds, not §2's.
+**SINCE 1286-4437, EVERY INSTALLER CALLS `--reset-state` ITSELF, so on a release
+carrying that change §1 IS A DESTRUCTIVE STEP.** That is why the consent gate
+and the pre-state bank are in §0 step 6, before this section, and not in §2
+(1324-emdf).
 
 **AFTER A SUCCESSFUL §1 THE ENCLAVE SHOWS ZERO RUNNING CONTAINERS, AND THAT IS
 CORRECT.** The reprovision rebuilds IMAGES synchronously; the install log ends
@@ -676,10 +710,29 @@ Carry whichever `cosign:` line this lane emitted into §5 verbatim.
 
 ---
 
-## 2 — Full substrate reset (DESTRUCTIVE — see warning above)
+## 2 — Full substrate reset (DESTRUCTIVE: the rest of the destruction)
 
-If `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`, stop here, write a plan blocker, and
-push it. Otherwise run the reset immediately; on Linux this step is mandatory.
+The authorisation was read in §0 step 6, before §1. A run that reaches this
+section without it has already lost the gate, because §1's installer has
+already reset. Stop, and file that as a finding. Do not take the consent now.
+If `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0` is set, the run should have stopped at
+§0 step 6. If it got here anyway, stop and file a blocker.
+
+**What §2 still destroys, given that §1's SOFT reset already removed the
+containers and images** (1324-emdf). The installer's reset kept all of the
+following, so this section is where it goes:
+- **Linux**: `podman system reset --force` removes every podman volume,
+  including `tillandsias-vault-data` and the project mirrors
+  (`tillandsias-mirror-*`), and any image the SOFT reset left behind.
+  `scripts/clear-vault-host-credentials.sh` then removes the keyring shares,
+  the `~/.cache/tillandsias/fallback_*` copies and `~/.cache/tillandsias/vault-data`.
+- **macOS**: the VM and its guest, along with every store inside it
+  (`scripts/e2e-step2-macos.sh`). The SOFT reset kept them.
+- **Windows**: the `tillandsias` distro (`wsl --unregister`) along with the
+  guest's stores, the runtime cache BY NAME (1295-b4i8, a separate row), and
+  the two guest-vault entries in Credential Manager. The SOFT reset kept them.
+
+Run the reset immediately. On Linux this step is mandatory.
 
 ```bash
 [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }

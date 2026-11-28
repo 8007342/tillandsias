@@ -5477,13 +5477,27 @@ fn run_policy(args: &[String]) -> ! {
     use tillandsias_plan::command_policy as cp;
     let usage = || -> ! {
         eprintln!(
-            "usage: tillandsias-plan policy eval [--host-kind bare-metal|forge|ci] [--regime interactive|gate|fixture|hook|relay] [--caller c] [--cwd dir] [--root dir] [--seed path] -- <argv...>\n       tillandsias-plan policy show [--root dir] [--seed path]\n       tillandsias-plan policy audit [--since 24h|7d|30m] [--caller c] [--root dir]\n       tillandsias-plan policy consent grant <soft-reset|hard-reset|workspace-destroy|force-push> [--ttl 30m] [--root dir] -- <argv...>   (the OPERATOR, on the host)\n       tillandsias-plan policy classify-bash --hook | --status | --command <cmd>"
+            "usage: tillandsias-plan policy eval [--host-kind bare-metal|forge|ci] [--regime interactive|gate|fixture|hook|relay] [--caller c] [--cwd dir] [--root dir] [--seed path] -- <argv...>\n       tillandsias-plan policy show [--root dir] [--seed path]\n       tillandsias-plan policy audit [--since 24h|7d|30m] [--caller c] [--root dir]\n       tillandsias-plan policy consent grant <soft-reset|hard-reset|workspace-destroy|force-push> [--ttl 30m] [--root dir] -- <argv...>   (the OPERATOR, on the host)\n       tillandsias-plan policy classify-bash --hook | --status | --command <cmd>\n       tillandsias-plan policy host-kind   (read-only: the detected host kind and its evidence)"
         );
         std::process::exit(2);
     };
     let Some(verb) = args.first() else { usage() };
     if verb == "classify-bash" {
         run_classify_bash(&args[1..]);
+    }
+    // ORDER 2444-vn38 — `policy host-kind`: what the policy engine reads as
+    // this host's kind, and the evidence behind it (marker, launch record,
+    // container record, env), with a note for each piece it ignored. Read-only
+    // and override-free: it takes no argument at all, so no flag can make it
+    // print a kind the engine would not use. Exit 0.
+    if verb == "host-kind" {
+        if args.len() > 1 {
+            usage();
+        }
+        for line in cp::host_kind_report_here() {
+            println!("{line}");
+        }
+        std::process::exit(0);
     }
     // ORDER 1443-w9hf — `policy audit [--since 24h|7d|…] [--caller c] [--root dir]`:
     // one line per (rule_id, decision) with its count, then the total. With no
@@ -5998,7 +6012,36 @@ fn mcp_tool_alias(name: &str) -> Option<String> {
         .then_some(candidate)
 }
 
+/// ORDER 2451-7wm7. On Windows the C runtime opens stdout and stderr in TEXT
+/// mode, which rewrites every "\n" as "\r\n". Lua's `print`, `io.write` and
+/// `io.stdout` all write through C stdio, while this binary's own lines go
+/// through Rust's std::io, which writes bytes as given. So one stream carried
+/// both endings: measured on yolanda (msys) 2026-11-28, a decider's stdout was
+/// `x\r\n` (Lua print) then `ok:...\n` (verdict), and a consumer comparing
+/// lines (tests/script_run_helper.rs, 0/5 on Windows) saw a stray "\r". Binary
+/// mode makes the Lua side match. The CRT is linked statically
+/// (.cargo/config.toml +crt-static), so the vendored Lua shares this CRT's
+/// stdio and the mode set here is the mode Lua writes with. Stdin is left in
+/// text mode: io.lines() over Git's stdin relies on its "\r\n" folding.
+#[cfg(windows)]
+fn lua_stdio_binary_mode() {
+    unsafe extern "C" {
+        fn _setmode(fd: i32, mode: i32) -> i32;
+    }
+    const O_BINARY: i32 = 0x8000;
+    for fd in [1, 2] {
+        // SAFETY: _setmode takes a CRT file descriptor and a mode flag; fds 1
+        // and 2 always exist in a console or piped process. A -1 return (no
+        // such fd) leaves the stream as it was, which is the old behaviour.
+        unsafe {
+            _setmode(fd, O_BINARY);
+        }
+    }
+}
+
 fn main() {
+    #[cfg(windows)]
+    lua_stdio_binary_mode();
     let start_time = std::time::Instant::now();
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let mut index = PathBuf::from("plan/index.yaml");

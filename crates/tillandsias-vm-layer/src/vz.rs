@@ -63,6 +63,10 @@ pub struct VzRuntime {
     /// probe escapes don't spill onto the user's terminal; the tray leaves it
     /// false (serial on stderr for live diagnostics).
     serial_to_log: std::sync::atomic::AtomicBool,
+    /// 2450-gkop: console.log's length when `start()` opened it for this
+    /// boot, so a dead-guest verdict reads only what THIS boot wrote (the log
+    /// is appended across boots). `u64::MAX` before any start.
+    console_boot_offset: std::sync::atomic::AtomicU64,
     /// 1642-cc54: this boot's clean-power-off token, minted by `start()` and
     /// handed to the guest through cidata. `stop()` honours the guest's
     /// clean-off line only when it carries this token.
@@ -399,6 +403,7 @@ impl VzRuntime {
             #[cfg(target_os = "macos")]
             host_listener: std::sync::Mutex::new(None),
             serial_to_log: std::sync::atomic::AtomicBool::new(false),
+            console_boot_offset: std::sync::atomic::AtomicU64::new(u64::MAX),
             shutdown_token: std::sync::Mutex::new(None),
             restore_from: std::sync::Mutex::new(None),
             #[cfg(target_os = "macos")]
@@ -3662,6 +3667,12 @@ impl VmRuntime for VzRuntime {
             // 54 KB / 78 boots ~22 hours later, i.e. ~680 bytes per start and
             // strictly monotonic. Not urgent by volume; unbounded by design.
             Self::rotate_console_log_if_oversized(&self.console_log_path());
+            self.console_boot_offset.store(
+                std::fs::metadata(self.console_log_path())
+                    .map(|m| m.len())
+                    .unwrap_or(0),
+                std::sync::atomic::Ordering::Relaxed,
+            );
             std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -4582,6 +4593,107 @@ impl VzRuntime {
                 }
             }
         }
+    }
+}
+
+/// Order 2450-gkop. Kernel fault lines that mean the guest kernel itself failed.
+pub const GUEST_KERNEL_FAULT_MARKERS: &[&str] = &[
+    "Kernel panic",
+    "Internal error: Oops",
+    "Unable to handle kernel",
+    "BUG: ",
+    "soft lockup",
+    "hard LOCKUP",
+    "blocked for more than",
+];
+
+/// Order 2450-gkop. Name a DEAD guest instead of a stale connection.
+///
+/// The vsock exec's idle timeout says only that no bytes arrived for the idle
+/// period. On the v56.11.28.1 macOS smoke (2026-11-28, n=1) the guest kernel
+/// had oopsed seven minutes before that error fired, and the error read
+/// `connection stale`, as if the guest were slow or the network had hiccupped.
+/// This reads what THIS boot wrote to the serial console and answers, in order:
+///
+/// - `guest-panic:<line>` / `guest-kernel-oops:<line>`: the console carries a
+///   kernel fault (the first one is quoted).
+/// - `guest-unresponsive`: no fault line, but the console has been silent at
+///   least as long as the vsock exec. A live guest keeps logging (health checks,
+///   journald forwarding), so a guest that is silent on both channels is wedged,
+///   not slow. That was this run's evidence: the console stopped 11 s after the
+///   oops and never printed it, because that boot had no kernel console (2449-kxrb).
+///
+/// Anything else, or an error that is not the idle timeout, returns `None`, and
+/// the caller keeps the original error.
+pub fn dead_guest_verdict(
+    err: &str,
+    boot_console: &str,
+    console_silent_for: Option<Duration>,
+    idle: Duration,
+    console_path: &str,
+) -> Option<String> {
+    if !err.contains("connection stale") {
+        return None;
+    }
+    // The first fault line, quoted from its marker on (no timestamp prefix).
+    if let Some(line) = boot_console.lines().find_map(|l| {
+        GUEST_KERNEL_FAULT_MARKERS
+            .iter()
+            .find_map(|m| l.find(m))
+            .map(|at| &l[at..])
+    }) {
+        let kind = if line.contains("Kernel panic") {
+            "guest-panic"
+        } else {
+            "guest-kernel-oops"
+        };
+        return Some(format!(
+            "{kind}:{} — the guest kernel failed, which is why the exec went silent \
+             (console: {console_path}; was: {err})",
+            line.trim()
+        ));
+    }
+    match console_silent_for {
+        Some(s) if s >= idle => Some(format!(
+            "guest-unresponsive: the guest console has also been silent for {}s, so the \
+             guest is wedged, not slow (console: {console_path}; was: {err})",
+            s.as_secs()
+        )),
+        _ => None,
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl VzRuntime {
+    /// Order 2450-gkop: rewrite an exec error as a dead-guest verdict when this
+    /// boot's console shows the guest died (see [`dead_guest_verdict`]); else
+    /// return it unchanged. Call it BEFORE `stop()`, which appends its own lines.
+    pub fn explain_exec_error(&self, err: String) -> String {
+        let path = self.console_log_path();
+        let from = self
+            .console_boot_offset
+            .load(std::sync::atomic::Ordering::Relaxed);
+        // No boot of ours wrote console.log (serial went to stderr): its age
+        // says nothing about this guest, so make no claim.
+        if from == u64::MAX {
+            return err;
+        }
+        let bytes = std::fs::read(&path).unwrap_or_default();
+        let from = usize::try_from(from).unwrap_or(usize::MAX).min(bytes.len());
+        let boot_console = String::from_utf8_lossy(&bytes[from..]);
+        let silent = std::fs::metadata(&path)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok());
+        let idle = crate::vsock_exec::exec_idle_timeout().unwrap_or(Duration::from_secs(300));
+        dead_guest_verdict(
+            &err,
+            &boot_console,
+            silent,
+            idle,
+            &path.display().to_string(),
+        )
+        .unwrap_or(err)
     }
 }
 
@@ -5839,6 +5951,58 @@ mod tests {
                 v => panic!("rebooted without a request on {not_asked:?}: {v:?}"),
             }
         }
+    }
+
+    /// 2450-gkop (v56.11.28.1 macOS smoke, n=1): an idle-timeout error from a
+    /// guest whose kernel failed is reported as that failure, not as a stale
+    /// connection. The fault lines are this run's own, from its journal. The
+    /// stale error is the exact text that lane printed.
+    #[test]
+    fn a_dead_guest_is_named_instead_of_a_stale_connection() {
+        use super::dead_guest_verdict;
+        use std::time::Duration;
+        let stale = "vsock_exec: no data from guest for 300s — connection stale \
+                     (override with TILLANDSIAS_VSOCK_EXEC_IDLE_TIMEOUT_SECS)";
+        let idle = Duration::from_secs(300);
+        let oops = "[  257.680759] podman[27000]: health_status\n\
+            [  258.101000] Internal error: Oops - Undefined instruction: 0000000002000000 [#1]  SMP\n\
+            [  258.101100] pc : virtio_transport_get_local_cid+0x0/0x68 [vmw_vsock_virtio_transport]\n\
+            [  265.000000] note: kworker/u32:24[27156] exited with irqs disabled\n";
+        let v = dead_guest_verdict(stale, oops, Some(Duration::from_secs(5)), idle, "/c.log")
+            .expect("pre-fix: an oopsed guest read as connection stale");
+        assert!(
+            v.starts_with("guest-kernel-oops:")
+                && v.contains("Internal error: Oops - Undefined instruction")
+                && v.contains("/c.log")
+                && v.contains("connection stale"),
+            "{v}"
+        );
+        let panic = "[ 300.1] Kernel panic - not syncing: Fatal exception\n";
+        let v = dead_guest_verdict(stale, panic, None, idle, "/c.log").expect("a panic");
+        assert!(v.starts_with("guest-panic:Kernel panic"), "{v}");
+
+        // This run's ACTUAL console: no fault line (no kernel console on that
+        // boot), silent from 11 s after the oops until the timeout.
+        let quiet = "[  268.203131] podman[27300]: container health_status\n\
+                     [  269.388016] aardvark-dns[17036]: dns request got empty response\n";
+        let v = dead_guest_verdict(stale, quiet, Some(Duration::from_secs(420)), idle, "/c.log")
+            .expect("a guest silent on both channels");
+        assert!(
+            v.starts_with("guest-unresponsive:") && v.contains("420s"),
+            "{v}"
+        );
+
+        // NEGATIVE CONTROLS: a console still being written is a live guest, and
+        // an error that is not the idle timeout is left alone.
+        assert_eq!(
+            dead_guest_verdict(stale, quiet, Some(Duration::from_secs(4)), idle, "/c.log"),
+            None
+        );
+        assert_eq!(dead_guest_verdict(stale, quiet, None, idle, "/c.log"), None);
+        assert_eq!(
+            dead_guest_verdict("vsock connect: refused", oops, Some(idle), idle, "/c.log"),
+            None
+        );
     }
 
     /// 2029-b87w: kernel fault reports must reach hvc0 without journald.

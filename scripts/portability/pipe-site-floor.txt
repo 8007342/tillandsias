@@ -149,7 +149,6 @@ litmus openspec/litmus-tests/litmus-host-browser-mcp-lane-socket-shape.yaml 7
 litmus openspec/litmus-tests/litmus-host-chromium-on-demand-shape.yaml 2
 litmus openspec/litmus-tests/litmus-host-expert-refresh-gate-shape.yaml 1
 litmus openspec/litmus-tests/litmus-host-guest-no-cfg-transport-selection.yaml 2
-litmus openspec/litmus-tests/litmus-host-kind-evidence-not-from-workspace.yaml 1
 litmus openspec/litmus-tests/litmus-image-build-convergence-shape.yaml 1
 litmus openspec/litmus-tests/litmus-inference-container-implementation-shape.yaml 6
 litmus openspec/litmus-tests/litmus-inference-deferred-model-pulls.yaml 4
