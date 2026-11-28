@@ -1,0 +1,14 @@
+# Gate step 2456-lrly — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. The Windows tray's forge -> Lemonade relay keeps its approved
+# security policy: the route allowlist is pinned exactly, and the policy tests
+# (named 403 + zero upstream connections for every refused route, rebuilt
+# headers, approved models incl. multipart, CL+TE, body caps, silent drop on a
+# bad lane credential) are RUN, not grepped. Replacing the policy core with a
+# bare byte splice reds 10 of its 12 tests (measured 2026-11-28 on doris).
+STEP_DESC="Checking the Lemonade relay keeps its route, model and credential policy (2456-lrly)"
+STEP_LUA="scripts/lua/check-lemonade-relay-policy.lua"
+STEP_ERROR="the Lemonade relay policy drifted: a route left or joined the allowlist, or a policy test failed (2456-lrly); see the violation line above"
+STEP_OK="lemonade relay policy verified"
+STEP_READS="crates/tillandsias-windows-tray/src/lemonade_relay.rs crates/tillandsias-windows-tray/src/lemonade_relay_tests.rs crates/tillandsias-windows-tray/Cargo.toml scripts/lua/check-lemonade-relay-policy.lua"
+STEP_SECOND_REGIME="doris 2026-11-28 msys ok:lemonade-relay-policy-verified:9 (Windows cargo, Git Bash)"

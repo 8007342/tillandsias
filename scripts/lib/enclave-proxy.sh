@@ -49,8 +49,9 @@
 # not against the address it resolves to — which is precisely why `nix-cache`
 # must be named even though the subnet is listed.
 
+# Order 2456-lrly: `lemonade` (the host Lemonade relay alias) joins `inference`.
 # Keep in step with ENCLAVE_NO_PROXY_BASE (main.rs) — the gate enforces it.
-ENCLAVE_NO_PROXY_BASE="localhost,127.0.0.1,0.0.0.0,::1,vault,tillandsias-vault,inference,proxy,nix-cache,studio"
+ENCLAVE_NO_PROXY_BASE="localhost,127.0.0.1,0.0.0.0,::1,vault,tillandsias-vault,inference,lemonade,proxy,nix-cache,studio"
 # Mirrors DEFAULT_ENCLAVE_SUBNET and its TILLANDSIAS_ENCLAVE_SUBNET override.
 ENCLAVE_SUBNET_DEFAULT="10.0.42.0/24"
 ENCLAVE_NO_PROXY="${ENCLAVE_NO_PROXY_BASE},${TILLANDSIAS_ENCLAVE_SUBNET:-$ENCLAVE_SUBNET_DEFAULT}"

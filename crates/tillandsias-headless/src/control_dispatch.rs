@@ -158,6 +158,9 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
         // property is worth more than the line it costs.
         (SetVsockForwardTarget { .. }, Vsock) => Handle,
         (SetVsockForwardTarget { .. }, UnixSocket) => Unsupported,
+        // 2456-lrly: the Lemonade sibling, same direction and transport rule.
+        (SetLemonadeForwardTarget { .. }, Vsock) => Handle,
+        (SetLemonadeForwardTarget { .. }, UnixSocket) => Unsupported,
 
         // HostClockSync (1503-qrgz) is vsock-only and host->guest: only the
         // host knows its wall clock survived a sleep the VM did not run through.
@@ -240,6 +243,23 @@ mod tests {
     /// variant answering Unsupported is how two earlier omissions were caught
     /// on their first live run; this asserts the registration exists so that
     /// property is not quietly spent.
+    /// ORDER 2456-lrly: the Lemonade sibling is registered by name, vsock only.
+    #[test]
+    fn set_lemonade_forward_target_is_vsock_only() {
+        let msg = ControlMessage::SetLemonadeForwardTarget {
+            cid: 2,
+            port: 42431,
+        };
+        assert_eq!(
+            decide_route(&msg, TransportKind::Vsock),
+            DispatchOutcome::Handle
+        );
+        assert_eq!(
+            decide_route(&msg, TransportKind::UnixSocket),
+            DispatchOutcome::Unsupported
+        );
+    }
+
     #[test]
     fn set_vsock_forward_target_is_vsock_only() {
         use ControlMessage::SetVsockForwardTarget as T;

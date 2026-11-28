@@ -1890,7 +1890,17 @@ async fn serve_ready_stream(
                     }
                 }
             }
-            ControlMessage::SetVsockForwardTarget { cid, port } => {
+            ControlMessage::SetVsockForwardTarget { cid, port }
+            | ControlMessage::SetLemonadeForwardTarget { cid, port } => {
+                // 2456-lrly: the Lemonade sibling shares this arm; only the
+                // file it records to and the alias it names differ.
+                let lemonade =
+                    matches!(env.body, ControlMessage::SetLemonadeForwardTarget { .. });
+                let (file_name, lane) = if lemonade {
+                    ("lemonade-forward", "lemonade:13305")
+                } else {
+                    ("vsock-forward", "inference:11434")
+                };
                 // ORDER 1309-rb3p, the last half of 830-xsk2. The tray learns
                 // the host endpoint from ITS OWN environment and tells us;
                 // nothing in the guest can know the port the host chose.
@@ -1913,12 +1923,12 @@ async fn serve_ready_stream(
                 let outcome = crate::VsockForwardTarget::new(cid, port)
                     .map_err(|why| std::io::Error::new(std::io::ErrorKind::InvalidInput, why))
                     .and_then(|_| std::fs::create_dir_all(dir))
-                    .and_then(|()| std::fs::write(dir.join("vsock-forward"), format!("{cid}:{port}\n")));
+                    .and_then(|()| std::fs::write(dir.join(file_name), format!("{cid}:{port}\n")));
                 match outcome {
                     Ok(()) => {
                         eprintln!(
-                            "[tillandsias] host-native inference target set: cid {cid} port {port} \
-                             — the next inference start will forward inference:11434 to the host"
+                            "[tillandsias] host-native target set: cid {cid} port {port} \
+                             — the next forwarder start will forward {lane} to the host"
                         );
                         // ORDER 1509-kf4d. ONE FRAME PER REQUEST, as HostClockSync
                         // does. Silent on success, the tray's request() waited
@@ -1949,7 +1959,7 @@ async fn serve_ready_stream(
                             body: ControlMessage::Error {
                                 seq_in_reply_to: Some(env.seq),
                                 code: ErrorCode::Internal,
-                                message: format!("SetVsockForwardTarget failed: {err}"),
+                                message: format!("{} failed: {err}", env.body.kind()),
                             },
                         };
                         if write_envelope_with_shutdown(&mut write_half, &err_env, &mut shutdown)

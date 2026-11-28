@@ -41,6 +41,14 @@ pub const CONTROL_WIRE_VSOCK_PORT: u32 = 42420;
 /// @trace spec:vsock-transport, spec:local-web-preview
 pub const PREVIEW_RELAY_VSOCK_PORT: u32 = 42430;
 
+/// Order 2456-lrly: the vsock port the Windows tray's Lemonade relay listens
+/// on. The guest's `tillandsias-lemonade-forwarder` connects here for every
+/// `lemonade:13305` connection a forge opens; the tray applies the relay policy
+/// and only then talks to Lemonade on the host's 127.0.0.1:13305.
+///
+/// @trace order:2456-lrly, spec:vsock-transport
+pub const LEMONADE_RELAY_VSOCK_PORT: u32 = 42431;
+
 /// Order 1794-rf3a (b): the host loopback port a VM guest's preview is
 /// served on. The tray binds `127.0.0.1` at this port and relays to
 /// [`PREVIEW_RELAY_VSOCK_PORT`]; the guest names it in every preview URL, so
