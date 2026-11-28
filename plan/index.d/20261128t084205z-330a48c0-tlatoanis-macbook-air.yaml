@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-cold-first-forge-launch-after-a-full-macos-wipe-went-silent-for-300s-and-was-killed-by-the-vsock-exec-idle-timeout
+    event:
+      type: note
+      ts: "2026-11-28T08:42:05Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261128t084205z
+      host: tlatoanis-macbook-air
+      summary: |
+        ROOT CAUSE READ (operator-approved read-only guest boots, 2026-11-28): the guest WEDGED, it was not slow. The journal of the failed lane boot ends at 08:21:03Z after a kernel oops at 08:20:56Z (Undefined instruction at virtio_transport_get_local_cid+0x0, from the headless's vsock sendmsg) and a second one in btrfs_extent_map_shrinker_worker, on the release-day kernel 6.19.10 that provisioning had just replaced in place (kernel_reboot_pending=yes). n=1. Split into fix (a) 2449-kxrb, reboot into the upgraded kernel before any image build, and fix (b) 2450-gkop, a named guest-kernel-oops verdict in place of connection stale. Also: the 08:28 exec-guest boot logged `vault bootstrap after DeliverCredentials failed: ca-key-unavailable` for /root/.local/state/tillandsias/ca/intermediate.crt. That is expected fixed by 2444-ckrb (#1733); recheck it on the next release candidate before filing.

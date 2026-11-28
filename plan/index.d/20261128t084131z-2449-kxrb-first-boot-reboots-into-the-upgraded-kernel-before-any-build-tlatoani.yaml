@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-28, at macuahuitl's direction (1810-sl5h, v56.11.28.1 macOS smoke).
+packets:
+- packet_id: macos-first-boot-reboots-into-the-upgraded-guest-kernel-before-any-image-build
+  order: 2449-kxrb
+  status: in_progress
+  kind: defect
+  priority: p1
+  desired_release: v0.5
+  owner_host: macos
+  pickup_role: macos
+  capability_tags: [rust, macos, vm, provisioning]
+  related: [1810-sl5h, 1925-gupg, 2352-pvcm, 2450-gkop, 2444-ckrb]
+  title: "the first macOS guest boot upgrades the kernel in place and then builds every image on the kernel it just replaced"
+  context: |
+    v56.11.28.1 macOS smoke (tlatoanis-macbook-air, 2026-11-28). Provisioning ran inside the lane's own first boot.
+    1925-gupg's `dnf -y upgrade` installed kernel-core 7.3.6-200 at 08:18:00Z, the marker recorded
+    kernel_reboot_pending=yes at 08:18:03Z, and the five image builds then ran on the release-day 6.19.10-300
+    kernel. At 08:20:56Z the guest oopsed (`Undefined instruction` at virtio_transport_get_local_cid+0x0, in the
+    headless's vsock sendmsg). At 08:21:03Z a second oops hit btrfs_extent_map_shrinker_worker, the same 6.19.10
+    shrinker bug 1925-gupg cites. The journal ends there, and the lane died at the 300 s vsock idle timeout.
+    n=1: this is one occurrence. Nothing proves 6.19.10 was the trigger rather than the circumstance. The
+    confirmation is the next release candidate's smoke, which needs the operator's approval; no cold rerun is to
+    be done for this row.
+  next_action: >-
+    In the provisioning script (crates/tillandsias-vm-layer/src/vz.rs), compute kernel_reboot_pending right after
+    the 1925-gupg upgrade. When it is yes: enable the headless units, write the provision record as
+    `phase reboot-requested` (kernel_running, kernel_installed), and power the guest off cleanly INSTEAD of starting
+    the headless units, so no image build and no Vault or CA initialisation runs on the replaced kernel. Make
+    VzRuntime::wait_phase_ready restart the VM exactly once when the guest stopped after recording
+    `phase reboot-requested`, then keep waiting. The second boot starts the enabled units on the new kernel, and the
+    host's first credential answer is delivered to that boot, which also keeps clear of the 2444-ckrb per-boot
+    passphrase mismatch. A second request, or a stop with no request, is still an error.
+  exit_criteria:
+    - "A test that FAILS on today's code: the provisioning script with a pending kernel reboot (installed != running) reaches the headless `systemctl start` / image-build path. With the fix it records `phase reboot-requested` and powers off before any headless unit starts."
+    - "With no pending reboot (installed == running) the script is unchanged: it starts the headless units and records `phase complete`, kernel_reboot_pending no."
+    - "wait_phase_ready restarts the VM once on a guest stop that follows a recorded reboot request. A stop without a request, or a second request, is an error that names the case."
+    - "The diagnose kernel line no longer tells the operator to quit and relaunch to pick up the kernel when the reboot has already happened."
+  verifiable_closure: "cargo test -p tillandsias-vm-layer: the provisioning-script test proves the reboot request precedes every headless start, and the wait_phase_ready restart logic is unit-tested on a fake state sequence. Confirmed live on the next release candidate's macOS smoke."
+  unscoreable: "fixture-scored: cargo unit tests, plus the next RC smoke (operator-approved)"
+  notes: |
+    size: M
+    implementer_tier: opus
+  events:
+  - {type: filed, ts: "2026-11-28T08:41:31Z", host: tlatoanis-macbook-air, summary: 'filed at macuahuitl''s direction as fix (a) for 1810-sl5h; claimed, work ref work/2449-kxrb'}

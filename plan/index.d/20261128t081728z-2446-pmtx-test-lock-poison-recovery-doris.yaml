@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by doris-windows at macuahuitl's request, from 2444-ckrb's mutation run.
+packets:
+  - packet_id: test-lock-poison-recovery
+    order: 2446-pmtx
+    status: ready
+    kind: tech-debt
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [tests, rust]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-headless/src/ca_key_store.rs
+    related: [2444-ckrb]
+    title: |
+      Tests that take a shared lock with .unwrap() fail as knock-ons of an unrelated panic
+    context: |
+      In 2444-ckrb's mutation run (discard disabled), two new arms failed as intended and four
+      unrelated ca_key_store tests failed too: they take SERIAL with .lock().unwrap(), so the first
+      panicking test poisoned it for them. Each passes alone. A red run then names six tests where
+      two are the cause. Every SERIAL/shared-Mutex lock in a test should recover from poisoning
+      (.unwrap_or_else(|p| p.into_inner())); the sweep covers the workspace, not only this file.
+    verifiable_closure: |
+      No test-module `static ... Mutex` is locked with a bare .unwrap() (a grep or lint names any);
+      with one ca_key_store arm forced to panic, only that arm fails.
+    unscoreable: "unpinnable-until-the-guard-exists: the sweep ships its own check (a lint or grep step naming bare-unwrap test locks)"
+    next_action: Sweep and fix; pick it up after 2428-cens-b.

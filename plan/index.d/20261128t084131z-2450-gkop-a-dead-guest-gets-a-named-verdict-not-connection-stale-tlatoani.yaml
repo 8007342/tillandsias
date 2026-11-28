@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-28, at macuahuitl's direction (1810-sl5h, v56.11.28.1 macOS smoke).
+packets:
+- packet_id: a-dead-macos-guest-is-reported-as-guest-kernel-oops-not-as-a-stale-vsock-connection
+  order: 2450-gkop
+  status: ready
+  kind: defect
+  priority: p1
+  desired_release: v0.5
+  owner_host: macos
+  pickup_role: macos
+  capability_tags: [rust, macos, vm, diagnostics]
+  related: [1810-sl5h, 2449-kxrb]
+  title: "a guest whose kernel oopsed is reported as `vsock_exec: no data from guest for 300s — connection stale`"
+  context: |
+    v56.11.28.1 macOS smoke (tlatoanis-macbook-air, 2026-11-28). The guest kernel oopsed at 08:20:56Z and 08:21:03Z
+    (vsock transport, then the btrfs extent-map shrinker; tainted D) and wrote nothing afterwards. The lane waited
+    until the 300 s idle timeout and reported `opencode: vsock_exec: no data from guest for 300s — connection stale`,
+    which reads as a slow guest or a network hiccup. The cause was only found by booting the VM again and reading
+    `journalctl -b -1`. n=1: one occurrence; the fix is the reporting, whatever the oops's trigger.
+  next_action: >-
+    When the vsock exec idle timeout (or wait_phase_ready) fires, read what the guest last said before reporting it
+    as stale: the VZ serial console log the tray already keeps, and/or the forwarded journal. If it contains a kernel
+    `Internal error: Oops`, `Kernel panic`, `BUG:` or a soft-lockup line, refuse with a named verdict:
+    `guest-kernel-oops:<first oops line>` or `guest-panic:<line>`, plus the log path. Otherwise keep the current
+    stale verdict. Keep TILLANDSIAS_VSOCK_EXEC_IDLE_TIMEOUT_SECS as is: a dead guest is not cured by waiting longer.
+  exit_criteria:
+    - "A test that FAILS on today's code: given a console or journal tail carrying this run's oops lines, the idle-timeout path reports guest-kernel-oops naming the first oops line, not `connection stale`."
+    - "Negative control: the same timeout with an ordinary console tail still reports connection stale."
+    - "The verdict names the log it read, so the operator can find the trace without booting the guest."
+  verifiable_closure: "cargo test for the classifier and the idle-timeout path (red on today's code, green with the fix), plus the negative control."
+  unscoreable: "fixture-scored: cargo unit tests"
+  notes: |
+    size: S
+    implementer_tier: sonnet
+  events:
+  - {type: filed, ts: "2026-11-28T08:41:31Z", host: tlatoanis-macbook-air, summary: 'filed at macuahuitl''s direction as fix (b) for 1810-sl5h'}
